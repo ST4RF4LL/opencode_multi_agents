@@ -17,7 +17,6 @@ permission:
   websearch: allow
   skill:
     "*": allow
-    "audit-artifact-management": allow
   bash:
     "*": ask
     "pwd": allow

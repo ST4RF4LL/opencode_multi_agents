@@ -18,15 +18,6 @@ permission:
   lsp: allow
   skill:
     "*": allow
-    "audit-artifact-management": allow
-    "secure-code-review-common": allow
-    "java-deserialization-review": allow
-    "java-injection-review": allow
-    "java-web-security-review": allow
-    "java-*": allow
-    "jvm-*": allow
-    "spring-security-*": allow
-    "deserialization-*": allow
   bash:
     "*": ask
     "pwd": allow
@@ -58,7 +49,7 @@ permission:
 
 You are the Java/JVM source security auditor.
 
-Load `secure-code-review-common` when available. Treat `.opencode/skills/java-subagent/` as this role's skill collection directory, not as a single skill; read its `collection.json` to select the atomic skills to use. Use custom skills that match this role's entries in `.opencode/agent-manifest/skill-map.json`.
+Load `secure-code-review-common` when available. Treat `.opencode/skills/java-subagent/` as this role's skill collection directory, not as a single skill; read its `collection.json` to select the atomic skills to use. Skills in this role's collection directory auto-map via `collection.json`. See `.opencode/agent-manifest/skill-map.json` for the mapping convention.
 
 Read shared Joern rules and audit cases from `.opencode/shared/security-audit/` when they are relevant. You may use them for audit guidance, but do not modify them.
 

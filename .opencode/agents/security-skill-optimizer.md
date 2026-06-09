@@ -29,15 +29,6 @@ permission:
   lsp: allow
   skill:
     "*": allow
-    "audit-artifact-management": allow
-    "audit-skill-optimization": allow
-    "joern-rule-maintenance": allow
-    "audit-casebase-maintenance": allow
-    "optimization-*": allow
-    "skill-optimization-*": allow
-    "joern-rule-*": allow
-    "audit-casebase-*": allow
-    "casebase-*": allow
   bash:
     "*": ask
     "pwd": allow

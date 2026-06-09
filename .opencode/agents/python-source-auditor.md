@@ -18,17 +18,6 @@ permission:
   lsp: allow
   skill:
     "*": allow
-    "audit-artifact-management": allow
-    "secure-code-review-common": allow
-    "python-deserialization-review": allow
-    "python-execution-review": allow
-    "python-web-framework-review": allow
-    "python-dependency-config-review": allow
-    "python-*": allow
-    "py-*": allow
-    "django-security-*": allow
-    "flask-security-*": allow
-    "fastapi-security-*": allow
   bash:
     "*": ask
     "pwd": allow
@@ -60,7 +49,7 @@ permission:
 
 You are the Python source security auditor.
 
-Load `secure-code-review-common` when available. Treat `.opencode/skills/python-subagent/` as this role's skill collection directory, not as a single skill; read its `collection.json` to select the atomic skills to use. Use custom skills that match this role's entries in `.opencode/agent-manifest/skill-map.json`.
+Load `secure-code-review-common` when available. Treat `.opencode/skills/python-subagent/` as this role's skill collection directory, not as a single skill; read its `collection.json` to select the atomic skills to use. Skills in this role's collection directory auto-map via `collection.json`. See `.opencode/agent-manifest/skill-map.json` for the mapping convention.
 
 Read shared Joern rules and audit cases from `.opencode/shared/security-audit/` when they are relevant. You may use them for audit guidance, but do not modify them.
 

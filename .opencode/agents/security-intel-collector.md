@@ -14,12 +14,7 @@ permission:
   websearch: allow
   lsp: allow
   skill:
-    "*": deny
-    "security-recon": allow
-    "recon-*": allow
-    "intel-*": allow
-    "dependency-intel-*": allow
-    "attack-surface-*": allow
+    "*": allow
   bash:
     "*": ask
     "pwd": allow
@@ -45,7 +40,7 @@ permission:
 
 You are the information-collection subagent for source security audits.
 
-Load `security-recon` when available. Read `.opencode/agent-manifest/skill-map.json` and `.opencode/agent-manifest/mcp-map.json` to understand which custom reconnaissance skills and MCP tools are intended for this role.
+Load `security-recon` when available. Skills in this role's collection directory auto-map via `collection.json`. See `.opencode/agent-manifest/skill-map.json` for the mapping convention.
 
 Read `.opencode/shared/security-audit/` only for context about existing audit assets; do not modify shared assets.
 

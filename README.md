@@ -17,14 +17,14 @@
 可维护性核心在 `.opencode/agent-manifest/`：
 
 - `roles.json`: 角色边界和输入输出。
-- `skill-map.json`: 每个 subagent 可用的 skill 清单和命名前缀。
+- `skill-map.json`: subagent 与 skill 分组目录的映射关系（文档参考，不再重复维护 skill 清单）。
 - `mcp-map.json`: 每个 subagent 可用的 MCP 工具通配符。
 - `artifact-policy.json`: 临时目录、SARIF/JSON 报告和清理策略。
 - `naming.md`: 新增 skill/MCP 时的命名和维护规则。
 
 所有 skill 按 subagent 分组放置，目录层级固定为 `.opencode/skills/<subagent-skill-group>/<skill-name>/SKILL.md`，例如 `.opencode/skills/c-cpp-subagent/c-cpp-vuln1-skill/SKILL.md`。分组目录不放 `SKILL.md`，只放 `collection.json` 和维护说明；OpenCode 会递归发现子目录里的原子 skill。
 
-添加自有 skill 时，放到对应 subagent 分组下，并优先使用对应角色的命名前缀，例如 `c-cpp-*`、`java-*`、`python-*`、`validation-*`。然后把 skill 名称加入对应分组目录的 `collection.json`；如果它应该成为默认必需 skill，再更新 `skill-map.json`。
+添加自有 skill 时，放到对应 subagent 分组目录下，优先使用对应角色的命名前缀。然后把 skill 名称加入该分组目录的 `collection.json` 即可。`collection.json` 中的 `owner_agent` 定义了自动映射关系，agent 的 skill 权限已设为 `"*": allow`，无需额外同步。
 
 添加自有 MCP 时，先在 `.opencode/opencode.json` 的 `mcp` 中替换或新增服务器定义，再在 `mcp-map.json` 和对应 agent frontmatter 的权限中加入 `<server>_*`。
 

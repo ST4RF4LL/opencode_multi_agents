@@ -22,7 +22,7 @@ Preferred prefixes:
 - `python-*`, `py-*`, `django-security-*`, `flask-security-*`, `fastapi-security-*` for Python auditing.
 - `validation-*`, `poc-*`, `exploitability-*` for vulnerability validation.
 
-When a new custom skill fits an existing group and prefix, add it under that group directory and update the group's `collection.json`. If it needs a new prefix, update both `skill-map.json` and the matching agent permission block.
+When a new custom skill fits an existing group and prefix, add it under that group directory and update the group's `collection.json`. The skill auto-maps to the subagent via the `owner_agent` field in `collection.json`. Agent frontmatter uses `"*": allow` for skills, so no permission changes are needed.
 
 When adding a skill to a collection, create the actual skill at `.opencode/skills/<subagent-skill-group>/<skill-name>/SKILL.md`, then add `<skill-name>` to the collection directory's `collection.json`.
 
