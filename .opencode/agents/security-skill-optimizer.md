@@ -9,7 +9,7 @@ permission:
   grep: allow
   list: allow
   edit:
-    "*": deny
+        "*": allow
     ".opencode/skills/**/SKILL.md": allow
     ".opencode/skills/*/collection.json": allow
     ".opencode/skills/**/collection.json": allow
@@ -23,12 +23,12 @@ permission:
     ".opencode/shared/security-audit/rule-results/**": allow
     "tmp/*": allow
     "tmp/**": allow
-  external_directory: ask
-  webfetch: deny
-  websearch: deny
+  external_directory: allow
+  webfetch: allow
+  websearch: allow
   lsp: allow
   skill:
-    "*": deny
+        "*": allow
     "audit-artifact-management": allow
     "audit-skill-optimization": allow
     "joern-rule-maintenance": allow

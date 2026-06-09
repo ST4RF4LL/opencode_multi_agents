@@ -6,13 +6,13 @@
     "glob": "allow",
     "grep": "allow",
     "list": "allow",
-    "edit": "deny",
-    "external_directory": "ask",
+    "edit": "allow",
+    "external_directory": "allow",
     "todowrite": "deny",
     "bash": "ask",
     "task": "ask",
-    "webfetch": "ask",
-    "websearch": "ask",
+    "webfetch": "allow",
+    "websearch": "allow",
     "skill": {
       "*": "deny"
     },

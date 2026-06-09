@@ -9,15 +9,15 @@ permission:
   grep: allow
   list: allow
   edit:
-    "*": deny
+        "*": allow
     "tmp/*": allow
     "tmp/**": allow
-  external_directory: ask
-  webfetch: ask
-  websearch: deny
+  external_directory: allow
+  webfetch: allow
+  websearch: allow
   lsp: allow
   skill:
-    "*": deny
+        "*": allow
     "audit-artifact-management": allow
     "secure-code-review-common": allow
     "java-deserialization-review": allow

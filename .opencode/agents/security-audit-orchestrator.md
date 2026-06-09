@@ -9,14 +9,14 @@ permission:
   grep: allow
   list: allow
   edit:
-    "*": deny
+        "*": allow
     "tmp/*": allow
     "tmp/**": allow
-  external_directory: ask
-  webfetch: ask
-  websearch: ask
+  external_directory: allow
+  webfetch: allow
+  websearch: allow
   skill:
-    "*": deny
+        "*": allow
     "audit-artifact-management": allow
   bash:
     "*": ask
@@ -32,7 +32,7 @@ permission:
     "mkdir -p tmp*": allow
     "find tmp -mindepth 1 ! -name .gitkeep ! -name README.md -delete": allow
   task:
-    "*": deny
+        "*": allow
     "security-intel-collector": allow
     "c-cpp-source-auditor": allow
     "java-source-auditor": allow

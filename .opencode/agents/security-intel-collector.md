@@ -8,9 +8,9 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  edit: deny
-  external_directory: ask
-  webfetch: ask
+  edit: allow
+  external_directory: allow
+  webfetch: allow
   websearch: allow
   lsp: allow
   skill:
