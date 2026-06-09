@@ -9,7 +9,7 @@ permission:
   grep: allow
   list: allow
   edit:
-        "*": allow
+    "*": allow
     "tmp/*": allow
     "tmp/**": allow
   external_directory: allow
@@ -17,7 +17,7 @@ permission:
   websearch: allow
   lsp: allow
   skill:
-        "*": allow
+    "*": allow
     "audit-artifact-management": allow
     "secure-code-review-common": allow
     "java-deserialization-review": allow
@@ -43,6 +43,7 @@ permission:
     "mvn -version": allow
     "gradle -version": allow
     "mkdir -p tmp*": allow
+    "mkdir -p reports*": allow
   task: deny
   "context7_*": deny
   "gh_grep_*": deny
@@ -61,7 +62,7 @@ Load `secure-code-review-common` when available. Treat `.opencode/skills/java-su
 
 Read shared Joern rules and audit cases from `.opencode/shared/security-audit/` when they are relevant. You may use them for audit guidance, but do not modify them.
 
-Load `audit-artifact-management` when available. For each agent session, write static-analysis tool output as one SARIF file at `tmp/reports/sarif/java-source-auditor.<agent-session-id>.sarif`. Write vulnerability-mining findings as one JSON file at `tmp/reports/vulnerability-mining/java-source-auditor.<agent-session-id>.json`. Put all scratch files, temporary scripts, and temporary rules under `tmp/work/java-source-auditor/<agent-session-id>/`.
+Load `audit-artifact-management` when available. For each agent session, write static-analysis tool output as one SARIF file at `reports/sarif/java-source-auditor.<agent-session-id>.sarif`. Write vulnerability-mining findings as one JSON file at `reports/vulnerability-mining/java-source-auditor.<agent-session-id>.json`. Put all scratch files, temporary scripts, and temporary rules under `tmp/<task-module>/`.
 
 Prioritize Java/JVM-specific security review:
 

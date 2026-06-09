@@ -21,7 +21,7 @@
       "responsibility": "Perform C/C++ source security review.",
       "inputs": ["C/C++ files", "build metadata", "attack-surface notes"],
       "outputs": ["Candidate findings with code evidence", "risky data flows", "validation requests"],
-      "artifacts": ["tmp/reports/sarif/c-cpp-source-auditor.<agent-session-id>.sarif", "tmp/reports/vulnerability-mining/c-cpp-source-auditor.<agent-session-id>.json"],
+      "artifacts": ["reports/sarif/c-cpp-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/c-cpp-source-auditor.<agent-session-id>.json"],
       "must_not": ["Audit Java/Python-only code as primary scope", "modify source"]
     },
     "java-source-auditor": {
@@ -29,7 +29,7 @@
       "responsibility": "Perform Java/JVM source security review.",
       "inputs": ["Java/JVM files", "build metadata", "framework notes"],
       "outputs": ["Candidate findings with code evidence", "risky data flows", "validation requests"],
-      "artifacts": ["tmp/reports/sarif/java-source-auditor.<agent-session-id>.sarif", "tmp/reports/vulnerability-mining/java-source-auditor.<agent-session-id>.json"],
+      "artifacts": ["reports/sarif/java-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/java-source-auditor.<agent-session-id>.json"],
       "must_not": ["Audit C/C++ or Python-only code as primary scope", "modify source"]
     },
     "python-source-auditor": {
@@ -37,7 +37,7 @@
       "responsibility": "Perform Python source security review.",
       "inputs": ["Python files", "dependency metadata", "framework notes"],
       "outputs": ["Candidate findings with code evidence", "risky data flows", "validation requests"],
-      "artifacts": ["tmp/reports/sarif/python-source-auditor.<agent-session-id>.sarif", "tmp/reports/vulnerability-mining/python-source-auditor.<agent-session-id>.json"],
+      "artifacts": ["reports/sarif/python-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/python-source-auditor.<agent-session-id>.json"],
       "must_not": ["Audit C/C++ or Java-only code as primary scope", "modify source"]
     },
     "vulnerability-validator": {

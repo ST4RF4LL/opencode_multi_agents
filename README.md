@@ -46,17 +46,17 @@
 
 ## Temporary artifacts and reports
 
-所有任务运行期产物统一放在当前目录的 `tmp/` 下。`tmp/` 默认被 `.gitignore` 忽略，只保留 `tmp/.gitkeep` 和 `tmp/README.md`。
+审计报告输出到 `reports/` 目录，临时产物存放在 `tmp/` 下按任务模块名称分目录管理。`tmp/` 默认被 `.gitignore` 忽略，只保留 `tmp/.gitkeep` 和 `tmp/README.md`。
 
 约定路径：
 
-- 静态分析报告统一使用 SARIF 2.1.0：`tmp/reports/sarif/<agent-name>.<agent-session-id>.sarif`
-- 漏洞挖掘 subagent/session 结果统一使用 JSON：`tmp/reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`
-- 其他临时文件、中间过程件、脚本、临时规则：`tmp/work/<agent-name>/<agent-session-id>/`
+- 静态分析报告统一使用 SARIF 2.1.0：`reports/sarif/<agent-name>.<agent-session-id>.sarif`
+- 漏洞挖掘 subagent/session 结果统一使用 JSON：`reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`
+- 其他临时文件、中间过程件、脚本、临时规则：`tmp/<task-module>/`
 
 一个 agent session 对应一个 SARIF；一个漏洞挖掘 agent session 对应一个 JSON。多个静态分析工具在同一 session 内运行时，应合并到同一个 SARIF 的多个 `runs`。
 
-Orchestrator 在任务结束前会读取并汇总这些报告，然后清理 `tmp/`。有复用价值的脚本、Joern 规则、静态规则、漏洞案例、误报案例，必须先由 `security-skill-optimizer` 提升到 `.opencode/skills/` 或 `.opencode/shared/security-audit/`。
+Orchestrator 在任务结束前会读取并汇总 `reports/` 下的报告，然后仅清理 `tmp/` 下的任务子目录。有复用价值的脚本、Joern 规则、静态规则、漏洞案例、误报案例，必须先由 `security-skill-optimizer` 提升到 `.opencode/skills/` 或 `.opencode/shared/security-audit/`。
 
 ## Usage
 
@@ -87,11 +87,10 @@ Orchestrator 在任务结束前会读取并汇总这些报告，然后清理 `tm
 
 ## Safety defaults
 
-默认配置是只读审计：
+默认配置已放开编辑和外部访问权限：
 
-- `edit: deny`
-- `security-skill-optimizer` 例外：只允许修改 `.opencode/skills/**/SKILL.md`、skill 集合清单和 `.opencode/shared/security-audit/` 下的规则/案例资产。
-- Orchestrator 和源码审计 subagent 例外：只允许在 `tmp/` 下写入运行期报告和临时产物。
-- `external_directory: ask`
+- `edit: allow`
+- 所有 agent 均可编辑文件和访问外部目录（`external_directory`、`webfetch`、`websearch` 均设为 `allow`）。
+- 审计报告输出到 `reports/` 目录，临时产物按任务模块存入 `tmp/<task-module>/`，任务结束后仅清理对应任务子目录。
 - bash 默认需要确认，只有 `pwd`、`ls`、`find`、`rg`、`git status`、`git log`、`git grep`、`git ls-files` 等只读命令自动允许。
 - 漏洞验证 agent 只允许本地、授权、非破坏性验证，不允许真实攻击、持久化、外连利用或数据窃取。

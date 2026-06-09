@@ -9,14 +9,14 @@ permission:
   grep: allow
   list: allow
   edit:
-        "*": allow
+    "*": allow
     "tmp/*": allow
     "tmp/**": allow
   external_directory: allow
   webfetch: allow
   websearch: allow
   skill:
-        "*": allow
+    "*": allow
     "audit-artifact-management": allow
   bash:
     "*": ask
@@ -30,9 +30,10 @@ permission:
     "git grep*": allow
     "git ls-files*": allow
     "mkdir -p tmp*": allow
-    "find tmp -mindepth 1 ! -name .gitkeep ! -name README.md -delete": allow
+    "mkdir -p reports*": allow
+    "find tmp -maxdepth 1 -mindepth 1 ! -name .gitkeep ! -name README.md -exec rm -rf {} +": allow
   task:
-        "*": allow
+    "*": allow
     "security-intel-collector": allow
     "c-cpp-source-auditor": allow
     "java-source-auditor": allow
@@ -73,16 +74,16 @@ Workflow:
    - `likely`: add review guidance and a pending case only if the missing condition is explicit.
    - `needs-info`: add skill guidance for required evidence when repeated uncertainty would be useful to prevent.
    - `false-positive`: add a false-positive case and refine skills/rules to reduce repeated noise.
-6. Before cleanup, read and summarize the per-session SARIF and JSON reports under `tmp/reports/`.
+6. Before cleanup, read and summarize the per-session SARIF and JSON reports under `reports/`.
 7. Produce one final audit report.
-8. Clean `tmp/` at task end after all useful scripts, rules, vulnerability cases, and false-positive cases have either been promoted by `security-skill-optimizer` or explicitly discarded. Preserve only `tmp/.gitkeep` and `tmp/README.md`.
+8. Clean only the task subdirectories under `tmp/` at task end after all useful scripts, rules, vulnerability cases, and false-positive cases have either been promoted by `security-skill-optimizer` or explicitly discarded. Delete contents of task subdirectories, preserving `tmp/.gitkeep` and `tmp/README.md`.
 
 Do not perform deep language-specific auditing yourself unless it is necessary to route the task. Do not run exploit validation directly. Do not edit the audited source or audit assets directly; use `security-skill-optimizer` for skill, rule, and case updates.
 
 Use this exact cleanup command when shell cleanup is appropriate:
 
 ```sh
-find tmp -mindepth 1 ! -name .gitkeep ! -name README.md -delete
+find tmp -maxdepth 1 -mindepth 1 ! -name .gitkeep ! -name README.md -exec rm -rf {} +
 ```
 
 Final report format:

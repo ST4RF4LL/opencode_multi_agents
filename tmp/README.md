@@ -1,13 +1,13 @@
 # Temporary Audit Workspace
 
-This directory is for per-task and per-agent-session runtime artifacts.
+This directory is for per-task runtime scratch artifacts.
 
-The orchestrator should clean this directory at the end of each audit task, preserving only `.gitkeep` and this README.
+The orchestrator should clean only the task subdirectories at the end of each audit task, preserving `.gitkeep` and this README.
 
 Expected runtime layout:
 
-- `reports/sarif/<agent-name>.<agent-session-id>.sarif`
-- `reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`
-- `work/<agent-name>/<agent-session-id>/`
+- `<task-module>/` — scratch files, generated scripts, intermediate rules, and tool raw output
+
+Audit reports (SARIF, JSON) are stored in the `reports/` directory at the project root, not under `tmp/`.
 
 Reusable scripts, rules, and cases should be promoted by `security-skill-optimizer` into `.opencode/skills/` or `.opencode/shared/security-audit/`, not kept here.

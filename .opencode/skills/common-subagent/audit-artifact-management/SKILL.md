@@ -16,9 +16,9 @@ Use this skill whenever an audit agent creates temporary files, tool reports, st
 
 Use `.opencode/agent-manifest/artifact-policy.json` as the source of truth.
 
-- Static-analysis report: `tmp/reports/sarif/<agent-name>.<agent-session-id>.sarif`
-- Vulnerability-mining report: `tmp/reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`
-- Scratch workspace: `tmp/work/<agent-name>/<agent-session-id>/`
+- Static-analysis report: `reports/sarif/<agent-name>.<agent-session-id>.sarif`
+- Vulnerability-mining report: `reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`
+- Scratch workspace: `tmp/<task-module>/`
 
 ## Static Analysis Reports
 
@@ -49,4 +49,4 @@ One vulnerability-mining agent session produces one JSON file. At minimum includ
 
 ## Cleanup and Promotion
 
-The orchestrator cleans `tmp/` at task end after it has summarized reports and after `security-skill-optimizer` has promoted reusable scripts, rules, or cases. Do not store durable audit knowledge only in `tmp/`.
+The orchestrator cleans only the task subdirectories under `tmp/` at task end after it has summarized reports and after `security-skill-optimizer` has promoted reusable scripts, rules, or cases. Do not store durable audit knowledge only in `tmp/`.

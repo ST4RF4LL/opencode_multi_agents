@@ -9,7 +9,7 @@ permission:
   grep: allow
   list: allow
   edit:
-        "*": allow
+    "*": allow
     ".opencode/skills/**/SKILL.md": allow
     ".opencode/skills/*/collection.json": allow
     ".opencode/skills/**/collection.json": allow
@@ -28,7 +28,7 @@ permission:
   websearch: allow
   lsp: allow
   skill:
-        "*": allow
+    "*": allow
     "audit-artifact-management": allow
     "audit-skill-optimization": allow
     "joern-rule-maintenance": allow

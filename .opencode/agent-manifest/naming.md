@@ -55,8 +55,8 @@ Only `security-skill-optimizer` should modify these assets during normal audit f
 
 All temporary files belong under root `tmp/`, not under `.opencode/shared/`.
 
-- Static-analysis reports use SARIF 2.1.0 at `tmp/reports/sarif/<agent-name>.<agent-session-id>.sarif`.
-- Vulnerability-mining reports use JSON at `tmp/reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`.
-- Scratch files, generated scripts, intermediate rules, and tool raw output use `tmp/work/<agent-name>/<agent-session-id>/`.
+- Static-analysis reports use SARIF 2.1.0 at `reports/sarif/<agent-name>.<agent-session-id>.sarif`.
+- Vulnerability-mining reports use JSON at `reports/vulnerability-mining/<agent-name>.<agent-session-id>.json`.
+- Scratch files, generated scripts, intermediate rules, and tool raw output use `tmp/<task-module>/`.
 
-The orchestrator cleans `tmp/` at task end. Reusable scripts, rules, cases, or skill improvements must be promoted by `security-skill-optimizer` before cleanup.
+The orchestrator cleans only the task subdirectories under `tmp/` at task end, preserving `tmp/.gitkeep` and `tmp/README.md`. Reusable scripts, rules, cases, or skill improvements must be promoted by `security-skill-optimizer` before cleanup.
