@@ -1,0 +1,7 @@
+{
+  "name": "security-skill-optimizer-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "security-skill-optimizer",
+  "description": "Skill collection directory for the skill/rule/case optimizer subagent.",
+  "skills": ["audit-skill-optimization", "joern-rule-maintenance", "audit-casebase-maintenance"]
+}

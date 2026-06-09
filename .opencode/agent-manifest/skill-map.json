@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "source_precedence": [
+    ".opencode/skills",
+    "~/.config/opencode/skills",
+    ".claude/skills",
+    "~/.claude/skills",
+    ".agents/skills",
+    "~/.agents/skills"
+  ],
+  "maintenance_rule": "All project skills are grouped by owner under .opencode/skills/<subagent-skill-group>/<skill-name>/SKILL.md. Group directories have collection.json but never SKILL.md.",
+  "collections": {
+    "security-intel-subagent": {
+      "directory": ".opencode/skills/security-intel-subagent",
+      "owner_agent": "security-intel-collector",
+      "skills": ["security-recon"]
+    },
+    "common-subagent": {
+      "directory": ".opencode/skills/common-subagent",
+      "owner_agent": "shared",
+      "skills": ["audit-artifact-management", "secure-code-review-common"]
+    },
+    "c-cpp-subagent": {
+      "directory": ".opencode/skills/c-cpp-subagent",
+      "owner_agent": "c-cpp-source-auditor",
+      "skills": ["c-cpp-memory-safety-review", "c-cpp-native-boundary-review", "c-cpp-file-privilege-review"]
+    },
+    "java-subagent": {
+      "directory": ".opencode/skills/java-subagent",
+      "owner_agent": "java-source-auditor",
+      "skills": ["java-deserialization-review", "java-injection-review", "java-web-security-review"]
+    },
+    "python-subagent": {
+      "directory": ".opencode/skills/python-subagent",
+      "owner_agent": "python-source-auditor",
+      "skills": ["python-deserialization-review", "python-execution-review", "python-web-framework-review", "python-dependency-config-review"]
+    },
+    "vulnerability-validator-subagent": {
+      "directory": ".opencode/skills/vulnerability-validator-subagent",
+      "owner_agent": "vulnerability-validator",
+      "skills": ["vulnerability-validation"]
+    },
+    "security-skill-optimizer-subagent": {
+      "directory": ".opencode/skills/security-skill-optimizer-subagent",
+      "owner_agent": "security-skill-optimizer",
+      "skills": ["audit-skill-optimization", "joern-rule-maintenance", "audit-casebase-maintenance"]
+    }
+  },
+  "agents": {
+    "security-intel-collector": {
+      "collections": ["security-intel-subagent"],
+      "required": ["security-recon"],
+      "allowed_patterns": ["recon-*", "intel-*", "dependency-intel-*", "attack-surface-*"],
+      "custom": []
+    },
+    "c-cpp-source-auditor": {
+      "collections": ["common-subagent", "c-cpp-subagent"],
+      "required": ["audit-artifact-management", "secure-code-review-common", "c-cpp-memory-safety-review", "c-cpp-native-boundary-review", "c-cpp-file-privilege-review"],
+      "allowed_patterns": ["c-cpp-*", "cpp-*", "native-security-*", "memory-safety-*"],
+      "custom": []
+    },
+    "java-source-auditor": {
+      "collections": ["common-subagent", "java-subagent"],
+      "required": ["audit-artifact-management", "secure-code-review-common", "java-deserialization-review", "java-injection-review", "java-web-security-review"],
+      "allowed_patterns": ["java-*", "jvm-*", "spring-security-*", "deserialization-*"],
+      "custom": []
+    },
+    "python-source-auditor": {
+      "collections": ["common-subagent", "python-subagent"],
+      "required": ["audit-artifact-management", "secure-code-review-common", "python-deserialization-review", "python-execution-review", "python-web-framework-review", "python-dependency-config-review"],
+      "allowed_patterns": ["python-*", "py-*", "django-security-*", "flask-security-*", "fastapi-security-*"],
+      "custom": []
+    },
+    "vulnerability-validator": {
+      "collections": ["vulnerability-validator-subagent"],
+      "required": ["vulnerability-validation"],
+      "allowed_patterns": ["validation-*", "poc-*", "exploitability-*"],
+      "custom": []
+    },
+    "security-skill-optimizer": {
+      "collections": ["common-subagent", "security-skill-optimizer-subagent"],
+      "required": ["audit-artifact-management", "audit-skill-optimization", "joern-rule-maintenance", "audit-casebase-maintenance"],
+      "allowed_patterns": ["optimization-*", "skill-optimization-*", "joern-rule-*", "audit-casebase-*", "casebase-*"],
+      "custom": []
+    },
+    "security-audit-orchestrator": {
+      "collections": ["common-subagent"],
+      "required": ["audit-artifact-management"],
+      "allowed_patterns": [],
+      "custom": []
+    }
+  }
+}

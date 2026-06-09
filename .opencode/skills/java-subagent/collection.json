@@ -1,0 +1,11 @@
+{
+  "name": "java-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "java-source-auditor",
+  "description": "Skill collection directory for the Java/JVM source-audit subagent. Skills live under .opencode/skills/java-subagent/<skill-name>/SKILL.md.",
+  "skills": [
+    "java-deserialization-review",
+    "java-injection-review",
+    "java-web-security-review"
+  ]
+}

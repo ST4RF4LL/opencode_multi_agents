@@ -1,0 +1,7 @@
+{
+  "name": "common-subagent",
+  "type": "shared-skill-collection",
+  "owner_agent": "shared",
+  "description": "Shared skills used by multiple audit agents.",
+  "skills": ["audit-artifact-management", "secure-code-review-common"]
+}

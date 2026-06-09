@@ -1,0 +1,11 @@
+{
+  "name": "c-cpp-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "c-cpp-source-auditor",
+  "description": "Skill collection directory for the C/C++ source-audit subagent. Skills live under .opencode/skills/c-cpp-subagent/<skill-name>/SKILL.md.",
+  "skills": [
+    "c-cpp-memory-safety-review",
+    "c-cpp-native-boundary-review",
+    "c-cpp-file-privilege-review"
+  ]
+}

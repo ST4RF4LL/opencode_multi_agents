@@ -1,0 +1,12 @@
+{
+  "name": "python-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "python-source-auditor",
+  "description": "Skill collection directory for the Python source-audit subagent. Skills live under .opencode/skills/python-subagent/<skill-name>/SKILL.md.",
+  "skills": [
+    "python-deserialization-review",
+    "python-execution-review",
+    "python-web-framework-review",
+    "python-dependency-config-review"
+  ]
+}

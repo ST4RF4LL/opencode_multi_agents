@@ -1,0 +1,7 @@
+{
+  "name": "security-intel-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "security-intel-collector",
+  "description": "Skill collection directory for the security-intel subagent.",
+  "skills": ["security-recon"]
+}
