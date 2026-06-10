@@ -1,32 +1,72 @@
 ---
 name: secure-code-review-common
-description: Common secure code review workflow for source, sink, trust-boundary, reachability, and evidence-based vulnerability findings.
+description: Universal secure code review methodology covering dual-track audit model, coverage matrix, and evidence standards.
 license: MIT
 compatibility: opencode
 metadata:
-  role: source-auditor
-  phase: source-review
+  role: shared
+  collection: common-subagent
 ---
 
 # Secure Code Review Common
 
-Use this skill as the shared review method for all language-specific auditors.
+Use this skill as the foundational methodology for all source security audits. Language-specific skills extend this base.
 
-## Review Method
+## Dual-Track Audit Model
 
-1. Map sources: external request parameters, headers, cookies, bodies, files, archives, environment variables, CLI args, queue messages, database content, and third-party callbacks.
-2. Map sinks: SQL, shell/process execution, file paths, network fetches, templates, deserializers, crypto APIs, logging, redirects, authorization decisions, memory operations, and privileged actions.
-3. Trace data flow between source and sink. Note sanitizers, validators, encoders, allowlists, auth checks, and type conversions.
-4. Check reachability. Prefer findings that can be triggered through a real entrypoint.
-5. Separate confirmed source-backed issues from weak patterns that need validation.
+Three execution strategies map to different vulnerability types:
 
-## Evidence Rules
+| Track | Dimensions | Logic | Key Metric |
+|-------|-----------|-------|------------|
+| **Sink-driven** | D1, D4, D5, D6 | Grep dangerous functions → trace data flow → verify no sanitization | Sink fan-out rate ≥ 30% |
+| **Control-driven** | D3, D9 | Enumerate operations → verify security controls exist → missing = vulnerability | Endpoint audit rate |
+| **Config-driven** | D2, D7, D8, D10 | Search configurations → compare against security baselines | Config item coverage |
 
-- Every candidate finding needs an affected file and the relevant code path.
-- Include why existing guards are insufficient.
-- State confidence and what would change the conclusion.
-- Do not invent runtime facts that are not visible in source, config, or user-provided context.
+**Critical distinction**: Sink-driven finds "dangerous code that exists." Control-driven finds "security controls that are absent" — Grep cannot find code that doesn't exist.
 
-## Finding Minimum
+## D1-D10 Coverage Matrix
 
-Include weakness class, affected code, trigger/data flow, impact, validation need, and recommended fix.
+Use this checklist to track completeness:
+
+| D# | Dimension | Core Question | Audit Track |
+|----|-----------|---------------|-------------|
+| D1 | Injection | Can user input reach SQL/Cmd/LDAP/SSTI/SpEL execution sinks? | Sink-driven |
+| D2 | Authentication | Token generation/verification complete? Secrets safe? Session fixation? | Config-driven |
+| D3 | Authorization | Does each sensitive operation verify user/resource ownership? CRUD permission consistent? | Control-driven |
+| D4 | Deserialization | Untrusted data deserialized? Gadget chains reachable? | Sink-driven |
+| D5 | File Operations | Path traversal? Unrestricted upload? Zip Slip? Symlink attacks? | Sink-driven |
+| D6 | SSRF | User-controlled URLs? Protocol restriction? Cloud metadata accessible? | Sink-driven |
+| D7 | Cryptography | Hardcoded keys/IV? ECB mode? Weak KDF? Cert validation bypass? | Config-driven |
+| D8 | Configuration | Debug endpoints exposed? CORS misconfig? Secrets in config files? | Config-driven |
+| D9 | Business Logic | Race conditions? Mass Assignment? IDOR? State machine bypass? Payment tampering? | Control-driven |
+| D10 | Supply Chain | Dependency CVEs? Vendored code risks? Version in security range? | Config-driven |
+
+## Evidence Standards
+
+Every finding must include:
+
+1. **Affected code** — `file:line` with actual code snippet (not fabricated)
+2. **Data flow** — source → transformation → sink (sink-driven) OR missing control description (control-driven)
+3. **Severity rationale** — `Reachability × InputControl × ExploitComplexity × Impact`
+4. **Concrete fix** — specific code change, not generic advice
+
+## False-Positive Prevention Rules
+
+- Verify file/location exists before reporting (use Read tool output)
+- Confirm the project actually uses the language/framework detected
+- Do not report missing crypto in projects without crypto functionality
+- Do not report SSRF in projects without any HTTP client code
+- User-controlled config ≠ vulnerability; user-controlled input reaching exec = vulnerability
+- `#{}` in MyBatis = safe; `${}` = dangerous; `PreparedStatement` = safe; `Statement` + concat = dangerous
+
+## Output Conventions
+
+All findings must use this header:
+
+```
+=== HEADER START ===
+COVERAGE: D1=✅(fan=N/M), D2=✅(N), ...
+UNCHECKED: D#:[category]: brief description
+STATS: tools=N/50 | files_read=N | grep_patterns=N | endpoints_audited=N/total
+=== HEADER END ===
+```
