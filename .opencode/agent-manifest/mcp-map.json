@@ -23,9 +23,9 @@
       "purpose": "CodeQL database/query workflows."
     },
     "joern": {
-      "status": "placeholder",
+      "status": "enabled-local",
       "type": "custom",
-      "purpose": "Joern CPG generation, query execution, and static vulnerability mining rule assistance."
+      "purpose": "Workspace-shared local Joern CPG generation, published-rule execution, SARIF export, and session cleanup."
     },
     "cpp_index": {
       "status": "placeholder",
@@ -49,12 +49,12 @@
     }
   },
   "agents": {
-    "security-intel-collector": ["context7_*", "gh_grep_*"],
+    "security-intel-collector": ["context7_*", "gh_grep_*", "joern_*"],
     "c-cpp-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "cpp_index_*"],
     "java-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "jvm_index_*"],
     "python-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "python_index_*"],
-    "vulnerability-validator": ["audit_lab_*"],
+    "vulnerability-validator": ["audit_lab_*", "joern_*"],
     "security-skill-optimizer": ["joern_*"],
-    "security-audit-orchestrator": []
+    "security-audit-orchestrator": ["joern_*"]
   }
 }

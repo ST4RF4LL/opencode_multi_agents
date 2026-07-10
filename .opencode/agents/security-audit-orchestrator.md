@@ -12,6 +12,7 @@ permission:
     "*": allow
     "tmp/*": allow
     "tmp/**": allow
+    ".opencode/shared/security-audit/**": deny
   external_directory: allow
   webfetch: allow
   websearch: allow
@@ -43,7 +44,7 @@ permission:
   "gh_grep_*": deny
   "semgrep_*": deny
   "codeql_*": deny
-  "joern_*": deny
+  "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": deny

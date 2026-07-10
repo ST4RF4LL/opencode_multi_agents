@@ -12,6 +12,7 @@ permission:
     "*": allow
     "tmp/*": allow
     "tmp/**": allow
+    ".opencode/shared/security-audit/**": deny
   external_directory: allow
   webfetch: allow
   websearch: allow
