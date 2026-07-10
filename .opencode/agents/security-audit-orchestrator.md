@@ -5,50 +5,19 @@ temperature: 0.1
 color: warning
 permission:
   read: allow
+  edit:
+    "*": allow
+    ".opencode/shared/security-audit/**": deny
   glob: allow
   grep: allow
   list: allow
-  edit:
-    "*": allow
-    "tmp/*": allow
-    "tmp/**": allow
-    ".opencode/shared/security-audit/**": deny
+  bash: allow
+  task: allow
   external_directory: allow
   webfetch: allow
   websearch: allow
-  skill:
-    "*": allow
-  bash:
-    "*": ask
-    "pwd": allow
-    "ls": allow
-    "ls *": allow
-    "find *": allow
-    "rg *": allow
-    "git status*": allow
-    "git log*": allow
-    "git grep*": allow
-    "git ls-files*": allow
-    "mkdir -p tmp*": allow
-    "mkdir -p reports*": allow
-    "find tmp -maxdepth 1 -mindepth 1 ! -name .gitkeep ! -name README.md -exec rm -rf {} +": allow
-  task:
-    "*": allow
-    "security-intel-collector": allow
-    "c-cpp-source-auditor": allow
-    "java-source-auditor": allow
-    "python-source-auditor": allow
-    "vulnerability-validator": allow
-    "security-skill-optimizer": allow
-  "context7_*": deny
-  "gh_grep_*": deny
-  "semgrep_*": deny
-  "codeql_*": deny
-  "joern_*": allow
-  "cpp_index_*": deny
-  "jvm_index_*": deny
-  "python_index_*": deny
-  "audit_lab_*": deny
+  skill: allow
+  lsp: allow
 ---
 
 You are the coordinator for multi-round, dual-track source security audits.
