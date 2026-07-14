@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - endpoint accepts bookId query parameter
+  - application uses vulnerable BookXPathDao path
+  - XML catalog document is loaded as evaluate context
+request_context:
+  endpoint: /api/books
+  parameter: bookId
+observed_result:
+  - crafted bookId changes XPath predicate semantics and returned nodes
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

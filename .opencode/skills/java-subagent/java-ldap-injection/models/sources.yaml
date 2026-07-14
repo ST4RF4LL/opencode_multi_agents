@@ -1,0 +1,74 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields require field-level taint tracking
+
+  - id: spring-security-login
+    framework: spring-security
+    method_full_name:
+      - ".*Authentication.*getName.*"
+      - ".*UsernamePasswordAuthenticationToken.*getPrincipal.*"
+      - ".*HttpServletRequest.*getParameter.*username.*"
+    controlled_value: return
+    confidence: high
+    notes: login username/password often flow into LDAP bind/search filters
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: file-or-config-external
+    framework: io
+    method_full_name:
+      - ".*Files.*readString.*"
+      - ".*BufferedReader.*readLine.*"
+    controlled_value: return
+    confidence: low
+    notes: only when external untrusted content is later used in LDAP filter/DN

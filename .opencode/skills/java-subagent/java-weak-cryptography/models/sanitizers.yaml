@@ -1,0 +1,76 @@
+sanitizers:
+  strong:
+    - id: aes-gcm-unique-nonce
+      condition:
+        - algorithm_is_AES_GCM_or_ChaCha20_Poly1305
+        - nonce_or_iv_unique_per_encryption
+        - key_from_secret_manager_or_keystore_not_hardcoded
+    - id: modern-password-hash
+      condition:
+        - uses_bcrypt_or_scrypt_or_argon2
+        - or_pbkdf2_with_high_iteration_and_unique_salt
+    - id: sha2-or-better-digest
+      condition:
+        - algorithm_is_SHA_256_or_SHA_384_or_SHA_512_or_SHA3
+        - not_used_as_sole_password_storage
+    - id: rsa-oaep
+      condition:
+        - RSA_encryption_uses_OAEP
+        - key_size_at_least_2048
+    - id: securerandom-unseeded
+      condition:
+        - java_security_SecureRandom_without_static_seed
+        - output_used_for_secrets
+    - id: tink-or-managed-crypto
+      condition:
+        - uses_Google_Tink_or_equivalent_high_level_AEAD
+        - no_raw_weak_JCA_algorithm_selection
+
+  contextual:
+    - id: aes-cbc-with-hmac
+      condition:
+        - AES_CBC_or_CTR_with_separate_integrity_MAC
+        - random_IV_per_message
+        - encrypt_then_MAC_order_correct
+      notes: not preferred over GCM; accept only with full AEAD properties
+    - id: pbkdf2-adequate
+      condition:
+        - PBKDF2WithHmacSHA256_or_better
+        - iterations_sufficient_for_threat_model
+        - unique_per_user_salt
+    - id: md5-non-security-checksum
+      condition:
+        - digest_used_only_for_cache_key_or_file_dedup
+        - no_integrity_or_auth_security_claim
+      notes: document non-security use to reject finding
+
+  weak:
+    - id: aes-cbc-without-mac
+      pattern:
+        - AES/CBC
+        - AES/CFB
+      notes: malleable without separate integrity
+    - id: sha256-as-password
+      pattern:
+        - MessageDigest SHA-256 on password once
+      notes: fast hash; offline cracking feasible
+    - id: random-uuid-as-secret
+      pattern:
+        - UUID.randomUUID for session token without SecureRandom audit
+      notes: often OK for IDs; verify unpredictability requirements
+
+  invalid:
+    - id: aes-ecb
+      notes: ECB leaks patterns; never acceptable for general encryption
+    - id: static-iv-gcm
+      notes: GCM nonce reuse is catastrophic
+    - id: des-3des-rc4
+      notes: broken or prohibited algorithms
+    - id: md5-sha1-password
+      notes: unsuitable for password storage
+    - id: java-util-random-for-key
+      notes: predictable PRNG for secrets
+    - id: hardcoded-secretkeyspec
+      notes: key extraction from binary/source
+    - id: rsa-pkcs1v15-encryption
+      notes: padding oracle risk; prefer OAEP

@@ -1,0 +1,54 @@
+l0_stack_detection:
+  - pattern: "org.slf4j"
+    implies: slf4j
+  - pattern: "org.apache.logging.log4j|log4j-core|LogManager.getLogger"
+    implies: log4j2
+  - pattern: "ch.qos.logback|logback-classic|logback.xml"
+    implies: logback
+  - pattern: "java.util.logging.Logger"
+    implies: jul
+  - pattern: "org.apache.commons.logging"
+    implies: commons-logging
+
+l1_sink_keywords:
+  - "LoggerFactory.getLogger"
+  - "LogManager.getLogger"
+  - "logger.info"
+  - "logger.warn"
+  - "logger.error"
+  - "logger.debug"
+  - "log.info"
+  - "log.warn"
+  - "log.error"
+  - "MDC.put"
+  - "ThreadContext.put"
+  - "Logger.getLogger"
+  - ".info("
+  - ".warn("
+  - ".error("
+
+high_risk_concat_hints:
+  - 'logger\\.(info|warn|error|debug)\\([^)]*\\+'
+  - 'log\\.(info|warn|error|debug)\\([^)]*\\+'
+  - '"(Login|User|Auth|Failed|Success).*"\\s*\\+'
+  - 'String\\.format\\([^)]*logger|logger\\.[a-z]+\\(String\\.format'
+  - 'append\\(\".*(login|user|auth)'
+
+config_layout_hints:
+  - "PatternLayout"
+  - "JsonTemplateLayout"
+  - "JsonEncoder"
+  - "logstash-logback-encoder"
+  - "%msg"
+  - "%message"
+  - "maxStringLength"
+
+rg_commands:
+  stack: |
+    rg -n "org\\.slf4j|org\\.apache\\.logging\\.log4j|ch\\.qos\\.logback|java\\.util\\.logging\\.Logger|commons\\.logging" --glob '*.java' --glob '*.xml' --glob '*.yml' --glob '*.properties'
+  sinks: |
+    rg -n "LoggerFactory\\.getLogger|LogManager\\.getLogger|logger\\.(info|warn|error|debug)|MDC\\.put|ThreadContext\\.put" --glob '*.java'
+  concat: |
+    rg -n 'logger\.(info|warn|error|debug)\([^;]*\+|log\.(info|warn|error)\([^;]*\+' --glob '*.java'
+  layout: |
+    rg -n "PatternLayout|JsonTemplateLayout|JsonEncoder|maxStringLength|%msg|%message" --glob '*.xml' --glob '*.yml' --glob '*.properties'

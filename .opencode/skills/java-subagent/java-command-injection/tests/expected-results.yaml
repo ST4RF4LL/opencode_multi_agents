@@ -1,0 +1,47 @@
+positive:
+  P01_RuntimeExecConcat.java:
+    expect: candidate_or_finding
+    subtype: runtime-exec-concat
+    sink: Runtime.exec
+  P02_ProcessBuilderShell.java:
+    expect: candidate_or_finding
+    subtype: processbuilder-shell-wrapper
+    sink: ProcessBuilder.start
+  P03_RuntimeExecShellArray.java:
+    expect: candidate_or_finding
+    subtype: processbuilder-shell-wrapper
+    sink: Runtime.exec
+    notes: array form with sh -c is still shell injection
+  P04_CommonsExecParse.java:
+    expect: candidate_or_finding
+    subtype: commons-exec-string
+    sink: CommandLine.parse
+  P05_ProcessBuilderCmdC.java:
+    expect: candidate_or_finding
+    subtype: processbuilder-shell-wrapper
+    sink: ProcessBuilder.start
+
+negative:
+  N01_ProcessBuilderListSafe.java:
+    expect: rejected
+    reason: list_form_fixed_binary_validated_arg_no_shell
+  N02_FixedCommandMap.java:
+    expect: rejected
+    reason: fixed_command_mapping
+  N03_JavaApiReplacement.java:
+    expect: rejected
+    reason: no_os_process
+  N04_ConstantCommand.java:
+    expect: rejected
+    reason: no_external_input
+  N05_RuntimeExecConstant.java:
+    expect: rejected
+    reason: constant_argv
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

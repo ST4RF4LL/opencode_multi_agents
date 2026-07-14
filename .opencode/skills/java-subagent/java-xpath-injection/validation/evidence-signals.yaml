@@ -1,0 +1,22 @@
+strong_signals:
+  - deterministic_boolean_response_difference_from_xpath_predicate
+  - xpath_error_reveals_syntax_influence
+  - extracted_node_content_matches_injected_query_intent
+  - application_logs_show_attacker_controlled_xpath
+  - successful_auth_bypass_via_xpath_logic
+
+medium_signals:
+  - stable_result_set_difference_tied_to_metacharacters
+  - predicate_changes_selected_nodes_in_attacker_controlled_way
+  - partial_error_disclosure_tied_to_quotes_or_operators
+
+weak_signals:
+  - generic_500_without_xpath_semantics
+  - presence_of_xpath_api_only
+  - single_quote_causes_error_without_confirming_structure_control
+  - xxe_related_parser_error_without_expression_control
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

@@ -1,0 +1,10 @@
+source:
+  kind: algorithm_config
+  expression: '"AES/ECB/PKCS5Padding"'
+path:
+  - CryptoService.encrypt
+sink:
+  method: Cipher.getInstance / Cipher.doFinal
+influence: confidentiality_of_encrypted_payload
+related_issues:
+  - hardcoded_key_bytes

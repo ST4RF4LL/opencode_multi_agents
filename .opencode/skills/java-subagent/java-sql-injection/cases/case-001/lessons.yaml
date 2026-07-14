@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Statement.execute* with concatenated SQL is a primary sink family
+  - PreparedStatement is only safe when the SQL template itself is not concatenated
+  - getParameter -> DAO string concat is a high-frequency Java web pattern
+non_transferable_details:
+  - original endpoint path
+  - original table/column names
+  - original payload strings

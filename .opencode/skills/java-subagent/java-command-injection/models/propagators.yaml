@@ -1,0 +1,48 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"ping -c 1 " + host'
+      - 'cmd + " " + userArg'
+      - 'new StringBuilder().append("sh -c ").append(script)'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("nslookup %s", host)'
+      - 'MessageFormat.format("cmd /c {0}", input)'
+
+  - pattern: array-or-list-construction
+    examples:
+      - 'new String[]{"sh", "-c", userInput}'
+      - 'Arrays.asList("cmd.exe", "/c", userInput)'
+      - 'list.add(userInput); new ProcessBuilder(list)'
+
+  - pattern: getter-setter
+    examples:
+      - setHost -> getHost
+      - setCommand -> getCommand
+      - setArgs -> getArgs
+
+  - pattern: builder
+    examples:
+      - CommandSpec.binary(x).arg(y).build()
+      - ProcessBuilder.command(...).directory(...).start()
+
+  - pattern: collection
+    examples:
+      - map.put("host", input)
+      - args.get(0)
+
+  - pattern: dto-field
+    examples:
+      - PingRequest.host
+      - JobRequest.shellScript
+
+  - pattern: wrapper-method
+    examples:
+      - ShellUtil.run(cmd)
+      - ProcessHelper.execute(command)
+      - SystemCommand.exec(argv)
+
+  - pattern: second-order-store
+    examples:
+      - save(userScript) -> later load() -> Runtime.exec

@@ -1,0 +1,22 @@
+id: case-002
+vulnerability_type: sql-injection
+subtype: mybatis-dollar-injection
+source:
+  type: request-parameter
+  expression: "@RequestParam String sort"
+sink:
+  api: MyBatis ${sort}
+  sensitive_argument: order-by-identifier
+propagation:
+  - UserController.list
+  - UserMapper.selectUsers
+root_cause:
+  - mybatis_dollar_substitution_for_order_by
+  - no_identifier_allowlist
+prerequisites:
+  - mybatis_mapper_reachable_from_controller
+observed_behavior:
+  - sort parameter injects SQL fragments into ORDER BY
+fix:
+  - replace_dollar_with_allowlisted_column_mapping
+  - avoid_${}_for_user_input

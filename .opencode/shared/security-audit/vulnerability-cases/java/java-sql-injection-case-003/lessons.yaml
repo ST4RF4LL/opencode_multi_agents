@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Using JPA/Hibernate does not prevent SQLi when native/HQL strings are concatenated
+  - createNativeQuery/createQuery first argument is a sink if non-constant
+  - setParameter only helps when the query template itself is constant
+non_transferable_details:
+  - original route
+  - original entity/table names
+  - original payload

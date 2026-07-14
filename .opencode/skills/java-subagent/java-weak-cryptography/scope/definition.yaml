@@ -1,0 +1,26 @@
+id: java-weak-cryptography
+name: Weak Cryptography
+language: java
+cwe:
+  - CWE-327
+  - CWE-328
+  - CWE-330
+  - CWE-321
+  - CWE-916
+objective:
+  detect: >
+    Use of broken or risky cryptographic algorithms, modes, IV/nonce handling,
+    key material sources, random number generation for security-sensitive values,
+    or weak password hashing such that confidentiality, integrity, authenticity,
+    or unpredictability guarantees fail.
+core_condition:
+  - crypto_primitive_or_config_is_present
+  - primitive_is_weak_or_misconfigured
+  - usage_is_security_sensitive
+  - effective_strong_alternative_or_control_is_missing
+not_in_scope:
+  - pure_tls_misconfiguration_without_app_crypto_api
+  - certificate_pinning_policy_only
+  - side_channel_timing_attacks_without_weak_primitive
+  - quantum_readiness_only_without_current_weakness
+  - custom_protocol_design_review_without_jca_pattern

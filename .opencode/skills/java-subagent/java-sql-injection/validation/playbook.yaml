@@ -1,0 +1,33 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_sql_influence_surface
+  - inspect_input_transformations
+  - inspect_parameterization_and_allowlists
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - where_clause_value
+  - boolean_condition
+  - order_by_identifier
+  - column_or_table_identifier
+  - limit_offset
+  - like_pattern
+  - multi_statement
+
+observable_behaviors:
+  - sql_error_message_difference
+  - boolean_content_difference
+  - timing_difference
+  - unexpected_row_set
+  - authentication_bypass_effect
+  - data_disclosure_in_response
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads

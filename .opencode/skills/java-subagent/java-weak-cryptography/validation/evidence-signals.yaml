@@ -1,0 +1,25 @@
+strong_signals:
+  - source_shows_AES_ECB_or_DES_or_RC4_transformation
+  - GCMParameterSpec_or_IvParameterSpec_fed_constant_bytes
+  - SecretKeySpec_constructed_from_string_or_byte_literal
+  - MessageDigest_MD5_or_SHA1_on_password_field
+  - NoOpPasswordEncoder_or_MessageDigestPasswordEncoder_in_security_config
+  - java_util_Random_feeds_key_or_session_token_bytes
+
+medium_signals:
+  - Cipher_getInstance_AES_without_mode_string
+  - AES_CBC_without_visible_MAC
+  - SecureRandom_setSeed_with_low_entropy_constant
+  - PBKDF2_with_suspiciously_low_iteration_constant
+  - weak_algorithm_selected_via_config_property
+
+weak_signals:
+  - presence_of_Cipher_API_only
+  - MD5_without_known_security_use
+  - Random_used_for_non_security_jitter
+  - crypto_in_comments_or_disabled_code
+
+interpretation:
+  strong: supports Finding when security use and reachability are clear
+  medium: supports Candidate; may upgrade with path/context
+  weak: insufficient alone

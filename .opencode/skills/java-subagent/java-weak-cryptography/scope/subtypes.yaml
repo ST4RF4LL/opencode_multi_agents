@@ -1,0 +1,28 @@
+subtypes:
+  - id: weak-algo
+    description: >
+      使用已知弱/禁用算法或模式：DES、3DES、RC4、Blowfish(短密钥)、
+      AES/ECB、MD5/SHA-1 用于安全上下文、RSA 无 OAEP/PKCS1v1.5 加密等
+    cwe: [CWE-327, CWE-328]
+
+  - id: static-iv
+    description: >
+      IV/nonce 硬编码、全零、可预测或跨消息重用（含 GCM 固定 nonce）
+    cwe: [CWE-329, CWE-330]
+
+  - id: insecure-random
+    description: >
+      使用 java.util.Random / Math.random / 固定种子 SecureRandom
+      生成密钥、token、session id、CSRF、OTP 等安全敏感值
+    cwe: [CWE-330, CWE-338]
+
+  - id: weak-password-hash
+    description: >
+      口令使用 MD5/SHA-1/SHA-256 单次哈希、无盐/固定盐、可逆加密存储，
+      而非 bcrypt/scrypt/argon2/PBKDF2(高迭代)
+    cwe: [CWE-916, CWE-328]
+
+  - id: hardcoded-key
+    description: >
+      密钥/密钥材料硬编码在源码或可部署资源中，或从可预测来源派生
+    cwe: [CWE-321, CWE-798]

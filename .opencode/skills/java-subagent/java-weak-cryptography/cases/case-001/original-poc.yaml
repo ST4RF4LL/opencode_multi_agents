@@ -1,0 +1,11 @@
+case_specific: true
+preconditions:
+  - service encrypts structured records with AES/ECB
+  - attacker can observe multiple ciphertexts
+request_context:
+  note: static demonstration preferred over live cryptanalysis
+observed_result:
+  - repeated plaintext blocks produce repeated ciphertext blocks
+reuse_policy:
+  - reference_only
+  - do_not_execute_destructive_tests_on_production

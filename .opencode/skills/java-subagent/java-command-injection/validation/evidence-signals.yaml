@@ -1,0 +1,20 @@
+strong_signals:
+  - process_audit_or_logs_show_attacker_controlled_command_or_args
+  - deterministic_side_effect_from_injected_command_on_authorized_probe
+  - command_output_reflected_matching_injected_intent
+  - shell_metacharacter_changes_execution_structure_as_predicted
+
+medium_signals:
+  - stable_time_delay_correlated_with_injected_sleep_style_behavior
+  - platform_specific_error_tied_to_metacharacters_or_extra_args
+  - response_difference_only_when_command_structure_changes
+
+weak_signals:
+  - generic_500_without_command_semantics
+  - presence_of_Runtime_exec_or_ProcessBuilder_only
+  - single_metacharacter_error_without_confirming_control
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

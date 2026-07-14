@@ -1,0 +1,22 @@
+id: case-001
+vulnerability_type: command-injection
+subtype: runtime-exec-concat
+source:
+  type: request-parameter
+  expression: request.getParameter("host")
+sink:
+  api: Runtime.exec
+  sensitive_argument: 1
+propagation:
+  - NetController.ping
+  - NetService.pingHost
+root_cause:
+  - command_string_concatenated_with_user_input
+  - runtime_exec_used_instead_of_java_api_or_list_args
+prerequisites:
+  - reachable_http_endpoint
+observed_behavior:
+  - attacker_can_inject_shell_metacharacters_into_command_string
+fix:
+  - use_java_api_when_possible
+  - or_processbuilder_list_with_fixed_binary_and_validated_arg

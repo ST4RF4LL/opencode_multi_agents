@@ -1,0 +1,23 @@
+id: case-002
+vulnerability_type: xpath-injection
+subtype: boolean-logic-bypass
+source:
+  type: request-parameter
+  expression: "@RequestParam String username / password"
+sink:
+  api: XPath.evaluate
+  sensitive_argument: 1
+propagation:
+  - AuthController.login
+  - XmlUserStore.authenticate
+root_cause:
+  - credentials_concatenated_into_xpath_boolean_predicate
+  - no_variable_binding_or_allowlist
+prerequisites:
+  - login_endpoint_reachable
+  - users_xml_document_used_for_auth_lookup
+observed_behavior:
+  - injected or/and alters authentication XPath logic
+fix:
+  - use_parameterized_xpath_with_variable_resolver
+  - prefer_non_xpath_credential_verification_when_possible

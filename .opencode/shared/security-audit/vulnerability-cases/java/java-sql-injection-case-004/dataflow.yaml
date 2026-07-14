@@ -1,0 +1,10 @@
+source:
+  method: ColorController.findByName
+  parameter: colorName
+  annotation: RequestParam
+path:
+  - ColorController.findByName
+sink:
+  method: EntityManager.createQuery
+  argument: 1
+influence: jpql_where_clause_value_and_structure

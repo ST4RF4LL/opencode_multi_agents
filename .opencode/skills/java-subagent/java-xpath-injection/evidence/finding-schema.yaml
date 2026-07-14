@@ -1,0 +1,41 @@
+finding_id: XPATHI-001
+status: finding # finding | candidate | rejected
+vulnerability_type: xpath-injection
+subtype: classic-string-concat
+confidence: high # high | medium | low
+entry:
+  route: "GET /api/books"
+  method: BookController.getById
+  parameter: bookId
+source:
+  file: BookController.java
+  line: 42
+  expression: request.getParameter("bookId")
+sink:
+  file: BookXPathDao.java
+  line: 88
+  expression: xpath.compile(expr) / xpath.evaluate(expr, doc)
+dataflow:
+  - BookController.getById
+  - BookService.find
+  - BookXPathDao.queryById
+controls:
+  observed: []
+  assessment:
+    - missing-variable-resolver
+    - string-concat-into-xpath
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - result_set_or_error_diff
+limitations: []
+rejection_reason: null

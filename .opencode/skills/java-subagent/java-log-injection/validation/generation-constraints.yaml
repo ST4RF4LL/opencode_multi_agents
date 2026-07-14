@@ -1,0 +1,23 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_log_message_construction
+  - actual_logging_framework_and_layout
+  - actual_validation_or_sanitization_logic
+  - actual_deployment_log_destination
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - claim_success_from_logger_api_match_only
+  - perform_destructive_or_unrelated_actions
+  - use_jndi_log4shell_payloads_as_primary_proof
+  - exfiltrate_unrelated_sensitive_data_beyond_minimal_proof
+  - flood_production_logs_beyond_minimal_proof

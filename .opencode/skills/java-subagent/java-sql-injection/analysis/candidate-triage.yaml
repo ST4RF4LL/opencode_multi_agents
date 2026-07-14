@@ -1,0 +1,33 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous SQL API or dynamic SQL pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach SQL construction/execution argument
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_identifier_analysis
+
+  L3_semantic_candidate:
+    meaning: parameterization missing or bypassable; attacker influences SQL structure/identifier
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - write_query_possible
+  - multi_statement_possible
+  - admin_data_access
+  - second_order_with_stored_payload
+
+priority_reduce:
+  - test_code_only
+  - constant_sql
+  - allowlisted_identifier_only
+  - dead_code
+  - local_dev_tooling

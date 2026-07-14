@@ -1,0 +1,26 @@
+id: runtime-exec
+name: java.lang.Runtime.exec
+detect:
+  imports:
+    - java.lang.Runtime
+  keywords:
+    - Runtime.getRuntime().exec
+    - Runtime.exec
+
+sources: inherit-global
+sinks:
+  - runtime-exec
+
+safe_patterns:
+  - constant_command_string_no_user_input
+  - string_array_with_constant_binary_and_allowlisted_args
+
+unsafe_patterns:
+  - exec_string_concat_or_format_with_user_input
+  - exec_single_string_built_from_untrusted_data
+  - exec_array_where_command_name_is_user_controlled
+
+notes:
+  - String overload tokenizes but does not fully replicate shell; still high risk with concat
+  - Prefer ProcessBuilder list form or pure Java APIs
+  - Dangerous API presence alone is not a finding

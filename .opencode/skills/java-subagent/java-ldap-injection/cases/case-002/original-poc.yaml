@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - endpoint accepts userId used to build DN
+  - application uses vulnerable DN concat path
+request_context:
+  endpoint: /api/users/profile
+  parameter: userId
+observed_result:
+  - crafted userId alters DN path beyond intended RDN
+  - may resolve or modify unintended directory objects
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

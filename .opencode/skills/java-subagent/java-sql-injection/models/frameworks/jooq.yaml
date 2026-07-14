@@ -1,0 +1,21 @@
+id: jooq
+name: jOOQ
+detect:
+  imports:
+    - org.jooq
+  keywords:
+    - DSLContext
+    - DSL.sql
+    - fetch
+    - execute
+
+sinks:
+  - jooq-plain-sql
+
+safe_patterns:
+  - type_safe_dsl_api
+  - bind_values_via_param
+
+unsafe_patterns:
+  - DSL.sql_with_user_string
+  - plain_sql_templates_with_concat

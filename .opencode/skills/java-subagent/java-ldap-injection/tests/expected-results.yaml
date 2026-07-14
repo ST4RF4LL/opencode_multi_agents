@@ -1,0 +1,44 @@
+positive:
+  - id: P01_FilterConcatLogin
+    expect: candidate_or_finding
+    subtype: filter-string-concat
+    reason: DirContext.search filter built with username/password concat
+  - id: P02_SpringLdapFilterConcat
+    expect: candidate_or_finding
+    subtype: spring-ldap-filter-concat
+    reason: LdapTemplate.search with cn concat
+  - id: P03_DnConcatLookup
+    expect: candidate_or_finding
+    subtype: dn-injection
+    reason: DN string concat into getAttributes
+  - id: P04_StringFormatFilter
+    expect: candidate_or_finding
+    subtype: filter-string-concat
+    reason: String.format filter from request param
+  - id: P05_HardcodedFilterConcat
+    expect: candidate_or_finding
+    subtype: spring-ldap-filter-concat
+    reason: HardcodedFilter with concat
+
+negative:
+  - id: N01_FilterArgsBinding
+    expect: rejected
+    reason: constant template with filterArgs binding
+  - id: N02_LdapEncoderFilter
+    expect: rejected
+    reason: LdapEncoder.filterEncode on value before fixed template
+  - id: N03_EqualsFilterApi
+    expect: rejected
+    reason: EqualsFilter encodes assertion values
+  - id: N04_ConstantFilter
+    expect: rejected
+    reason: no external input in filter
+  - id: N05_UsernameAllowlist
+    expect: rejected
+    reason: allowlist maps to constant filters only
+
+metrics:
+  - sink_candidate_recall
+  - dataflow_hit_rate
+  - false_positive_rate
+  - finding_precision

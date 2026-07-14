@@ -1,0 +1,53 @@
+positive:
+  P01_WriterPrintParam.java:
+    expect: candidate_or_finding
+    subtype: reflected-html
+    sink: PrintWriter.print
+  P02_JspUnescapedEl.jsp:
+    expect: candidate_or_finding
+    subtype: reflected-html
+    sink: jsp-el-unescaped
+  P03_WrongEncodeContext.java:
+    expect: candidate_or_finding
+    subtype: wrong-encoding-context
+    notes: Encode.forHtml inside JS string is invalid control
+  P04_ThymeleafUtext.html:
+    expect: sink_candidate
+    subtype: template-unescape
+    sink: th:utext
+  P05_ModelToRawView.java:
+    expect: candidate
+    subtype: reflected-html
+    notes: model propagator; confirm view unescapes
+
+negative:
+  N01_EncodeForHtml.java:
+    expect: rejected
+    reason: matching_context_html_encoding
+  N02_JstlCout.jsp:
+    expect: rejected
+    reason: jstl_default_escape
+  N03_ThymeleafText.html:
+    expect: rejected
+    reason: th_text_auto_escape
+  N04_EncodeForJs.java:
+    expect: rejected
+    reason: matching_context_js_encoding
+  N05_ConstantHtml.java:
+    expect: rejected
+    reason: no_external_input
+
+regression:
+  R01_HtmlPolicySanitizer.java:
+    expect: strong_sanitizer_pattern
+    notes: PolicyFactory.sanitize is strong only if policy is restrictive; do not false-positive as sink alone
+    must_not_regress: treat_sanitizer_api_as_vulnerability
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count
+    - wrong_context_encoding_detection

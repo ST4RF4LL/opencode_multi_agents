@@ -1,0 +1,26 @@
+id: jul
+name: java.util.logging
+detect:
+  imports:
+    - java.util.logging.Logger
+    - java.util.logging.Level
+  keywords:
+    - java.util.logging
+    - Logger.getLogger
+
+sources: inherit-global
+sinks:
+  - jul-logger
+
+safe_patterns:
+  - constant_message_template_with_parameters_where_supported
+  - custom_formatter_escaping_control_chars
+
+unsafe_patterns:
+  - logger_info_string_concat
+  - log_Level_INFO_concatenated_message
+  - entering_exiting_with_untrusted_params_unsanitized
+
+notes:
+  - JUL is common in libraries; often wrapped
+  - Expand wrappers to actual Logger.log / info calls

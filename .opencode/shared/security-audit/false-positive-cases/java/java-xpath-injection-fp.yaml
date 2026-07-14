@@ -1,0 +1,41 @@
+not_vulnerability:
+  - id: constant-xpath-with-variable-resolver
+    pattern: XPath.compile constant template with $var and XPathVariableResolver binding
+    reason: user input cannot change query structure
+
+  - id: constant-evaluate-expression
+    pattern: evaluate/compile with fully constant expression string
+    reason: no external influence on XPath structure
+
+  - id: expression-allowlist
+    pattern: filter/path mapped through immutable allowlist/enum to constant fragments
+    reason: attacker selects among fixed safe expressions only
+
+  - id: test-only-xpath
+    pattern: XPath helper only referenced from test sources
+    reason: not production reachable
+
+  - id: xxe-only-misclass
+    pattern: DocumentBuilderFactory insecure features without XPath string influence
+    reason: separate vulnerability class (CWE-611); out of scope for this skill
+
+needs_deeper_review:
+  - id: compile-but-concat
+    pattern: XPath.compile(expr) where expr includes + / format / append
+    reason: false sense of safety if VariableResolver is also present but unused for the slot
+
+  - id: predicate-param
+    pattern: "[@id='" + requestParam + "']"
+    reason: classic predicate injection
+
+  - id: login-xpath
+    pattern: user/password concatenated into XPath auth check
+    reason: boolean logic bypass subtype
+
+  - id: wrapper-util
+    pattern: custom XPathUtil/XmlHelper query(String)
+    reason: sink is indirection; expand to real compile/evaluate
+
+  - id: partial-binding
+    pattern: some values bound via resolver but other path fragments still concatenated
+    reason: partial parameterization

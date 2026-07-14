@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - request filter logs User-Agent with string concatenation
+  - plain text access logs
+request_context:
+  endpoint: any filtered path
+  parameter: User-Agent header
+observed_result:
+  - User-Agent content appears raw in log line; CRLF forges additional lines
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

@@ -1,0 +1,41 @@
+finding_id: NOSQLI-001
+status: finding # finding | candidate | rejected
+vulnerability_type: nosql-injection
+subtype: json-operator-injection
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/login"
+  method: AuthController.login
+  parameter: body.password
+source:
+  file: AuthController.java
+  line: 42
+  expression: "@RequestBody Map credentials"
+sink:
+  file: UserRepository.java
+  line: 88
+  expression: collection.find(new Document(credentials))
+dataflow:
+  - AuthController.login
+  - AuthService.authenticate
+  - UserRepository.findByCredentials
+controls:
+  observed: []
+  assessment:
+    - missing-operator-sanitization
+    - document-from-user-map
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - result_set_or_auth_diff
+limitations: []
+rejection_reason: null

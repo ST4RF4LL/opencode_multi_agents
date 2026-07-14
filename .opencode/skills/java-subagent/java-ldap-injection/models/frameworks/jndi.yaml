@@ -1,0 +1,40 @@
+id: jndi
+name: Java JNDI Directory (javax.naming / jakarta.naming)
+detection:
+  imports:
+    - javax.naming
+    - javax.naming.directory
+    - jakarta.naming
+    - jakarta.naming.directory
+  classes:
+    - DirContext
+    - InitialDirContext
+    - InitialContext
+    - SearchControls
+    - Attributes
+    - NamingEnumeration
+  dependencies:
+    - none (JDK standard)
+
+sinks:
+  - DirContext.search(name, filter, controls)
+  - DirContext.search(name, filter, filterArgs, controls)
+  - DirContext.lookup(name)
+  - DirContext.bind / rebind / createSubcontext
+  - Context.lookup(name)
+
+safe_patterns:
+  - search with constant filter template and Object[] filterArgs for values
+  - filter values encoded per RFC 4515 before concat (manual strong encoding)
+  - base DN fully constant
+
+unsafe_patterns:
+  - filter = "(uid=" + userInput + ")"
+  - String.format("(&(uid=%s)(userPassword=%s))", user, pass)
+  - search(base, filter, controls) where filter contains unencoded input
+  - lookup("uid=" + user + ",ou=people,dc=example,dc=com")
+
+notes:
+  - filterArgs overload binds values when filter uses {0} style placeholders
+  - special filter chars: * ( ) \ NUL and others per RFC 4515
+  - DN special chars differ slightly; use DN-specific encoding

@@ -1,0 +1,33 @@
+id: process-builder
+name: java.lang.ProcessBuilder
+detect:
+  imports:
+    - java.lang.ProcessBuilder
+  keywords:
+    - ProcessBuilder
+    - .start()
+    - "/bin/sh"
+    - "cmd.exe"
+    - "-c"
+    - "/c"
+
+sources: inherit-global
+sinks:
+  - process-builder-constructor
+  - process-builder-command
+  - process-builder-start
+
+safe_patterns:
+  - list_form_fixed_binary_user_arg_as_single_token_with_strict_validation
+  - fully_constant_argv
+
+unsafe_patterns:
+  - shell_wrapper_sh_c_or_cmd_c_with_user_string
+  - command_name_from_user_input
+  - unvalidated_user_args_that_inject_flags
+  - string_join_of_user_input_into_single_shell_argument
+
+notes:
+  - Parameterized/list ProcessBuilder without shell is often safe against shell metacharacters
+  - Always check whether argv[0] is shell and whether -c /c receives tainted string
+  - start() requires tracing back to command construction

@@ -1,0 +1,25 @@
+must_derive_from:
+  - actual_api_or_page_route
+  - actual_parameter_location
+  - actual_response_construction_or_template
+  - actual_output_context_html_js_css_url
+  - actual_encoding_or_sanitizer_logic
+  - actual_content_type_and_template_engine
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+  - output_context_classification
+
+must_not:
+  - reuse_historical_payload_blindly_as_generic_exploit
+  - ship_reusable_weaponized_browser_exploits
+  - claim_success_from_generic_500_only
+  - assume_browser_execution_without_response_or_lab_evidence
+  - perform_session_hijack_or_data_theft_beyond_minimal_proof
+  - target_out_of_scope_users_or_third_party_sites

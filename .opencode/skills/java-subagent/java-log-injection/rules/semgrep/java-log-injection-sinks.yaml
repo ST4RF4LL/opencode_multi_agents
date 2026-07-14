@@ -1,0 +1,86 @@
+rules:
+  - id: java-log-injection-string-concat
+    message: Log message built with string concatenation; untrusted data may forge log lines (CRLF)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.trace($MSG)
+          - pattern: $LOG.debug($MSG)
+          - pattern: $LOG.info($MSG)
+          - pattern: $LOG.warn($MSG)
+          - pattern: $LOG.error($MSG)
+          - pattern: $LOG.fatal($MSG)
+      - pattern-either:
+          - pattern-inside: |
+              $MSG = $X + $Y;
+              ...
+          - pattern-inside: |
+              $MSG = String.format(...);
+              ...
+          - pattern-inside: |
+              $MSG = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $MSG += $Y;
+              ...
+    metadata:
+      cwe:
+        - CWE-117
+        - CWE-93
+      category: log-injection
+      confidence: medium
+
+  - id: java-log-injection-inline-concat
+    message: Logger call uses inline string concatenation in message argument
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: $LOG.trace($A + $B, ...)
+      - pattern: $LOG.debug($A + $B, ...)
+      - pattern: $LOG.info($A + $B, ...)
+      - pattern: $LOG.warn($A + $B, ...)
+      - pattern: $LOG.error($A + $B, ...)
+      - pattern: $LOG.fatal($A + $B, ...)
+      - pattern: $LOG.info(String.format(...), ...)
+      - pattern: $LOG.warn(String.format(...), ...)
+      - pattern: $LOG.error(String.format(...), ...)
+    metadata:
+      cwe:
+        - CWE-117
+      category: log-injection
+      subtype: unstructured-string-concat
+      confidence: high
+
+  - id: java-log-injection-jul-concat
+    message: java.util.logging Logger message may include concatenated untrusted input
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: $LOG.info($A + $B)
+      - pattern: $LOG.warning($A + $B)
+      - pattern: $LOG.severe($A + $B)
+      - pattern: $LOG.log($LEVEL, $A + $B)
+      - pattern: $LOG.log($LEVEL, String.format(...))
+    metadata:
+      cwe:
+        - CWE-117
+      category: log-injection
+      confidence: medium
+
+  - id: java-log-injection-mdc-put
+    message: MDC/ThreadContext put may store untrusted value rendered into log layout
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: MDC.put($K, $V)
+      - pattern: org.slf4j.MDC.put($K, $V)
+      - pattern: ThreadContext.put($K, $V)
+      - pattern: ThreadContext.push($V)
+    metadata:
+      cwe:
+        - CWE-117
+      category: log-injection
+      subtype: marker-mdc-abuse
+      confidence: low
+      notes: Confirm $V is attacker-controlled and layout includes the key

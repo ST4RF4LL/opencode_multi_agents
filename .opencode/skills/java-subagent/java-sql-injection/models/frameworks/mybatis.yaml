@@ -1,0 +1,35 @@
+id: mybatis
+name: MyBatis
+detect:
+  imports:
+    - org.apache.ibatis
+    - org.mybatis
+  files:
+    - "**/*Mapper.xml"
+    - "**/*Mapper.java"
+  keywords:
+    - "${"
+    - "#{"
+    - "@Select"
+    - "@Update"
+    - "@Insert"
+    - "@Delete"
+    - "SelectProvider"
+
+sinks:
+  - mybatis-mapper-dynamic
+
+safe_patterns:
+  - "#{param}"
+  - foreach_with_hash_placeholders
+  - order_by_via_allowlisted_switch
+
+unsafe_patterns:
+  - "${param}"
+  - order_by_${column}
+  - ${tableName}
+  - provider_method_returning_concatenated_sql
+
+notes:
+  - '${}' is substitution, '#{}' is binding
+  - common real-world bug is ORDER BY ${sort}

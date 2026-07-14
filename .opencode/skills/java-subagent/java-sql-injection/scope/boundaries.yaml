@@ -1,0 +1,26 @@
+in_scope:
+  - jdbc_statement_and_preparedstatement_misuse
+  - spring_jdbctemplate_string_sql
+  - mybatis_xml_and_annotation_dynamic_sql
+  - hibernate_hql_jpql_native_query_concat
+  - jpa_entitymanager_create_native_query
+  - spring_data_jpa_query_annotation_spel_or_concat
+  - jooq_plain_sql_with_user_input
+  - order_by_column_table_name_injection
+  - second_order_sql_injection
+  - custom_sql_builder_wrappers
+
+out_of_scope:
+  - nosql_injection
+  - graphql_injection_without_sql
+  - ldap_injection
+  - xpath_injection
+  - command_injection
+  - ssti
+  - pure_authorization_flaws_without_sql_structure_control
+
+boundary_notes:
+  - parameterized_value_binding_is_not_sqli
+  - identifier_allowlist_is_required_for_order_by_column_names
+  - orm_safe_api_can_still_be_unsafe_if_native_sql_is_concatenated
+  - stored_data_used_in_later_sql_must_be_treated_as_untrusted

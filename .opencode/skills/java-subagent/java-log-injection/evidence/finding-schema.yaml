@@ -1,0 +1,42 @@
+finding_id: LOGINJ-001
+status: finding # finding | candidate | rejected
+vulnerability_type: log-injection
+subtype: crlf-log-forging
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/login"
+  method: AuthController.login
+  parameter: username
+source:
+  file: AuthController.java
+  line: 42
+  expression: request.getParameter("username")
+sink:
+  file: AuthService.java
+  line: 88
+  expression: logger.info("Login success for " + username)
+dataflow:
+  - AuthController.login
+  - AuthService.authenticate
+controls:
+  observed: []
+  assessment:
+    - unstructured-string-concat
+    - missing-newline-sanitization
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+    - logging layout if known
+  dynamic:
+    - request
+    - log_snippet
+    - forged_line_evidence
+limitations: []
+rejection_reason: null
+adjacent_notes: null # e.g. log4shell boundary if observed

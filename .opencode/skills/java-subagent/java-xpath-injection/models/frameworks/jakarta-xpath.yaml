@@ -1,0 +1,21 @@
+id: jakarta-xpath
+name: jakarta.xml.xpath
+detection:
+  imports:
+    - jakarta.xml.xpath.XPath
+    - jakarta.xml.xpath.XPathFactory
+    - jakarta.xml.xpath.XPathExpression
+    - jakarta.xml.xpath.XPathVariableResolver
+  classes:
+    - XPathFactory
+    - XPath
+    - XPathExpression
+sinks:
+  - XPath.compile(String)
+  - XPath.evaluate(String, Object)
+  - XPathExpression.evaluate(...)
+strong_controls:
+  - XPath.setXPathVariableResolver
+  - $var parameterized expressions
+notes:
+  - API mirrors javax.xml.xpath; same injection patterns apply

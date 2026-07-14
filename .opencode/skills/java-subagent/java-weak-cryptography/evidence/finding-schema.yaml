@@ -1,0 +1,45 @@
+finding_id: WEAKCRYPTO-001
+status: finding # finding | candidate | rejected
+vulnerability_type: weak-cryptography
+subtype: weak-algo # weak-algo | static-iv | insecure-random | weak-password-hash | hardcoded-key
+confidence: high # high | medium | low
+cwe:
+  - CWE-327
+entry:
+  route: "N/A or service path"
+  method: CryptoService.encrypt
+  parameter: null
+source:
+  file: CryptoService.java
+  line: 20
+  expression: 'Cipher.getInstance("AES/ECB/PKCS5Padding")'
+  kind: algorithm_config # algorithm_config | key_material | iv_nonce | prng | password_input
+sink:
+  file: CryptoService.java
+  line: 28
+  expression: cipher.doFinal(plaintext)
+  kind: cipher-getinstance
+dataflow:
+  - CryptoService.encrypt
+  - uses algorithm literal and SecretKeySpec
+controls:
+  observed: []
+  assessment:
+    - weak-algorithm-ecb
+    - missing-aead
+validation:
+  status: not_attempted # verified | not_attempted | failed | static_only
+  observable: []
+evidence:
+  static:
+    - algorithm transformation string
+    - key/IV/random construction
+    - security-sensitive usage
+    - control analysis
+  dynamic: []
+security_impact:
+  - confidentiality
+  # integrity | authenticity | unpredictability
+limitations: []
+remediation_hint: use AES-GCM with unique nonce and managed keys
+rejection_reason: null

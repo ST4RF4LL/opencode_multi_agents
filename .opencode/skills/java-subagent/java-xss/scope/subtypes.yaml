@@ -1,0 +1,19 @@
+subtypes:
+  - id: reflected-html
+    description: 请求参数/头等即时反射到 HTML 响应体或属性，未正确编码
+  - id: stored-html
+    description: 不可信数据入库/文件后，后续页面渲染时未编码写出
+  - id: js-context
+    description: 用户输入进入 script 块、事件处理器或 JS 字符串字面量
+  - id: css-context
+    description: 用户输入进入 style 属性或 CSS 块，可触发 expression/url 注入
+  - id: attribute-context
+    description: 输入进入 HTML 属性值，可逃逸引号注入事件处理器
+  - id: url-context
+    description: 输入进入 href/src/action 等 URL 上下文，可注入 javascript: 等 scheme
+  - id: wrong-encoding-context
+    description: 使用了编码 API 但上下文不匹配（如 forHtml 用于 JS 上下文）
+  - id: template-unescape
+    description: 模板引擎显式关闭转义（th:utext、?no_esc、JSP 未转义 EL）
+  - id: content-type-sniff
+    description: 错误 Content-Type 或缺失 charset 导致浏览器将响应当作 HTML 解析

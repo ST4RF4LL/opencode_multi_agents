@@ -1,0 +1,24 @@
+id: javax-xpath
+name: javax.xml.xpath (JDK)
+detection:
+  imports:
+    - javax.xml.xpath.XPath
+    - javax.xml.xpath.XPathFactory
+    - javax.xml.xpath.XPathExpression
+    - javax.xml.xpath.XPathVariableResolver
+  classes:
+    - XPathFactory
+    - XPath
+    - XPathExpression
+sinks:
+  - XPath.compile(String)
+  - XPath.evaluate(String, Object)
+  - XPath.evaluate(String, InputSource)
+  - XPathExpression.evaluate(...)
+strong_controls:
+  - XPath.setXPathVariableResolver(XPathVariableResolver)
+  - compile expressions with $var placeholders
+  - bind values in resolver.resolveVariable(QName)
+notes:
+  - Prefer compile("//book[@id=$bookId]") + VariableResolver over string concat
+  - DocumentBuilder is adjacent XML load context only

@@ -1,0 +1,57 @@
+sanitizers:
+  strong:
+    - id: bson-filters-api-value-only
+      condition:
+        - field_names_are_constants
+        - user_input_only_used_as_comparison_value
+        - uses_Filters_eq_or_typed_Bson_builders
+        - no_Document_parse_of_user_json
+    - id: operator-and-special-char-reject
+      condition:
+        - rejects_chars_quote_doublequote_backslash_semicolon_brace_dollar
+        - rejects_keys_starting_with_dollar
+        - applied_before_query_construction
+        - fail_closed_on_violation
+    - id: typed-scalar-only-filter
+      condition:
+        - input_converted_to_strict_type_string_number_objectid
+        - never_parsed_as_json_object_or_map
+        - placed_only_as_value_in_Filters_eq
+
+  contextual:
+    - id: allowlisted-field-names
+      condition:
+        - user_selects_among_predefined_field_names
+        - mapped_field_names_are_constants
+        - operators_not_user_controlled
+    - id: enum-or-fixed-operator
+      condition:
+        - comparison_operator_fixed_in_code
+        - only_value_is_user_controlled
+
+  weak:
+    - id: blacklist-dollar-only
+      pattern:
+        - contains("$")
+        - replace("$", "")
+      notes: incomplete; nested encodings and alternate operators may bypass
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without structure control
+      notes: insufficient if JSON object structure still accepted
+    - id: client-side-json-schema-only
+      pattern:
+        - frontend validation only
+      notes: not enforced server-side
+
+  invalid:
+    - id: document-parse-as-defense
+      notes: Document.parse does not sanitize; it enables operator injection
+    - id: string-concat-then-filters
+      notes: building query string then wrapping does not restore safety
+    - id: validate-after-parse
+      notes: validation after untrusted JSON already became query structure
+    - id: html-encode-as-nosql-defense
+    - id: sql-preparedstatement-mindset-on-json-map
+      notes: treating Map/JSON body as bound parameters without stripping operators is invalid

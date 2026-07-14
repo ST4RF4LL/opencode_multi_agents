@@ -1,0 +1,60 @@
+sanitizers:
+  strong:
+    - id: jdbc-parameter-binding
+      condition:
+        - sql_template_is_constant_or_safe_composition
+        - user_input_only_passed_via_setX_or_parameter_map
+        - no_string_concat_into_sql_structure
+    - id: mybatis-hash-placeholder
+      condition:
+        - uses_hash_placeholder_only
+        - no_dollar_placeholder_for_user_input
+    - id: jpa-named-parameter
+      condition:
+        - query_string_is_constant
+        - parameters_bound_via_setParameter
+    - id: identifier-allowlist
+      condition:
+        - user_input_mapped_to_predefined_column_or_table_set
+        - mapped_values_are_constants
+        - reject_or_default_on_unknown
+
+  contextual:
+    - id: typed-numeric-cast
+      condition:
+        - input_converted_to_number_before_use
+        - used_only_as_numeric_literal_context
+      notes: reduces classic string injection but does not fix identifier injection
+    - id: enum-mapping
+      condition:
+        - input_restricted_to_enum_values
+        - enum_to_sql_fragment_is_constant
+
+  weak:
+    - id: manual-quote-escape
+      pattern:
+        - replace("'", "''")
+        - escapeSql
+        - StringEscapeUtils
+      notes: easy to bypass; encoding/context mismatches
+    - id: blacklist-keywords
+      pattern:
+        - contains("union")
+        - contains("--")
+        - regex_blacklist
+      notes: incomplete and bypassable
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without identifier mapping
+      notes: insufficient for structure control
+
+  invalid:
+    - id: preparedstatement-with-concat
+      notes: Connection.prepareStatement(sql) where sql was built with user concat
+    - id: orm-wrapper-with-native-concat
+      notes: using JPA/Hibernate but concatenating into createNativeQuery
+    - id: validate-after-concat
+      notes: validation applied after SQL string already includes untrusted data
+    - id: client-side-only-validation
+    - id: html-encode-as-sql-defense

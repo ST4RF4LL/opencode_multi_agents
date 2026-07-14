@@ -1,0 +1,51 @@
+id: mongodb-java
+name: MongoDB Java Driver
+detect:
+  imports:
+    - com.mongodb.client.MongoCollection
+    - com.mongodb.client.MongoDatabase
+    - com.mongodb.BasicDBObject
+    - com.mongodb.client.model.Filters
+    - org.bson.Document
+    - org.bson.conversions.Bson
+  keywords:
+    - Document.parse
+    - BasicDBObject
+    - MongoCollection
+    - Filters.eq
+    - Filters.where
+    - "$where"
+
+sources: inherit-global
+sinks:
+  - mongodb-document-parse
+  - mongodb-basicdbobject-construct
+  - mongodb-collection-find
+  - mongodb-where-expression
+  - mongodb-filters-string-abuse
+
+safe_patterns:
+  - Filters.eq_with_constant_field_and_bound_value
+  - Filters.and_or_with_typed_builders_only
+  - Document_with_constant_keys_and_scalar_values
+  - ObjectId_or_typed_codec_for_ids
+
+unsafe_patterns:
+  - Document.parse_untrusted_string
+  - BasicDBObject.parse_untrusted_string
+  - string_concat_into_query_json
+  - user_controlled_map_keys_as_operators
+  - Filters.where_or_$where_with_user_expression
+  - field_name_from_user_input_without_allowlist
+
+owasp_java_security_notes:
+  - symptom: untrusted_input_builds_nosql_api_call_expression
+  - prevent: no_special_chars_for_api_syntax
+  - prevent: use_api_query_builders_not_string_concat
+  - reject_chars: ["'", "\"", "\\", ";", "{", "}", "$"]
+  - prefer: Filters.eq_and_Bson_expression
+
+notes:
+  - MongoDB query operators are keys starting with $
+  - Parsing attacker JSON as a filter is the dominant Java NoSQL injection pattern
+  - $where executes server-side JavaScript and is especially dangerous

@@ -1,4 +1,69 @@
 {
   "version": 1,
-  "cases": []
+  "cases": [
+    {
+      "id": "java-sql-injection-fp",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "path": "java/java-sql-injection-fp.md",
+      "yaml": "java/java-sql-injection-fp.yaml"
+    },
+    {
+      "id": "java-nosql-injection-fp",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "path": "java/java-nosql-injection-fp.md",
+      "yaml": "java/java-nosql-injection-fp.yaml"
+    },
+    {
+      "id": "java-ldap-injection-fp",
+      "language": "java",
+      "skill": "java-ldap-injection",
+      "weakness": "ldap-injection",
+      "path": "java/java-ldap-injection-fp.md",
+      "yaml": "java/java-ldap-injection-fp.yaml"
+    },
+    {
+      "id": "java-xpath-injection-fp",
+      "language": "java",
+      "skill": "java-xpath-injection",
+      "weakness": "xpath-injection",
+      "path": "java/java-xpath-injection-fp.md",
+      "yaml": "java/java-xpath-injection-fp.yaml"
+    },
+    {
+      "id": "java-command-injection-fp",
+      "language": "java",
+      "skill": "java-command-injection",
+      "weakness": "command-injection",
+      "path": "java/java-command-injection-fp.md",
+      "yaml": "java/java-command-injection-fp.yaml"
+    },
+    {
+      "id": "java-xss-fp",
+      "language": "java",
+      "skill": "java-xss",
+      "weakness": "xss",
+      "path": "java/java-xss-fp.md",
+      "yaml": "java/java-xss-fp.yaml"
+    },
+    {
+      "id": "java-log-injection-fp",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "path": "java/java-log-injection-fp.md",
+      "yaml": "java/java-log-injection-fp.yaml"
+    },
+    {
+      "id": "java-weak-cryptography-fp",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "path": "java/java-weak-cryptography-fp.md",
+      "yaml": "java/java-weak-cryptography-fp.yaml"
+    }
+  ]
 }

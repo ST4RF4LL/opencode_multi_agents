@@ -1,0 +1,70 @@
+name: java-weak-cryptography-decision-tree
+steps:
+  - id: find_crypto_sink
+    question: 是否发现 Cipher/MessageDigest/Mac/Signature/Random/Key/PasswordEncoder 相关调用或弱算法字面量？
+    no: stop_no_sink
+    yes: classify_subtype
+
+  - id: classify_subtype
+    question: 属于哪种子类型？weak-algo / static-iv / insecure-random / weak-password-hash / hardcoded-key
+    next: check_security_relevance
+
+  - id: check_security_relevance
+    question: 用途是否安全相关（加密机密、完整性、认证、口令存储、token/session/密钥生成）？
+    no: reject_non_security_use
+    yes: check_strength
+
+  - id: check_strength
+    question: 算法/模式/IV/随机/密钥来源是否 weak 或 misconfigured？
+    strong_and_correct: reject_strong_crypto
+    weak_or_misconfigured: check_controls
+
+  - id: check_controls
+    question: 是否存在有效 strong 替代或补偿控制（AEAD、唯一 nonce、Secret Manager、bcrypt/argon2、SecureRandom）？
+    none: high_risk_candidate
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: reachability
+    question: 是否生产可达（非仅测试/示例/死代码）？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract（静态语义清晰或已验证）？
+    yes: emit_finding
+    no: emit_candidate
+
+# Subtype-specific shortcuts
+subtype_rules:
+  weak-algo:
+    auto_high_when:
+      - AES_ECB
+      - DES_3DES_RC4
+      - MD5_SHA1_for_password_or_signature
+  static-iv:
+    auto_high_when:
+      - GCM_nonce_reuse_or_fixed
+      - constant_IV_with_CBC_CTR_GCM
+  insecure-random:
+    requires:
+      - output_used_as_secret_or_security_token
+  weak-password-hash:
+    auto_high_when:
+      - MD5_SHA1_or_single_SHA256_of_password
+      - NoOpPasswordEncoder
+  hardcoded-key:
+    auto_high_when:
+      - SecretKeySpec_from_literal_or_constant_bytes_in_production_path
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_non_security_use: Rejected
+  reject_strong_crypto: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

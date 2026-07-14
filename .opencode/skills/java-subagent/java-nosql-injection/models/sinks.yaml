@@ -1,0 +1,132 @@
+sinks:
+  - id: mongodb-document-parse
+    framework: mongodb-java
+    method_full_name:
+      - ".*org\\.bson\\.Document\\.parse.*"
+      - ".*com\\.mongodb\\.BasicDBObject\\.parse.*"
+    sensitive_arguments: [1]
+    semantics: nosql-query-construction
+    confidence: high
+    notes: parsing untrusted JSON into a query Document enables operator injection
+
+  - id: mongodb-basicdbobject-construct
+    framework: mongodb-java
+    method_full_name:
+      - ".*com\\.mongodb\\.BasicDBObject\\.<init>.*"
+      - ".*com\\.mongodb\\.BasicDBObject\\.put.*"
+      - ".*com\\.mongodb\\.BasicDBObject\\.append.*"
+      - ".*org\\.bson\\.Document\\.<init>.*"
+      - ".*org\\.bson\\.Document\\.put.*"
+      - ".*org\\.bson\\.Document\\.append.*"
+    sensitive_arguments: []
+    semantics: nosql-query-construction
+    confidence: medium
+    notes: high risk when keys or nested values come from user input
+
+  - id: mongodb-collection-find
+    framework: mongodb-java
+    method_full_name:
+      - ".*MongoCollection\\.find.*"
+      - ".*MongoCollection\\.findOneAnd.*"
+      - ".*MongoCollection\\.delete.*"
+      - ".*MongoCollection\\.update.*"
+      - ".*MongoCollection\\.replaceOne.*"
+      - ".*MongoCollection\\.countDocuments.*"
+      - ".*MongoCollection\\.aggregate.*"
+      - ".*DBCollection\\.find.*"
+      - ".*DBCollection\\.update.*"
+      - ".*DBCollection\\.remove.*"
+    sensitive_arguments: [1]
+    semantics: nosql-execution
+    confidence: high
+
+  - id: mongodb-where-expression
+    framework: mongodb-java
+    patterns:
+      - "$where"
+      - "Filters.where"
+      - "where("
+    method_full_name:
+      - ".*Filters\\.where.*"
+      - ".*com\\.mongodb\\.client\\.model\\.Filters\\.where.*"
+    sensitive_arguments: [1]
+    semantics: server-side-js-execution
+    confidence: high
+
+  - id: mongodb-filters-string-abuse
+    framework: mongodb-java
+    method_full_name:
+      - ".*Filters\\.eq.*"
+      - ".*Filters\\.and.*"
+      - ".*Filters\\.or.*"
+      - ".*Filters\\.expr.*"
+    sensitive_arguments: []
+    semantics: query-builder
+    confidence: low
+    notes: safe when field names constant and values bound; unsafe if field name or expression string is user-controlled
+
+  - id: spring-data-mongo-query
+    framework: spring-data-mongo
+    annotation:
+      - Query
+      - Aggregation
+    patterns:
+      - "+ "
+      - "String.format"
+      - "StringBuilder"
+      - "#{#"
+      - "$where"
+    semantics: nosql-construction
+    confidence: high
+
+  - id: spring-data-mongo-template
+    framework: spring-data-mongo
+    method_full_name:
+      - ".*MongoTemplate\\.find.*"
+      - ".*MongoTemplate\\.findOne.*"
+      - ".*MongoTemplate\\.remove.*"
+      - ".*MongoTemplate\\.update.*"
+      - ".*MongoTemplate\\.count.*"
+      - ".*MongoTemplate\\.aggregate.*"
+      - ".*MongoOperations\\.find.*"
+      - ".*ReactiveMongoTemplate\\.find.*"
+    sensitive_arguments: [1]
+    semantics: nosql-execution
+    confidence: high
+
+  - id: spring-criteria-string
+    framework: spring-data-mongo
+    method_full_name:
+      - ".*Criteria\\.where.*"
+      - ".*Criteria\\.and.*"
+      - ".*Query\\.addCriteria.*"
+      - ".*BasicQuery\\.<init>.*"
+    sensitive_arguments: []
+    semantics: nosql-query-construction
+    confidence: medium
+    notes: BasicQuery(String) and Criteria built from untrusted JSON are sinks
+
+  - id: redis-eval
+    framework: redis
+    method_full_name:
+      - ".*Jedis\\.eval.*"
+      - ".*Jedis\\.evalsha.*"
+      - ".*RedisTemplate\\.execute.*"
+      - ".*DefaultRedisScript\\..*"
+      - ".*ReactiveRedisTemplate\\.execute.*"
+    sensitive_arguments: [1]
+    semantics: script-execution
+    confidence: medium
+    notes: secondary; focus when user input enters Lua script body
+
+  - id: custom-nosql-util
+    framework: custom
+    method_full_name:
+      - ".*MongoUtil\\..*"
+      - ".*QueryHelper\\..*"
+      - ".*NoSqlHelper\\..*"
+      - ".*Repository\\..*findByDynamic.*"
+    sensitive_arguments: []
+    semantics: possible-nosql-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real Mongo/Spring Data calls

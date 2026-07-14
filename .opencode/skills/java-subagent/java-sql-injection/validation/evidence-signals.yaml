@@ -1,0 +1,21 @@
+strong_signals:
+  - deterministic_boolean_response_difference_from_sql_predicate
+  - database_error_reveals_syntax_influence
+  - extracted_data_matches_injected_query_intent
+  - application_logs_show_attacker_controlled_sql
+  - successful_auth_bypass_via_sql_logic
+
+medium_signals:
+  - stable_time_delay_correlated_with_db_sleep_style_behavior
+  - order_by_changes_result_ordering_in_attacker_controlled_way
+  - partial_error_disclosure_tied_to_metacharacters
+
+weak_signals:
+  - generic_500_without_sql_semantics
+  - presence_of_statement_api_only
+  - single_quote_causes_error_without_confirming_structure_control
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

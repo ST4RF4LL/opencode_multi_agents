@@ -1,0 +1,54 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"{ username: ''" + user + "'' }"'
+      - 'query + " , $where: " + expr'
+      - 'new StringBuilder().append("{").append(userInput).append("}")'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("{ \"name\": \"%s\" }", name)'
+      - 'MessageFormat.format(...)'
+
+  - pattern: json-parse
+    examples:
+      - Document.parse(userJson)
+      - BasicDBObject.parse(body)
+      - objectMapper.readValue(body, Map.class) -> used as filter
+
+  - pattern: map-to-document
+    examples:
+      - new Document(requestMap)
+      - document.putAll(userMap)
+      - filters from Map keys including $gt
+
+  - pattern: getter-setter
+    examples:
+      - setFilter -> getFilter
+      - setQueryJson -> getQueryJson
+      - setWhereExpr -> getWhereExpr
+
+  - pattern: builder
+    examples:
+      - QueryBuilder.withFilter(x).build()
+      - Criteria.where(field).is(value)
+
+  - pattern: collection
+    examples:
+      - map.put("$gt", input)
+      - params.get("filter")
+
+  - pattern: dto-field
+    examples:
+      - SearchRequest.filter
+      - MongoQueryRequest.whereClause
+
+  - pattern: wrapper-method
+    examples:
+      - MongoUtil.find(query)
+      - QueryHelper.execute(filter)
+      - repository.findByDynamicQuery(doc)
+
+  - pattern: second-order-store
+    examples:
+      - save(userFilter) -> later load() -> use as query Document

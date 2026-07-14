@@ -1,0 +1,37 @@
+id: hibernate-jpa
+name: Hibernate / JPA
+detect:
+  imports:
+    - javax.persistence
+    - jakarta.persistence
+    - org.hibernate
+  keywords:
+    - createQuery
+    - createNativeQuery
+    - createSQLQuery
+    - EntityManager
+    - SessionFactory
+
+sinks:
+  - hibernate-create-query
+  - hibernate-criteria-unsafe
+
+# OWASP Java CS: untrusted input must not build JPA QL; use Query Parameterization
+notes: >
+  EntityManager.createQuery / Session.createQuery first arg is a sink when the
+  JPQL/HQL string is concatenated or formatted with user input (same class of
+  bug as SQL concat). createNativeQuery is native SQL; createQuery is JPQL/HQL.
+  Safe: constant JPQL + setParameter(":name", value). Unsafe: "select ... where x = '" + user + "'".
+
+safe_patterns:
+  - criteria_api_with_metamodel_paths
+  - jpql_with_named_parameters_and_constant_query
+  - setParameter_for_values
+  # OWASP: createQuery("... = :colorName").setParameter("colorName", untrustedInput)
+
+unsafe_patterns:
+  - createNativeQuery_with_string_concat
+  - createQuery_jpql_or_hql_string_concat
+  - createQuery_hql_concat
+  - order_by_string_from_user
+  - entity_name_or_field_name_from_user

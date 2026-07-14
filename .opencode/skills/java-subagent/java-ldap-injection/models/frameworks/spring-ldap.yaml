@@ -1,0 +1,47 @@
+id: spring-ldap
+name: Spring LDAP
+detection:
+  imports:
+    - org.springframework.ldap
+    - org.springframework.ldap.core
+    - org.springframework.ldap.filter
+    - org.springframework.ldap.support
+  classes:
+    - LdapTemplate
+    - LdapQuery
+    - LdapQueryBuilder
+    - LdapEncoder
+    - EqualsFilter
+    - LikeFilter
+    - AndFilter
+    - OrFilter
+    - HardcodedFilter
+    - LdapNameBuilder
+  dependencies:
+    - org.springframework.ldap:spring-ldap-core
+
+sinks:
+  - LdapTemplate.search
+  - LdapTemplate.searchForObject
+  - LdapTemplate.authenticate
+  - LdapTemplate.lookup
+  - LdapTemplate.find / findOne
+  - HardcodedFilter(String) with user concat
+  - LdapQueryBuilder.filter(String) with raw concat
+
+safe_patterns:
+  - LdapQueryBuilder.query().where("uid").is(username)  # encodes value
+  - new EqualsFilter("uid", username)
+  - LdapEncoder.filterEncode(userInput) before insertion as value only
+  - LdapEncoder.nameEncode for DN components
+
+unsafe_patterns:
+  - String filter = "(uid=" + username + ")"; ldapTemplate.search(base, filter, ...)
+  - new HardcodedFilter("(cn=" + name + ")")
+  - ldapQuery.filter("(uid=" + user + ")")
+  - authenticate with concatenated filter string
+
+notes:
+  - prefer Filter classes and LdapQueryBuilder over raw filter strings
+  - LdapEncoder.filterEncode vs nameEncode are context-specific
+  - Spring Security LDAP authenticator may build filters from username — check config and custom UserSearch

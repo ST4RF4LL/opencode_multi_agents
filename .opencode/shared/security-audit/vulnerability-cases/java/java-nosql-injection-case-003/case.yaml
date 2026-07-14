@@ -1,0 +1,22 @@
+id: case-003
+vulnerability_type: nosql-injection
+subtype: string-concat-query
+source:
+  type: request-parameter
+  expression: "@RequestParam String username"
+sink:
+  api: Document.parse
+  sensitive_argument: 1
+propagation:
+  - UserController.find
+  - UserDao.findByUsername
+root_cause:
+  - query_json_string_concatenated_with_user_input
+  - document_parse_of_dynamic_string
+prerequisites:
+  - endpoint_reachable
+observed_behavior:
+  - attacker_breaks_out_of_string_and_injects_operators_or_clauses
+fix:
+  - use_Filters_eq_instead_of_string_json
+  - reject_special_chars_if_string_path_unavoidable

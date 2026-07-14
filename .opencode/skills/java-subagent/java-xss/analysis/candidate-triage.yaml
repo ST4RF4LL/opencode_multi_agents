@@ -1,0 +1,35 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous response writer or unescaped template pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach response write / template variable
+    not_a_finding_until: control_and_context_checked
+    next: sanitizer_and_context_analysis
+
+  L3_semantic_candidate:
+    meaning: encoding missing, wrong-context, or sanitizer bypassable; attacker influences HTML/JS/CSS output
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - reflected_in_html_document
+  - stored_content_rendered_to_other_users
+  - javascript_context_injection
+  - admin_or_high_privilege_victim_page
+  - missing_csp_or_weak_csp
+
+priority_reduce:
+  - test_code_only
+  - constant_html_only
+  - json_api_without_html_embedding
+  - effective_context_encoding
+  - dead_code
+  - local_dev_tooling

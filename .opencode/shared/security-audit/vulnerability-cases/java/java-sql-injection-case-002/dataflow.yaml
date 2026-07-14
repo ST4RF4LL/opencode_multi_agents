@@ -1,0 +1,11 @@
+source:
+  method: UserController.list
+  parameter: sort
+  annotation: RequestParam
+path:
+  - UserController.list
+  - UserMapper.selectUsers
+sink:
+  method: MyBatis ORDER BY ${sort}
+  argument: identifier
+influence: order_by_identifier

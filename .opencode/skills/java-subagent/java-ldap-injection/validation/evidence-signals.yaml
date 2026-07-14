@@ -1,0 +1,21 @@
+strong_signals:
+  - successful_auth_bypass_via_ldap_filter_logic
+  - directory_search_returns_entries_outside_intended_scope
+  - application_logs_show_attacker_controlled_ldap_filter_or_dn
+  - deterministic_boolean_response_difference_from_filter_predicate
+  - ldap_error_reveals_syntax_influence_from_metacharacters
+
+medium_signals:
+  - stable_response_difference_when_filter_metacharacters_injected
+  - search_base_change_alters_result_set_in_attacker_controlled_way
+  - partial_error_disclosure_tied_to_ldap_metacharacters
+
+weak_signals:
+  - generic_500_without_ldap_semantics
+  - presence_of_dircontext_api_only
+  - single_metacharacter_causes_error_without_confirming_structure_control
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

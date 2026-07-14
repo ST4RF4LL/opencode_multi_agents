@@ -1,0 +1,31 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - ldap_filter_or_dn_structure_is_influenced
+    - effective_encoding_or_parameterization_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - ldap_server_or_directory_type_if_known
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - filter_is_constant_and_inputs_are_bound_or_encoded_values_only
+  - user_input_only_selects_from_fixed_allowlist_map
+  - input_does_not_influence_filter_structure_or_dn
+  - path_is_test_only_or_dead_code
+  - validation_is_effective_and_complete
+  - evidence_is_only_a_dangerous_api_match
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

@@ -1,0 +1,58 @@
+sinks:
+  - id: xpath-compile
+    framework: javax-xpath
+    method_full_name:
+      - ".*javax\\.xml\\.xpath\\.XPath\\.compile.*"
+      - ".*jakarta\\.xml\\.xpath\\.XPath\\.compile.*"
+      - ".*org\\.w3c\\.dom\\.xpath\\.XPathEvaluator\\.createExpression.*"
+    sensitive_arguments: [1]
+    semantics: xpath-construction
+    confidence: high
+    notes: compile is safe only if expression string is constant or uses $variables without concat of user data
+
+  - id: xpath-evaluate
+    framework: javax-xpath
+    method_full_name:
+      - ".*javax\\.xml\\.xpath\\.XPath\\.evaluate.*"
+      - ".*jakarta\\.xml\\.xpath\\.XPath\\.evaluate.*"
+      - ".*javax\\.xml\\.xpath\\.XPathExpression\\.evaluate.*"
+      - ".*jakarta\\.xml\\.xpath\\.XPathExpression\\.evaluate.*"
+    sensitive_arguments: [1]
+    semantics: xpath-execution
+    confidence: high
+    notes: first argument is often the expression string when evaluate(String expression, ...) overload is used
+
+  - id: saxon-xpath
+    framework: saxon
+    method_full_name:
+      - ".*net\\.sf\\.saxon\\.s9api\\.XPathCompiler\\.compile.*"
+      - ".*net\\.sf\\.saxon\\.s9api\\.XPathSelector\\.setContextItem.*"
+      - ".*net\\.sf\\.saxon\\.xpath\\.XPathEvaluator\\.compile.*"
+      - ".*net\\.sf\\.saxon\\.xpath\\.XPathEvaluator\\.evaluate.*"
+    sensitive_arguments: [1]
+    semantics: xpath-construction-or-execution
+    confidence: high
+
+  - id: custom-xpath-util
+    framework: custom
+    method_full_name:
+      - ".*XPathUtil\\..*"
+      - ".*XmlQuery\\..*"
+      - ".*XPathHelper\\..*"
+      - ".*XmlDao\\..*query.*"
+      - ".*XmlDao\\..*select.*"
+    sensitive_arguments: []
+    semantics: possible-xpath-wrapper
+    confidence: medium
+    notes: wrappers require sink expansion into real XPath.compile/evaluate calls
+
+adjacent_not_sink:
+  - id: document-builder-parse
+    framework: jdk-xml
+    method_full_name:
+      - ".*DocumentBuilder\\.parse.*"
+      - ".*DocumentBuilderFactory\\.newInstance.*"
+    semantics: xml-document-load
+    notes: >
+      Relevant as evaluation context for XPath, not XPath injection sink.
+      XXE (CWE-611) is a separate skill (java-xxe). Do not report XXE as XPathi.

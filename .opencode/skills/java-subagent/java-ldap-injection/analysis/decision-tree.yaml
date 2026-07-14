@@ -1,0 +1,52 @@
+name: java-ldap-injection-decision-tree
+steps:
+  - id: find_ldap_sink
+    question: 是否发现 LDAP search/bind/lookup 或 filter 构造 Sink？
+    no: stop_no_sink
+    yes: check_filter_or_dn_origin
+
+  - id: check_filter_or_dn_origin
+    question: filter/DN 是否完全由常量或安全 API（EqualsFilter / 参数化 filterArgs / 已编码常量模板）产生，且用户输入仅作已编码值？
+    yes: reject_safe_encoding
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到 filter 字符串或 DN 组件的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是 filter 结构（运算符/通配符/逻辑）、filter 断言值、还是 DN/search base？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在有效 filter/DN 编码、参数化 filter 或 allowlist？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（RFC 4515 编码 / filterArgs / EqualsFilter / 完整映射）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_safe_encoding: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

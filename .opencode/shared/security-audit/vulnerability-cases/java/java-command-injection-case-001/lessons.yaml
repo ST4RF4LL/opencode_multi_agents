@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Runtime.exec with concatenated user input is a primary CMDi sink family
+  - Prefer Java APIs (e.g. InetAddress.isReachable) over OS ping/curl
+  - ProcessBuilder list form with fixed binary reduces shell-metacharacter risk but still needs arg validation
+non_transferable_details:
+  - original endpoint path
+  - original host parameter name
+  - original payload strings

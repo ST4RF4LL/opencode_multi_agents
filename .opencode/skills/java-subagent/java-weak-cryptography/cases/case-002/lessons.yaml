@@ -1,0 +1,8 @@
+transferable_lessons:
+  - AES-GCM is strong only with unique nonces per key
+  - static IV arrays next to GCMParameterSpec are high-confidence findings
+  - fixed IV often co-occurs with hardcoded keys - report both subtypes if present
+  - IV must be transmitted with ciphertext but never reused
+non_transferable_details:
+  - exact FIXED_IV bytes
+  - class name TokenEncryptor

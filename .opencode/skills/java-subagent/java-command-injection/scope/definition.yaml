@@ -1,0 +1,21 @@
+id: java-command-injection
+name: OS Command Injection
+language: java
+cwe:
+  - CWE-78
+objective:
+  detect: >
+    Attacker-controlled data reaching OS command construction or execution
+    such that command name, arguments, or shell-interpreted fragments can be
+    influenced without effective argument separation or allowlisting.
+core_condition:
+  - external_input_exists
+  - command_string_or_arguments_are_influenced
+  - os_command_execution_is_reachable
+  - effective_argument_separation_or_allowlist_is_missing
+not_in_scope:
+  - sql_injection
+  - ssrf
+  - path_traversal_without_command_execution
+  - pure_expression_language_injection
+  - hardcoded_commands_with_no_external_influence

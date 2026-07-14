@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: ldap-injection
+subtype: filter-string-concat
+source:
+  type: request-parameter
+  expression: request.getParameter("username")
+sink:
+  api: DirContext.search
+  sensitive_argument: 2
+propagation:
+  - AuthController.login
+  - LdapAuthService.authenticate
+root_cause:
+  - ldap_filter_string_concatenated_with_user_input
+  - no_filter_encoding_or_parameterized_filterArgs
+  - authentication_logic_embedded_in_injectable_filter
+prerequisites:
+  - reachable_login_or_search_endpoint
+  - ldap_directory_reachable_from_app
+observed_behavior:
+  - attacker_can_alter_filter_logic_and_bypass_auth_or_broaden_search
+fix:
+  - encode_filter_values_with_LdapEncoder_filterEncode
+  - or_use_search_with_constant_filter_template_and_filterArgs
+  - or_use_Spring_EqualsFilter_LdapQueryBuilder

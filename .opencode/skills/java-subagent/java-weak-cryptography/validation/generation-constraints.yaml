@@ -1,0 +1,21 @@
+must_derive_from:
+  - actual_crypto_api_and_transformation_string
+  - actual_key_and_iv_construction
+  - actual_password_hashing_or_token_generation_path
+  - actual_framework_encoder_config
+  - actual_deployment_reachability
+
+must_include:
+  - subtype
+  - primitive_and_parameters
+  - why_weak_or_misconfigured
+  - security_property_impacted
+  - static_locations
+  - success_condition_for_any_dynamic_check
+
+must_not:
+  - claim_break_of_crypto_without_code_evidence
+  - reuse_historical_keys_or_payloads_as_live_secrets
+  - brute_force_production_passwords
+  - extract_or_publish_live_key_material
+  - perform_destructive_re-encryption_in_production

@@ -1,0 +1,23 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_command_construction_logic
+  - actual_execution_api_runtime_processbuilder_or_commons
+  - actual_shell_vs_list_semantics
+  - actual_validation_logic
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - claim_success_from_generic_500_only
+  - perform_destructive_or_unrelated_system_actions
+  - use_generic_exploit_payloads_without_target_derivation
+  - exfiltrate_unrelated_sensitive_data_beyond_proof

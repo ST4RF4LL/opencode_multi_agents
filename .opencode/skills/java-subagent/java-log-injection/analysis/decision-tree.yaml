@@ -1,0 +1,58 @@
+name: java-log-injection-decision-tree
+steps:
+  - id: find_log_sink
+    question: 是否发现日志写入/MDC 类 Sink？
+    no: stop_no_sink
+    yes: check_message_origin
+
+  - id: check_message_origin
+    question: 日志消息/上下文是否完全由常量产生，且无外部输入进入消息体或布局字段？
+    yes: reject_constant_message
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到日志消息参数、拼接结果或 MDC 值的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是完整消息文本、可插入 CRLF 的字段、格式串，还是 MDC/布局字段？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在结构化 JSON 字段绑定、换行剥离或等效控制？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（JSON 结构化 + 转义 / 完整 CRLF 与控制字符清理）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: assess_impact
+    question: 日志是否进入审计/SIEM/共享查看路径，或可证明行伪造影响完整性？
+    no: lower_priority_candidate
+    yes: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_constant_message: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  lower_priority_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

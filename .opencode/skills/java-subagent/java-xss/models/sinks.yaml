@@ -1,0 +1,125 @@
+sinks:
+  - id: servlet-writer-print
+    framework: servlet
+    method_full_name:
+      - ".*PrintWriter\\.print.*"
+      - ".*PrintWriter\\.println.*"
+      - ".*PrintWriter\\.write.*"
+      - ".*PrintWriter\\.append.*"
+      - ".*ServletOutputStream\\.print.*"
+      - ".*ServletOutputStream\\.write.*"
+    sensitive_arguments: [1]
+    semantics: http-response-write
+    confidence: high
+    notes: typically response.getWriter().print/write
+
+  - id: servlet-response-send
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletResponse\\.sendError.*"
+      - ".*HttpServletResponse\\.getWriter.*"
+    sensitive_arguments: [2]
+    semantics: http-response-message
+    confidence: medium
+    notes: sendError(code, message) may reflect message into HTML error page
+
+  - id: jsp-el-unescaped
+    framework: jsp
+    patterns:
+      - "${"
+      - "<%="
+      - "out.print"
+      - "out.write"
+    semantics: template-html-output
+    confidence: high
+    notes: JSP EL and scriptlets default to unescaped output unless JSTL c:out / fn:escapeXml
+
+  - id: jstl-out-escape-false
+    framework: jsp
+    patterns:
+      - 'escapeXml="false"'
+      - "escapeXml='false'"
+    semantics: template-html-output-unescaped
+    confidence: high
+
+  - id: thymeleaf-utext
+    framework: thymeleaf
+    patterns:
+      - "th:utext"
+      - "th:uText"
+      - "[[${"
+      - "[(${"
+    semantics: template-html-output-unescaped
+    confidence: high
+    notes: th:text is escaped; th:utext and unescaped inline are sinks
+
+  - id: freemarker-no-esc
+    framework: freemarker
+    patterns:
+      - "?no_esc"
+      - "?html"
+      - "<#noescape"
+      - "${"
+    semantics: template-html-output
+    confidence: medium
+    notes: ?no_esc and #noescape disable escaping; bare ${} depends on auto-escaping config
+
+  - id: spring-model-and-view
+    framework: spring-mvc
+    method_full_name:
+      - ".*Model\\.addAttribute.*"
+      - ".*ModelMap\\.addAttribute.*"
+      - ".*ModelAndView\\.addObject.*"
+    sensitive_arguments: [2]
+    semantics: view-model-propagation
+    confidence: medium
+    notes: not a final sink; expand to template render of the attribute
+
+  - id: spring-response-body
+    framework: spring-mvc
+    annotation:
+      - ResponseBody
+      - RestController
+    method_full_name:
+      - ".*ResponseEntity\\..*"
+      - ".*HttpEntity\\..*"
+    sensitive_arguments: []
+    semantics: http-response-body
+    confidence: medium
+    notes: JSON usually lower risk; HTML/text content-type with user data is high risk
+
+  - id: spring-redirect-attributes
+    framework: spring-mvc
+    method_full_name:
+      - ".*RedirectAttributes\\.addFlashAttribute.*"
+      - ".*RedirectAttributes\\.addAttribute.*"
+    sensitive_arguments: [2]
+    semantics: flash-to-view-propagation
+    confidence: medium
+
+  - id: string-html-builder
+    framework: custom
+    method_full_name:
+      - ".*StringBuilder\\.append.*"
+      - ".*StringBuffer\\.append.*"
+      - ".*String\\.format.*"
+    patterns:
+      - "<html"
+      - "<div"
+      - "<script"
+      - "innerHTML"
+    semantics: html-construction
+    confidence: medium
+    notes: intermediate HTML string building before write; track to final response sink
+
+  - id: custom-view-helper
+    framework: custom
+    method_full_name:
+      - ".*HtmlUtil\\..*"
+      - ".*ViewHelper\\..*"
+      - ".*TemplateUtil\\..*render.*"
+      - ".*PageRenderer\\..*"
+    sensitive_arguments: []
+    semantics: possible-html-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real writer/template calls

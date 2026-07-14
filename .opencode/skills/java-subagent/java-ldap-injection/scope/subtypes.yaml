@@ -1,0 +1,13 @@
+subtypes:
+  - id: filter-string-concat
+    description: 字符串拼接/格式化构造 LDAP filter，用户输入成为过滤器结构的一部分（可导致认证旁路、数据泄露）
+  - id: dn-injection
+    description: DN（distinguished name）由用户输入拼接，可改变搜索基、绑定目标或对象路径
+  - id: search-base-control
+    description: 搜索 base DN 受用户控制，导致越权搜索范围
+  - id: attribute-name-injection
+    description: 返回属性名或搜索属性由用户输入控制（较少见，仍可能影响查询语义）
+  - id: partial-encoding
+    description: 仅部分字符被转义，或编码 API 用错上下文（filter vs DN）
+  - id: spring-ldap-filter-concat
+    description: Spring LDAP 中 filter 字符串拼接而非 LdapQueryBuilder / encoded filter

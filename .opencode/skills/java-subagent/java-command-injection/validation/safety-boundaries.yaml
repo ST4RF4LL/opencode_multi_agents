@@ -1,0 +1,15 @@
+allowed:
+  - non_destructive_proof_in_authorized_or_staging_environments
+  - boolean_or_timing_confirmation_with_minimal_impact
+  - observation_via_application_logs_or_approved_audit_hooks
+
+forbidden:
+  - destructive_commands_in_production_without_explicit_authorization
+  - lateral_movement_outside_agreed_scope
+  - credential_harvesting_unrelated_to_the_finding
+  - generic_payload_libraries_executed_blindly
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_logs_and_minimal_observable_proof
+  - never_ship_reusable_weaponized_payloads_in_findings

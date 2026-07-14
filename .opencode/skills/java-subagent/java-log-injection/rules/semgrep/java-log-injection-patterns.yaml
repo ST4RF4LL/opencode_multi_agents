@@ -1,0 +1,84 @@
+rules:
+  - id: java-log-injection-non-constant-format
+    message: Log format/pattern argument may not be a compile-time constant
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $LOG.info($FMT, $ARG)
+      - pattern: |
+          $LOG.warn($FMT, $ARG)
+      - pattern: |
+          $LOG.error($FMT, $ARG)
+    metavariable-regex:
+      metavariable: $FMT
+      regex: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+    metadata:
+      cwe:
+        - CWE-117
+      subtype: format-string-injection
+      confidence: low
+      notes: Heuristic — variable format string; review if FMT is user-influenced
+
+  - id: java-log-injection-auth-audit-concat
+    message: Authentication/audit style log message uses concatenation (high-value forge target)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.info($A + $B, ...)
+          - pattern: $LOG.warn($A + $B, ...)
+          - pattern: $LOG.info("..." + $X)
+          - pattern: $LOG.warn("..." + $X)
+      - pattern-either:
+          - pattern-inside: |
+              ...
+              $LOG.$METHOD(...);
+              ...
+          - pattern-regex: '(?i)(login|auth|audit|success|failed|password|session)'
+    metadata:
+      cwe:
+        - CWE-117
+      subtype: crlf-log-forging
+      confidence: medium
+
+  - id: java-log-injection-header-logged
+    message: HTTP header value logged — common CRLF / log forge source
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $H = $REQ.getHeader(...);
+          ...
+          $LOG.$LEVEL(..., $H, ...);
+      - pattern: |
+          $H = $REQ.getHeader(...);
+          ...
+          $LOG.$LEVEL($X + $H);
+      - pattern: |
+          $LOG.info($A + $REQ.getHeader(...))
+      - pattern: |
+          $LOG.warn($A + $REQ.getHeader(...))
+    metadata:
+      cwe:
+        - CWE-117
+      category: log-injection
+      confidence: medium
+
+  - id: java-log-injection-exception-message
+    message: Exception constructed or logged with potentially untrusted message
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          throw new $EX($USER);
+          ...
+          $LOG.error(..., $E);
+      - pattern: |
+          $LOG.error($A + $E.getMessage())
+      - pattern: |
+          $LOG.warn($E.getMessage())
+    metadata:
+      cwe:
+        - CWE-117
+      confidence: low

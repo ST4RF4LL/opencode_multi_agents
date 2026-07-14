@@ -1,0 +1,8 @@
+transferable_lessons:
+  - MyBatis ${} is string substitution; treat as high-risk sink for untrusted input
+  - ORDER BY / column / table names cannot be safely parameterized as values
+  - Fix requires allowlist/enum mapping to constant identifiers, not escaping alone
+non_transferable_details:
+  - original mapper namespace
+  - original parameter name
+  - original payload

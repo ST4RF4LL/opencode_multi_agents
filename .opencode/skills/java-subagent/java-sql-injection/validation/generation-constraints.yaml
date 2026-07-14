@@ -1,0 +1,23 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_sql_construction_logic
+  - actual_persistence_framework
+  - actual_validation_logic
+  - actual_database_dialect_if_known
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_db_error_messages_are_exposed
+  - claim_success_from_generic_500_only
+  - perform_destructive_update_or_drop_without_authorization
+  - exfiltrate_unrelated_sensitive_data_beyond_proof

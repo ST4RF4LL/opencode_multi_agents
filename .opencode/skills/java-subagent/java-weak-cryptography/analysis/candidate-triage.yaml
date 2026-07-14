@@ -1,0 +1,34 @@
+triage_levels:
+  L1_crypto_candidate:
+    meaning: weak algorithm literal, crypto API, or suspicious key/IV/random pattern found
+    not_a_finding: true
+    next: classify_subtype_and_trace_config
+
+  L2_config_or_dataflow_candidate:
+    meaning: algorithm/key/IV/random/password path to weak primitive established
+    not_a_finding_until: security_relevance_and_controls_checked
+    next: sanitizer_and_usage_analysis
+
+  L3_semantic_candidate:
+    meaning: weak or misconfigured crypto with security-sensitive use; controls missing or bypassable
+    next: reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied (often complete static semantics for crypto)
+  rejected:
+    meaning: proven strong crypto, non-security use, or non-reachable
+
+priority_boost:
+  - production_encryption_of_pii_or_secrets
+  - password_storage_path
+  - authentication_token_generation
+  - hardcoded_key_in_deployed_artifact
+  - gcm_static_nonce
+  - aes_ecb_on_structured_data
+
+priority_reduce:
+  - test_code_only
+  - example_or_docs_only
+  - md5_for_non_security_checksum_with_evidence
+  - dead_code
+  - local_dev_tooling

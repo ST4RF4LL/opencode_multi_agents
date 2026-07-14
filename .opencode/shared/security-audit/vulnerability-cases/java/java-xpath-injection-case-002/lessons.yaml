@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Auth/filter XPath with concatenated credentials is a high-impact boolean-logic subtype
+  - $username/$password via VariableResolver prevents structure control of and/or predicates
+  - Prefer non-XPath credential verification when XML is only a data store
+  - Do not confuse this with XXE; the document load path is separate
+non_transferable_details:
+  - original login route
+  - original XML schema
+  - original payload

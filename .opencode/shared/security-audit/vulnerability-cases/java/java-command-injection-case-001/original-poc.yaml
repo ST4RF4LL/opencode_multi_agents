@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - endpoint accepts host query parameter
+  - application uses vulnerable NetService.pingHost path
+request_context:
+  endpoint: /api/ping
+  parameter: host
+observed_result:
+  - crafted host alters executed command structure beyond intended ping target
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

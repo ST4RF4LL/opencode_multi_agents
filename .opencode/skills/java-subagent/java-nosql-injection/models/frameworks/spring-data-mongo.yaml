@@ -1,0 +1,40 @@
+id: spring-data-mongo
+name: Spring Data MongoDB
+detect:
+  imports:
+    - org.springframework.data.mongodb
+    - org.springframework.data.mongodb.core.MongoTemplate
+    - org.springframework.data.mongodb.core.query.Query
+    - org.springframework.data.mongodb.core.query.Criteria
+    - org.springframework.data.mongodb.core.query.BasicQuery
+    - org.springframework.data.mongodb.repository
+  keywords:
+    - "@Query"
+    - MongoTemplate
+    - MongoRepository
+    - Criteria.where
+    - BasicQuery
+    - ReactiveMongoTemplate
+
+sinks:
+  - spring-data-mongo-query
+  - spring-data-mongo-template
+  - spring-criteria-string
+
+safe_patterns:
+  - derived_query_methods
+  - Criteria.where_constant_field_is_value
+  - "@Query with ?0 placeholders and bound params"
+  - Example_matcher_without_raw_json
+
+unsafe_patterns:
+  - "@Query value built with + or String.format"
+  - BasicQuery_with_user_json_string
+  - Criteria_built_from_Document_parse
+  - SpEL_fragments_with_user_input_in_@Query
+  - MongoTemplate_find_with_untrusted_Query_json
+
+notes:
+  - Spring Data derived methods are generally safe for values
+  - @Query JSON strings with concatenation reintroduce injection
+  - BasicQuery(String query) is equivalent to parsing untrusted filter JSON

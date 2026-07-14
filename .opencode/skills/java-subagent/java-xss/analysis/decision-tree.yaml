@@ -1,0 +1,57 @@
+name: java-xss-decision-tree
+steps:
+  - id: find_xss_sink
+    question: 是否发现 HTTP 响应写出 / 未转义模板输出 Sink？
+    no: stop_no_sink
+    yes: check_output_origin
+
+  - id: check_output_origin
+    question: Sink 写出内容是否完全由常量产生，用户输入未进入响应体/模板插值？
+    yes: reject_constant_output
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到响应写出参数/模板变量的数据流？
+    no: candidate_needs_modeling
+    yes: classify_context
+
+  - id: classify_context
+    question: 输出上下文是 HTML body、HTML attribute、JavaScript、CSS 还是 URL？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在上下文匹配的编码、HTML Sanitizer 或模板默认转义？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（匹配上下文的 Encoder / 有效 PolicyFactory / 默认转义且无 unescape）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: wrong_context_check
+    question: 若使用了编码 API，上下文是否匹配（forHtml 不用于 JS/CSS 等）？
+    mismatch: high_risk_candidate
+    match: continue_reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_constant_output: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

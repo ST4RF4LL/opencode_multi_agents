@@ -1,0 +1,50 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - 'logger.info("Login for " + username)'
+      - '"User " + user + " failed auth"'
+      - 'new StringBuilder().append("id=").append(id).toString()'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("user=%s action=%s", user, action)'
+      - 'MessageFormat.format(...)'
+      - 'logger.printf(Level.INFO, "user=%s", user)'
+
+  - pattern: getter-setter
+    examples:
+      - setUsername -> getUsername
+      - setMessage -> getMessage
+      - AuditEvent.setDetail -> getDetail
+
+  - pattern: builder
+    examples:
+      - AuditEvent.builder().user(x).detail(y).build()
+      - LogMessage.builder().append(userInput)
+
+  - pattern: collection
+    examples:
+      - map.put("username", input)
+      - params.get("user")
+
+  - pattern: dto-field
+    examples:
+      - LoginRequest.username
+      - AuditRequest.reason
+      - ErrorReport.message
+
+  - pattern: wrapper-method
+    examples:
+      - AuditLogger.record(msg)
+      - LogUtil.info(msg)
+      - SecurityLog.authFailure(user, reason)
+
+  - pattern: mdc-context
+    examples:
+      - MDC.put("user", input) -> layout %X{user}
+      - ThreadContext.put("requestId", header)
+
+  - pattern: exception-message
+    examples:
+      - new RuntimeException(userInput) -> logger.error("failed", ex)
+      - ex.getMessage() containing untrusted data

@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getHeader
+  parameter: User-Agent
+path:
+  - RequestLoggingFilter.doFilter
+sink:
+  method: Logger.info
+  argument: 1
+influence: log_message_body_via_unstructured_concat

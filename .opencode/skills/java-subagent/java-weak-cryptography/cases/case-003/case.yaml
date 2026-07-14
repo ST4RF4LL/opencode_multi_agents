@@ -1,0 +1,23 @@
+id: case-003
+vulnerability_type: weak-cryptography
+subtype: weak-password-hash
+source:
+  type: password-plaintext
+  expression: request.getParameter("password")
+sink:
+  api: MessageDigest.digest
+  sensitive_argument: password_bytes
+propagation:
+  - AuthService.register
+  - PasswordUtil.hash
+root_cause:
+  - md5_single_pass_password_storage
+  - no_salt_or_adaptive_cost
+prerequisites:
+  - password_stored_or_compared_via_md5_hex
+observed_behavior:
+  - offline_cracking_feasible_with_rainbow_tables
+fix:
+  - use_bcrypt_or_argon2id_or_scrypt
+  - unique_salt_managed_by_encoder
+  - migrate_legacy_hashes_on_login

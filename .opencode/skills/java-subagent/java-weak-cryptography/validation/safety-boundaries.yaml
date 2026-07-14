@@ -1,0 +1,16 @@
+allowed:
+  - static_code_and_config_review
+  - offline_analysis_of_sample_ciphertext_format_in_authorized_env
+  - verification_of_password_hash_encoding_prefix_in_staging
+  - entropy_review_of_token_format_without_account_takeover_at_scale
+
+forbidden:
+  - mass_offline_cracking_against_production_password_dumps_without_authorization
+  - exfiltration_of_keystore_or_cloud_kms_material
+  - downgrade_attacks_on_live_users
+  - lateral_movement_using_forged_tokens_outside_scope
+
+reporting:
+  - document_affected_security_property
+  - prefer_code_snippets_and_config_over_weaponized_exploits
+  - recommend_algorithm_agility_and_secret_management

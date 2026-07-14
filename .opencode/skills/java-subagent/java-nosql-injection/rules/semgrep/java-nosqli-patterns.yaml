@@ -1,0 +1,82 @@
+rules:
+  - id: java-nosqli-string-concat-query
+    message: String concatenation used to build MongoDB query JSON
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $Q = "{'" + $X + "'"
+      - pattern: |
+          $Q = "{\"" + $X
+      - pattern: |
+          $SB.append("{").append($X)
+      - pattern: |
+          String.format("{ \"%s\": \"%s\" }", $K, $V)
+      - pattern: |
+          String.format("{'%s': '%s'}", $K, $V)
+    metadata:
+      cwe: CWE-943
+      subtype: string-concat-query
+      confidence: high
+
+  - id: java-nosqli-operator-keys
+    message: Possible MongoDB operator key from untrusted map/JSON structure
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $M.put("$gt", $V)
+      - pattern: |
+          $M.put("$ne", $V)
+      - pattern: |
+          $M.put("$in", $V)
+      - pattern: |
+          $M.put("$regex", $V)
+      - pattern: |
+          $M.put("$where", $V)
+      - pattern: |
+          $D.append("$gt", $V)
+      - pattern: |
+          $D.append("$ne", $V)
+    metadata:
+      cwe: CWE-943
+      subtype: json-operator-injection
+      confidence: medium
+      notes: Flag when map/document is populated from request body without key allowlisting
+
+  - id: java-nosqli-map-as-filter
+    message: Request Map/JSON deserialized and used directly as Mongo filter
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $M = $OM.readValue($BODY, Map.class);
+              ...
+              new Document($M)
+          - pattern: |
+              $M = $OM.readValue($BODY, ...);
+              ...
+              $COL.find(new Document($M))
+          - pattern: |
+              $M = $OM.readValue($BODY, ...);
+              ...
+              new BasicQuery($M.toString())
+    metadata:
+      cwe: CWE-943
+      subtype: json-operator-injection
+      confidence: high
+
+  - id: java-nosqli-spring-query-concat
+    message: Spring Data MongoDB @Query or query string may embed concatenation/SpEL risk
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          @Query($A + $B)
+      - pattern: |
+          @Query(String.format(...))
+    metadata:
+      cwe: CWE-943
+      subtype: spring-query-spel-concat
+      confidence: medium

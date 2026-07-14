@@ -1,0 +1,13 @@
+source:
+  method: AuthController.login
+  parameter:
+    - username
+    - password
+  annotation: RequestParam
+path:
+  - AuthController.login
+  - XmlUserStore.authenticate
+sink:
+  method: XPath.evaluate
+  argument: 1
+influence: boolean_predicate_logic

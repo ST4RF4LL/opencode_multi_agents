@@ -1,0 +1,111 @@
+sanitizers:
+  strong:
+    - id: owasp-encoder-for-html
+      condition:
+        - uses_org_owasp_encoder_Encode_forHtml_or_forHtmlContent_or_forHtmlAttribute
+        - encoded_value_is_what_reaches_the_sink
+        - output_context_is_html_body_or_matching_attribute
+      api:
+        - "org.owasp.encoder.Encode.forHtml"
+        - "org.owasp.encoder.Encode.forHtmlContent"
+        - "org.owasp.encoder.Encode.forHtmlAttribute"
+    - id: owasp-encoder-for-js
+      condition:
+        - uses_Encode_forJavaScript_or_forJavaScriptBlock_or_forJavaScriptAttribute
+        - output_context_is_javascript
+      api:
+        - "org.owasp.encoder.Encode.forJavaScript"
+        - "org.owasp.encoder.Encode.forJavaScriptBlock"
+        - "org.owasp.encoder.Encode.forJavaScriptAttribute"
+        - "org.owasp.encoder.Encode.forJavaScriptSource"
+    - id: owasp-encoder-for-css
+      condition:
+        - uses_Encode_forCssString_or_forCssUrl
+        - output_context_is_css
+      api:
+        - "org.owasp.encoder.Encode.forCssString"
+        - "org.owasp.encoder.Encode.forCssUrl"
+    - id: owasp-encoder-for-uri
+      condition:
+        - uses_Encode_forUriComponent_or_forUri
+        - output_context_is_url_parameter_or_path
+      api:
+        - "org.owasp.encoder.Encode.forUriComponent"
+        - "org.owasp.encoder.Encode.forUri"
+    - id: owasp-html-sanitizer
+      condition:
+        - uses_HtmlPolicyBuilder_or_Sanitizers_factory
+        - policy_disallows_script_and_event_handlers
+        - sanitized_output_is_what_reaches_sink
+      api:
+        - "org.owasp.html.HtmlPolicyBuilder"
+        - "org.owasp.html.Sanitizers"
+        - "org.owasp.html.PolicyFactory.sanitize"
+    - id: template-default-escape
+      condition:
+        - template_engine_auto_escapes_for_context
+        - no_explicit_unescape_directive
+        - input_not_passed_through_utext_no_esc_or_escapeXml_false
+    - id: jstl-cout-default
+      condition:
+        - uses_c_out_or_fn_escapeXml_with_default_true
+        - output_context_is_html_text
+
+  contextual:
+    - id: spring-htmlutils-htmlEscape
+      condition:
+        - uses_HtmlUtils_htmlEscape
+        - output_context_is_html_text_not_js_or_url
+      api:
+        - "org.springframework.web.util.HtmlUtils.htmlEscape"
+      notes: HTML entity escape only; wrong for JS/CSS/URL contexts
+    - id: commons-text-escapeHtml
+      condition:
+        - uses_StringEscapeUtils_escapeHtml4_or_escapeXml11
+        - context_is_html_text
+      api:
+        - "org.apache.commons.text.StringEscapeUtils.escapeHtml4"
+        - "org.apache.commons.lang3.StringEscapeUtils.escapeHtml4"
+    - id: content-type-json
+      condition:
+        - response_content_type_is_application_json
+        - body_is_structured_json_not_html_fragment
+        - no_jsonp_callback_from_user_input
+      notes: reduces classic HTML XSS; still check JS context embedding
+
+  weak:
+    - id: blacklist-tags
+      pattern:
+        - replace("<script", "")
+        - replace("javascript:", "")
+        - contains("<script")
+        - regex_strip_tags
+      notes: incomplete and bypassable (case, encoding, event handlers)
+    - id: strip-angle-brackets-only
+      pattern:
+        - replace("<", "")
+        - replace(">", "")
+      notes: misses attribute/JS contexts and encoding bypasses
+    - id: length-or-alnum-only
+      pattern:
+        - length check
+        - alphanumeric-only without context encoding
+      notes: may block some payloads but is not context-aware encoding
+    - id: manual-quote-escape
+      pattern:
+        - replace("\"", "&quot;")
+        - replace("'", "&#39;")
+      notes: partial; often misses one context or encoding variant
+
+  invalid:
+    - id: encode-wrong-context
+      notes: Encode.forHtml used inside script block or CSS; or forJs used in HTML body attributes incorrectly
+    - id: sanitize-then-decode
+      notes: sanitization followed by HTML/URL decode before output
+    - id: encode-then-concatenate-raw
+      notes: encode one part then append untrusted raw fragment
+    - id: client-side-only-filter
+    - id: input-validation-without-output-encoding
+      notes: allowlist input helps but output encoding is still required for defense in depth
+    - id: double-encode-display-only
+      notes: double encoding that is later decoded by browser or intermediate layer

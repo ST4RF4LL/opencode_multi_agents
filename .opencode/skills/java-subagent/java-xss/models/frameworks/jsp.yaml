@@ -1,0 +1,40 @@
+id: jsp
+name: JavaServer Pages (JSP) / JSTL
+detect:
+  imports:
+    - javax.servlet.jsp
+    - jakarta.servlet.jsp
+    - javax.servlet.jsp.jstl
+  keywords:
+    - ".jsp"
+    - "<%="
+    - "${"
+    - "c:out"
+    - "fn:escapeXml"
+    - "escapeXml"
+  files:
+    - "**/*.jsp"
+    - "**/*.jspx"
+    - "**/*.tag"
+
+sources: inherit-global
+sinks:
+  - jsp-el-unescaped
+  - jstl-out-escape-false
+  - servlet-writer-print
+
+safe_patterns:
+  - c_out_default_escapeXml_true
+  - fn_escapeXml_around_el
+  - owasp_encoder_before_scriptlet_print
+
+unsafe_patterns:
+  - raw_el_dollar_brace_in_html
+  - scriptlet_expression_equals
+  - c_out_escapeXml_false
+  - out_print_with_request_parameter
+
+notes:
+  - JSP EL ${} does not HTML-encode by default
+  - Prefer JSTL c:out or OWASP Java Encoder at the output boundary
+  - escapeXml="false" is an explicit unescape sink

@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Auth/login logs that concatenate username are high-value CRLF forge targets
+  - Parameterized logging ("{}", user) is preferred over string concat but still needs newline policy
+  - Proof should show an extra forged line in the actual log destination, not just API presence
+non_transferable_details:
+  - original endpoint path
+  - original log file path
+  - original payload strings

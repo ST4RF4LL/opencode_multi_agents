@@ -1,0 +1,27 @@
+in_scope:
+  - servlet_response_writer_print_write
+  - spring_mvc_response_body_and_view_model
+  - jsp_el_and_scriptlet_unescaped_output
+  - thymeleaf_utext_and_inline_js
+  - freemarker_no_esc_and_raw_output
+  - jstl_out_escape_xml_false
+  - wrong_context_owasp_encoder_usage
+  - incomplete_html_sanitizer_policy
+  - stored_then_rendered_user_content
+  - custom_view_helpers_that_write_html
+
+out_of_scope:
+  - browser_only_dom_xss_without_server_reflection
+  - pure_client_side_spa_sinks_with_no_java_backend_path
+  - csrf_as_standalone_issue
+  - open_redirect_without_scriptable_context
+  - sql_injection
+  - ssti_as_server_code_execution
+  - pure_authorization_flaws
+
+boundary_notes:
+  - default_template_auto_escape_is_not_xss_when_input_stays_in_escaped_context
+  - encoding_must_match_output_context_html_vs_js_vs_css_vs_url
+  - html_sanitizer_policy_must_be_restrictive_enough_for_the_use_case
+  - stored_data_reused_in_templates_must_be_treated_as_untrusted
+  - dom_xss_is_a_subtype_boundary_mention_only_when_server_emits_unsafe_bootstrap_data

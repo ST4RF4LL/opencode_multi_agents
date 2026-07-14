@@ -1,0 +1,53 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"<div>" + userInput + "</div>"'
+      - 'html + "<script>var x='" + name + "'</script>"'
+      - 'new StringBuilder().append("<p>").append(userInput)'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("<h1>%s</h1>", title)'
+      - 'MessageFormat.format("<span>{0}</span>", msg)'
+
+  - pattern: getter-setter
+    examples:
+      - setMessage -> getMessage
+      - setComment -> getComment
+      - setDisplayName -> getDisplayName
+
+  - pattern: builder
+    examples:
+      - HtmlBuilder.body(x).build()
+      - ResponseEntity.body(html)
+
+  - pattern: collection
+    examples:
+      - map.put("msg", input)
+      - model.addAttribute("msg", input)
+      - list.add(userComment)
+
+  - pattern: dto-field
+    examples:
+      - Comment.content
+      - User.displayName
+      - ErrorResponse.message
+
+  - pattern: wrapper-method
+    examples:
+      - ViewHelper.render(html)
+      - PageRenderer.write(content)
+      - TemplateUtil.merge(template, data)
+
+  - pattern: model-to-template
+    examples:
+      - model.addAttribute("name", input) -> ${name} / th:text / th:utext
+      - request.setAttribute("err", input) -> JSP EL
+
+  - pattern: stored-then-render
+    examples:
+      - save(userInput) -> later load() -> write to response/template
+
+  - pattern: flash-and-redirect
+    examples:
+      - redirectAttributes.addFlashAttribute("msg", input) -> next view render

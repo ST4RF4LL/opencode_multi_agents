@@ -1,0 +1,15 @@
+allowed:
+  - read_only_xpath_proof_queries_when_possible
+  - boolean_or_result_set_confirmation_with_minimal_impact
+  - use_of_staging_or_authorized_test_environments
+
+forbidden:
+  - destructive_xml_or_data_store_changes_in_production_without_explicit_authorization
+  - mass_data_exfiltration_beyond_minimal_proof
+  - credential_stuffing_unrelated_to_the_finding
+  - lateral_movement_outside_agreed_scope
+  - intentional_xxe_exploitation_under_this_skill_unless_separately_authorized_as_java-xxe
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_screenshots_logs_and_minimal_result_samples

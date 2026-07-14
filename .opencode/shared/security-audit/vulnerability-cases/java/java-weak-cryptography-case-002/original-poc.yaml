@@ -1,0 +1,8 @@
+case_specific: true
+preconditions:
+  - same key encrypts multiple messages with fixed GCM nonce
+observed_result:
+  - static analysis shows constant nonce; GCM nonce reuse is catastrophic
+reuse_policy:
+  - reference_only
+  - prefer_static_evidence_over_cryptanalytic_attack

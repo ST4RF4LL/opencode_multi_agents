@@ -1,0 +1,29 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_filter_or_dn_structure_influence
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_structure_influence
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - authentication_bypass_path
+    - admin_directory_access
+    - confirmed_data_disclosure
+  decrease:
+    - partial_encoding
+    - waf_noise_only
+    - uncertain_reachability

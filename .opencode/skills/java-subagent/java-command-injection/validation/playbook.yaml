@@ -1,0 +1,33 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_command_influence_surface
+  - inspect_input_transformations
+  - inspect_shell_vs_list_and_allowlists
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - full_shell_command_string
+  - shell_c_argument
+  - command_binary_name
+  - argv_flags
+  - argv_operands
+  - environment_variables
+  - working_directory
+
+observable_behaviors:
+  - command_error_message_difference
+  - timing_difference_correlated_with_injected_delay
+  - side_effect_on_authorized_probe_only
+  - process_list_or_audit_log_shows_attacker_controlled_argv
+  - application_response_reflects_command_output
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - prefer_non_destructive_proof_in_authorized_environments

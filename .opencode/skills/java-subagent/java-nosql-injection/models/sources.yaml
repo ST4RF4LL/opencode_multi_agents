@@ -1,0 +1,86 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: high
+    notes: >
+      JSON/Map/Document request bodies are primary sources for operator injection
+      when deserialized into query filters.
+
+  - id: spring-query-map
+    framework: spring-mvc
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*MultiValueMap.*"
+    controlled_value: map_values
+    confidence: high
+
+  - id: json-parse-untrusted
+    framework: json
+    method_full_name:
+      - ".*ObjectMapper\\.readValue.*"
+      - ".*ObjectMapper\\.readTree.*"
+      - ".*JSON\\.parse.*"
+      - ".*JsonParser\\..*"
+      - ".*Gson\\.fromJson.*"
+    controlled_value: return
+    confidence: high
+    notes: untrusted JSON later used as Mongo query Document/Bson
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: database-read-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*Document\\.get.*"
+      - ".*DBObject\\.get.*"
+    controlled_value: return
+    confidence: low
+    notes: second-order when previously stored attacker data is reused in queries

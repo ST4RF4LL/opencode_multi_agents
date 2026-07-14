@@ -1,0 +1,34 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous NoSQL API or dynamic query pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach NoSQL construction/execution argument
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_operator_analysis
+
+  L3_semantic_candidate:
+    meaning: query builder missing or bypassable; attacker influences operators/structure/script
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - document_parse_of_request_body
+  - where_script_reachable
+  - write_or_delete_query_possible
+  - authentication_bypass_via_operator_injection
+  - admin_data_access
+
+priority_reduce:
+  - test_code_only
+  - constant_filters_eq_only
+  - allowlisted_field_and_fixed_operator
+  - dead_code
+  - local_dev_tooling

@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - login endpoint logs username on success/failure
+  - log layout is plain text line-oriented
+request_context:
+  endpoint: /api/login
+  parameter: username
+observed_result:
+  - CRLF in username creates additional forged log lines (e.g. fake success entry)
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

@@ -1,0 +1,38 @@
+l0_stack_detection:
+  - pattern: "javax.xml.xpath|jakarta.xml.xpath"
+    implies: javax-xpath
+  - pattern: "XPathFactory|XPathExpression|XPathVariableResolver"
+    implies: javax-xpath
+  - pattern: "net.sf.saxon|XPathCompiler"
+    implies: saxon
+  - pattern: "DocumentBuilderFactory|DocumentBuilder"
+    implies: dom-xpath-context
+
+l1_sink_keywords:
+  - "XPathFactory"
+  - "newXPath"
+  - "XPath.compile"
+  - ".compile("
+  - "XPath.evaluate"
+  - ".evaluate("
+  - "XPathExpression"
+  - "XPathVariableResolver"
+  - "createExpression"
+  - "XPathCompiler"
+  - "StringBuilder"
+  - "String.format"
+
+high_risk_concat_hints:
+  - '"//.*\\+'
+  - '"\\[.*\\+'
+  - "append\\(\".*//"
+  - "String\\.format\\(\".*//"
+  - "String\\.format\\(\".*\\[@"
+
+rg_commands:
+  stack: |
+    rg -n "javax\\.xml\\.xpath|jakarta\\.xml\\.xpath|XPathFactory|XPathVariableResolver|net\\.sf\\.saxon" --glob '*.java'
+  sinks: |
+    rg -n "XPathFactory|newXPath|\\.compile\\(|\\.evaluate\\(|XPathExpression|XPathCompiler" --glob '*.java'
+  concat: |
+    rg -n '"//.*"\s*\+|append\("//|String\.format\(".*//|String\.format\(".*\[@' --glob '*.java'

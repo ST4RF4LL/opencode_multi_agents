@@ -1,0 +1,17 @@
+allowed:
+  - minimal_benign_crlf_proof_strings_in_authorized_test_or_staging
+  - read_only_inspection_of_application_logs
+  - boolean_comparison_of_baseline_vs_test_log_lines
+  - use_of_staging_or_authorized_test_environments
+
+forbidden:
+  - production_log_flooding_or_disk_exhaustion
+  - jndi_rce_or_log4shell_exploitation_as_part_of_this_skill
+  - destructive_actions_unrelated_to_log_integrity_proof
+  - mass_exfiltration_of_log_contents_beyond_minimal_proof
+  - lateral_movement_outside_agreed_scope
+
+reporting:
+  - document_log_destination_and_retention_assumptions
+  - prefer_redacted_log_snippets_and_line_counts
+  - separate_adjacent_jndi_findings_from_crlf_log_injection

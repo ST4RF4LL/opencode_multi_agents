@@ -1,0 +1,33 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous LDAP API or dynamic filter/DN pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach LDAP filter or DN construction argument
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_encoding_analysis
+
+  L3_semantic_candidate:
+    meaning: encoding/parameterization missing or bypassable; attacker influences filter structure or DN
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - authentication_login_path
+  - admin_directory_search
+  - bind_with_user_controlled_dn
+  - password_in_filter_string
+
+priority_reduce:
+  - test_code_only
+  - constant_filter
+  - equals_filter_api_only
+  - dead_code
+  - local_dev_tooling

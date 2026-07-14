@@ -1,0 +1,49 @@
+id: jca-jce
+name: Java Cryptography Architecture / Extension
+detect:
+  imports:
+    - javax.crypto.Cipher
+    - javax.crypto.Mac
+    - javax.crypto.spec.SecretKeySpec
+    - javax.crypto.spec.IvParameterSpec
+    - javax.crypto.spec.GCMParameterSpec
+    - java.security.MessageDigest
+    - java.security.SecureRandom
+    - java.security.Signature
+    - java.security.KeyPairGenerator
+  keywords:
+    - Cipher.getInstance
+    - MessageDigest.getInstance
+    - SecretKeySpec
+    - IvParameterSpec
+    - SecureRandom
+
+sources: inherit-global
+sinks:
+  - cipher-getinstance
+  - cipher-init-iv
+  - messagedigest-getinstance
+  - mac-getinstance
+  - signature-getinstance
+  - secretkeyspec
+  - ivparameterspec
+  - insecure-random-for-secret
+  - securerandom-misuse
+
+safe_patterns:
+  - AES_GCM_or_ChaCha20_Poly1305_with_unique_nonce
+  - SecureRandom_default_for_secrets
+  - RSA_OAEP_with_2048_plus
+  - SHA_256_or_better_for_integrity_not_password
+
+unsafe_patterns:
+  - AES_ECB
+  - DES_DESede_RC4
+  - MD5_SHA1_for_security
+  - static_IV_or_nonce
+  - java_util_Random_for_secrets
+  - hardcoded_SecretKeySpec
+
+notes:
+  - Prefer high-level libraries (Tink) over raw JCA when assessing remediation
+  - Algorithm agility - hardcoded weak transformation blocks migration

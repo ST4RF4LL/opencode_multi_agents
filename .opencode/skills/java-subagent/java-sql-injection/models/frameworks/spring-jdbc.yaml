@@ -1,0 +1,23 @@
+id: spring-jdbc
+name: Spring JdbcTemplate
+detect:
+  imports:
+    - org.springframework.jdbc.core.JdbcTemplate
+    - org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+  keywords:
+    - JdbcTemplate
+    - NamedParameterJdbcTemplate
+    - queryForObject
+    - queryForList
+
+sinks:
+  - spring-jdbctemplate
+
+safe_patterns:
+  - 'jdbcTemplate.query("SELECT ... WHERE id = ?", id)'
+  - named_parameter_with_constant_sql
+
+unsafe_patterns:
+  - 'jdbcTemplate.query("SELECT ... WHERE id = " + id)'
+  - string_format_into_first_argument
+  - dynamic_order_by_concat

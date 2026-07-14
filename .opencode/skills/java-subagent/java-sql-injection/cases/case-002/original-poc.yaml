@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - MyBatis mapper uses ${sort}
+  - sort request parameter reaches mapper
+request_context:
+  endpoint: /api/users
+  parameter: sort
+observed_result:
+  - ORDER BY clause accepts SQL metacharacters/fragments
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: nosql-injection
+subtype: json-operator-injection
+source:
+  type: request-body
+  expression: "@RequestBody Map<String, Object> credentials"
+sink:
+  api: MongoCollection.find
+  sensitive_argument: 1
+propagation:
+  - AuthController.login
+  - UserRepository.findByCredentials
+root_cause:
+  - user_json_map_used_directly_as_mongo_filter
+  - no_operator_key_rejection
+  - no_Filters_eq_value_binding
+prerequisites:
+  - reachable_http_endpoint
+  - mongodb_collection_query_reachable
+observed_behavior:
+  - attacker_injects_$ne_or_$gt_operators_to_bypass_auth_or_broaden_match
+fix:
+  - extract_scalar_fields_only
+  - use_Filters_eq_with_constant_field_names
+  - reject_keys_starting_with_dollar

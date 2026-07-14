@@ -1,0 +1,10 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: name
+path:
+  - HelloServlet.doGet
+sink:
+  method: PrintWriter.print
+  argument: 1
+output_context: html_body
+influence: html_body_text

@@ -1,0 +1,33 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous OS command API or shell-wrapper pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach command construction/execution argument
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_shell_vs_argv_analysis
+
+  L3_semantic_candidate:
+    meaning: shell interpretation or command/arg control missing or bypassable
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - shell_wrapper_sh_c_or_cmd_c
+  - command_name_user_controlled
+  - privileged_process_or_root
+  - network_facing_admin_tooling
+
+priority_reduce:
+  - test_code_only
+  - constant_command
+  - processbuilder_list_fixed_binary_validated_arg
+  - dead_code
+  - local_dev_tooling

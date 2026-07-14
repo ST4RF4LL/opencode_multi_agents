@@ -1,0 +1,62 @@
+sanitizers:
+  strong:
+    - id: structured-json-field-binding
+      condition:
+        - log_layout_is_json_structured
+        - user_input_bound_as_json_field_not_raw_line_template
+        - encoder_escapes_control_characters
+      notes: >
+        Log4j2 JsonTemplateLayout / Logback JsonEncoder with field binding.
+        Still evaluate maxStringLength and viewer XSS separately.
+    - id: newline-and-control-char-strip
+      condition:
+        - cr_lf_and_other_control_chars_removed_or_encoded_before_log
+        - applied_to_all_untrusted_log_arguments
+        - no_reintroduction_via_format_or_concat
+    - id: compile-time-constant-pattern-plus-length-limit
+      condition:
+        - message_pattern_is_compile_time_constant
+        - arguments_length_limited
+        - layout_escapes_or_encodes_newlines
+      notes: parameterization alone is incomplete without newline handling
+
+  contextual:
+    - id: parameterized-slf4j-only
+      condition:
+        - uses_logger_info_template_placeholders
+        - no_string_concat_into_message_template
+      notes: >
+        Good practice (OWASP) but plain PatternLayout still may write CRLF
+        from arguments into multi-line log files.
+    - id: allowlisted-enum-for-log-status
+      condition:
+        - status_or_event_type_mapped_to_constants
+        - free_text_fields_still_reviewed
+
+  weak:
+    - id: replace-newline-once
+      pattern:
+        - replace("\n", "")
+        - replace("\r", "")
+      notes: incomplete if other control chars or Unicode line separators remain
+    - id: length-limit-only
+      pattern:
+        - substring
+        - max length check
+      notes: does not prevent short CRLF forge payloads
+    - id: html-encode-as-log-defense
+      pattern:
+        - HtmlUtils.htmlEscape
+        - StringEscapeUtils.escapeHtml
+      notes: wrong context for file/SIEM logs; may help viewer XSS only
+
+  invalid:
+    - id: string-concat-into-log-message
+      notes: logger.info("user=" + user) — BAD per OWASP Java CS
+    - id: non-constant-format-pattern
+      notes: logger.info(userControlledPattern, args) or MessageFormat with untrusted pattern
+    - id: log-then-sanitize
+      notes: sanitization applied after logging
+    - id: assume-parameterized-is-enough
+      notes: parameterized {} without structured layout or CRLF policy
+    - id: disable-logging-as-fix

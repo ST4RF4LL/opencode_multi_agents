@@ -1,0 +1,46 @@
+propagators:
+  - pattern: algorithm-string-variable
+    examples:
+      - String algo = "AES/ECB/PKCS5Padding"; Cipher.getInstance(algo)
+      - config.getAlgorithm() -> Cipher.getInstance
+
+  - pattern: key-bytes-to-secretkeyspec
+    examples:
+      - byte[] key = "...".getBytes(); new SecretKeySpec(key, "AES")
+      - decodeBase64(constant) -> SecretKeySpec
+
+  - pattern: iv-bytes-to-params
+    examples:
+      - new IvParameterSpec(FIXED_IV)
+      - new GCMParameterSpec(128, staticNonce)
+
+  - pattern: random-to-token
+    examples:
+      - new Random().nextLong() -> sessionId
+      - Math.random() -> reset token
+      - random.nextBytes(keyBytes) where random is java.util.Random
+
+  - pattern: password-to-digest
+    examples:
+      - password -> MessageDigest.update -> digest
+      - password -> DigestUtils.md5Hex
+      - password -> MessageDigestPasswordEncoder
+
+  - pattern: getter-setter
+    examples:
+      - setEncryptionKey -> getEncryptionKey
+      - CryptoConfig.setAlgorithm -> getAlgorithm
+
+  - pattern: builder
+    examples:
+      - CipherBuilder.algorithm(x).key(y).iv(z).build()
+
+  - pattern: wrapper-method
+    examples:
+      - CryptoUtil.encrypt(data)
+      - AesHelper.decrypt(cipherText)
+      - PasswordService.hash(password)
+
+  - pattern: config-to-runtime
+    examples:
+      - application.yml crypto.algorithm -> @Value -> Cipher.getInstance

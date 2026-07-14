@@ -1,0 +1,22 @@
+id: case-004
+vulnerability_type: sql-injection
+subtype: jpa-jpql-injection
+source:
+  type: request-parameter
+  expression: "@RequestParam String colorName"
+sink:
+  api: EntityManager.createQuery
+  sensitive_argument: 1
+propagation:
+  - ColorController.findByName
+  - ColorRepository.findByFriendlyName
+root_cause:
+  - jpql_string_concatenated_with_user_input
+  - jpa_ql_built_like_sql_without_setParameter
+prerequisites:
+  - jpa_entity_manager_available
+observed_behavior:
+  - JPQL predicate structure controlled by attacker (not native SQL)
+fix:
+  - constant_jpql_with_named_setParameter
+  # OWASP: createQuery("select c from Color c where c.friendlyName = :colorName").setParameter(...)

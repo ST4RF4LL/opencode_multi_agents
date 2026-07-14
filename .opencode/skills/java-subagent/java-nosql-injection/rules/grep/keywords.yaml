@@ -1,0 +1,55 @@
+l0_stack_detection:
+  - pattern: "com.mongodb|org.bson.Document|MongoCollection|BasicDBObject"
+    implies: mongodb-java
+  - pattern: "org.springframework.data.mongodb|MongoTemplate|MongoRepository|BasicQuery"
+    implies: spring-data-mongo
+  - pattern: "Filters\\.eq|Filters\\.where|com.mongodb.client.model"
+    implies: mongodb-java
+  - pattern: "redis.clients.jedis|RedisTemplate|DefaultRedisScript|EVAL"
+    implies: redis
+
+l1_sink_keywords:
+  - "Document.parse"
+  - "BasicDBObject.parse"
+  - "BasicDBObject"
+  - "MongoCollection"
+  - "MongoTemplate"
+  - "BasicQuery"
+  - "Filters.where"
+  - "$where"
+  - "Criteria.where"
+  - "@Query"
+  - "StringBuilder"
+  - "String.format"
+  - "ObjectMapper.readValue"
+  - "Jedis.eval"
+  - "DefaultRedisScript"
+
+high_risk_operator_hints:
+  - "\\$gt"
+  - "\\$ne"
+  - "\\$in"
+  - "\\$nin"
+  - "\\$regex"
+  - "\\$where"
+  - "\\$or"
+  - "\\$and"
+  - "\\$expr"
+  - "\\$function"
+
+high_risk_concat_hints:
+  - 'Document\\.parse\\(.*\\+'
+  - 'BasicDBObject\\.parse\\(.*\\+'
+  - 'new BasicQuery\\(.*\\+'
+  - 'String\\.format\\(.*\\$.*where'
+  - 'append\\(.*\\$where'
+
+rg_commands:
+  stack: |
+    rg -n "com\\.mongodb|org\\.bson\\.Document|MongoTemplate|MongoRepository|BasicDBObject|Filters\\." --glob '*.java'
+  sinks: |
+    rg -n "Document\\.parse|BasicDBObject\\.parse|BasicQuery|Filters\\.where|\\$where|MongoTemplate\\.(find|remove|update)|MongoCollection\\.(find|update|delete)" --glob '*.java'
+  operators: |
+    rg -n '\$gt|\$ne|\$where|\$regex|\$in|Document\.parse|BasicDBObject\.parse' --glob '*.java'
+  concat: |
+    rg -n 'Document\.parse\([^)]*\+|BasicQuery\([^)]*\+|String\.format\(".*\{.*%s' --glob '*.java'

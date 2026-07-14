@@ -1,0 +1,32 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_xpath_influence_surface
+  - inspect_input_transformations
+  - inspect_variable_resolver_and_allowlists
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - predicate_value
+  - predicate_attribute_name
+  - path_or_axis_fragment
+  - boolean_condition
+  - node_test
+  - full_expression
+
+observable_behaviors:
+  - xpath_error_message_difference
+  - boolean_auth_or_filter_bypass
+  - unexpected_node_set_or_document_content
+  - empty_vs_nonempty_result_flip
+  - data_disclosure_in_response
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - do_not_conflate_xxe_probes_with_xpath_injection_proof

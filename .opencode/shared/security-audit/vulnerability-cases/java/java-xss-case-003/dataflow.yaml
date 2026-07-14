@@ -1,0 +1,13 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: msg
+path:
+  - NotifyServlet.doGet
+  - Encode.forHtml
+  - PrintWriter.print
+sink:
+  method: PrintWriter.print
+  argument: 1
+output_context: javascript
+influence: javascript_string_literal
+control_assessment: wrong-encoding-context

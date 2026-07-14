@@ -1,0 +1,93 @@
+sinks:
+  - id: slf4j-logger
+    framework: slf4j
+    method_full_name:
+      - ".*org\\.slf4j\\.Logger\\.trace.*"
+      - ".*org\\.slf4j\\.Logger\\.debug.*"
+      - ".*org\\.slf4j\\.Logger\\.info.*"
+      - ".*org\\.slf4j\\.Logger\\.warn.*"
+      - ".*org\\.slf4j\\.Logger\\.error.*"
+    sensitive_arguments: [1]
+    semantics: log-message-emission
+    confidence: high
+    notes: >
+      Parameterized forms logger.info("msg {}", x) still emit x into layout;
+      assess layout (pattern vs JSON) and CRLF in arguments.
+
+  - id: log4j2-logger
+    framework: log4j2
+    method_full_name:
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.trace.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.debug.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.info.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.warn.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.error.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.fatal.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.log.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.Logger\\.printf.*"
+    sensitive_arguments: [1]
+    semantics: log-message-emission
+    confidence: high
+
+  - id: log4j2-logbuilder
+    framework: log4j2
+    method_full_name:
+      - ".*LogBuilder\\.log.*"
+      - ".*LogBuilder\\.withMessage.*"
+    sensitive_arguments: [1]
+    semantics: log-message-emission
+    confidence: high
+
+  - id: logback-logger
+    framework: logback
+    method_full_name:
+      - ".*ch\\.qos\\.logback\\.classic\\.Logger\\.(trace|debug|info|warn|error).*"
+    sensitive_arguments: [1]
+    semantics: log-message-emission
+    confidence: high
+    notes: typically via SLF4J facade; direct Logback use is rarer
+
+  - id: jul-logger
+    framework: jul
+    method_full_name:
+      - ".*java\\.util\\.logging\\.Logger\\.log.*"
+      - ".*java\\.util\\.logging\\.Logger\\.severe.*"
+      - ".*java\\.util\\.logging\\.Logger\\.warning.*"
+      - ".*java\\.util\\.logging\\.Logger\\.info.*"
+      - ".*java\\.util\\.logging\\.Logger\\.fine.*"
+      - ".*java\\.util\\.logging\\.Logger\\.finer.*"
+      - ".*java\\.util\\.logging\\.Logger\\.finest.*"
+    sensitive_arguments: [1, 2]
+    semantics: log-message-emission
+    confidence: high
+
+  - id: commons-logging
+    framework: commons-logging
+    method_full_name:
+      - ".*org\\.apache\\.commons\\.logging\\.Log\\.(trace|debug|info|warn|error|fatal).*"
+    sensitive_arguments: [1]
+    semantics: log-message-emission
+    confidence: high
+
+  - id: mdc-threadcontext-put
+    framework: logging-context
+    method_full_name:
+      - ".*org\\.slf4j\\.MDC\\.put.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.ThreadContext\\.put.*"
+      - ".*org\\.apache\\.logging\\.log4j\\.ThreadContext\\.push.*"
+    sensitive_arguments: [2]
+    semantics: log-context-pollution
+    confidence: medium
+    notes: values often rendered by layout patterns (%X{key})
+
+  - id: custom-log-util
+    framework: custom
+    method_full_name:
+      - ".*LogUtil\\..*"
+      - ".*AuditLogger\\..*"
+      - ".*SecurityLog\\..*"
+      - ".*LoggerHelper\\..*"
+    sensitive_arguments: []
+    semantics: possible-log-wrapper
+    confidence: medium
+    notes: wrappers require sink expansion into real logger calls

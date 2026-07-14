@@ -1,0 +1,36 @@
+id: thymeleaf
+name: Thymeleaf
+detect:
+  imports:
+    - org.thymeleaf
+  keywords:
+    - "th:text"
+    - "th:utext"
+    - "th:inline"
+    - "thymeleaf"
+  files:
+    - "**/*.html"
+  dependencies:
+    - spring-boot-starter-thymeleaf
+    - thymeleaf
+
+sources: inherit-global
+sinks:
+  - thymeleaf-utext
+  - spring-model-and-view
+
+safe_patterns:
+  - th_text_for_html_text_content
+  - th_attr_with_escaped_values
+  - natural_templates_with_default_escaping
+
+unsafe_patterns:
+  - th_utext_with_user_data
+  - unescaped_inline_double_bracket
+  - th_inline_javascript_with_raw_user_data
+  - inlining_user_data_into_script_without_js_escaping
+
+notes:
+  - th:text escapes for HTML; th:utext does not
+  - JS inlining needs JavaScript-context escaping, not only HTML escaping
+  - Model attributes are not sinks until rendered unescaped

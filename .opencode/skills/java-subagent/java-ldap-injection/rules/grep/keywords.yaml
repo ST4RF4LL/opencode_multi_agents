@@ -1,0 +1,52 @@
+l0_stack_detection:
+  - pattern: "javax.naming.directory|jakarta.naming.directory|DirContext|InitialDirContext"
+    implies: jndi
+  - pattern: "org.springframework.ldap|LdapTemplate|LdapQueryBuilder|LdapEncoder"
+    implies: spring-ldap
+  - pattern: "com.unboundid.ldap|LDAPConnection"
+    implies: unboundid
+  - pattern: "org.apache.directory.ldap|LdapNetworkConnection"
+    implies: apache-directory-ldap
+
+l1_sink_keywords:
+  - "DirContext"
+  - "InitialDirContext"
+  - ".search("
+  - "SearchControls"
+  - "NamingEnumeration"
+  - "LdapTemplate"
+  - "LdapQuery"
+  - "LdapQueryBuilder"
+  - "HardcodedFilter"
+  - "EqualsFilter"
+  - "LikeFilter"
+  - "AndFilter"
+  - "OrFilter"
+  - "LdapEncoder"
+  - "filterEncode"
+  - "encodeFilterValue"
+  - "DistinguishedName"
+  - "LdapNameBuilder"
+  - "LDAPConnection"
+  - "userPassword"
+  - "(uid="
+  - "(cn="
+  - "(&(uid="
+
+high_risk_concat_hints:
+  - '"\\(uid="\\s*\\+'
+  - '"\\(cn="\\s*\\+'
+  - '"\\(&\\(uid="\\s*\\+'
+  - 'String\\.format\\(".*\\(uid=%s'
+  - 'append\\("\\(uid="'
+  - 'HardcodedFilter\\(.*\\+'
+
+rg_commands:
+  stack: |
+    rg -n "javax\\.naming\\.directory|jakarta\\.naming\\.directory|DirContext|InitialDirContext|org\\.springframework\\.ldap|LdapTemplate|LdapEncoder|com\\.unboundid\\.ldap" --glob '*.java'
+  sinks: |
+    rg -n "DirContext|InitialDirContext|\\.search\\(|LdapTemplate\\.(search|authenticate|lookup|find)|HardcodedFilter|SearchControls" --glob '*.java'
+  concat: |
+    rg -n '"(\(uid=|\(cn=|\(&\(uid=).*"\s*\+|String\.format\(".*\(uid=%s|append\("\(uid=|HardcodedFilter\(.*\+' --glob '*.java'
+  encoding: |
+    rg -n "LdapEncoder|filterEncode|encodeFilterValue|nameEncode|encodeDnValue" --glob '*.java'

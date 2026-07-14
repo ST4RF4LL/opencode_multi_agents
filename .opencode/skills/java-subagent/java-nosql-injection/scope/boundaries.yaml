@@ -1,0 +1,27 @@
+in_scope:
+  - mongodb_java_driver_document_parse
+  - mongodb_basicdbobject_query_construction
+  - mongodb_where_and_server_side_js
+  - mongodb_filters_vs_string_concat
+  - spring_data_mongodb_query_annotation
+  - spring_data_mongodb_criteria_string_abuse
+  - json_body_parsed_as_query_filter
+  - operator_injection_via_map_or_document
+  - custom_query_builder_wrappers
+  - redis_eval_user_script_fragments
+
+out_of_scope:
+  - sql_injection
+  - graphql_injection_without_nosql
+  - ldap_injection
+  - xpath_injection
+  - command_injection
+  - ssti
+  - pure_authorization_flaws_without_query_structure_control
+
+boundary_notes:
+  - Filters.eq_and_typed_Bson_builders_are_not_nosqli_when_values_only
+  - Document.parse_of_untrusted_json_is_high_risk
+  - rejecting_special_chars_quote_backslash_semicolon_brace_dollar_is_recommended_for_string_paths
+  - operator_keys_starting_with_dollar_must_not_come_from_user_input
+  - typed_parameter_binding_does_not_apply_the_same_way_as_SQL_prepared_statements

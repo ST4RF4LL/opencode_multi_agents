@@ -1,0 +1,42 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"//users/user[@name=\'' + name + "\']"'
+      - 'base + "[@id='" + id + "']"'
+      - 'new StringBuilder().append("//book[@id=\'').append(bookId).append("\']").toString()'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("//users/user[@name=\'%s\']", name)'
+      - 'MessageFormat.format("//item[@id={0}]", id)'
+
+  - pattern: getter-setter
+    examples:
+      - setQuery -> getQuery
+      - setFilter -> getFilter
+      - setXPathExpression -> getXPathExpression
+
+  - pattern: builder
+    examples:
+      - XPathQueryBuilder.where(attr, value).build()
+      - Criteria-like XML query builders returning string expressions
+
+  - pattern: collection
+    examples:
+      - map.put("xpath", input)
+      - params.get("filter")
+
+  - pattern: dto-field
+    examples:
+      - SearchRequest.xpathFilter
+      - BookQuery.bookId used in concat path
+
+  - pattern: wrapper-method
+    examples:
+      - XPathUtil.query(expr)
+      - XmlHelper.selectNodes(doc, expr)
+      - repository.findByXPath(expr)
+
+  - pattern: second-order-store
+    examples:
+      - save(userInput) -> later load() -> concatenate into XPath

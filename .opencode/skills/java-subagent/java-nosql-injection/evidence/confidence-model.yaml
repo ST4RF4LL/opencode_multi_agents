@@ -1,0 +1,30 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_operator_structure_or_script_influence
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_structure_or_operator_influence
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - request_body_parsed_as_filter
+    - where_script
+    - write_or_delete_filter
+    - confirmed_auth_bypass_or_data_disclosure
+  decrease:
+    - partial_operator_blacklist
+    - waf_noise_only
+    - uncertain_reachability

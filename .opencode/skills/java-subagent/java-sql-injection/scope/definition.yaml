@@ -1,0 +1,21 @@
+id: java-sql-injection
+name: SQL Injection
+language: java
+cwe:
+  - CWE-89
+objective:
+  detect: >
+    Attacker-controlled data reaching SQL statement construction or execution
+    such that query structure, identifiers, or operators can be influenced
+    without effective parameterization or allowlisting.
+core_condition:
+  - external_input_exists
+  - sql_query_structure_or_identifier_is_influenced
+  - sql_execution_is_reachable
+  - effective_parameterization_or_identifier_control_is_missing
+not_in_scope:
+  - pure_nosql_injection_without_sql
+  - ldap_injection
+  - xpath_injection
+  - command_injection
+  - hardcoded_sql_with_no_external_influence

@@ -1,0 +1,24 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_xpath_construction_logic
+  - actual_xpath_api_or_wrapper
+  - actual_validation_or_variable_resolver_logic
+  - actual_xml_document_context_if_known
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_xpath_error_messages_are_exposed
+  - claim_success_from_generic_500_only
+  - perform_destructive_or_unrelated_xml_mutations_without_authorization
+  - treat_xxe_oob_callbacks_as_xpath_injection_proof
+  - exfiltrate_unrelated_sensitive_data_beyond_proof

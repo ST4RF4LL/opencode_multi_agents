@@ -1,0 +1,22 @@
+id: java-log-injection
+name: Log Injection / CRLF Log Forging
+language: java
+cwe:
+  - CWE-117
+  - CWE-93
+objective:
+  detect: >
+    Attacker-controlled data reaching log message construction or emission
+    such that log structure, line boundaries, or viewer-interpreted content
+    can be influenced without effective structured logging or sanitization.
+core_condition:
+  - external_input_exists
+  - log_message_content_or_structure_is_influenced
+  - logging_emission_is_reachable
+  - effective_structured_logging_or_newline_control_is_missing
+not_in_scope:
+  - pure_log4shell_jndi_lookup_without_crlf_forging
+  - sensitive_data_logging_without_structure_control
+  - command_injection
+  - sql_injection
+  - hardcoded_log_messages_with_no_external_influence

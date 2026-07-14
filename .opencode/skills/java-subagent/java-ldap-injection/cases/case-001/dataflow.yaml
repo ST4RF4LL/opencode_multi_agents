@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: username
+path:
+  - LdapAuthService.authenticate
+sink:
+  method: DirContext.search
+  argument: 2
+influence: filter_structure_and_assertion_values

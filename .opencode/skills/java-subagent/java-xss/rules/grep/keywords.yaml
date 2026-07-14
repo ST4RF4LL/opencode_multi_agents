@@ -1,0 +1,64 @@
+l0_stack_detection:
+  - pattern: "javax.servlet|jakarta.servlet|HttpServlet"
+    implies: servlet
+  - pattern: "@Controller|@RestController|@RequestMapping|spring-webmvc"
+    implies: spring-mvc
+  - pattern: "thymeleaf|th:text|th:utext"
+    implies: thymeleaf
+  - pattern: "freemarker|FreeMarker|\\.ftl|\\?no_esc"
+    implies: freemarker
+  - pattern: "\\.jsp|<%|c:out|fn:escapeXml"
+    implies: jsp
+  - pattern: "org.owasp.encoder.Encode|HtmlPolicyBuilder"
+    implies: owasp-encoder-or-sanitizer
+
+l1_sink_keywords:
+  - "getWriter"
+  - "PrintWriter"
+  - ".print("
+  - ".println("
+  - "sendError"
+  - "addAttribute"
+  - "addObject"
+  - "addFlashAttribute"
+  - "th:utext"
+  - "?no_esc"
+  - "<#noescape"
+  - 'escapeXml="false"'
+  - "<%="
+  - "${param."
+  - "out.print"
+  - "out.write"
+  - "ResponseEntity"
+  - "text/html"
+
+high_risk_output_hints:
+  - 'getWriter\\(\\)\\.(print|println|write)'
+  - 'request\\.getParameter\\([^)]+\\).{0,120}(print|println|write)'
+  - 'th:utext'
+  - '\\?no_esc'
+  - 'escapeXml\\s*=\\s*"false"'
+  - '<%=\s*request\\.getParameter'
+  - '"<script"\\s*\\+'
+  - 'String\\.format\\(".*<.*%s'
+
+encoding_keywords:
+  - "Encode.forHtml"
+  - "Encode.forJavaScript"
+  - "Encode.forCssString"
+  - "Encode.forUriComponent"
+  - "HtmlUtils.htmlEscape"
+  - "escapeHtml4"
+  - "HtmlPolicyBuilder"
+  - "PolicyFactory"
+  - "Sanitizers."
+
+rg_commands:
+  stack: |
+    rg -n "HttpServlet|@Controller|@RestController|thymeleaf|th:utext|freemarker|\\.ftl|\\.jsp|org\\.owasp\\.encoder" --glob '*.java' --glob '*.jsp' --glob '*.html' --glob '*.ftl' --glob '*.xml'
+  sinks: |
+    rg -n "getWriter\\(\\)|PrintWriter\\.(print|println|write)|sendError\\(|addAttribute\\(|th:utext|\\?no_esc|escapeXml\\s*=\\s*\"false\"|<%=" --glob '*.java' --glob '*.jsp' --glob '*.html' --glob '*.ftl'
+  encoding: |
+    rg -n "Encode\\.forHtml|Encode\\.forJavaScript|HtmlUtils\\.htmlEscape|HtmlPolicyBuilder|escapeHtml4" --glob '*.java'
+  concat_html: |
+    rg -n '"<[^"]*"\s*\+|append\("<|String\.format\(".*<' --glob '*.java'

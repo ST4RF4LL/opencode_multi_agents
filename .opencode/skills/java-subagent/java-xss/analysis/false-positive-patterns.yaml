@@ -1,0 +1,57 @@
+not_vulnerability:
+  - id: owasp-encode-matching-context
+    pattern: Encode.forHtml/forJs/forCss/forUri used for matching output context and result reaches sink
+    reason: context-aware encoding prevents injection in that context
+
+  - id: thymeleaf-th-text
+    pattern: th:text with user data, no th:utext / unescaped inline
+    reason: default HTML escaping
+
+  - id: jstl-cout-default
+    pattern: c:out without escapeXml=false
+    reason: default XML/HTML escaping
+
+  - id: freemarker-auto-esc
+    pattern: .ftlh or HTML output format with auto_esc, no ?no_esc around user data
+    reason: engine escapes interpolations
+
+  - id: json-rest-only
+    pattern: @ResponseBody application/json with structured serialization, not embedded in HTML page
+    reason: classic HTML XSS not applicable without HTML consumption
+
+  - id: test-only-view
+    pattern: response write only referenced from test sources
+    reason: not production reachable
+
+needs_deeper_review:
+  - id: writer-print-param
+    pattern: response.getWriter().print(request.getParameter(...))
+    reason: classic reflected XSS
+
+  - id: model-to-utext
+    pattern: model attribute from user input rendered with th:utext or raw EL
+    reason: unescaped template output
+
+  - id: encode-forhtml-in-script
+    pattern: HTML encoder used to build JS string or script block
+    reason: wrong encoding context
+
+  - id: escapeXml-false
+    pattern: c:out escapeXml=false or equivalent
+    reason: explicit disable of escaping
+
+  - id: blacklist-script-replace
+    pattern: replace/contains on script tags only
+    reason: weak sanitizer; still Candidate if dataflow exists
+
+  - id: senderror-user-message
+    pattern: sendError(code, userMessage)
+    reason: container error pages may reflect message as HTML
+
+  - id: stored-comment-render
+    pattern: DB field written to HTML without encoding
+    reason: stored XSS; confirm original input path
+
+  - id: custom-html-helper
+    pattern: HtmlUtil/ViewHelper render(String)
+    reason: sink indirection; expand to real writer/template

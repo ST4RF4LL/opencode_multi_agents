@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - endpoint embeds msg into inline script string
+  - only Encode.forHtml applied
+request_context:
+  endpoint: /notify
+  parameter: msg
+observed_result:
+  - JS string context remains influenceable despite HTML encoding
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - do_not_publish_as_generic_exploit_kit_payload

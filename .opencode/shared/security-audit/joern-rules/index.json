@@ -1,4 +1,455 @@
 {
   "version": 1,
-  "rules": []
+  "rules": [
+    {
+      "id": "java-command-injection-detect-validation",
+      "language": "java",
+      "skill": "java-command-injection",
+      "weakness": "command-injection",
+      "dimension": "D1",
+      "path": "java/java-command-injection-detect-validation.sc",
+      "metadata": "java/java-command-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-command-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-command-injection",
+      "weakness": "command-injection",
+      "dimension": "D1",
+      "path": "java/java-command-injection-locate-sinks.sc",
+      "metadata": "java/java-command-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-command-injection-locate-sources",
+      "language": "java",
+      "skill": "java-command-injection",
+      "weakness": "command-injection",
+      "dimension": "D1",
+      "path": "java/java-command-injection-locate-sources.sc",
+      "metadata": "java/java-command-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-command-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-command-injection",
+      "weakness": "command-injection",
+      "dimension": "D1",
+      "path": "java/java-command-injection-source-to-sink.sc",
+      "metadata": "java/java-command-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ldap-injection-detect-validation",
+      "language": "java",
+      "skill": "java-ldap-injection",
+      "weakness": "ldap-injection",
+      "dimension": "D1",
+      "path": "java/java-ldap-injection-detect-validation.sc",
+      "metadata": "java/java-ldap-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ldap-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-ldap-injection",
+      "weakness": "ldap-injection",
+      "dimension": "D1",
+      "path": "java/java-ldap-injection-locate-sinks.sc",
+      "metadata": "java/java-ldap-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ldap-injection-locate-sources",
+      "language": "java",
+      "skill": "java-ldap-injection",
+      "weakness": "ldap-injection",
+      "dimension": "D1",
+      "path": "java/java-ldap-injection-locate-sources.sc",
+      "metadata": "java/java-ldap-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ldap-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-ldap-injection",
+      "weakness": "ldap-injection",
+      "dimension": "D1",
+      "path": "java/java-ldap-injection-source-to-sink.sc",
+      "metadata": "java/java-ldap-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ldap-injection-trace-callers",
+      "language": "java",
+      "skill": "java-ldap-injection",
+      "weakness": "ldap-injection",
+      "dimension": "D1",
+      "path": "java/java-ldap-injection-trace-callers.sc",
+      "metadata": "java/java-ldap-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-log-injection-detect-validation",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "dimension": "D8",
+      "path": "java/java-log-injection-detect-validation.sc",
+      "metadata": "java/java-log-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-log-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "dimension": "D8",
+      "path": "java/java-log-injection-locate-sinks.sc",
+      "metadata": "java/java-log-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-log-injection-locate-sources",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "dimension": "D8",
+      "path": "java/java-log-injection-locate-sources.sc",
+      "metadata": "java/java-log-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-log-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "dimension": "D8",
+      "path": "java/java-log-injection-source-to-sink.sc",
+      "metadata": "java/java-log-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-log-injection-trace-callers",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "dimension": "D8",
+      "path": "java/java-log-injection-trace-callers.sc",
+      "metadata": "java/java-log-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-nosql-injection-detect-validation",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "dimension": "D1",
+      "path": "java/java-nosql-injection-detect-validation.sc",
+      "metadata": "java/java-nosql-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-nosql-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "dimension": "D1",
+      "path": "java/java-nosql-injection-locate-sinks.sc",
+      "metadata": "java/java-nosql-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-nosql-injection-locate-sources",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "dimension": "D1",
+      "path": "java/java-nosql-injection-locate-sources.sc",
+      "metadata": "java/java-nosql-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-nosql-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "dimension": "D1",
+      "path": "java/java-nosql-injection-source-to-sink.sc",
+      "metadata": "java/java-nosql-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-nosql-injection-trace-callers",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "dimension": "D1",
+      "path": "java/java-nosql-injection-trace-callers.sc",
+      "metadata": "java/java-nosql-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-derived-dynamic-filter-fragment",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-derived-dynamic-filter-fragment.sc",
+      "metadata": "java/java-sql-injection-derived-dynamic-filter-fragment.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-derived-dynamic-identifier",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-derived-dynamic-identifier.sc",
+      "metadata": "java/java-sql-injection-derived-dynamic-identifier.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-derived-map-key-to-sql",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-derived-map-key-to-sql.sc",
+      "metadata": "java/java-sql-injection-derived-map-key-to-sql.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-derived-operator-connector-inject",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-derived-operator-connector-inject.sc",
+      "metadata": "java/java-sql-injection-derived-operator-connector-inject.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-derived-path-param-to-sql",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-derived-path-param-to-sql.sc",
+      "metadata": "java/java-sql-injection-derived-path-param-to-sql.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-derived-raw-sql-execution",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-derived-raw-sql-execution.sc",
+      "metadata": "java/java-sql-injection-derived-raw-sql-execution.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-detect-validation",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-detect-validation.sc",
+      "metadata": "java/java-sql-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-locate-sinks.sc",
+      "metadata": "java/java-sql-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-locate-sources",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-locate-sources.sc",
+      "metadata": "java/java-sql-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-source-to-sink.sc",
+      "metadata": "java/java-sql-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-sql-injection-trace-callers",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "dimension": "D1",
+      "path": "java/java-sql-injection-trace-callers.sc",
+      "metadata": "java/java-sql-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-weak-cryptography-detect-validation",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "dimension": "D7",
+      "path": "java/java-weak-cryptography-detect-validation.sc",
+      "metadata": "java/java-weak-cryptography-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-weak-cryptography-locate-sinks",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "dimension": "D7",
+      "path": "java/java-weak-cryptography-locate-sinks.sc",
+      "metadata": "java/java-weak-cryptography-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-weak-cryptography-locate-sources",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "dimension": "D7",
+      "path": "java/java-weak-cryptography-locate-sources.sc",
+      "metadata": "java/java-weak-cryptography-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-weak-cryptography-source-to-sink",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "dimension": "D7",
+      "path": "java/java-weak-cryptography-source-to-sink.sc",
+      "metadata": "java/java-weak-cryptography-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-weak-cryptography-trace-callers",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "dimension": "D7",
+      "path": "java/java-weak-cryptography-trace-callers.sc",
+      "metadata": "java/java-weak-cryptography-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xpath-injection-detect-validation",
+      "language": "java",
+      "skill": "java-xpath-injection",
+      "weakness": "xpath-injection",
+      "dimension": "D1",
+      "path": "java/java-xpath-injection-detect-validation.sc",
+      "metadata": "java/java-xpath-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xpath-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-xpath-injection",
+      "weakness": "xpath-injection",
+      "dimension": "D1",
+      "path": "java/java-xpath-injection-locate-sinks.sc",
+      "metadata": "java/java-xpath-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xpath-injection-locate-sources",
+      "language": "java",
+      "skill": "java-xpath-injection",
+      "weakness": "xpath-injection",
+      "dimension": "D1",
+      "path": "java/java-xpath-injection-locate-sources.sc",
+      "metadata": "java/java-xpath-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xpath-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-xpath-injection",
+      "weakness": "xpath-injection",
+      "dimension": "D1",
+      "path": "java/java-xpath-injection-source-to-sink.sc",
+      "metadata": "java/java-xpath-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xpath-injection-trace-callers",
+      "language": "java",
+      "skill": "java-xpath-injection",
+      "weakness": "xpath-injection",
+      "dimension": "D1",
+      "path": "java/java-xpath-injection-trace-callers.sc",
+      "metadata": "java/java-xpath-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xss-detect-validation",
+      "language": "java",
+      "skill": "java-xss",
+      "weakness": "xss",
+      "dimension": "D1",
+      "path": "java/java-xss-detect-validation.sc",
+      "metadata": "java/java-xss-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xss-locate-sinks",
+      "language": "java",
+      "skill": "java-xss",
+      "weakness": "xss",
+      "dimension": "D1",
+      "path": "java/java-xss-locate-sinks.sc",
+      "metadata": "java/java-xss-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xss-locate-sources",
+      "language": "java",
+      "skill": "java-xss",
+      "weakness": "xss",
+      "dimension": "D1",
+      "path": "java/java-xss-locate-sources.sc",
+      "metadata": "java/java-xss-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xss-source-to-sink",
+      "language": "java",
+      "skill": "java-xss",
+      "weakness": "xss",
+      "dimension": "D1",
+      "path": "java/java-xss-source-to-sink.sc",
+      "metadata": "java/java-xss-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xss-trace-callers",
+      "language": "java",
+      "skill": "java-xss",
+      "weakness": "xss",
+      "dimension": "D1",
+      "path": "java/java-xss-trace-callers.sc",
+      "metadata": "java/java-xss-trace-callers.md",
+      "source": "vuln_skill_builder"
+    }
+  ]
 }

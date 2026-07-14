@@ -1,0 +1,52 @@
+positive:
+  P01_JsonOperatorInject.java:
+    expect: candidate_or_finding
+    subtype: json-operator-injection
+    sink: MongoCollection.find
+  P02_WhereInject.java:
+    expect: candidate_or_finding
+    subtype: where-script-injection
+    sink: Filters.where
+  P03_DocumentParseConcat.java:
+    expect: candidate_or_finding
+    subtype: string-concat-query
+    sink: Document.parse
+  P04_BasicQueryString.java:
+    expect: candidate_or_finding
+    subtype: string-concat-query
+    sink: BasicQuery
+  P05_BasicDBObjectParse.java:
+    expect: candidate_or_finding
+    subtype: json-operator-injection
+    sink: BasicDBObject.parse
+
+negative:
+  N01_FiltersEq.java:
+    expect: rejected
+    reason: constant_field_value_binding
+  N02_FiltersAndScalars.java:
+    expect: rejected
+    reason: constant_fields_with_bound_values
+  N03_CriteriaIs.java:
+    expect: rejected
+    reason: criteria_value_binding
+  N04_ConstantDocument.java:
+    expect: rejected
+    reason: no_external_input
+  N05_FieldAllowlist.java:
+    expect: rejected
+    reason: field_allowlist_fixed_operator
+
+regression:
+  R01_DocumentParse.java:
+    expect: sink_candidate
+    subtype: json-operator-injection
+    must_not_regress: false_negative_on_Document_parse
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

@@ -1,0 +1,53 @@
+positive:
+  P01_Slf4jConcat.java:
+    expect: candidate_or_finding
+    subtype: unstructured-string-concat
+    sink: Logger.info
+  P02_HeaderToLog.java:
+    expect: candidate_or_finding
+    subtype: crlf-log-forging
+    sink: Logger.warn
+    source: getHeader
+  P03_Log4j2Concat.java:
+    expect: candidate_or_finding
+    subtype: unstructured-string-concat
+    sink: log4j2.Logger.error
+  P04_JulConcat.java:
+    expect: candidate_or_finding
+    subtype: unstructured-string-concat
+    sink: java.util.logging.Logger.info
+  P05_MdcUntrusted.java:
+    expect: candidate
+    subtype: marker-mdc-abuse
+    sink: MDC.put
+
+negative:
+  N01_ParameterizedConstant.java:
+    expect: rejected_or_low_candidate
+    reason: parameterized_template_with_newline_strip
+  N02_ConstantMessage.java:
+    expect: rejected
+    reason: no_external_input
+  N03_SanitizedBeforeLog.java:
+    expect: rejected
+    reason: control_char_sanitization_before_log
+  N04_StructuredStyle.java:
+    expect: rejected_or_low_candidate
+    reason: parameterized_plus_sanitized_fields
+  N05_ServerGeneratedId.java:
+    expect: rejected
+    reason: no_external_input
+
+regression:
+  R01_AuthLogConcat.java:
+    expect: sink_candidate
+    subtype: crlf-log-forging
+    must_not_regress: false_negative_on_auth_concat
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

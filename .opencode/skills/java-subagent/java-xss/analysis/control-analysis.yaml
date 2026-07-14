@@ -1,0 +1,68 @@
+questions:
+  - id: output_origin
+    ask: 响应/模板输出是常量、已编码值，还是包含外部输入？
+    outcomes:
+      constant_only: likely_safe
+      user_in_html: high_risk
+      user_in_js_css_url: context_specific_high_risk
+
+  - id: output_context
+    ask: 输出落在哪个上下文？
+    contexts:
+      - html_body
+      - html_attribute
+      - javascript
+      - css
+      - url
+      - json_embedded_in_html
+    notes: encoding must match context
+
+  - id: encoding
+    ask: 用户输入是否经匹配上下文的编码器处理且编码结果到达 sink？
+    strong_yes:
+      - Encode.forHtml / forHtmlContent / forHtmlAttribute in HTML context
+      - Encode.forJavaScript* in JS context
+      - Encode.forCssString / forCssUrl in CSS context
+      - Encode.forUriComponent in URL component context
+      - template auto-escape without unescape directive
+    false_friends:
+      - Encode.forHtml inside <script> or event handler
+      - HtmlUtils.htmlEscape for JS string embedding
+      - encode then decode before write
+      - encode one fragment, concatenate raw untrusted fragment
+
+  - id: sanitization
+    ask: 是否使用 HTML Sanitizer，策略是否足够严格？
+    accept:
+      - HtmlPolicyBuilder with no script/event handlers/unsafe URLs
+      - Sanitizers.FORMATTING / BLOCKS only when that matches product need
+    reject_as_strong:
+      - policy allows on* attributes or javascript: URLs
+      - sanitize then insert into JS context
+      - custom blacklist replace of <script> only
+
+  - id: template_escape
+    ask: 模板引擎是否默认转义，是否存在显式关闭？
+    unsafe_markers:
+      - th:utext
+      - ?no_esc
+      - "#noescape"
+      - escapeXml=false
+      - raw JSP EL / scriptlet
+    safe_markers:
+      - th:text
+      - c:out default
+      - ftlh auto-escaping
+
+  - id: stored_xss
+    ask: 当前输出是否来自历史存储的用户数据？
+    if_yes:
+      - treat_db_value_as_untrusted_source
+      - trace_original_write_path
+      - assess_who_can_store_and_who_views
+
+control_grades:
+  strong: effective_blocks_script_or_markup_injection_in_that_context
+  contextual: effective_only_for_specific_output_context
+  weak: bypassable
+  invalid: does_not_mitigate_or_wrong_context

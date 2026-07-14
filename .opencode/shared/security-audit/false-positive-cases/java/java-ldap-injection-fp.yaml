@@ -1,0 +1,45 @@
+not_vulnerability:
+  - id: constant-filter-with-filterargs
+    pattern: DirContext.search with constant filter template and filterArgs binding only
+    reason: user input cannot change filter structure
+
+  - id: equals-filter-api
+    pattern: EqualsFilter / LikeFilter / LdapQueryBuilder.where().is() without raw concat
+    reason: Spring LDAP encodes assertion values
+
+  - id: ldap-encoder-value-only
+    pattern: LdapEncoder.filterEncode applied to value before insertion into fixed template
+    reason: metacharacters escaped in value context
+
+  - id: allowlisted-username
+    pattern: username mapped through immutable allowlist/enum before filter use
+    reason: attacker selects among fixed safe values only
+
+  - id: test-only-ldap
+    pattern: LDAP helper only referenced from test sources
+    reason: not production reachable
+
+needs_deeper_review:
+  - id: concat-filter-login
+    pattern: "(uid=" + username + ")" style auth filter
+    reason: classic login bypass via * or )(|(uid=*
+
+  - id: hardcoded-filter-concat
+    pattern: new HardcodedFilter with + or format
+    reason: bypasses structured Filter API safety
+
+  - id: dn-concat
+    pattern: "uid=" + user + ",ou=people,..."
+    reason: DN injection / search base escape
+
+  - id: partial-replace
+    pattern: replace only * or only parentheses
+    reason: incomplete; \\ and NUL often missed
+
+  - id: wrong-encoder-context
+    pattern: filterEncode used for DN or nameEncode for filter values only
+    reason: context mismatch may leave metacharacters active
+
+  - id: wrapper-ldap-service
+    pattern: custom LdapUtil/DirectoryService search(String)
+    reason: sink is indirection; expand to real JNDI/Spring LDAP call

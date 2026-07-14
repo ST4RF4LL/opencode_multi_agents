@@ -1,0 +1,45 @@
+not_vulnerability:
+  - id: constant-sql-prepared
+    pattern: PreparedStatement/JdbcTemplate with constant SQL and bound params only
+    reason: user input cannot change query structure
+
+  - id: mybatis-hash-only
+    pattern: MyBatis #{} placeholders only, no ${} for untrusted data
+    reason: parameter binding
+
+  - id: criteria-api-metamodel
+    pattern: JPA Criteria API with static metamodel paths
+    reason: no string-built SQL structure from user input
+
+  - id: identifier-allowlist
+    pattern: sort/column mapped through immutable allowlist/enum
+    reason: attacker selects among fixed safe identifiers only
+
+  - id: test-only-sql
+    pattern: SQL helper only referenced from test sources
+    reason: not production reachable
+
+needs_deeper_review:
+  - id: prepared-but-concat
+    pattern: prepareStatement(sql) where sql includes + / format / append
+    reason: false sense of safety
+
+  - id: order-by-param
+    pattern: ORDER BY + request parameter
+    reason: classic identifier injection; value binding does not apply
+
+  - id: mybatis-dollar
+    pattern: ${} in mapper XML/annotation
+    reason: substitution; confirm whether value is user-controlled
+
+  - id: native-query-with-spel
+    pattern: Spring @Query nativeQuery with SpEL fragments
+    reason: may embed untrusted expressions
+
+  - id: like-concat
+    pattern: LIKE '%'+input+'%'
+    reason: often true SQLi if quotes not parameterized
+
+  - id: wrapper-dao
+    pattern: custom SqlUtil/DAO execute(String)
+    reason: sink is indirection; expand to real executor

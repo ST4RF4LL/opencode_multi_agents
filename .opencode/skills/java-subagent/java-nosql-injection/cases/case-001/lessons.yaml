@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Deserializing JSON into Map/Document and using it as a filter is the primary Java NoSQL injection pattern
+  - Operators are keys starting with $; value binding via Filters.eq does not apply to operator objects
+  - Fix requires typed scalars and constant field names, not merely "using the Mongo driver"
+non_transferable_details:
+  - original endpoint path
+  - original field names
+  - original payload strings

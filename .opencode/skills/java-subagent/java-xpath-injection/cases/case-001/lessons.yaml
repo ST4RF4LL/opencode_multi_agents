@@ -1,0 +1,9 @@
+transferable_lessons:
+  - XPath.compile/evaluate with concatenated expression is a primary sink family
+  - XPathVariableResolver + $var is the strong fix pattern (OWASP Java Security CS)
+  - getParameter -> DAO string concat into XPath is a high-frequency Java web pattern
+  - DocumentBuilder XXE hardening does not remediate this path
+non_transferable_details:
+  - original endpoint path
+  - original element/attribute names
+  - original payload strings

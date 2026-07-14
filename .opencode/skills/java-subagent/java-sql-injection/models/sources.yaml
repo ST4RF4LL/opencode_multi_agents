@@ -1,0 +1,82 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields require field-level taint tracking
+
+  - id: spring-query-map
+    framework: spring-mvc
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*MultiValueMap.*"
+    controlled_value: map_values
+    confidence: high
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: second-order and async entry points
+
+  - id: database-read-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*ResultSet.*getString.*"
+      - ".*ResultSet.*getObject.*"
+    controlled_value: return
+    confidence: low
+    notes: treat as source only when previously stored attacker data is re-used in SQL construction
+
+  - id: file-or-config-external
+    framework: io
+    method_full_name:
+      - ".*Files.*readString.*"
+      - ".*BufferedReader.*readLine.*"
+    controlled_value: return
+    confidence: low
+    notes: only when external untrusted content is later used in SQL

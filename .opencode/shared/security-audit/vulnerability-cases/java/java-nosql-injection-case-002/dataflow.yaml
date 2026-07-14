@@ -1,0 +1,10 @@
+source:
+  method: SearchController.advanced
+  parameter: expr
+  annotation: RequestParam
+path:
+  - SearchController.advanced
+sink:
+  method: Filters.where
+  argument: 1
+influence: where_script_expression

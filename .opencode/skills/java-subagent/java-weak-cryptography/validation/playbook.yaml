@@ -1,0 +1,36 @@
+# Crypto findings are often static-only. Dynamic validation is optional and limited.
+steps:
+  - identify_crypto_api_and_subtype
+  - determine_algorithm_mode_padding
+  - determine_key_iv_nonce_random_origin
+  - determine_security_sensitive_usage
+  - inspect_compensating_controls
+  - classify_static_semantics_strength
+  - if_needed_generate_target_specific_check
+  - preserve_evidence
+
+validation_modes:
+  static_preferred:
+    when:
+      - weak_algorithm_literal_clear
+      - static_iv_or_hardcoded_key_clear
+      - md5_password_hash_clear
+    action: satisfy Evidence Contract via complete static semantics
+
+  limited_dynamic:
+    when:
+      - need_to_confirm_token_predictability
+      - need_to_confirm_password_storage_format
+    action: non-destructive observation only
+
+observable_behaviors:
+  - ciphertext_pattern_leakage_under_ecb
+  - identical_iv_in_multiple_ciphertexts
+  - password_hash_format_matches_md5_sha1_hex
+  - session_token_low_entropy_or_sequential
+  - algorithm_name_in_config_or_error_message
+
+notes:
+  - do_not_attempt_to_break_production_crypto_at_scale
+  - do_not_exfiltrate_live_keys
+  - prefer_code_and_config_evidence_over_cryptanalysis

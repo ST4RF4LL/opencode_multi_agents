@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: log-injection
+subtype: crlf-log-forging
+source:
+  type: request-parameter
+  expression: request.getParameter("username")
+sink:
+  api: Logger.info
+  sensitive_argument: 1
+propagation:
+  - AuthController.login
+  - AuthService.authenticate
+root_cause:
+  - username_concatenated_into_log_message
+  - no_newline_sanitization
+  - plain_text_log_layout
+prerequisites:
+  - reachable_login_endpoint
+  - application_logs_auth_events
+observed_behavior:
+  - attacker_can_inject_crlf_to_forge_extra_login_success_line
+fix:
+  - use_parameterized_logging
+  - strip_or_encode_crlf_in_username
+  - prefer_structured_json_logging

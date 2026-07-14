@@ -1,0 +1,16 @@
+allowed:
+  - read_only_proof_queries_when_possible
+  - operator_injection_confirming_result_difference_with_minimal_impact
+  - use_of_staging_or_authorized_test_environments
+  - authentication_bypass_proof_with_test_accounts_when_authorized
+
+forbidden:
+  - destructive_collection_drop_in_production_without_explicit_authorization
+  - mass_data_exfiltration_beyond_minimal_proof
+  - unbounded_server_side_js_for_dos
+  - credential_stuffing_unrelated_to_the_finding
+  - lateral_movement_outside_agreed_scope
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_screenshots_logs_and_minimal_result_samples

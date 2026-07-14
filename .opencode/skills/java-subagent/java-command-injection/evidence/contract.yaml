@@ -1,0 +1,32 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - command_name_args_or_shell_string_is_influenced
+    - effective_argument_separation_or_allowlist_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - os_platform_if_known
+      - shell_vs_list_semantics
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - command_is_constant_and_inputs_do_not_reach_argv_or_shell_string
+  - user_input_only_selects_from_fixed_command_map
+  - processbuilder_list_fixed_binary_with_strict_arg_allowlist_no_shell
+  - path_is_test_only_or_dead_code
+  - validation_is_effective_and_complete
+  - evidence_is_only_a_dangerous_api_match
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: bookId
+path:
+  - BookXPathDao.findById
+sink:
+  method: XPath.evaluate
+  argument: 1
+influence: predicate_value_and_structure

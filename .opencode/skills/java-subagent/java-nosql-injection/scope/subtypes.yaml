@@ -1,0 +1,13 @@
+subtypes:
+  - id: json-operator-injection
+    description: 用户输入被解析为查询 JSON/Document，注入 $gt/$ne/$in/$regex/$where 等运算符
+  - id: where-script-injection
+    description: $where / mapReduce / server-side JS 表达式由用户输入控制
+  - id: string-concat-query
+    description: 字符串拼接/格式化构造查询字符串后 Document.parse 或作为 query 执行
+  - id: spring-query-spel-concat
+    description: Spring Data MongoDB @Query 字符串拼接或 SpEL 嵌入不可信输入
+  - id: basicdbobject-put-injection
+    description: BasicDBObject/Document put 的 key 或嵌套结构由用户控制导致运算符注入
+  - id: redis-eval-script
+    description: Redis EVAL/EVALSHA 脚本片段含用户输入（次要，按需）

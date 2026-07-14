@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - login endpoint uses XPath auth against XML user store
+  - username/password request parameters reach evaluate expression
+request_context:
+  endpoint: /login
+  parameter:
+    - username
+    - password
+observed_result:
+  - crafted credentials alter boolean XPath logic and may bypass authentication
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

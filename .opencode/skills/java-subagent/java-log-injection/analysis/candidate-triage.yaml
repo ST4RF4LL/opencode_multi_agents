@@ -1,0 +1,34 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: logging API or MDC put pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach log message argument or MDC value
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_layout_analysis
+
+  L3_semantic_candidate:
+    meaning: unstructured logging or missing newline control; attacker can forge lines or pollute fields
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - auth_or_audit_log_target
+  - headers_logged_directly
+  - plain_pattern_layout
+  - shared_log_viewer_or_siem
+  - admin_visible_logs
+
+priority_reduce:
+  - test_code_only
+  - constant_message_only
+  - structured_json_layout_confirmed
+  - dead_code
+  - local_dev_logging_only

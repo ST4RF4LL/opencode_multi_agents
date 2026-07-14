@@ -1,0 +1,8 @@
+transferable_lessons:
+  - ProcessBuilder is not safe by itself when argv is sh/bash/cmd with -c /c
+  - Fixed job-id to constant argv mapping is a strong control
+  - Parameterized/list ProcessBuilder without shell is often safe; shell wrappers are not
+non_transferable_details:
+  - original endpoint path
+  - original job binary paths
+  - original payload strings

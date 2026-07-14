@@ -1,0 +1,52 @@
+name: java-sql-injection-decision-tree
+steps:
+  - id: find_sql_sink
+    question: 是否发现 SQL 构造/执行 Sink？
+    no: stop_no_sink
+    yes: check_sql_origin
+
+  - id: check_sql_origin
+    question: Sink 的 SQL/HQL 是否完全由常量或固定模板产生，且用户输入仅作绑定参数？
+    yes: reject_safe_parameterization
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到 SQL 字符串/标识符的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是查询结构（关键字/运算符/子句）还是标识符（表/列/ORDER BY）或二者兼有？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在有效参数化或标识符白名单？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（常量模板+绑定 / 完整标识符映射）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_safe_parameterization: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

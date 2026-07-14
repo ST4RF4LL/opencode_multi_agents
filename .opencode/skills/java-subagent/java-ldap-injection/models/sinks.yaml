@@ -1,0 +1,111 @@
+sinks:
+  - id: jndi-dircontext-search
+    framework: jndi
+    method_full_name:
+      - ".*javax\\.naming\\.directory\\.DirContext\\.search.*"
+      - ".*javax\\.naming\\.directory\\.InitialDirContext\\.search.*"
+      - ".*jakarta\\.naming\\.directory\\.DirContext\\.search.*"
+      - ".*jakarta\\.naming\\.directory\\.InitialDirContext\\.search.*"
+    sensitive_arguments: [1, 2]
+    semantics: ldap-search-filter-or-base
+    confidence: high
+    notes: >
+      Argument positions vary by overload: search(Name/String name, String filter, SearchControls)
+      or search(Name/String name, String filter, Object[] filterArgs, SearchControls).
+      filter string (often arg 2) is primary injection surface; base name/DN (arg 1) is DN injection surface.
+
+  - id: jndi-dircontext-search-with-args
+    framework: jndi
+    method_full_name:
+      - ".*DirContext\\.search.*"
+    sensitive_arguments: [2]
+    semantics: ldap-filter-execution
+    confidence: high
+    notes: when filterArgs overload is used with constant filter template, args are bound — safer
+
+  - id: jndi-context-lookup
+    framework: jndi
+    method_full_name:
+      - ".*javax\\.naming\\.Context\\.lookup.*"
+      - ".*javax\\.naming\\.InitialContext\\.lookup.*"
+      - ".*DirContext\\.lookup.*"
+    sensitive_arguments: [1]
+    semantics: ldap-dn-or-name-resolution
+    confidence: medium
+    notes: DN/name injection when lookup name is user-controlled; distinct from classic filter injection
+
+  - id: jndi-context-bind
+    framework: jndi
+    method_full_name:
+      - ".*Context\\.bind.*"
+      - ".*Context\\.rebind.*"
+      - ".*DirContext\\.bind.*"
+      - ".*DirContext\\.createSubcontext.*"
+      - ".*DirContext\\.destroySubcontext.*"
+      - ".*DirContext\\.modifyAttributes.*"
+    sensitive_arguments: [1]
+    semantics: ldap-dn-mutation
+    confidence: medium
+
+  - id: spring-ldap-template-search
+    framework: spring-ldap
+    method_full_name:
+      - ".*LdapTemplate\\.search.*"
+      - ".*LdapTemplate\\.searchForObject.*"
+      - ".*LdapTemplate\\.searchForContext.*"
+      - ".*LdapTemplate\\.authenticate.*"
+      - ".*LdapTemplate\\.lookup.*"
+      - ".*LdapTemplate\\.find.*"
+      - ".*LdapTemplate\\.findOne.*"
+    sensitive_arguments: [1, 2]
+    semantics: ldap-search-or-auth
+    confidence: high
+
+  - id: spring-ldap-query-filter
+    framework: spring-ldap
+    method_full_name:
+      - ".*LdapQueryBuilder\\.filter.*"
+      - ".*HardcodedFilter\\..*"
+      - ".*EqualsFilter\\..*"
+      - ".*LikeFilter\\..*"
+      - ".*AndFilter\\..*"
+      - ".*OrFilter\\..*"
+    sensitive_arguments: []
+    semantics: ldap-filter-construction
+    confidence: medium
+    notes: EqualsFilter/LikeFilter encode values; raw filter(String) or HardcodedFilter with concat is risky
+
+  - id: spring-ldap-name-builder
+    framework: spring-ldap
+    method_full_name:
+      - ".*LdapNameBuilder\\.add.*"
+      - ".*DistinguishedName\\.add.*"
+      - ".*LdapUtils\\.newLdapName.*"
+    sensitive_arguments: [1]
+    semantics: ldap-dn-construction
+    confidence: medium
+
+  - id: unboundid-search
+    framework: unboundid
+    method_full_name:
+      - ".*LDAPConnection\\.search.*"
+      - ".*LDAPConnection\\.asyncSearch.*"
+      - ".*Filter\\.create.*"
+      - ".*Filter\\.createEqualityFilter.*"
+      - ".*SearchRequest\\..*"
+    sensitive_arguments: [1, 2]
+    semantics: ldap-search-filter
+    confidence: high
+
+  - id: custom-ldap-util
+    framework: custom
+    method_full_name:
+      - ".*LdapUtil\\..*"
+      - ".*LdapHelper\\..*"
+      - ".*LdapService\\..*search.*"
+      - ".*LdapAuth\\..*"
+      - ".*DirectoryService\\..*"
+    sensitive_arguments: []
+    semantics: possible-ldap-wrapper
+    confidence: medium
+    notes: wrappers require sink expansion into real JNDI/Spring LDAP calls

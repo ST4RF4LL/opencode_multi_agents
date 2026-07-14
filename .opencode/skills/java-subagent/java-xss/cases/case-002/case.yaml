@@ -1,0 +1,23 @@
+id: case-002
+vulnerability_type: xss
+subtype: template-unescape
+source:
+  type: request-parameter
+  expression: "@RequestParam String q"
+sink:
+  api: JSP EL ${}
+  sensitive_argument: template_interpolation
+propagation:
+  - SearchController.search
+  - search.jsp
+root_cause:
+  - jsp_el_outputs_without_html_encoding
+  - no_jstl_c_out_or_owasp_encoder
+prerequisites:
+  - jsp_view_resolved
+  - model_or_request_attribute_set_from_user_input
+observed_behavior:
+  - search_query_reflected_unescaped_in_result_page
+fix:
+  - use_c_out_or_fn_escapeXml
+  - or_Encode_forHtml_before_setting_attribute

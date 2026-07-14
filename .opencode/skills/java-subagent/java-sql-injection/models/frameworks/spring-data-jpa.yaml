@@ -1,0 +1,24 @@
+id: spring-data-jpa
+name: Spring Data JPA
+detect:
+  imports:
+    - org.springframework.data.jpa
+  keywords:
+    - "@Query"
+    - JpaRepository
+    - nativeQuery
+    - SpEL
+    - "#{#"
+
+sinks:
+  - spring-data-query
+
+safe_patterns:
+  - derived_query_methods
+  - "@Query with :param and set binding"
+  - Specification/Criteria without string concat
+
+unsafe_patterns:
+  - "@Query value built with +"
+  - nativeQuery_with_spel_user_input
+  - sort_property_from_unvalidated_request_param

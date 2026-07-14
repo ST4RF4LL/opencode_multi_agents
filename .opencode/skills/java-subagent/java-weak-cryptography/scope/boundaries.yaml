@@ -1,0 +1,25 @@
+in_scope:
+  - jca_cipher_messagedigest_mac_signature_misuse
+  - weak_algorithm_and_mode_selection
+  - static_or_reused_iv_nonce
+  - insecure_prng_for_secrets
+  - weak_password_storage_hashing
+  - hardcoded_or_predictable_keys
+  - rsa_without_oaep_or_weak_padding
+  - custom_crypto_wrappers_around_jca
+  - spring_message_digest_password_encoder_legacy
+  - bouncycastle_weak_algorithm_selection
+
+out_of_scope:
+  - network_tls_cipher_suite_only_without_app_code
+  - hsts_or_cookie_flags_only
+  - pure_business_logic_authz
+  - sql_injection_or_command_injection
+  - theoretical_post_quantum_migration_without_current_weakness
+
+boundary_notes:
+  - MD5_SHA1_for_non_security_checksum_may_be_acceptable_with_evidence
+  - AES_CBC_is_contextual_not_always_finding_needs_IV_and_MAC_review
+  - SecureRandom_is_strong_but_static_seed_or_setSeed_misuse_is_in_scope
+  - password_hashing_is_subtype_not_generic_digest_use
+  - prefer_secret_management_and_Tink_over_raw_JCA_when_assessing_fix

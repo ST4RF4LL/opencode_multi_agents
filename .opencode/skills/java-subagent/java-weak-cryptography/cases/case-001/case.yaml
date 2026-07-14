@@ -1,0 +1,22 @@
+id: case-001
+vulnerability_type: weak-cryptography
+subtype: weak-algo
+source:
+  type: algorithm-string-literal
+  expression: 'Cipher.getInstance("AES/ECB/PKCS5Padding")'
+sink:
+  api: Cipher.doFinal
+  sensitive_argument: algorithm_config
+propagation:
+  - CryptoService.encrypt
+root_cause:
+  - aes_ecb_mode_leaks_plaintext_patterns
+  - no_integrity_protection
+prerequisites:
+  - encryption_of_structured_or_repetitive_data
+observed_behavior:
+  - identical_plaintext_blocks_yield_identical_ciphertext_blocks
+fix:
+  - use_AES_GCM_NoPadding
+  - unique_nonce_per_encryption
+  - manage_keys_via_KMS_or_KeyStore

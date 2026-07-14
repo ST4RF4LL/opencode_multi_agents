@@ -1,0 +1,45 @@
+not_vulnerability:
+  - id: filters-eq-constant-field
+    pattern: Filters.eq / Criteria.where with constant field name and bound scalar value
+    reason: user input cannot introduce operators or change query structure
+
+  - id: derived-spring-data-method
+    pattern: Spring Data MongoDB derived query method (findByName)
+    reason: framework binds values safely
+
+  - id: constant-document
+    pattern: Document/BasicDBObject with only constant keys and constant or bound scalars
+    reason: no external structure control
+
+  - id: field-allowlist-fixed-op
+    pattern: user selects field from allowlist; operator fixed in code
+    reason: attacker chooses among fixed safe fields only
+
+  - id: test-only-query
+    pattern: query helper only referenced from test sources
+    reason: not production reachable
+
+needs_deeper_review:
+  - id: document-parse-any
+    pattern: Document.parse / BasicDBObject.parse
+    reason: high-risk sink; confirm input trust boundary
+
+  - id: request-body-as-filter
+    pattern: @RequestBody Map/JsonNode/Document used in find/update
+    reason: classic operator injection surface
+
+  - id: where-clause
+    pattern: $where or Filters.where
+    reason: server-side JS; treat as critical if user-influenced
+
+  - id: basicquery-string
+    pattern: new BasicQuery(string)
+    reason: equivalent to parsing query JSON
+
+  - id: string-concat-json
+    pattern: building query JSON with + / format / append
+    reason: structure and quote injection
+
+  - id: wrapper-dao
+    pattern: custom MongoUtil/QueryHelper execute(Document|String)
+    reason: sink is indirection; expand to real executor

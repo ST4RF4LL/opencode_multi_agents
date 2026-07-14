@@ -1,0 +1,43 @@
+id: log4j2
+name: Apache Log4j 2
+detect:
+  imports:
+    - org.apache.logging.log4j.Logger
+    - org.apache.logging.log4j.LogManager
+    - org.apache.logging.log4j.ThreadContext
+  keywords:
+    - LogManager.getLogger
+    - log4j2
+    - log4j-core
+  config_files:
+    - log4j2.xml
+    - log4j2.yml
+    - log4j2.properties
+    - log4j2-spring.xml
+
+sources: inherit-global
+sinks:
+  - log4j2-logger
+  - log4j2-logbuilder
+  - mdc-threadcontext-put
+
+safe_patterns:
+  - parameterized_logging_logger_info_template_args
+  - JsonTemplateLayout_with_field_binding
+  - maxStringLength_configured_on_json_layout
+  - PatternLayout_with_replace_lookup_or_encode_for_newlines
+
+unsafe_patterns:
+  - string_concat_into_log_message
+  - PatternLayout_raw_percent_m_without_newline_escaping
+  - ThreadContext_put_untrusted
+  - printf_with_untrusted_format
+
+adjacent_risk:
+  - jndi_lookup_message_lookup_log4shell
+  - notes: different CWE; report separately unless natural overlap
+
+notes:
+  - OWASP: use structured JSON logging; JsonTemplateLayout maxStringLength
+  - Prefer logger.warn("... {}", user) over concatenation
+  - Evaluate lookup plugins / versions separately from CRLF forging

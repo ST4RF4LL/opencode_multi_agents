@@ -1,0 +1,17 @@
+allowed:
+  - reflected_safe_markers_in_authorized_test_or_staging
+  - browser_lab_verification_on_owned_or_authorized_targets
+  - minimal_stored_marker_content_for_stored_xss_proof
+  - screenshots_and_html_source_snippets_as_evidence
+
+forbidden:
+  - weaponized_payloads_for_credential_theft_in_production
+  - mass_storage_of_malicious_content_visible_to_real_users
+  - targeting_third_party_users_without_authorization
+  - drive_by_exploitation_outside_agreed_scope
+  - bypassing_auth_to_attack_unrelated_tenants
+
+reporting:
+  - document_victim_context_and_browser_assumptions
+  - prefer_non_destructive_markers_over_alert_or_exfil_demos
+  - redacted_html_snippets_and_request_response_pairs

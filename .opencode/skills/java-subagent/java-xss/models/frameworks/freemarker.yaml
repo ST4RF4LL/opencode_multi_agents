@@ -1,0 +1,40 @@
+id: freemarker
+name: FreeMarker
+detect:
+  imports:
+    - freemarker.template
+    - freemarker.core
+  keywords:
+    - "FreeMarker"
+    - "Configuration"
+    - "?no_esc"
+    - "?html"
+    - "<#noescape"
+    - ".ftl"
+  files:
+    - "**/*.ftl"
+    - "**/*.ftlh"
+  dependencies:
+    - freemarker
+    - spring-boot-starter-freemarker
+
+sources: inherit-global
+sinks:
+  - freemarker-no-esc
+  - spring-model-and-view
+
+safe_patterns:
+  - auto_escaping_ftlh_with_html_output_format
+  - explicit_html_built_in_when_auto_esc_off
+  - no_noescape_around_user_data
+
+unsafe_patterns:
+  - no_esc_on_user_controlled_value
+  - noescape_directive_wrapping_user_data
+  - auto_escaping_disabled_globally
+  - raw_interpolation_into_js_block
+
+notes:
+  - .ftlh enables HTML auto-escaping by default in modern FreeMarker
+  - ?no_esc and #noescape are primary unescape sinks
+  - Verify output format and auto_esc configuration before rejecting

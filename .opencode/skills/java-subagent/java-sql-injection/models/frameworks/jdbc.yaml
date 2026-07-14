@@ -1,0 +1,31 @@
+id: jdbc
+name: Java JDBC
+detect:
+  imports:
+    - java.sql.Connection
+    - java.sql.Statement
+    - java.sql.PreparedStatement
+    - java.sql.ResultSet
+  keywords:
+    - prepareStatement
+    - createStatement
+    - executeQuery
+    - executeUpdate
+
+sources: inherit-global
+sinks:
+  - jdbc-statement-execute
+  - jdbc-connection-prepare
+
+safe_patterns:
+  - prepareStatement_with_constant_sql_and_setX
+  - callable_statement_with_bound_params
+
+unsafe_patterns:
+  - createStatement_plus_execute_with_concat
+  - prepareStatement_sql_built_by_concat
+  - addBatch_with_dynamic_sql_string
+
+notes:
+  - PreparedStatement only protects placeholders; concatenated identifiers remain unsafe
+  - Statement.execute* with any user-influenced SQL is high risk

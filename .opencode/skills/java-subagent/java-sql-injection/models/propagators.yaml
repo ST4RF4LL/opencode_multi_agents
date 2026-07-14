@@ -1,0 +1,47 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"SELECT * FROM users WHERE id = " + id'
+      - 'sql + " ORDER BY " + sort'
+      - 'new StringBuilder().append(prefix).append(userInput)'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("SELECT * FROM t WHERE name=%s", name)'
+      - 'MessageFormat.format(...)'
+
+  - pattern: getter-setter
+    examples:
+      - setFilter -> getFilter
+      - setOrderBy -> getOrderBy
+      - setSqlFragment -> getSqlFragment
+
+  - pattern: builder
+    examples:
+      - QueryBuilder.where(x).orderBy(y).build()
+      - Criteria custom string path
+
+  - pattern: collection
+    examples:
+      - map.put("sort", input)
+      - params.get("column")
+
+  - pattern: dto-field
+    examples:
+      - SearchRequest.sortField
+      - ReportQuery.tableName
+
+  - pattern: wrapper-method
+    examples:
+      - SqlUtil.query(sql)
+      - DbHelper.execute(sql)
+      - repository.findByDynamicSql(sql)
+
+  - pattern: mybatis-provider
+    examples:
+      - Provider method returns SQL string with ${}
+      - @SelectProvider / @UpdateProvider dynamic SQL
+
+  - pattern: second-order-store
+    examples:
+      - save(userInput) -> later load() -> concatenate into SQL

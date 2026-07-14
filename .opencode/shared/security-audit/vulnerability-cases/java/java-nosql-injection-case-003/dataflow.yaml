@@ -1,0 +1,12 @@
+source:
+  method: UserController.find
+  parameter: username
+  annotation: RequestParam
+path:
+  - UserController.find
+  - string concat into json
+  - Document.parse
+sink:
+  method: Document.parse
+  argument: 1
+influence: query_string_structure

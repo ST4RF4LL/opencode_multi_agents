@@ -1,0 +1,17 @@
+case_specific: true
+preconditions:
+  - login or search endpoint accepts username parameter
+  - application uses vulnerable filter concat path
+request_context:
+  endpoint: /login
+  parameter: username
+observed_result:
+  - crafted username alters LDAP filter boolean structure
+  - may authenticate without valid password or return unintended entries
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+notes: >
+  Historical illustrations often use filter metacharacters (* parentheses)
+  to force always-true conditions. Derive tests from the target's actual
+  filter template and auth flow; do not paste generic payloads blindly.

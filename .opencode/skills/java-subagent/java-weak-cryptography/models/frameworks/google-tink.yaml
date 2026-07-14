@@ -1,0 +1,25 @@
+id: google-tink
+name: Google Tink
+detect:
+  imports:
+    - com.google.crypto.tink
+  keywords:
+    - Aead
+    - HybridEncrypt
+    - Mac
+    - com.google.crypto.tink
+
+sources: inherit-global
+sinks: []
+
+safe_patterns:
+  - Tink_AEAD_default_primitives
+  - Tink_keyset_management
+
+unsafe_patterns:
+  - bypassing_Tink_to_use_raw_weak_JCA_alongside
+  - exporting_raw_keys_into_hardcoded_storage
+
+notes:
+  - Tink usage is generally a strong sanitizer signal
+  - Still review keyset storage and access control

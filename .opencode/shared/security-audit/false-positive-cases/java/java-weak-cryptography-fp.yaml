@@ -1,0 +1,57 @@
+not_vulnerability:
+  - id: aes-gcm-unique-nonce
+    pattern: AES/GCM with SecureRandom nonce per message and managed key
+    reason: strong AEAD usage
+
+  - id: securerandom-default
+    pattern: SecureRandom without static seed for tokens/keys
+    reason: acceptable CSPRNG
+
+  - id: bcrypt-argon2-password
+    pattern: BCryptPasswordEncoder / Argon2 / SCrypt for passwords
+    reason: modern password hashing
+
+  - id: md5-cache-key
+    pattern: MD5 used only as non-security cache key or fingerprint with no trust boundary
+    reason: not a cryptographic security claim
+
+  - id: sha256-file-integrity-with-signature
+    pattern: SHA-256 checksum combined with separate signature/HMAC from trusted key
+    reason: integrity provided by signature, not hash alone
+
+  - id: test-only-crypto
+    pattern: weak crypto only under src/test or demo packages never shipped
+    reason: not production reachable
+
+  - id: tink-aead
+    pattern: Google Tink AEAD primitive with proper keyset
+    reason: high-level safe API
+
+needs_deeper_review:
+  - id: aes-cbc
+    pattern: AES/CBC without visible MAC
+    reason: may lack integrity; check Encrypt-then-MAC or protocol context
+
+  - id: cipher-aes-default
+    pattern: Cipher.getInstance("AES")
+    reason: often ECB default; confirm provider behavior
+
+  - id: random-uuid
+    pattern: UUID.randomUUID for session identifiers
+    reason: usually OK; verify if cryptographic unpredictability required
+
+  - id: pbkdf2-params
+    pattern: PBKDF2 present but iteration count unknown
+    reason: may be too low
+
+  - id: custom-crypto-util
+    pattern: CryptoUtil.encrypt wrapping JCA
+    reason: expand into real algorithm/IV/key handling
+
+  - id: rsa-without-mode
+    pattern: Cipher.getInstance("RSA")
+    reason: padding defaults vary; prefer explicit OAEP
+
+  - id: spring-delegating-encoder
+    pattern: DelegatingPasswordEncoder with legacy {MD5} ids
+    reason: verify default and encoding id for new passwords

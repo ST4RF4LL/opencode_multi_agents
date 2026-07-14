@@ -1,0 +1,64 @@
+sanitizers:
+  strong:
+    - id: spring-ldap-encoder-filter
+      condition:
+        - filter_value_passed_through_LdapEncoder_filterEncode_or_encodeFilterValue
+        - encoded_value_inserted_only_as_assertion_value_not_as_filter_structure
+        - special_chars_star_paren_backslash_nul_are_escaped
+    - id: spring-ldap-encoder-dn
+      condition:
+        - dn_component_passed_through_LdapEncoder_nameEncode_or_encodeDnValue
+        - encoding_matches_dn_context_not_filter_only
+    - id: parameterized-filter-args
+      condition:
+        - DirContext_search_uses_filter_template_with_placeholders
+        - user_input_only_in_filterArgs_array
+        - filter_template_string_is_constant
+    - id: spring-equals-filter-api
+      condition:
+        - uses_EqualsFilter_LikeFilter_AndFilter_builder_apis
+        - no_raw_string_filter_concat_with_user_input
+    - id: identifier-allowlist
+      condition:
+        - user_input_mapped_to_predefined_username_or_role_set
+        - mapped_values_are_constants
+        - reject_or_default_on_unknown
+
+  contextual:
+    - id: alphanumeric-username-only
+      condition:
+        - input_restricted_to_safe_charset_before_filter_use
+        - charset_excludes_ldap_metacharacters
+      notes: may be sufficient for simple uid filters; verify complete charset
+    - id: enum-or-role-mapping
+      condition:
+        - input_restricted_to_enum_values
+        - enum_to_filter_fragment_is_constant
+
+  weak:
+    - id: partial-char-replace
+      pattern:
+        - replace("*", "")
+        - replace("(", "")
+        - replace(")", "")
+      notes: incomplete; misses \\ NUL and encoding order issues
+    - id: blacklist-metacharacters
+      pattern:
+        - contains("*")
+        - contains("(")
+        - regex_blacklist
+      notes: incomplete and bypassable
+    - id: length-check-only
+      pattern:
+        - length check without encoding
+      notes: insufficient for structure control
+
+  invalid:
+    - id: html-or-sql-encode-as-ldap-defense
+      notes: HTML/SQL encoding does not escape LDAP filter metacharacters
+    - id: encode-after-structure-built
+      notes: encoding applied after filter already includes untrusted structure
+    - id: wrong-context-encoder
+      notes: using filter encoder for DN or vice versa
+    - id: client-side-only-validation
+    - id: search-with-concat-filter-despite-filterArgs-overload-unused

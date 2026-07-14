@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - endpoint accepts id query parameter
+  - application uses vulnerable UserDao path
+request_context:
+  endpoint: /api/users
+  parameter: id
+observed_result:
+  - crafted id changes SQL predicate semantics
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

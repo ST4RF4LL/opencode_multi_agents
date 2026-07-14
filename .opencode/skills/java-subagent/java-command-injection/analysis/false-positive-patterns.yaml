@@ -1,0 +1,45 @@
+not_vulnerability:
+  - id: constant-command
+    pattern: Runtime.exec / ProcessBuilder with fully constant argv and no user influence
+    reason: user input cannot change command or arguments
+
+  - id: processbuilder-list-validated
+    pattern: ProcessBuilder list form, fixed binary, user input is single arg with strict allowlist
+    reason: no shell; attacker cannot inject metacharacters or extra tokens
+
+  - id: java-api-replacement
+    pattern: no OS process; pure Java API used
+    reason: not command injection
+
+  - id: fixed-command-map
+    pattern: user selects id mapped to predefined constant command/args
+    reason: attacker selects among fixed safe operations only
+
+  - id: test-only-exec
+    pattern: command helper only referenced from test sources
+    reason: not production reachable
+
+needs_deeper_review:
+  - id: runtime-exec-concat
+    pattern: Runtime.exec(string + input) or format into command string
+    reason: classic CMDi; high priority
+
+  - id: processbuilder-sh-c
+    pattern: ProcessBuilder shell wrapper with -c /c
+    reason: shell injection even if ProcessBuilder API is used
+
+  - id: array-exec-but-shell
+    pattern: Runtime.exec(new String[]{"sh","-c", input})
+    reason: array form does not make shell safe
+
+  - id: argument-injection
+    pattern: fixed binary but user-controlled flags/operands
+    reason: may still be security-relevant without shell
+
+  - id: commons-exec-parse
+    pattern: CommandLine.parse(dynamicString)
+    reason: string parsing; confirm taint
+
+  - id: wrapper-util
+    pattern: custom ShellUtil/ProcessHelper execute(String)
+    reason: sink is indirection; expand to real executor

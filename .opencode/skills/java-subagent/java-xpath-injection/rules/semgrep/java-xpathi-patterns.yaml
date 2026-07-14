@@ -1,0 +1,56 @@
+rules:
+  - id: java-xpathi-predicate-concat
+    message: XPath predicate built by concatenating attribute/value filters
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "//" + $PATH + "[@" + $ATTR + "='" + $VAL + "']"
+      - pattern: |
+          $BASE + "[@id='" + $ID + "']"
+      - pattern: |
+          $BASE + "[@name='" + $NAME + "']"
+      - pattern: |
+          String.format("//%s[@%s='%s']", $PATH, $ATTR, $VAL)
+      - pattern: |
+          String.format("%s[@id='%s']", $BASE, $ID)
+    metadata:
+      cwe: CWE-643
+      subtype: predicate-injection
+      confidence: high
+
+  - id: java-xpathi-login-boolean-style
+    message: Possible auth/filter XPath with user credentials concatenated into expression
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          String.format("//user[@name='%s' and @password='%s']", $U, $P)
+      - pattern: |
+          "//user[name/text()='" + $U + "' and password/text()='" + $P + "']"
+      - pattern: |
+          $SB.append("//user[").append($U).append("]")
+    metadata:
+      cwe: CWE-643
+      subtype: boolean-logic-bypass
+      confidence: medium
+
+  - id: java-xpathi-missing-variable-resolver-hint
+    message: XPath usage without nearby VariableResolver may indicate string-built queries
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $F.newXPath()
+          - pattern: |
+              XPathFactory.newInstance().newXPath()
+      - pattern-not-inside: |
+          ...
+          $X.setXPathVariableResolver(...);
+          ...
+    metadata:
+      cwe: CWE-643
+      category: xpath-injection
+      confidence: low
+      notes: L1 hint only; not a finding without concat and dataflow

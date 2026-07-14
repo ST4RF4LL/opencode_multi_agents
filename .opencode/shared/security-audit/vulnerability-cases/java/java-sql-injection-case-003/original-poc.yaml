@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - /api/accounts/search reachable
+  - createNativeQuery uses concatenated email
+request_context:
+  endpoint: /api/accounts/search
+  parameter: email
+observed_result:
+  - SQL structure influenced by email parameter
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

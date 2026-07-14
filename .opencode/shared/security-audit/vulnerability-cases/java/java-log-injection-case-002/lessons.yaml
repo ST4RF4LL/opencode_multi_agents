@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Request headers (User-Agent, Referer, X-Forwarded-*) are frequent log injection sources
+  - Access-log filters that concat metadata are high-recall L1/L2 patterns
+  - Fix combines parameterization, size limits, and CRLF stripping; JSON layout is preferred
+non_transferable_details:
+  - original filter class name
+  - original log pattern
+  - original payload

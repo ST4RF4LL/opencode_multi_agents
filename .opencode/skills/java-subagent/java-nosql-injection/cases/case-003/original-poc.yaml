@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - /api/users/by-name accepts username
+  - query JSON built by string concat then Document.parse
+request_context:
+  endpoint: /api/users/by-name
+  parameter: username
+observed_result:
+  - crafted username alters query JSON structure
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

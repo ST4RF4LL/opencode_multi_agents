@@ -1,0 +1,8 @@
+case_specific: true
+preconditions:
+  - registration or password-change endpoint stores MD5 hex
+observed_result:
+  - stored value matches md5(password) format
+reuse_policy:
+  - reference_only
+  - do_not_crack_production_password_databases

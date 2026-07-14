@@ -1,0 +1,69 @@
+rules:
+  - id: java-ldap-uid-filter-concat
+    message: LDAP uid/cn filter string concatenated with variable (classic login bypass surface)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "(uid=" + $USER + ")"
+      - pattern: |
+          "(cn=" + $USER + ")"
+      - pattern: |
+          "(&(uid=" + $USER + ")(userPassword=" + $PASS + "))"
+      - pattern: |
+          "(&(uid=" + $USER + ")"
+      - pattern: |
+          String.format("(uid=%s)", $USER)
+      - pattern: |
+          String.format("(&(uid=%s)(userPassword=%s))", $USER, $PASS)
+      - pattern: |
+          $SB.append("(uid=").append($USER).append(")")
+      - pattern: |
+          $SB.append("(&(uid=").append($USER)
+    metadata:
+      cwe: CWE-90
+      subtype: filter-string-concat
+      confidence: high
+
+  - id: java-ldap-dn-uid-concat
+    message: DN constructed by concatenating uid/ou components from variables
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "uid=" + $USER + ",ou="
+      - pattern: |
+          "uid=" + $USER + ",ou=people"
+      - pattern: |
+          "cn=" + $USER + ",ou="
+      - pattern: |
+          String.format("uid=%s,ou=%s,dc=%s", $USER, $OU, $DC)
+      - pattern: |
+          "uid=" + $USER + "," + $BASE
+    metadata:
+      cwe: CWE-90
+      subtype: dn-injection
+      confidence: medium
+
+  - id: java-ldap-missing-encoder-hint
+    message: LDAP filter-like string built without nearby LdapEncoder usage (review required)
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $F = "(uid=" + $X + ")"
+          - pattern: |
+              $F = "(&(uid=" + $X + ")"
+      - pattern-not-inside: |
+          ...
+          LdapEncoder.filterEncode(...);
+          ...
+      - pattern-not-inside: |
+          ...
+          encodeFilterValue(...);
+          ...
+    metadata:
+      cwe: CWE-90
+      confidence: low
+      notes: L1 hint only; confirm dataflow and absence of encoding

@@ -1,0 +1,24 @@
+id: case-002
+vulnerability_type: command-injection
+subtype: processbuilder-shell-wrapper
+source:
+  type: request-parameter
+  expression: "@RequestParam String script"
+sink:
+  api: ProcessBuilder.start
+  sensitive_argument: shell-c-string
+propagation:
+  - JobController.run
+  - JobRunner.executeScript
+root_cause:
+  - processbuilder_invokes_bin_sh_with_c
+  - user_input_passed_as_shell_script_body
+  - no_command_allowlist
+prerequisites:
+  - reachable_authenticated_or_public_endpoint
+observed_behavior:
+  - script parameter is interpreted by shell allowing command chaining
+fix:
+  - avoid_shell_wrappers
+  - use_fixed_command_map_or_pure_java
+  - if_external_tool_required_use_list_form_without_sh_c

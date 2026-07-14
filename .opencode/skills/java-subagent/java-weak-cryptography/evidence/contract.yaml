@@ -1,0 +1,41 @@
+# Adapted for crypto: complete static semantics often sufficient (no classic injection PoC).
+finding_requirements:
+  mandatory:
+    - reachable_production_path
+    - crypto_primitive_or_config_identified
+    - weakness_or_misconfiguration_identified
+    - security_sensitive_usage_established
+    - effective_strong_control_missing_or_bypassable
+  one_of:
+    - complete_static_semantics_with_clear_weakness
+    - dynamic_or_behavioral_confirmation
+    - config_and_code_correlation_proving_weak_primitive_in_use
+  context:
+    recommended:
+      - subtype_classification
+      - algorithm_mode_padding
+      - key_iv_random_origin
+      - affected_security_property
+      - affected_component
+      - remediation_direction
+
+reject_when:
+  - only_dangerous_api_name_match_without_weak_params
+  - strong_aead_with_unique_nonce_and_managed_key
+  - non_security_use_of_weak_hash_with_evidence
+  - path_is_test_only_or_dead_code
+  - modern_password_encoder_in_use
+  - SecureRandom_correctly_used_for_secrets
+  - evidence_is_only_generic_crypto_presence
+
+status_definitions:
+  Candidate: weak pattern found but usage, reachability, or params incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason
+
+static_semantics_sufficient_examples:
+  - Cipher.getInstance("AES/ECB/PKCS5Padding") on production encrypt path
+  - GCMParameterSpec with constant nonce array
+  - MessageDigest MD5 of password before store
+  - new Random().nextBytes(key)
+  - new SecretKeySpec("hardcoded".getBytes(), "AES")

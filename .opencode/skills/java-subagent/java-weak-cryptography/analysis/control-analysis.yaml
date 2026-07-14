@@ -1,0 +1,64 @@
+questions:
+  - id: algorithm_selection
+    ask: 使用的算法/模式/填充是什么？是否在禁止列表？
+    high_risk:
+      - DES|DESede|RC4|RC2|Blowfish
+      - AES/ECB or default AES
+      - MD5|SHA-1 for security
+      - RSA PKCS1v1.5 encryption
+    preferred:
+      - AES/GCM/NoPadding
+      - ChaCha20-Poly1305
+      - SHA-256+ for integrity
+      - RSA/ECB/OAEPWithSHA-256AndMGF1Padding
+
+  - id: iv_nonce_handling
+    ask: IV/nonce 如何生成？是否每消息唯一？
+    accept:
+      - SecureRandom_per_encryption
+      - counter_with_proven_uniqueness_under_key
+    reject_as_strong:
+      - constant_byte_array
+      - all_zero_iv
+      - reused_gcm_nonce
+      - key_derived_static_iv_without_analysis
+
+  - id: key_management
+    ask: 密钥从何而来？
+    accept:
+      - KMS_HSM_secret_manager
+      - KeyStore_with_protected_entry
+      - ephemeral_key_agreement
+    reject_as_strong:
+      - source_code_literal
+      - resource_file_committed_secret
+      - predictable_derivation_from_username
+
+  - id: random_source
+    ask: 安全敏感值的随机源是什么？
+    accept:
+      - java.security.SecureRandom (default, no static seed)
+    reject_as_strong:
+      - java.util.Random
+      - Math.random
+      - SecureRandom with fixed setSeed
+
+  - id: password_storage
+    ask: 口令如何存储？
+    accept:
+      - bcrypt_scrypt_argon2
+      - PBKDF2_high_iterations_unique_salt
+    reject_as_strong:
+      - single_md5_sha1_sha256
+      - reversible_encryption_as_password_storage
+      - plaintext_or_NoOpPasswordEncoder
+
+  - id: algorithm_agility
+    ask: 算法是否硬编码导致无法迁移？
+    notes: hardcoded weak transforms block agility; note as remediation risk
+
+control_grades:
+  strong: effective_modern_crypto_and_key_handling
+  contextual: acceptable_only_for_specific_threat_model
+  weak: bypassable_or_deprecated
+  invalid: broken_primitive_or_catastrophic_misuse

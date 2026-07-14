@@ -1,0 +1,53 @@
+positive:
+  P01_AesEcb.java:
+    expect: candidate_or_finding
+    subtype: weak-algo
+    sink: Cipher.getInstance
+    notes: AES/ECB is high confidence
+  P02_StaticIvGcm.java:
+    expect: candidate_or_finding
+    subtype: static-iv
+    sink: GCMParameterSpec
+  P03_Md5Password.java:
+    expect: candidate_or_finding
+    subtype: weak-password-hash
+    sink: MessageDigest.getInstance MD5
+  P04_InsecureRandomToken.java:
+    expect: candidate
+    subtype: insecure-random
+    notes: Random used for session token
+  P05_HardcodedKey.java:
+    expect: candidate_or_finding
+    subtype: hardcoded-key
+    sink: SecretKeySpec from string literal
+
+negative:
+  N01_AesGcmSecureRandom.java:
+    expect: rejected
+    reason: aes_gcm_unique_nonce_securerandom
+  N02_BcryptPassword.java:
+    expect: rejected
+    reason: modern_password_encoder
+  N03_SecureRandomToken.java:
+    expect: rejected
+    reason: securerandom_for_token
+  N04_Sha256Checksum.java:
+    expect: rejected
+    reason: non_security_checksum_sha256
+  N05_ManagedKeyNoHardcode.java:
+    expect: rejected
+    reason: managed_key_aes_gcm
+
+regression:
+  R01_DesLegacy.java:
+    expect: sink_candidate
+    subtype: weak-algo
+    must_not_regress: false_negative_on_DES
+
+metrics:
+  track:
+    - crypto_candidate_recall
+    - subtype_classification_accuracy
+    - false_positive_rate
+    - finding_precision
+    - static_semantics_finding_rate

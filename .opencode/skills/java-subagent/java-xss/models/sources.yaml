@@ -1,0 +1,95 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+      - ".*HttpServletRequest.*getServletPath.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: servlet-cookie
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getCookies.*"
+      - ".*Cookie.*getValue.*"
+    controlled_value: return
+    confidence: high
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields require field-level taint tracking
+
+  - id: spring-flash-session
+    framework: spring-mvc
+    method_full_name:
+      - ".*HttpSession.*getAttribute.*"
+      - ".*FlashMap.*"
+      - ".*RedirectAttributes.*"
+    controlled_value: return
+    confidence: medium
+    notes: may carry stored attacker data into subsequent render
+
+  - id: database-read-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*ResultSet.*getString.*"
+      - ".*ResultSet.*getObject.*"
+      - ".*Optional.*get.*"
+    controlled_value: return
+    confidence: low
+    notes: treat as source for stored XSS when previously stored attacker data is re-rendered
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: async stored content later rendered in UI
+
+  - id: file-or-upload-external
+    framework: io
+    method_full_name:
+      - ".*Files.*readString.*"
+      - ".*MultipartFile.*getOriginalFilename.*"
+      - ".*MultipartFile.*getBytes.*"
+    controlled_value: return
+    confidence: medium
+    notes: filenames and file content reflected into HTML without encoding

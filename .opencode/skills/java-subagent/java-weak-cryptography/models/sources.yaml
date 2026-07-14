@@ -1,0 +1,72 @@
+# For crypto: "sources" = crypto configuration, algorithm strings, key/IV/nonce origins, sensitive data.
+sources:
+  - id: algorithm-string-literal
+    framework: jca-jce
+    patterns:
+      - "Cipher.getInstance"
+      - "MessageDigest.getInstance"
+      - "Mac.getInstance"
+      - "Signature.getInstance"
+      - "KeyGenerator.getInstance"
+      - "KeyPairGenerator.getInstance"
+      - "SecretKeyFactory.getInstance"
+    controlled_value: algorithm_argument
+    confidence: high
+    notes: algorithm/mode/padding string is the primary configuration source
+
+  - id: key-material-hardcoded
+    framework: jca-jce
+    patterns:
+      - byte array / String literals passed to SecretKeySpec
+      - hardcoded char[]/String passwords for KeyStore or PBE
+    controlled_value: key_bytes_or_password
+    confidence: high
+    notes: maps to subtype hardcoded-key
+
+  - id: iv-nonce-static
+    framework: jca-jce
+    patterns:
+      - fixed byte[] passed to IvParameterSpec / GCMParameterSpec
+      - zero IV / constant nonce
+    controlled_value: iv_or_nonce_bytes
+    confidence: high
+
+  - id: weak-prng
+    framework: jdk
+    method_full_name:
+      - ".*java\\.util\\.Random\\..*"
+      - ".*Math\\.random.*"
+      - ".*SecureRandom\\.setSeed.*"
+    controlled_value: random_output
+    confidence: high
+    notes: source of insecurity when output used as secret
+
+  - id: password-plaintext
+    framework: app
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*getPassword.*"
+    annotation:
+      - RequestParam
+      - RequestBody
+    controlled_value: password_value
+    confidence: high
+    notes: sensitive input for weak-password-hash subtype
+
+  - id: config-crypto-property
+    framework: config
+    patterns:
+      - application*.yml/properties crypto algorithm keys
+      - system properties selecting algorithms
+    controlled_value: config_value
+    confidence: medium
+
+  - id: keystore-or-env-key
+    framework: secrets
+    method_full_name:
+      - ".*System\\.getenv.*"
+      - ".*System\\.getProperty.*"
+      - ".*KeyStore\\.getKey.*"
+    controlled_value: key_material
+    confidence: low
+    notes: not weak by itself; track if used with weak algo or if value is default/predictable

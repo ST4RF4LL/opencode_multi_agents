@@ -1,0 +1,43 @@
+questions:
+  - id: sql_template_origin
+    ask: SQL 字符串是常量、安全拼接，还是包含外部输入？
+    outcomes:
+      constant_or_bound_only: likely_safe
+      user_in_structure: high_risk
+      user_in_identifier: identifier_injection_risk
+
+  - id: parameterization
+    ask: 用户输入是否仅通过占位符/绑定 API 传入？
+    strong_yes:
+      - PreparedStatement setX on constant template
+      - MyBatis #{}
+      - JPA setParameter on constant JPQL/SQL
+    false_friends:
+      - prepareStatement(concatenatedSql)
+      - MyBatis ${}
+      - createNativeQuery(sql + input)
+
+  - id: identifier_handling
+    ask: ORDER BY/列名/表名如何处理？
+    accept:
+      - switch_or_map_to_constant_identifiers
+      - enum_allowlist
+    reject_as_strong:
+      - direct_concat_of_sort_param
+      - regex_only_without_allowlist
+
+  - id: second_order
+    ask: 当前 SQL 片段是否来自历史存储的用户数据？
+    if_yes:
+      - treat_db_value_as_untrusted_source
+      - trace_original_write_path
+
+  - id: encoding_and_escape
+    ask: 是否依赖手工转义？
+    assessment: weak_or_invalid_unless_proven_context_correct
+
+control_grades:
+  strong: effective_blocks_structure_control
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

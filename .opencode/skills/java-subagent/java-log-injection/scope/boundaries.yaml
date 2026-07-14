@@ -1,0 +1,26 @@
+in_scope:
+  - slf4j_log_message_concatenation
+  - log4j2_logger_string_concat_and_non_parameterized_messages
+  - logback_encoder_pattern_with_untrusted_message
+  - jul_logger_log_with_concat
+  - commons_logging_with_concat
+  - mdc_threadcontext_put_untrusted_values
+  - forged_audit_or_auth_log_lines_via_crlf
+  - unstructured_text_layout_without_newline_escaping
+  - log_viewer_xss_when_logs_rendered_in_browser
+
+out_of_scope:
+  - log4shell_jndi_lookup_exploitation_as_primary_finding
+  - pure_sensitive_data_logging_without_injection
+  - sql_injection
+  - command_injection
+  - xss_unrelated_to_log_output
+  - pure_authorization_flaws
+
+boundary_notes:
+  - parameterized_logging_logger_info_template_arg_is_not_automatically_safe_if_layout_is_plain_text_and_args_contain_crlf
+  - structured_json_logging_with_field_binding_strongly_reduces_line_forging
+  - log4j2_JsonTemplateLayout_maxStringLength_and_escaping_are_mitigations_to_evaluate
+  - logback_JsonEncoder_and_slf4j_parameterized_logging_are_preferred_patterns
+  - jndi_lookup_is_adjacent_not_primary_unless_natural_overlap
+  - BAD_patterns_include_string_concat_in_log_messages_and_non_compile_time_constant_format_patterns

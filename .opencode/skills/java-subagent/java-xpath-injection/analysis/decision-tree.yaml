@@ -1,0 +1,58 @@
+name: java-xpath-injection-decision-tree
+steps:
+  - id: find_xpath_sink
+    question: 是否发现 XPath 构造/编译/求值 Sink？
+    no: stop_no_sink
+    yes: check_expr_origin
+
+  - id: check_expr_origin
+    question: Sink 的 XPath 表达式是否完全由常量或固定模板产生，且用户输入仅经 $var / VariableResolver 绑定？
+    yes: reject_safe_parameterization
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到 XPath 表达式字符串的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是谓词、轴/路径、布尔逻辑，还是完整表达式？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在有效 VariableResolver/$var 绑定或表达式白名单？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（常量模板+变量绑定 / 完整片段映射）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: exclude_xxe_only
+    question: 证据是否仅表明 XXE 配置问题而无 XPath 结构可控？
+    yes: reject_wrong_vuln_class
+    no: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_safe_parameterization: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  reject_wrong_vuln_class: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

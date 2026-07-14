@@ -1,0 +1,49 @@
+l0_stack_detection:
+  - pattern: "java.sql"
+    implies: jdbc
+  - pattern: "JdbcTemplate"
+    implies: spring-jdbc
+  - pattern: "org.apache.ibatis|org.mybatis"
+    implies: mybatis
+  - pattern: "EntityManager|createNativeQuery|org.hibernate"
+    implies: hibernate-jpa
+  - pattern: "org.springframework.data.jpa|@Query"
+    implies: spring-data-jpa
+  - pattern: "org.jooq|DSLContext"
+    implies: jooq
+
+l1_sink_keywords:
+  - "createStatement"
+  - "prepareStatement"
+  - "executeQuery"
+  - "executeUpdate"
+  - "JdbcTemplate"
+  - "NamedParameterJdbcTemplate"
+  - "createNativeQuery"
+  - "createSQLQuery"
+  - "createQuery"
+  - "${"
+  - "@Select"
+  - "@Update"
+  - "@SelectProvider"
+  - "DSL.sql"
+  - "ORDER BY"
+  - "order by"
+  - "StringBuilder"
+  - "String.format"
+
+high_risk_concat_hints:
+  - '"SELECT .*\\+'
+  - '"INSERT .*\\+'
+  - '"UPDATE .*\\+'
+  - '"DELETE .*\\+'
+  - "append\\(\".*SELECT"
+  - "String\\.format\\(\".*SELECT"
+
+rg_commands:
+  stack: |
+    rg -n "java\\.sql|JdbcTemplate|org\\.apache\\.ibatis|EntityManager|createNativeQuery|org\\.jooq" --glob '*.java' --glob '*.xml'
+  sinks: |
+    rg -n "executeQuery|executeUpdate|prepareStatement|createNativeQuery|createSQLQuery|JdbcTemplate\\.(query|update|execute)|\\$\\{" --glob '*.java' --glob '*.xml'
+  concat: |
+    rg -n '"(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|ORDER BY).*"\s*\+|append\("(SELECT|WHERE|ORDER BY)' --glob '*.java'

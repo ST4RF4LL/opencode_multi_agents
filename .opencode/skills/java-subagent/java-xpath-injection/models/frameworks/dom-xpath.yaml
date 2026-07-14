@@ -1,0 +1,15 @@
+id: dom-xpath
+name: DOM + XPath evaluation context
+detection:
+  imports:
+    - org.w3c.dom.Document
+    - javax.xml.parsers.DocumentBuilder
+    - javax.xml.parsers.DocumentBuilderFactory
+  classes:
+    - DocumentBuilder
+    - DocumentBuilderFactory
+role: evaluation_context
+notes:
+  - Document load is not the XPath injection sink
+  - XXE configuration of DocumentBuilderFactory is out of scope for this skill
+  - When Document is used as evaluate context, still analyze expression string origin for XPathi

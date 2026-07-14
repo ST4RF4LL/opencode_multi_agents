@@ -1,0 +1,70 @@
+sanitizers:
+  strong:
+    - id: xpath-variable-resolver
+      condition:
+        - expression_uses_dollar_variables_only_for_untrusted_slots
+        - xpath_set_xpath_variable_resolver_installed
+        - expression_template_is_constant_or_safe_composition
+        - user_input_only_passed_via_variable_resolver_or_set_variable
+      notes: >
+        OWASP Java Security CS pattern: compile("//book[@id=$bookId]") and bind
+        bookId through XPathVariableResolver / XPathVariable
+
+    - id: parameterized-xpath-template
+      condition:
+        - xpath_expression_string_is_constant
+        - untrusted_values_bound_as_variables_not_concatenated
+        - no_string_concat_into_expression_structure
+
+    - id: expression-allowlist
+      condition:
+        - user_input_mapped_to_predefined_xpath_fragments
+        - mapped_values_are_constants
+        - reject_or_default_on_unknown
+
+  contextual:
+    - id: typed-numeric-or-enum-cast
+      condition:
+        - input_converted_to_number_or_enum_before_use
+        - used_only_in_numeric_or_enum_literal_context
+      notes: reduces classic string injection but does not fix full path/axis control
+
+    - id: fixed-predicate-key-map
+      condition:
+        - attribute_name_or_path_selected_from_constant_map
+        - only_value_slot_bound_via_variable_resolver
+
+  weak:
+    - id: manual-quote-escape
+      pattern:
+        - replace("'", "")
+        - replace("\"", "")
+        - replace("'", "''")
+        - escapeXml
+      notes: easy to bypass; encoding/context mismatches; does not stop or/and axis tricks
+
+    - id: blacklist-metacharacters
+      pattern:
+        - contains("'")
+        - contains("or")
+        - regex_blacklist
+      notes: incomplete and bypassable
+
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without variable binding
+      notes: insufficient for structure control
+
+  invalid:
+    - id: string-concat-into-xpath
+      notes: building expression with + / format / append of user input
+    - id: compile-with-concat
+      notes: XPath.compile(expr) where expr was built with user concat
+    - id: evaluate-with-concat
+      notes: XPath.evaluate(expr, item) where expr includes untrusted data
+    - id: validate-after-concat
+      notes: validation applied after expression already includes untrusted data
+    - id: client-side-only-validation
+    - id: xxe-hardening-as-xpathi-defense
+      notes: FEATURE_SECURE_PROCESSING / disable external entities does not stop XPath injection

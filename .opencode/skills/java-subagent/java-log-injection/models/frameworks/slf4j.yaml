@@ -1,0 +1,31 @@
+id: slf4j
+name: SLF4J
+detect:
+  imports:
+    - org.slf4j.Logger
+    - org.slf4j.LoggerFactory
+    - org.slf4j.MDC
+  keywords:
+    - LoggerFactory.getLogger
+    - org.slf4j
+
+sources: inherit-global
+sinks:
+  - slf4j-logger
+  - mdc-threadcontext-put
+
+safe_patterns:
+  - parameterized_logging_with_constant_template
+  - mdc_values_sanitized_or_structured_json_layout
+  - backend_logback_or_log4j2_with_json_encoder
+
+unsafe_patterns:
+  - logger_info_string_concat
+  - logger_error_with_concatenated_message
+  - non_constant_format_string_as_first_arg
+  - mdc_put_untrusted_without_sanitization
+
+notes:
+  - Prefer logger.warn("msg {}", user) over string concatenation
+  - Parameterization does not strip CRLF from arguments; check layout
+  - Actual emission depends on binding (Logback / Log4j2)

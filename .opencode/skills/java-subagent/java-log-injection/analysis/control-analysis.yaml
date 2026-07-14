@@ -1,0 +1,52 @@
+questions:
+  - id: message_construction
+    ask: 日志消息是常量模板 + 参数化，还是字符串拼接/format？
+    outcomes:
+      constant_parameterized: review_layout_and_crlf_in_args
+      user_in_concat: high_risk
+      user_as_format_pattern: format_injection_risk
+
+  - id: parameterization
+    ask: 是否使用 logger.info("... {}", arg) 这类参数化 API？
+    strong_yes:
+      - SLF4J/Log4j2 parameterized placeholders with compile-time constant template
+    false_friends:
+      - logger.info("user=" + user)
+      - logger.info(String.format("user=%s", user))
+      - logger.info(userControlledPattern, args)
+    notes: parameterization is recommended but not sufficient alone against CRLF in args
+
+  - id: layout_and_structure
+    ask: 日志布局是 PatternLayout 文本行，还是 JSON 结构化字段？
+    accept:
+      - JsonTemplateLayout / JsonEncoder with field binding and escaping
+      - maxStringLength or equivalent size limits
+    reject_as_strong:
+      - raw %msg / %message with no newline encoding
+      - unknown layout
+
+  - id: newline_sanitization
+    ask: 不可信参数写入前是否剥离/编码 CR、LF 及其他控制字符？
+    accept:
+      - strip_or_encode_all_line_separators_before_log
+    reject_as_strong:
+      - replace_only_backslash_n
+      - length_limit_only
+
+  - id: viewer_path
+    ask: 日志是否在浏览器/管理台展示？是否有输出编码？
+    if_yes:
+      - assess_log_viewer_xss_subtype
+      - html_encode_is_viewer_control_not_file_log_control
+
+  - id: adjacent_jndi
+    ask: 是否存在 Log4j 查找/JNDI 相关风险？
+    if_yes:
+      - mark_adjacent_not_primary_log_injection
+      - do_not_conflate_with_crlf_forging
+
+control_grades:
+  strong: effective_blocks_line_forging_and_structure_control
+  contextual: effective_only_for_specific_subtype_or_layout
+  weak: bypassable
+  invalid: does_not_mitigate

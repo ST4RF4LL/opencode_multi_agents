@@ -1,0 +1,23 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_filter_or_dn_construction_logic
+  - actual_ldap_api_framework
+  - actual_validation_or_encoding_logic
+  - actual_directory_structure_if_known
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_ldap_error_messages_are_exposed
+  - claim_success_from_generic_500_only
+  - perform_directory_modification_without_authorization
+  - exfiltrate_unrelated_directory_data_beyond_proof

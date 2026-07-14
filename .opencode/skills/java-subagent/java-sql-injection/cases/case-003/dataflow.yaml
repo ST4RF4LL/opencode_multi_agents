@@ -1,0 +1,10 @@
+source:
+  method: AccountController.search
+  parameter: email
+  annotation: RequestParam
+path:
+  - AccountController.search
+sink:
+  method: EntityManager.createNativeQuery
+  argument: 1
+influence: where_clause_value_and_structure

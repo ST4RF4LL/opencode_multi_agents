@@ -1,0 +1,63 @@
+rules:
+  - id: java-sqli-orderby-concat
+    message: Dynamic ORDER BY / sort column may allow identifier injection
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $SQL + " ORDER BY " + $SORT
+      - pattern: |
+          $SQL + " order by " + $SORT
+      - pattern: |
+          String.format("%s ORDER BY %s", $SQL, $SORT)
+      - pattern: |
+          $SB.append(" ORDER BY ").append($SORT)
+    metadata:
+      cwe: CWE-89
+      subtype: dynamic-identifier
+      confidence: medium
+
+  - id: java-sqli-like-concat
+    message: LIKE clause concatenated with user input
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $SQL + " LIKE '%" + $X + "%'"
+      - pattern: |
+          String.format("%s LIKE '%%%s%%'", $SQL, $X)
+    metadata:
+      cwe: CWE-89
+      subtype: like-wildcard-abuse
+      confidence: high
+
+  - id: mybatis-dollar-placeholder
+    message: MyBatis ${} placeholder performs string substitution (high SQLi risk)
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include:
+        - "*.xml"
+        - "*Mapper.java"
+    pattern-regex: '\$\{[^}]+\}'
+    metadata:
+      cwe: CWE-89
+      subtype: mybatis-dollar-injection
+      confidence: medium
+      notes: Review whether the substituted value is user-controlled; #{} is preferred
+
+  - id: java-sqli-table-or-column-name
+    message: Possible dynamic table/column name from external input
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "SELECT * FROM " + $T
+      - pattern: |
+          "SELECT " + $C + " FROM "
+      - pattern: |
+          String.format("SELECT * FROM %s", $T)
+    metadata:
+      cwe: CWE-89
+      subtype: dynamic-identifier
+      confidence: medium

@@ -1,0 +1,22 @@
+id: java-xss
+name: Cross-Site Scripting (XSS)
+language: java
+cwe:
+  - CWE-79
+objective:
+  detect: >
+    Attacker-controlled data reaching server-side HTTP response construction
+    (HTML, JavaScript, or CSS contexts) without effective context-aware
+    output encoding or sanitization, enabling client-side script or markup injection.
+core_condition:
+  - external_input_exists
+  - response_content_is_influenced
+  - response_write_or_template_render_is_reachable
+  - effective_context_encoding_or_sanitization_is_missing
+not_in_scope:
+  - pure_dom_xss_with_no_server_side_reflection
+  - csrf_without_script_injection
+  - open_redirect_without_script_context
+  - sql_injection
+  - command_injection
+  - hardcoded_safe_constant_html_with_no_external_influence

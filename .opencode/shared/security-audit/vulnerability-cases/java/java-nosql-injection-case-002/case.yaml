@@ -1,0 +1,24 @@
+id: case-002
+vulnerability_type: nosql-injection
+subtype: where-script-injection
+source:
+  type: request-parameter
+  expression: "@RequestParam String expr"
+sink:
+  api: Filters.where / $where
+  sensitive_argument: 1
+propagation:
+  - SearchController.advanced
+  - SearchService.findWhere
+root_cause:
+  - user_controlled_where_javascript_expression
+  - server_side_js_enabled_in_query
+prerequisites:
+  - mongodb_allows_$where
+  - endpoint_reachable
+observed_behavior:
+  - attacker_controls_server_side_js_predicate
+fix:
+  - remove_$where_entirely
+  - use_Filters_and_typed_comparisons
+  - never_concatenate_user_input_into_where

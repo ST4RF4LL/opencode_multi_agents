@@ -1,0 +1,93 @@
+# Real-case patterns distilled from ghsa-skill-builder data → Joern rules
+# Sources:
+#   - ghsa-skill-builder/data/pip_details_89.json
+#   - ghsa-skill-builder/data/pip_details_injection.json
+#   - ghsa-skill-builder/data/h1_by_category/sqli.json
+#   - ghsa-skill-builder/vuln-skills/skills/vuln-patterns-injection/references/cases.md
+#   - ghsa-skill-builder/vuln-skills/skills/pentest-sqli/references/cases.md
+
+patterns:
+  - id: dynamic-identifier
+    cases: [R1, CVE-2026-26198, GHSA-xxh2-68g9-8jqr]
+    root_cause: untrusted_identifier_embedded_in_sql_structure
+    java_signals:
+      - ORDER BY + user input
+      - column/table name concat
+      - MyBatis ${}
+      - createNativeQuery with dynamic select list
+    joern:
+      - rules/joern/derived/dynamic-identifier.sc
+    sanitizer_required: identifier_allowlist_or_enum_map
+
+  - id: map-key-to-sql
+    cases: [R2, CVE-2025-65896, GHSA-qhqw-rrw9-25rm, CVE-2024-36039]
+    root_cause: map_keys_used_as_sql_identifiers_without_allowlist_while_values_escaped_or_bound
+    java_signals:
+      - for-each map entry append key into SQL
+      - dynamic SET/WHERE column from map key
+      - MyBatis ${key} in foreach
+    joern:
+      - rules/joern/derived/map-key-to-sql.sc
+    sanitizer_required: column_allowlist_for_keys
+
+  - id: raw-sql-execution
+    cases: [R3, CVE-2024-12909, GHSA-x48g-hm9c-ww42]
+    root_cause: fully_attacker_or_llm_controlled_sql_string_executed
+    java_signals:
+      - execute/query first arg is non-constant variable from external/agent
+      - admin report custom SQL API
+    joern:
+      - rules/joern/derived/raw-sql-execution.sc
+    sanitizer_required: deny_or_strict_sql_allowlist_readonly
+
+  - id: operator-connector-inject
+    cases: [R4, H1-3335709]
+    root_cause: logical_operator_or_connector_from_user_interpolated_into_sql
+    java_signals:
+      - AND/OR/NOT from request into query builder
+      - filter JSON op field concatenated
+    joern:
+      - rules/joern/derived/operator-connector-inject.sc
+    sanitizer_required: operator_enum_allowlist
+
+  - id: dynamic-filter-fragment
+    cases: [R5, H1-3292573]
+    root_cause: dynamic_join_or_filter_fragment_from_user
+    java_signals:
+      - dynamic ON/WHERE fragment strings
+      - filter DSL string eval
+    joern:
+      - rules/joern/derived/dynamic-filter-fragment.sc
+    sanitizer_required: structured_predicate_api_only
+
+  - id: path-param-to-sql
+    cases: [R6, H1-2958619, H1-2633959, H1-2266081]
+    root_cause: url_path_segment_flows_into_sql_construction
+    java_signals:
+      - PathVariable to DAO concat
+      - getPathInfo used in SQL
+    joern:
+      - rules/joern/derived/path-param-to-sql.sc
+    sanitizer_required: bound_parameters_or_typed_conversion_with_constant_sql
+
+  - id: classic-source-to-sink
+    cases: [R7, R8, H1-3293803, H1-2209130, H1-3578842]
+    root_cause: request_parameter_concat_into_sql
+    java_signals:
+      - getParameter/RequestParam to Statement/JdbcTemplate/createNativeQuery
+    joern:
+      - rules/joern/source-to-sink.sc
+      - rules/joern/locate-sinks.sc
+    sanitizer_required: parameterization
+
+extraction_method:
+  - read_ghsa_description_and_patch_diff_when_available
+  - abstract_source_sink_sanitizer_gap
+  - map_to_java_framework_equivalents
+  - encode_as_joern_query_not_as_reusable_payload
+  - store_lessons_only_transferable_parts
+
+usage:
+  after_l0_stack_detect: load_matching_derived_rules
+  after_l1_hit: open_matching_case_in_references/cases.md
+  never: execute_historical_payloads_verbatim

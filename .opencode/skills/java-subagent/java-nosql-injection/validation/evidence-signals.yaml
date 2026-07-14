@@ -1,0 +1,21 @@
+strong_signals:
+  - operator_payload_changes_query_result_set_deterministically
+  - authentication_bypass_via_$ne_or_$gt_style_filter
+  - application_logs_show_attacker_controlled_query_document
+  - $where_expression_side_effect_or_logic_confirmed
+  - extracted_data_matches_injected_query_intent
+
+medium_signals:
+  - mongo_parse_or_query_error_tied_to_metacharacters
+  - stable_difference_between_scalar_and_operator_object_input
+  - regex_operator_alters_match_scope
+
+weak_signals:
+  - generic_500_without_query_semantics
+  - presence_of_Document_parse_api_only
+  - single_quote_or_brace_causes_error_without_confirming_operator_control
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

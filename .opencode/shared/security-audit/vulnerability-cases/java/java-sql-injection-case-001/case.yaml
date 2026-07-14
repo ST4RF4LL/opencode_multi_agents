@@ -1,0 +1,23 @@
+id: case-001
+vulnerability_type: sql-injection
+subtype: classic-string-concat
+source:
+  type: request-parameter
+  expression: request.getParameter("id")
+sink:
+  api: Statement.executeQuery
+  sensitive_argument: 1
+propagation:
+  - UserController.getById
+  - UserService.findById
+  - UserDao.findById
+root_cause:
+  - sql_string_concatenated_with_user_input
+  - statement_api_used_instead_of_bound_parameters
+prerequisites:
+  - reachable_http_endpoint
+observed_behavior:
+  - attacker_can_alter_where_clause_logic
+fix:
+  - use_prepareStatement_with_placeholders
+  - bind_id_via_setString_or_setLong

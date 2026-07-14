@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - /api/login accepts JSON body
+  - body map used directly as Mongo filter
+request_context:
+  endpoint: /api/login
+  parameter: body
+observed_result:
+  - operator object in password field changes match semantics
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

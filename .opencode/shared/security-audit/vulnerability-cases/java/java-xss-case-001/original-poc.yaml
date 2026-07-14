@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - endpoint accepts name query parameter
+  - response rendered as HTML
+request_context:
+  endpoint: /hello
+  parameter: name
+observed_result:
+  - crafted name appears unescaped in HTML body
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - do_not_treat_as_generic_reusable_exploit

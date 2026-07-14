@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - /api/colors reachable
+  - createQuery uses concatenated colorName in JPQL
+request_context:
+  endpoint: /api/colors
+  parameter: colorName
+observed_result:
+  - JPQL structure influenced by colorName parameter
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

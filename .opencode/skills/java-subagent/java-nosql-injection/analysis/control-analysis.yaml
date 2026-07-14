@@ -1,0 +1,54 @@
+questions:
+  - id: query_template_origin
+    ask: 查询是 Filters/Bson 常量字段构造，还是 Document.parse / 字符串拼接 / 用户 Map？
+    outcomes:
+      filters_value_only: likely_safe
+      user_json_parse: high_risk
+      user_in_where_script: where_injection_risk
+      user_operator_keys: operator_injection_risk
+
+  - id: query_builder_usage
+    ask: 用户输入是否仅通过 Filters.eq / Criteria.is 等作为值传入？
+    strong_yes:
+      - Filters.eq("field", userValue)
+      - Criteria.where("field").is(userValue)
+      - typed ObjectId/Number conversion before value bind
+    false_friends:
+      - Document.parse(userJson)
+      - BasicQuery(userJson)
+      - new Document(userMap)
+      - Filters.where(userExpression)
+
+  - id: operator_handling
+    ask: 是否允许用户控制以 $ 开头的 key 或嵌套运算符对象？
+    accept:
+      - reject_keys_starting_with_dollar
+      - only_scalar_values_accepted
+      - schema_validated_dto_without_map_passthrough
+    reject_as_strong:
+      - raw_map_from_json_as_filter
+      - recursive_merge_of_user_object_into_query
+
+  - id: special_char_policy
+    ask: 若走字符串路径，是否拒绝 ' " \ ; { } $ ？
+    strong_yes:
+      - fail_closed_reject_before_parse_or_concat
+    weak:
+      - partial_blacklist
+      - strip_only_one_metacharacter
+
+  - id: second_order
+    ask: 当前查询片段是否来自历史存储的用户数据？
+    if_yes:
+      - treat_stored_value_as_untrusted_source
+      - trace_original_write_path
+
+  - id: encoding_and_escape
+    ask: 是否依赖手工转义 JSON 字符串？
+    assessment: weak_or_invalid_unless_proven_context_correct
+
+control_grades:
+  strong: effective_blocks_operator_and_structure_control
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

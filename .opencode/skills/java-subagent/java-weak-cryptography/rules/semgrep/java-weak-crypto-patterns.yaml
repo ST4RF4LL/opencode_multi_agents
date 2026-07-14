@@ -1,0 +1,137 @@
+rules:
+  - id: java-weak-crypto-static-iv
+    message: Static or hardcoded IV/nonce for cipher init
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              byte[] $IV = {...};
+              ...
+              new IvParameterSpec($IV)
+          - pattern: |
+              byte[] $IV = "...".getBytes(...);
+              ...
+              new IvParameterSpec($IV)
+          - pattern: |
+              new IvParameterSpec(new byte[] {...})
+          - pattern: |
+              new GCMParameterSpec($T, new byte[] {...})
+          - pattern: |
+              byte[] $N = {...};
+              ...
+              new GCMParameterSpec($T, $N)
+    metadata:
+      cwe: CWE-329
+      subtype: static-iv
+      confidence: high
+
+  - id: java-weak-crypto-hardcoded-key
+    message: Hardcoded key material passed to SecretKeySpec
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              new SecretKeySpec("...".getBytes(...), ...)
+          - pattern: |
+              byte[] $K = {...};
+              ...
+              new SecretKeySpec($K, ...)
+          - pattern: |
+              new SecretKeySpec(new byte[] {...}, ...)
+    metadata:
+      cwe: CWE-321
+      subtype: hardcoded-key
+      confidence: high
+
+  - id: java-weak-crypto-insecure-random
+    message: java.util.Random / Math.random used where unpredictability is required
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          new Random().nextBytes($B)
+      - pattern: |
+          new Random($SEED).nextBytes($B)
+      - pattern: |
+          $R = new Random(...);
+          ...
+          $R.nextBytes($B)
+      - pattern: |
+          $R = new Random(...);
+          ...
+          $R.nextLong()
+      - pattern: |
+          $R = new Random(...);
+          ...
+          $R.nextInt(...)
+      - pattern: Math.random()
+    metadata:
+      cwe: CWE-330
+      subtype: insecure-random
+      confidence: medium
+      notes: confirm output used for key/token/session/otp before Finding
+
+  - id: java-weak-crypto-securerandom-static-seed
+    message: SecureRandom seeded with static/predictable value
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $SR = new SecureRandom($SEED);
+          - pattern: |
+              $SR.setSeed($SEED);
+      - pattern-either:
+          - pattern-inside: |
+              byte[] $SEED = {...};
+              ...
+          - pattern-inside: |
+              byte[] $SEED = "...".getBytes(...);
+              ...
+    metadata:
+      cwe: CWE-330
+      subtype: insecure-random
+      confidence: high
+
+  - id: java-weak-crypto-password-md5-sha
+    message: Password hashed with fast/weak digest (MD5/SHA-1/single SHA-256)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              MessageDigest $MD = MessageDigest.getInstance("MD5");
+              ...
+              $MD.digest($PASSWORD.getBytes(...))
+          - pattern: |
+              MessageDigest $MD = MessageDigest.getInstance("SHA-1");
+              ...
+              $MD.digest($PASSWORD.getBytes(...))
+          - pattern: |
+              MessageDigest $MD = MessageDigest.getInstance("SHA-256");
+              ...
+              $MD.digest($PASSWORD.getBytes(...))
+          - pattern: DigestUtils.md5Hex($PASSWORD)
+          - pattern: DigestUtils.sha1Hex($PASSWORD)
+          - pattern: DigestUtils.sha256Hex($PASSWORD)
+    metadata:
+      cwe: CWE-916
+      subtype: weak-password-hash
+      confidence: high
+
+  - id: java-weak-crypto-noop-password-encoder
+    message: Spring NoOp or MessageDigest password encoder is insecure
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: NoOpPasswordEncoder.getInstance()
+      - pattern: new MessageDigestPasswordEncoder(...)
+      - pattern: new StandardPasswordEncoder(...)
+      - pattern: new Md5PasswordEncoder()
+      - pattern: new ShaPasswordEncoder(...)
+    metadata:
+      cwe: CWE-916
+      subtype: weak-password-hash
+      confidence: high

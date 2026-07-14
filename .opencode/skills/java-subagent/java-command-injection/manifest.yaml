@@ -1,0 +1,69 @@
+id: java-command-injection
+name: Java OS Command Injection
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-78
+owasp:
+  - A03:2021-Injection
+maturity: 3
+description: >
+  Detect attacker-controlled input reaching OS command construction or execution
+  without effective argument separation, command allowlisting, or Java API alternatives.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - detect-validation.sc
+    semgrep:
+      - java-cmdi-patterns.yaml
+    codeql:
+      - java-cmdi.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+  tests:
+    - positive/
+    - negative/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - runtime-exec
+  - process-builder
+  - apache-commons-exec

@@ -1,0 +1,11 @@
+source:
+  method: AuthController.login
+  parameter: credentials
+  annotation: RequestBody
+path:
+  - AuthController.login
+  - new Document(credentials)
+sink:
+  method: MongoCollection.find
+  argument: 1
+influence: json_operator_in_filter

@@ -1,0 +1,24 @@
+id: case-002
+vulnerability_type: log-injection
+subtype: unstructured-string-concat
+source:
+  type: request-header
+  expression: request.getHeader("User-Agent")
+sink:
+  api: Logger.info
+  sensitive_argument: 1
+propagation:
+  - RequestLoggingFilter.doFilter
+root_cause:
+  - user_agent_concatenated_into_access_log_message
+  - no_structured_logging
+  - no_control_char_sanitization
+prerequisites:
+  - filter_or_interceptor_logs_request_metadata
+observed_behavior:
+  - attacker_controls_log_message_content_via_User-Agent
+  - crlf_can_split_or_forge_access_log_lines
+fix:
+  - parameterized_or_structured_json_logging
+  - sanitize_headers_before_log
+  - limit_input_size

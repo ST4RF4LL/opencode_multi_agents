@@ -1,0 +1,34 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_log_influence_surface
+  - inspect_input_transformations
+  - inspect_logging_api_and_layout
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_log_output
+  - preserve_evidence
+
+influence_surfaces:
+  - log_message_body
+  - crlf_injected_extra_line
+  - mdc_or_threadcontext_field
+  - format_pattern
+  - exception_message_logged
+  - log_viewer_html_context
+
+observable_behaviors:
+  - extra_forged_log_line_appears
+  - audit_or_auth_line_spoofed
+  - multi_line_break_in_single_event
+  - siem_parser_field_shift
+  - log_viewer_script_execution
+  - application_writes_attacker_string_verbatim_to_log
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - prefer_read_only_log_inspection_over_destructive_actions
+  - do_not_attempt_jndi_or_rce_payloads_under_this_skill

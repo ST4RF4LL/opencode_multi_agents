@@ -1,0 +1,23 @@
+strong_signals:
+  - unescaped_attacker_controlled_markup_in_html_response
+  - script_execution_observed_in_authorized_browser_lab
+  - stored_payload_rendered_to_different_user_without_encoding
+  - response_shows_attribute_or_tag_breakout_matching_injection_point
+  - application_logs_or_html_source_confirm_raw_reflection
+
+medium_signals:
+  - metacharacters_reflected_without_entity_encoding
+  - wrong_context_encoder_leaves_js_metacharacters_intact
+  - template_unescape_directive_bound_to_user_field
+  - content_type_text_html_with_concatenated_user_string
+
+weak_signals:
+  - presence_of_printwriter_api_only
+  - generic_500_without_reflection
+  - input_appears_only_in_json_api_without_html_consumer
+  - waf_or_filter_blocks_one_payload_variant_only
+
+interpretation:
+  strong: supports Finding when static path and context are clear
+  medium: supports Candidate; may upgrade with context proof
+  weak: insufficient alone

@@ -1,0 +1,11 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: password
+path:
+  - PasswordUtil.hash
+  - MessageDigest.getInstance("MD5")
+  - MessageDigest.digest
+sink:
+  method: MessageDigest.digest
+  argument: password_bytes
+influence: password_storage_strength

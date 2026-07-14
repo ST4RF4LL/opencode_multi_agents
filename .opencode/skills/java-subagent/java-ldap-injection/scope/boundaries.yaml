@@ -1,0 +1,24 @@
+in_scope:
+  - jndi_dircontext_search_filter_concat
+  - jndi_initialdircontext_search
+  - jndi_dircontext_lookup_or_bind_with_user_dn
+  - spring_ldap_template_search_filter_concat
+  - spring_ldap_query_builder_misuse_with_raw_filter
+  - spring_ldap_filter_string_from_user_input
+  - custom_ldap_wrapper_building_filters
+  - dn_construction_from_user_input
+  - authentication_login_ldap_filter_bypass
+
+out_of_scope:
+  - sql_injection
+  - xpath_injection
+  - command_injection
+  - ssti
+  - jndi_injection_rce_via_lookup_url
+  - pure_authorization_flaws_without_ldap_structure_control
+
+boundary_notes:
+  - parameterized_or_encoded_filter_values_are_not_ldap_injection
+  - ldap_encoder_must_match_context_filter_vs_dn
+  - allowlist_of_usernames_or_roles_is_valid_when_mapped_to_constants
+  - DirContext.search_is_not_inherently_vulnerable_source_of_filter_matters

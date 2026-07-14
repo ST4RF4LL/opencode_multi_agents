@@ -1,0 +1,10 @@
+transferable_lessons:
+  - DirContext.search with concatenated filter is a primary LDAP injection sink
+  - filterArgs with constant template is safe for value binding; concat of structure is not
+  - login filters embedding uid and password are high-impact auth-bypass surfaces
+  - Spring LdapEncoder.filterEncode must encode the value, not replace a full security review
+non_transferable_details:
+  - original endpoint path
+  - original attribute names (uid vs cn vs sAMAccountName)
+  - original payload strings
+  - specific directory vendor quirks

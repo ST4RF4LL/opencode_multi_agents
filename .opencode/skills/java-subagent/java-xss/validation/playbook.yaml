@@ -1,0 +1,34 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_output_context
+  - inspect_input_transformations
+  - inspect_encoding_and_sanitizer
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - html_body_text
+  - html_attribute_value
+  - html_event_handler_attribute
+  - javascript_string_literal
+  - javascript_block
+  - css_property_or_url
+  - url_href_src_action
+  - json_embedded_in_html_page
+
+observable_behaviors:
+  - reflected_markup_appears_unescaped_in_response_body
+  - browser_executes_injected_script_in_authorized_lab
+  - attribute_breakout_changes_dom_structure
+  - stored_payload_renders_for_other_user_session
+  - content_type_html_with_raw_user_string
+
+notes:
+  - derive_tests_from_actual_route_parameter_and_output_context
+  - do_not_blindly_reuse_historical_payloads_as_generic_exploits
+  - prefer_safe_proof_markers_over_destructive_payloads

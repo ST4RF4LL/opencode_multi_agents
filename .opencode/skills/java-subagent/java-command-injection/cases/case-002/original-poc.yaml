@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - endpoint accepts script parameter
+  - application uses ProcessBuilder /bin/sh -c path
+request_context:
+  endpoint: /api/jobs/run
+  parameter: script
+observed_result:
+  - shell interprets user-controlled script body enabling extra commands
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

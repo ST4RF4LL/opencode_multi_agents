@@ -1,0 +1,9 @@
+transferable_lessons:
+  - AES/ECB is never acceptable for general data encryption
+  - Cipher.getInstance("AES") often defaults to ECB - treat as high risk
+  - co-occurrence of hardcoded SecretKeySpec is a separate subtype finding
+  - remediation should prefer AES-GCM with unique nonce and managed keys
+non_transferable_details:
+  - original key literal value
+  - original class/package names
+  - original Base64 encoding choice

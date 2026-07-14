@@ -1,0 +1,120 @@
+sinks:
+  - id: cipher-getinstance
+    framework: jca-jce
+    method_full_name:
+      - ".*javax\\.crypto\\.Cipher\\.getInstance.*"
+      - ".*java\\.crypto\\.Cipher\\.getInstance.*"
+    sensitive_arguments: [1]
+    semantics: cipher-algorithm-selection
+    confidence: high
+    weak_when:
+      - algorithm contains DES|DESede|RC2|RC4|Blowfish|AES/ECB|AES$
+      - transformation uses ECB
+      - RSA without OAEP
+
+  - id: cipher-init-iv
+    framework: jca-jce
+    method_full_name:
+      - ".*Cipher\\.init.*"
+    sensitive_arguments: [2, 3]
+    semantics: cipher-params-iv-key
+    confidence: high
+    notes: inspect IvParameterSpec/GCMParameterSpec and SecretKeySpec origins
+
+  - id: messagedigest-getinstance
+    framework: jca-jce
+    method_full_name:
+      - ".*java\\.security\\.MessageDigest\\.getInstance.*"
+    sensitive_arguments: [1]
+    semantics: digest-algorithm-selection
+    confidence: high
+    weak_when:
+      - MD5|SHA-1|SHA1 for password or integrity of untrusted data
+
+  - id: mac-getinstance
+    framework: jca-jce
+    method_full_name:
+      - ".*javax\\.crypto\\.Mac\\.getInstance.*"
+    sensitive_arguments: [1]
+    semantics: mac-algorithm-selection
+    confidence: medium
+    weak_when:
+      - HmacMD5
+
+  - id: signature-getinstance
+    framework: jca-jce
+    method_full_name:
+      - ".*java\\.security\\.Signature\\.getInstance.*"
+    sensitive_arguments: [1]
+    semantics: signature-algorithm-selection
+    confidence: high
+    weak_when:
+      - MD5withRSA|SHA1withRSA|NONE with weak hash
+
+  - id: secretkeyspec
+    framework: jca-jce
+    method_full_name:
+      - ".*javax\\.crypto\\.spec\\.SecretKeySpec\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: key-material-binding
+    confidence: high
+
+  - id: ivparameterspec
+    framework: jca-jce
+    method_full_name:
+      - ".*javax\\.crypto\\.spec\\.IvParameterSpec\\.<init>.*"
+      - ".*javax\\.crypto\\.spec\\.GCMParameterSpec\\.<init>.*"
+    sensitive_arguments: [1, 2]
+    semantics: iv-nonce-binding
+    confidence: high
+
+  - id: insecure-random-for-secret
+    framework: jdk
+    method_full_name:
+      - ".*java\\.util\\.Random\\.next.*"
+      - ".*Math\\.random.*"
+    semantics: prng-output
+    confidence: high
+    notes: sink only when result used as key/token/session/otp/csrf
+
+  - id: securerandom-misuse
+    framework: jdk
+    method_full_name:
+      - ".*java\\.security\\.SecureRandom\\.setSeed.*"
+      - ".*SecureRandom\\.<init>\\(byte\\[\\]\\).*"
+    semantics: prng-seeding
+    confidence: medium
+
+  - id: password-encoder-weak
+    framework: spring-security-crypto
+    method_full_name:
+      - ".*MessageDigestPasswordEncoder\\..*"
+      - ".*NoOpPasswordEncoder\\..*"
+      - ".*StandardPasswordEncoder\\..*"
+      - ".*Md5PasswordEncoder\\..*"
+      - ".*ShaPasswordEncoder\\..*"
+    semantics: password-hash
+    confidence: high
+
+  - id: digest-as-password
+    framework: jca-jce
+    method_full_name:
+      - ".*MessageDigest\\.digest.*"
+      - ".*DigestUtils\\.(md5|sha1|md5Hex|sha1Hex).*"
+      - ".*DigestUtils\\.md5Digest.*"
+    semantics: password-or-token-hash
+    confidence: medium
+    notes: elevate when input is password field
+
+  - id: pbe-weak
+    framework: jca-jce
+    method_full_name:
+      - ".*SecretKeyFactory\\.getInstance.*"
+      - ".*PBEKeySpec\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: password-based-encryption
+    confidence: medium
+    weak_when:
+      - low iteration count
+      - MD5-based PBE
+      - fixed salt

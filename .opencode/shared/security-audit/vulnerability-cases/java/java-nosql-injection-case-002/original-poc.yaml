@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - /api/items/search exposes expr parameter
+  - Filters.where used with expr
+request_context:
+  endpoint: /api/items/search
+  parameter: expr
+observed_result:
+  - server-side JS predicate controlled by attacker
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

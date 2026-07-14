@@ -1,0 +1,80 @@
+id: java-weak-cryptography
+name: Java Weak Cryptography
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-327
+  - CWE-328
+  - CWE-330
+  - CWE-321
+  - CWE-916
+  - CWE-798
+owasp:
+  - A02:2021-Cryptographic Failures
+maturity: 3
+description: >
+  Detect weak algorithms/modes, static IVs, hardcoded keys, insecure random
+  for secrets, and weak password hashing in Java JCA/JCE and related libraries.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-weak-crypto-sinks.yaml
+      - java-weak-crypto-patterns.yaml
+    codeql:
+      - java-weak-crypto.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - jca-jce
+  - bouncycastle
+  - google-tink
+  - spring-security-crypto
+  - password-hashing

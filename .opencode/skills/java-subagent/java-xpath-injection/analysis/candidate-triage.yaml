@@ -1,0 +1,33 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous XPath API or dynamic expression pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach XPath expression construction/compile/evaluate argument
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_expression_analysis
+
+  L3_semantic_candidate:
+    meaning: variable binding missing or bypassable; attacker influences XPath structure
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - auth_or_acl_xpath_logic
+  - multi_document_or_sensitive_xml_store
+  - boolean_logic_bypass_possible
+  - second_order_with_stored_payload
+
+priority_reduce:
+  - test_code_only
+  - constant_xpath
+  - allowlisted_expression_only
+  - dead_code
+  - local_dev_tooling

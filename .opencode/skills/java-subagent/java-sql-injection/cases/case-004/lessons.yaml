@@ -1,0 +1,9 @@
+transferable_lessons:
+  - JPQL/HQL injection is the same class of bug as SQL injection: untrusted input must not build the query string
+  - EntityManager.createQuery first argument is a sink when non-constant (distinct from createNativeQuery)
+  - OWASP fix: constant JPQL with named parameters, e.g. setParameter("colorName", input)
+  - setParameter does not help if the JPQL template itself is concatenated
+non_transferable_details:
+  - original route
+  - original entity/field names
+  - original payload

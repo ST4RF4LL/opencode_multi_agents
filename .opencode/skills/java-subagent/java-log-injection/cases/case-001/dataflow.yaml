@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: username
+path:
+  - AuthService.authenticate
+sink:
+  method: Logger.info / Logger.warn
+  argument: 1
+influence: log_message_body_with_crlf_line_forging

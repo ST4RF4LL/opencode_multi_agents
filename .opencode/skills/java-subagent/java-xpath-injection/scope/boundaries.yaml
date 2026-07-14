@@ -1,0 +1,23 @@
+in_scope:
+  - javax_xml_xpath_compile_and_evaluate
+  - jakarta_xml_xpath_compile_and_evaluate
+  - xpath_expression_string_concat_or_format
+  - saxon_or_third_party_xpath_apis_with_string_queries
+  - custom_xpath_util_wrappers
+  - predicate_axis_and_boolean_logic_injection
+  - second_order_xpath_injection
+
+out_of_scope:
+  - documentbuilderfactory_xxe_without_xpath_injection
+  - sql_injection
+  - ldap_injection
+  - command_injection
+  - xslt_injection_without_xpath_structure_control
+  - pure_authorization_flaws_without_xpath_structure_control
+
+boundary_notes:
+  - parameterized_xpath_with_variable_resolver_is_not_xpathi
+  - DocumentBuilder XXE hardening does not fix XPath injection
+  - XPath.compile/evaluate is the primary sink family; DocumentBuilder is document load context
+  - stored_data_used_in_later_xpath_must_be_treated_as_untrusted
+  - string_escaping_quotes_is_weak_and_often_bypassable

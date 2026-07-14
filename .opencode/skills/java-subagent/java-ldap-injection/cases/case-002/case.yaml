@@ -1,0 +1,25 @@
+id: case-002
+vulnerability_type: ldap-injection
+subtype: dn-injection
+source:
+  type: request-parameter
+  expression: request.getParameter("userId")
+sink:
+  api: DirContext.lookup
+  sensitive_argument: 1
+propagation:
+  - UserController.getProfile
+  - LdapUserRepository.lookupByUid
+root_cause:
+  - dn_string_concatenated_with_user_input
+  - no_dn_encoding_or_name_builder_with_encoded_rdn
+  - search_or_lookup_base_influenced_by_attacker
+prerequisites:
+  - reachable_endpoint_passing_userId_into_dn
+  - ldap_directory_reachable_from_app
+observed_behavior:
+  - attacker_can_escape_intended_ou_or_resolve_unintended_dn
+fix:
+  - use_LdapEncoder_nameEncode_on_rdn_values
+  - or_LdapNameBuilder_with_safe_components
+  - keep_base_dn_constant_and_search_by_encoded_filter

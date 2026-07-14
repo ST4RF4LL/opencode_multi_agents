@@ -1,0 +1,45 @@
+not_vulnerability:
+  - id: constant-log-message
+    pattern: logger.info("server started") with no external input
+    reason: no attacker-controlled content
+
+  - id: structured-json-fields
+    pattern: JsonTemplateLayout/JsonEncoder binds user data as escaped JSON fields
+    reason: line-oriented CRLF forging largely mitigated (still review XSS if UI renders)
+
+  - id: sanitized-newlines
+    pattern: all untrusted log args pass through CRLF/control-char sanitizer before emission
+    reason: effective control for log forging
+
+  - id: test-only-logging
+    pattern: logger calls only in test sources
+    reason: not production reachable
+
+  - id: internal-ids-only
+    pattern: only server-generated UUIDs/constants logged
+    reason: input does not influence message content
+
+needs_deeper_review:
+  - id: parameterized-plain-layout
+    pattern: logger.info("user {}", user) with PatternLayout %msg
+    reason: args may still contain CRLF; not automatic reject
+
+  - id: auth-login-logs
+    pattern: login success/failure logs include username/header
+    reason: high-value forge target; verify newline handling
+
+  - id: header-to-log
+    pattern: User-Agent / X-Forwarded-For logged directly
+    reason: classic CRLF source
+
+  - id: mdc-user-fields
+    pattern: MDC.put("user", requestParam)
+    reason: layout may render into every line
+
+  - id: wrapper-audit-logger
+    pattern: AuditLogger.record(String) custom wrapper
+    reason: expand to real logger sink and layout
+
+  - id: exception-message-loop
+    pattern: logger.error(ex.getMessage()) where message was user-influenced
+    reason: second-order style log injection

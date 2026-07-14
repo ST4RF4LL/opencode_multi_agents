@@ -1,0 +1,59 @@
+positive:
+  P01_JdbcConcat.java:
+    expect: candidate_or_finding
+    subtype: classic-string-concat
+    sink: Statement.executeQuery
+  P02_JdbcTemplateConcat.java:
+    expect: candidate_or_finding
+    subtype: classic-string-concat
+    sink: JdbcTemplate.queryForList
+  P03_OrderByInject.java:
+    expect: candidate
+    subtype: dynamic-identifier
+  P04_JpaNativeConcat.java:
+    expect: candidate_or_finding
+    subtype: orm-native-query
+    sink: EntityManager.createNativeQuery
+  P05_PrepareStatementConcat.java:
+    expect: candidate_or_finding
+    subtype: partial-parameterization
+    notes: prepareStatement with concatenated SQL is unsafe
+  P06_JpaJpqlConcat.java:
+    expect: candidate_or_finding
+    subtype: jpa-jpql-injection
+    sink: EntityManager.createQuery
+    notes: pure JPQL string concat (not native SQL)
+
+negative:
+  N01_PreparedBinding.java:
+    expect: rejected
+    reason: constant_sql_with_bound_parameter
+  N02_JdbcTemplateBound.java:
+    expect: rejected
+    reason: constant_sql_with_bound_parameter
+  N03_OrderByAllowlist.java:
+    expect: rejected
+    reason: identifier_allowlist
+  N04_JpaNamedParam.java:
+    expect: rejected
+    reason: named_parameter_on_constant_sql
+  N05_ConstantSql.java:
+    expect: rejected
+    reason: no_external_input
+  N06_JpaJpqlNamedParam.java:
+    expect: rejected
+    reason: named_parameter_on_constant_jpql
+
+regression:
+  R01_MyBatisDollar.xml:
+    expect: sink_candidate
+    subtype: mybatis-dollar-injection
+    must_not_regress: false_negative_on_${}
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

@@ -1,0 +1,13 @@
+subtypes:
+  - id: classic-string-concat
+    description: 字符串拼接/格式化构造 XPath，用户输入成为表达式结构的一部分
+  - id: predicate-injection
+    description: 谓词条件（[@attr=...]、[position()] 等）由用户输入注入
+  - id: axis-or-node-test-control
+    description: 轴、节点测试或路径片段由用户输入控制导致越权节点选择
+  - id: boolean-logic-bypass
+    description: 注入 or/and 改变认证/授权或过滤逻辑（如 login 查询）
+  - id: partial-parameterization
+    description: 部分使用变量绑定，但仍有拼接片段进入表达式
+  - id: second-order
+    description: 输入先存储，后续 XPath 拼接已存储数据触发二次注入

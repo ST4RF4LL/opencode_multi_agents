@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: host
+path:
+  - NetService.pingHost
+sink:
+  method: Runtime.exec
+  argument: 1
+influence: full_command_string_via_concat

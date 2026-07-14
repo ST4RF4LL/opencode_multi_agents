@@ -1,0 +1,8 @@
+transferable_lessons:
+  - MD5/SHA-1/single SHA-256 are not password hashing algorithms
+  - MessageDigest on a field named password is high-confidence weak-password-hash
+  - Spring MessageDigestPasswordEncoder / NoOpPasswordEncoder are equivalent smells
+  - prefer bcrypt/scrypt/argon2 with migration strategy
+non_transferable_details:
+  - original hex encoding format
+  - original servlet parameter name

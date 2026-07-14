@@ -1,0 +1,22 @@
+id: case-003
+vulnerability_type: xss
+subtype: wrong-encoding-context
+source:
+  type: request-parameter
+  expression: request.getParameter("msg")
+sink:
+  api: PrintWriter.print
+  sensitive_argument: 1
+propagation:
+  - NotifyServlet.doGet
+root_cause:
+  - Encode_forHtml_used_inside_javascript_string_context
+  - html_encoding_does_not_neutralize_js_metacharacters_reliably
+prerequisites:
+  - reachable_http_endpoint
+  - user_value_embedded_in_script_block
+observed_behavior:
+  - js_string_context_can_still_be_broken_despite_html_encoder
+fix:
+  - use_Encode_forJavaScript_for_js_string_context
+  - or_avoid_embedding_user_data_in_inline_script

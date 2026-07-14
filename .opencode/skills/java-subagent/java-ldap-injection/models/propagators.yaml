@@ -1,0 +1,47 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"(&(uid=" + username + ")(userPassword=" + password + "))"'
+      - '"(cn=" + name + ")"'
+      - 'filter + userInput'
+      - 'new StringBuilder().append("(uid=").append(user).append(")")'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("(uid=%s)", username)'
+      - 'MessageFormat.format("(cn={0})", name)'
+
+  - pattern: getter-setter
+    examples:
+      - setUsername -> getUsername
+      - setFilter -> getFilter
+      - setSearchBase -> getSearchBase
+      - setDn -> getDn
+
+  - pattern: builder
+    examples:
+      - FilterBuilder.uid(x).and(password(y)).build()
+      - LdapQueryBuilder.query().where("uid").is(user)  # safe if API encodes
+      - HardcodedFilter with pre-concatenated string
+
+  - pattern: collection
+    examples:
+      - map.put("username", input)
+      - params.get("uid")
+
+  - pattern: dto-field
+    examples:
+      - LoginRequest.username
+      - SearchCriteria.filterValue
+      - UserLookup.dn
+
+  - pattern: wrapper-method
+    examples:
+      - LdapUtil.search(filter)
+      - LdapHelper.authenticate(user, pass)
+      - DirectoryService.findUser(uid)
+
+  - pattern: dn-construction
+    examples:
+      - '"uid=" + user + ",ou=people,dc=example,dc=com"'
+      - 'LdapNameBuilder.newInstance(base).add("uid", user)'

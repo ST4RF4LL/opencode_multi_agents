@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Model.addAttribute is a propagator; final sink is template interpolation
+  - JSP ${} does not HTML-encode by default — treat as sink when value is untrusted
+  - Fix belongs at output boundary (c:out / Encoder), not only at controller
+non_transferable_details:
+  - original view name
+  - original parameter name
+  - original payload strings

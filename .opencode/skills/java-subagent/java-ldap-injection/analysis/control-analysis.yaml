@@ -1,0 +1,47 @@
+questions:
+  - id: filter_template_origin
+    ask: LDAP filter 字符串是常量、安全 API 构造，还是包含外部输入？
+    outcomes:
+      constant_or_encoded_value_only: likely_safe
+      user_in_filter_structure: high_risk
+      user_in_dn_component: dn_injection_risk
+
+  - id: encoding_or_parameterization
+    ask: 用户输入是否经 LdapEncoder / filterArgs / EqualsFilter 等安全路径传入？
+    strong_yes:
+      - LdapEncoder.filterEncode before value insertion
+      - DirContext.search(filterTemplate, filterArgs) with constant template
+      - new EqualsFilter("uid", username)
+      - LdapQueryBuilder.where("uid").is(username)
+    false_friends:
+      - String concat into filter then search
+      - HardcodedFilter(concatenated)
+      - HTML/SQL encode used as LDAP defense
+      - filterEncode used but result still used as full filter structure without fixed template
+
+  - id: dn_handling
+    ask: search base / lookup DN 如何处理？
+    accept:
+      - constant_base_dn
+      - LdapEncoder.nameEncode on each RDN value
+      - LdapNameBuilder with encoded components
+    reject_as_strong:
+      - direct_concat_of_uid_into_dn
+      - filter_encoder_used_for_dn
+
+  - id: metacharacter_coverage
+    ask: 转义是否覆盖 * ( ) \\ NUL 及上下文所需字符？
+    if_partial:
+      - treat_as_weak_or_bypassable
+
+  - id: auth_semantics
+    ask: 该 filter 是否用于认证（uid + password 条件）？
+    if_yes:
+      - prioritize_login_bypass_impact
+      - assess_whether_wildcard_or_or_injection_breaks_auth_logic
+
+control_grades:
+  strong: effective_blocks_filter_or_dn_structure_control
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

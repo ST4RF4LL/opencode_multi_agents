@@ -1,0 +1,74 @@
+rules:
+  - id: java-nosqli-document-parse
+    message: Untrusted input may reach Document.parse / BasicDBObject.parse (NoSQL operator injection)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Document.parse($X)
+      - pattern: BasicDBObject.parse($X)
+      - pattern: org.bson.Document.parse($X)
+      - pattern: com.mongodb.BasicDBObject.parse($X)
+    metadata:
+      cwe: CWE-943
+      category: nosql-injection
+      confidence: medium
+      notes: Confirm $X is user-controlled; parsing untrusted JSON as query is high risk
+
+  - id: java-nosqli-document-parse-concat
+    message: Document/BasicDBObject parse of concatenated string enables NoSQL injection
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Document.parse($A + $B)
+      - pattern: BasicDBObject.parse($A + $B)
+      - pattern: Document.parse(String.format(...))
+      - pattern: BasicDBObject.parse(String.format(...))
+    metadata:
+      cwe: CWE-943
+      category: nosql-injection
+      confidence: high
+
+  - id: java-nosqli-basicquery-string
+    message: Spring BasicQuery built from dynamic string may allow NoSQL injection
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: new BasicQuery($Q)
+      - pattern: new BasicQuery($A + $B)
+      - pattern: new BasicQuery(String.format(...))
+    metadata:
+      cwe: CWE-943
+      category: nosql-injection
+      confidence: high
+
+  - id: java-nosqli-where-expression
+    message: $where / Filters.where with dynamic expression enables server-side JS injection
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Filters.where($EXPR)
+      - pattern: Filters.where($A + $B)
+      - pattern: |
+          $DOC.put("$where", $EXPR)
+      - pattern: |
+          $DOC.append("$where", $EXPR)
+      - pattern: |
+          $DOC.put("$where", $A + $B)
+    metadata:
+      cwe: CWE-943
+      subtype: where-script-injection
+      confidence: high
+
+  - id: java-nosqli-mongotemplate-dynamic
+    message: MongoTemplate query argument may include attacker-controlled filter
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: $MT.find(new BasicQuery($Q), ...)
+      - pattern: $MT.findOne(new BasicQuery($Q), ...)
+      - pattern: $MT.remove(new BasicQuery($Q), ...)
+      - pattern: $MT.find(new Query(Criteria.where($F).is($V)), ...)
+    metadata:
+      cwe: CWE-943
+      category: nosql-injection
+      confidence: medium

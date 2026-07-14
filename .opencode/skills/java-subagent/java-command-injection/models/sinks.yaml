@@ -1,0 +1,80 @@
+sinks:
+  - id: runtime-exec
+    framework: runtime-exec
+    method_full_name:
+      - ".*java\\.lang\\.Runtime\\.exec.*"
+    sensitive_arguments: [1]
+    semantics: os-command-execution
+    confidence: high
+    notes: >
+      String form is shell-like on some platforms via tokenization;
+      String[] form does not invoke a shell but still executes argv as given.
+
+  - id: process-builder-constructor
+    framework: process-builder
+    method_full_name:
+      - ".*java\\.lang\\.ProcessBuilder\\.<init>.*"
+    sensitive_arguments: []
+    sensitive_object: receiver_command_list
+    semantics: os-command-construction
+    confidence: high
+    notes: track constructor args and subsequent command()/command(List) mutations
+
+  - id: process-builder-command
+    framework: process-builder
+    method_full_name:
+      - ".*java\\.lang\\.ProcessBuilder\\.command.*"
+    sensitive_arguments: [1]
+    semantics: os-command-construction
+    confidence: high
+
+  - id: process-builder-start
+    framework: process-builder
+    method_full_name:
+      - ".*java\\.lang\\.ProcessBuilder\\.start.*"
+    sensitive_object: receiver
+    semantics: os-command-execution
+    confidence: high
+    notes: expand to ProcessBuilder construction; start() alone needs prior command taint
+
+  - id: process-impl-start
+    framework: jdk
+    method_full_name:
+      - ".*java\\.lang\\.ProcessImpl\\.start.*"
+      - ".*java\\.lang\\.ProcessBuilder\\.start.*"
+    sensitive_arguments: []
+    semantics: os-command-execution
+    confidence: medium
+
+  - id: commons-exec-executor
+    framework: apache-commons-exec
+    method_full_name:
+      - ".*org\\.apache\\.commons\\.exec\\.Executor\\.execute.*"
+      - ".*DefaultExecutor\\.execute.*"
+    sensitive_arguments: [1]
+    semantics: os-command-execution
+    confidence: high
+
+  - id: commons-exec-commandline
+    framework: apache-commons-exec
+    method_full_name:
+      - ".*CommandLine\\.parse.*"
+      - ".*CommandLine\\.<init>.*"
+      - ".*CommandLine\\.addArguments.*"
+    sensitive_arguments: [1]
+    semantics: os-command-construction
+    confidence: high
+    notes: CommandLine.parse(String) is high-risk if string includes user input
+
+  - id: custom-shell-util
+    framework: custom
+    method_full_name:
+      - ".*ShellUtil\\..*"
+      - ".*CommandUtil\\..*"
+      - ".*ProcessHelper\\..*"
+      - ".*ExecHelper\\..*"
+      - ".*SystemCommand\\..*"
+    sensitive_arguments: []
+    semantics: possible-command-wrapper
+    confidence: medium
+    notes: wrappers require sink expansion into Runtime/ProcessBuilder/Commons Exec

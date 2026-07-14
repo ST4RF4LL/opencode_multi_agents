@@ -1,0 +1,33 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - log_message_content_or_structure_is_influenced
+    - effective_structured_logging_or_newline_control_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - logging_framework_and_layout
+      - log_destination_file_siem_viewer
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - log_message_is_constant_with_no_external_influence
+  - user_input_only_selects_from_fixed_event_type_map_and_free_text_absent
+  - structured_json_binding_with_escaping_and_no_line_forge_path
+  - effective_newline_and_control_char_sanitization_on_all_args
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_a_logger_api_match
+  - only_sensitive_data_logging_without_structure_control
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

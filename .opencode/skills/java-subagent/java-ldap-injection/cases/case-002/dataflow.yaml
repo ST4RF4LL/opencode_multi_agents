@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: userId
+path:
+  - LdapUserRepository.lookupByUid
+sink:
+  method: DirContext.getAttributes
+  argument: 1
+influence: dn_component_and_resolution_target

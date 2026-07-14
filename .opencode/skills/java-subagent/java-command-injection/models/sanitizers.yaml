@@ -1,0 +1,62 @@
+sanitizers:
+  strong:
+    - id: fixed-command-mapping
+      condition:
+        - user_input_only_selects_predefined_command_or_arg_set
+        - mapped_values_are_constants
+        - reject_or_default_on_unknown
+    - id: processbuilder-list-no-shell
+      condition:
+        - processbuilder_uses_list_or_varargs_form
+        - no_shell_wrapper_bin_sh_cmd_exe
+        - executable_is_constant
+        - user_input_is_single_argument_token
+        - argument_semantics_do_not_allow_dangerous_flags
+    - id: java-api-replacement
+      condition:
+        - no_os_process_started
+        - equivalent_java_api_used
+      examples:
+        - InetAddress.isReachable instead of ping
+        - Files/NIO instead of shell file ops
+        - URLConnection instead of curl/wget
+
+  contextual:
+    - id: allowlisted-args-for-fixed-tool
+      condition:
+        - command_binary_is_constant
+        - each_user_arg_validated_against_strict_pattern_or_enum
+        - shell_not_used
+      notes: still review for argument injection (extra flags)
+    - id: enum-or-id-to-command
+      condition:
+        - input_restricted_to_enum_or_numeric_id
+        - enum_maps_to_constant_argv
+
+  weak:
+    - id: metacharacter-blacklist
+      pattern:
+        - replace(";", "")
+        - contains("|")
+        - contains("&")
+        - regex_blacklist
+      notes: incomplete; encoding, quoting, and platform differences allow bypass
+    - id: quote-wrapping
+      pattern:
+        - wrap_in_single_or_double_quotes
+      notes: fails if input contains quotes or when shell parsing differs
+    - id: length-or-alnum-only
+      pattern:
+        - length check
+        - alphanumeric-only without allowlist mapping
+      notes: insufficient when alphanumeric still forms dangerous args
+
+  invalid:
+    - id: runtime-exec-with-concat
+      notes: Runtime.exec(cmd + userInput) or format into shell string
+    - id: processbuilder-with-sh-c
+      notes: new ProcessBuilder("sh", "-c", userControlled) is still shell injection
+    - id: validate-after-concat
+      notes: validation applied after command string already includes untrusted data
+    - id: client-side-only-validation
+    - id: html-or-sql-encode-as-cmd-defense

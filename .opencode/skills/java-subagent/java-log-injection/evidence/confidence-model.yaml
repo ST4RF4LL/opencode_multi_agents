@@ -1,0 +1,30 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_log_content_or_crlf_structure_influence
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_message_influence
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_log_capture
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - auth_or_audit_log
+    - plain_text_pattern_layout
+    - confirmed_forged_line_in_logs
+    - admin_log_viewer_without_encoding
+  decrease:
+    - json_layout_partial_mitigation
+    - uncertain_reachability
+    - only_debug_level_non_production

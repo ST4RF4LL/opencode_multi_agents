@@ -1,0 +1,21 @@
+id: java-xpath-injection
+name: XPath Injection
+language: java
+cwe:
+  - CWE-643
+objective:
+  detect: >
+    Attacker-controlled data reaching XPath expression construction, compilation,
+    or evaluation such that query structure, predicates, axes, or node tests can
+    be influenced without effective variable binding or allowlisting.
+core_condition:
+  - external_input_exists
+  - xpath_expression_structure_is_influenced
+  - xpath_compile_or_evaluate_is_reachable
+  - effective_variable_binding_or_expression_control_is_missing
+not_in_scope:
+  - pure_xxe_without_xpath_structure_control
+  - sql_injection
+  - ldap_injection
+  - command_injection
+  - hardcoded_xpath_with_no_external_influence

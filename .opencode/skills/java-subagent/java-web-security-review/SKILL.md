@@ -19,6 +19,8 @@ Use this skill for Java/JVM HTTP services, API servers, admin panels, and framew
 - SSRF, redirects, CORS/CSRF, session flags, debug endpoints, actuator exposure, and error handling.
 - Uploads, downloads, archive extraction, path traversal, and temporary file handling.
 - Maven/Gradle dependencies and production reachability of test or debug utilities.
+- XSS / template unescape paths → progressive-load `java-xss`.
+- Log forging / CRLF into logger messages → progressive-load `java-log-injection`.
 
 ## Evidence Requirements
 

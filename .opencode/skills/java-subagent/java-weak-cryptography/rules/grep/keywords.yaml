@@ -1,0 +1,67 @@
+l0_stack_detection:
+  - pattern: "javax.crypto.Cipher|java.security.MessageDigest"
+    implies: jca-jce
+  - pattern: "org.bouncycastle"
+    implies: bouncycastle
+  - pattern: "com.google.crypto.tink"
+    implies: google-tink
+  - pattern: "org.springframework.security.crypto"
+    implies: spring-security-crypto
+  - pattern: "BCrypt|Argon2|password4j|jbcrypt"
+    implies: password-hashing
+
+l1_sink_keywords:
+  - "Cipher.getInstance"
+  - "MessageDigest.getInstance"
+  - "Mac.getInstance"
+  - "Signature.getInstance"
+  - "SecretKeySpec"
+  - "IvParameterSpec"
+  - "GCMParameterSpec"
+  - "KeyGenerator.getInstance"
+  - "SecureRandom"
+  - "java.util.Random"
+  - "NoOpPasswordEncoder"
+  - "MessageDigestPasswordEncoder"
+  - "DigestUtils"
+  - "PBEKeySpec"
+  - "SecretKeyFactory"
+
+weak_algorithm_literals:
+  - "DES"
+  - "DESede"
+  - "TripleDES"
+  - "RC2"
+  - "RC4"
+  - "Blowfish"
+  - "AES/ECB"
+  - "AES/ECB/PKCS5Padding"
+  - "AES/ECB/NoPadding"
+  - "MD5"
+  - "SHA-1"
+  - "SHA1"
+  - "HmacMD5"
+  - "MD5withRSA"
+  - "SHA1withRSA"
+  - "RSA/ECB/PKCS1Padding"
+  - "PBEWithMD5AndDES"
+
+high_risk_hints:
+  - 'new SecretKeySpec\\('
+  - 'new IvParameterSpec\\('
+  - 'new GCMParameterSpec\\('
+  - 'new Random\\('
+  - 'Math\\.random\\('
+  - 'NoOpPasswordEncoder'
+  - 'MessageDigestPasswordEncoder'
+  - 'getBytes\\(\\)'  # often near hardcoded keys - review context
+
+rg_commands:
+  stack: |
+    rg -n "javax\\.crypto|java\\.security\\.MessageDigest|org\\.bouncycastle|com\\.google\\.crypto\\.tink|org\\.springframework\\.security\\.crypto" --glob '*.java'
+  sinks: |
+    rg -n "Cipher\\.getInstance|MessageDigest\\.getInstance|SecretKeySpec|IvParameterSpec|GCMParameterSpec|SecureRandom|java\\.util\\.Random|NoOpPasswordEncoder|MessageDigestPasswordEncoder" --glob '*.java'
+  weak_algo: |
+    rg -n '"DES"|"DESede"|"RC4"|"AES/ECB|"MD5"|"SHA-1"|"SHA1"|"RSA/ECB/PKCS1Padding"|"PBEWithMD5' --glob '*.java'
+  hardcoded_key_hints: |
+    rg -n 'SecretKeySpec\s*\(|new\s+byte\s*\[\s*\]\s*\{|getBytes\s*\(\s*"UTF-8"\s*\)' --glob '*.java'

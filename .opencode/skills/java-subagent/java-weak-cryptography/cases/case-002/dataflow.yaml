@@ -1,0 +1,10 @@
+source:
+  kind: iv_nonce
+  expression: FIXED_IV constant byte array
+path:
+  - TokenEncryptor.encrypt
+  - GCMParameterSpec
+  - Cipher.init
+sink:
+  method: Cipher.init
+influence: aead_security_broken_under_nonce_reuse

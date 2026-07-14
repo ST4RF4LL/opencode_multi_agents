@@ -1,0 +1,85 @@
+rules:
+  - id: java-weak-crypto-aes-ecb
+    message: AES in ECB mode is insecure (pattern leakage)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Cipher.getInstance("AES/ECB/...")
+      - pattern: Cipher.getInstance("AES/ECB/PKCS5Padding")
+      - pattern: Cipher.getInstance("AES/ECB/NoPadding")
+      - pattern: Cipher.getInstance("AES/ECB/PKCS7Padding")
+      - pattern: Cipher.getInstance("AES")
+    metadata:
+      cwe: CWE-327
+      subtype: weak-algo
+      confidence: high
+      notes: Cipher.getInstance("AES") defaults to ECB on many providers
+
+  - id: java-weak-crypto-des-3des-rc4
+    message: Broken or legacy cipher algorithm (DES/3DES/RC4/Blowfish)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Cipher.getInstance("DES...")
+      - pattern: Cipher.getInstance("DESede...")
+      - pattern: Cipher.getInstance("RC4...")
+      - pattern: Cipher.getInstance("RC2...")
+      - pattern: Cipher.getInstance("Blowfish...")
+      - pattern: Cipher.getInstance("PBEWithMD5AndDES")
+    metadata:
+      cwe: CWE-327
+      subtype: weak-algo
+      confidence: high
+
+  - id: java-weak-crypto-md5-sha1-digest
+    message: Weak hash algorithm MD5/SHA-1 via MessageDigest
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: MessageDigest.getInstance("MD5")
+      - pattern: MessageDigest.getInstance("SHA-1")
+      - pattern: MessageDigest.getInstance("SHA1")
+      - pattern: DigestUtils.md5Hex(...)
+      - pattern: DigestUtils.md5Digest(...)
+      - pattern: DigestUtils.sha1Hex(...)
+      - pattern: DigestUtils.sha1Digest(...)
+    metadata:
+      cwe: CWE-328
+      subtype: weak-algo
+      confidence: medium
+      notes: elevate if used for passwords or security integrity
+
+  - id: java-weak-crypto-rsa-pkcs1
+    message: RSA encryption without OAEP (PKCS1v1.5 padding risk)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Cipher.getInstance("RSA/ECB/PKCS1Padding")
+      - pattern: Cipher.getInstance("RSA")
+    metadata:
+      cwe: CWE-327
+      subtype: weak-algo
+      confidence: medium
+
+  - id: java-weak-crypto-hmac-md5
+    message: HmacMD5 is weak for MAC
+    severity: WARNING
+    languages: [java]
+    pattern: Mac.getInstance("HmacMD5")
+    metadata:
+      cwe: CWE-327
+      subtype: weak-algo
+      confidence: high
+
+  - id: java-weak-crypto-weak-signature
+    message: Signature uses weak hash (MD5/SHA1 with RSA)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Signature.getInstance("MD5withRSA")
+      - pattern: Signature.getInstance("SHA1withRSA")
+      - pattern: Signature.getInstance("SHA1withDSA")
+    metadata:
+      cwe: CWE-327
+      subtype: weak-algo
+      confidence: high

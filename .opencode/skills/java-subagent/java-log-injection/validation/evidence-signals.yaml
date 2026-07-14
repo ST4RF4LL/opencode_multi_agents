@@ -1,0 +1,20 @@
+strong_signals:
+  - log_file_or_stream_contains_attacker_controlled_extra_line
+  - forged_auth_or_audit_entry_visible_in_logs
+  - deterministic_multi_line_split_from_single_request_field
+  - log_viewer_executes_or_reflects_injected_markup_with_evidence
+
+medium_signals:
+  - raw_crlf_or_control_chars_persist_in_captured_log_event
+  - mdc_field_shows_unescaped_user_value_in_layout_output
+  - structured_log_missing_but_concat_path_confirmed_statically
+
+weak_signals:
+  - logger_api_present_only
+  - single_quote_or_special_char_in_logs_without_line_forge
+  - generic_error_without_log_content_evidence
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with log capture evidence
+  weak: insufficient alone

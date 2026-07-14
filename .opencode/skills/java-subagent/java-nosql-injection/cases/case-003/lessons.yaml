@@ -1,0 +1,8 @@
+transferable_lessons:
+  - String-built query JSON + Document.parse is equivalent to classic injection
+  - Filters.eq with constant field names is the preferred fix
+  - Special-char rejection is a secondary control when string paths cannot be removed
+non_transferable_details:
+  - original route
+  - original field names
+  - original payload

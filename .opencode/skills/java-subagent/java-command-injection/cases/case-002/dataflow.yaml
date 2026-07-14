@@ -1,0 +1,10 @@
+source:
+  method: RequestParam
+  parameter: script
+path:
+  - JobController.run
+  - JobRunner.executeScript
+sink:
+  method: ProcessBuilder.<init> / ProcessBuilder.start
+  argument: shell_-c_string
+influence: full_shell_script_body

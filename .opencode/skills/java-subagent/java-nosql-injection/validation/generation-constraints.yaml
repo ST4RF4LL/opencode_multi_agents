@@ -1,0 +1,23 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_query_construction_logic
+  - actual_mongodb_or_spring_data_api
+  - actual_validation_logic
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_mongo_error_messages_are_exposed
+  - claim_success_from_generic_500_only
+  - perform_destructive_drop_or_mass_delete_without_authorization
+  - exfiltrate_unrelated_sensitive_data_beyond_proof
+  - execute_unbounded_$where_resource_exhaustion_in_production

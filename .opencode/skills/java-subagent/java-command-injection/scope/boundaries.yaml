@@ -1,0 +1,21 @@
+in_scope:
+  - runtime_exec_string_and_array_forms
+  - processbuilder_with_shell_or_user_controlled_tokens
+  - apache_commons_exec_commandline
+  - custom_shell_wrappers_and_process_helpers
+  - command_name_and_argument_injection
+  - environment_variable_influence_on_executed_process
+  - windows_cmd_and_unix_shell_wrappers
+
+out_of_scope:
+  - sql_injection
+  - ssrf
+  - path_traversal_without_process_start
+  - pure_java_api_replacements_without_os_process
+  - pure_authorization_flaws_without_command_control
+
+boundary_notes:
+  - ProcessBuilder with fixed command and separate List arguments is often safe for shell metacharacters
+  - array form of Runtime.exec does not invoke shell by default but still allows argument injection
+  - dangerous API hit alone is not a vulnerability
+  - prefer Java API (e.g. InetAddress.isReachable) over shelling out to ping/curl/etc

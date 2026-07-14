@@ -1,0 +1,8 @@
+transferable_lessons:
+  - response.getWriter().print with concatenated user input is a primary XSS sink
+  - Content-Type text/html plus raw parameter reflection is high confidence reflected XSS
+  - OWASP Java Encoder Encode.forHtml is the matching control for HTML body context
+non_transferable_details:
+  - original endpoint path
+  - original parameter name
+  - original payload strings

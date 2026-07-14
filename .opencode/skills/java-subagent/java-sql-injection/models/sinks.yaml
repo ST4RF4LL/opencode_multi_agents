@@ -1,0 +1,110 @@
+sinks:
+  - id: jdbc-statement-execute
+    framework: jdbc
+    method_full_name:
+      - ".*java\\.sql\\.Statement\\.execute.*"
+      - ".*java\\.sql\\.Statement\\.executeQuery.*"
+      - ".*java\\.sql\\.Statement\\.executeUpdate.*"
+      - ".*java\\.sql\\.Statement\\.executeLargeUpdate.*"
+      - ".*java\\.sql\\.Statement\\.addBatch.*"
+    sensitive_arguments: [1]
+    semantics: sql-execution
+    confidence: high
+
+  - id: jdbc-connection-prepare
+    framework: jdbc
+    method_full_name:
+      - ".*java\\.sql\\.Connection\\.prepareStatement.*"
+      - ".*java\\.sql\\.Connection\\.prepareCall.*"
+    sensitive_arguments: [1]
+    semantics: sql-construction
+    confidence: high
+    notes: prepareStatement is safe only if SQL string is constant or fully parameterized template without concat
+
+  - id: spring-jdbctemplate
+    framework: spring-jdbc
+    method_full_name:
+      - ".*JdbcTemplate\\.query.*"
+      - ".*JdbcTemplate\\.queryForObject.*"
+      - ".*JdbcTemplate\\.queryForList.*"
+      - ".*JdbcTemplate\\.queryForMap.*"
+      - ".*JdbcTemplate\\.update.*"
+      - ".*JdbcTemplate\\.execute.*"
+      - ".*JdbcTemplate\\.batchUpdate.*"
+      - ".*NamedParameterJdbcTemplate\\.query.*"
+      - ".*NamedParameterJdbcTemplate\\.update.*"
+    sensitive_arguments: [1]
+    semantics: sql-execution
+    confidence: high
+
+  - id: mybatis-mapper-dynamic
+    framework: mybatis
+    patterns:
+      - "${"
+      - "order by ${"
+      - "ORDER BY ${"
+    semantics: sql-construction
+    confidence: high
+    notes: MyBatis ${} is string substitution; #{} is parameter binding
+
+  - id: hibernate-create-query
+    framework: hibernate-jpa
+    method_full_name:
+      - ".*Session\\.createQuery.*"
+      - ".*Session\\.createSQLQuery.*"
+      - ".*Session\\.createNativeQuery.*"
+      - ".*EntityManager\\.createQuery.*"
+      - ".*EntityManager\\.createNativeQuery.*"
+    sensitive_arguments: [1]
+    semantics: sql-or-hql-execution
+    confidence: high
+    notes: >
+      Arg 1 is the query string. createQuery = JPQL/HQL (jpa-jpql-injection when
+      concatenated); createNativeQuery/createSQLQuery = native SQL (orm-native-query).
+      Vulnerable if string is built via + / String.format / StringBuilder with user
+      input. Safe only when the query text is constant and values use setParameter.
+
+  - id: hibernate-criteria-unsafe
+    framework: hibernate-jpa
+    method_full_name:
+      - ".*Criteria\\.addOrder.*"
+      - ".*CriteriaBuilder\\..*"
+    sensitive_arguments: []
+    semantics: dynamic-query-construction
+    confidence: medium
+    notes: order/path expressions built from strings may allow identifier injection
+
+  - id: spring-data-query
+    framework: spring-data-jpa
+    annotation:
+      - Query
+    patterns:
+      - "nativeQuery = true"
+      - "+ "
+      - "String.format"
+      - "StringBuilder"
+    semantics: sql-construction
+    confidence: high
+
+  - id: jooq-plain-sql
+    framework: jooq
+    method_full_name:
+      - ".*DSLContext\\.execute.*"
+      - ".*DSLContext\\.fetch.*"
+      - ".*DSLContext\\.query.*"
+      - ".*DSL\\..*sql.*"
+    sensitive_arguments: [1]
+    semantics: sql-execution
+    confidence: high
+
+  - id: custom-sql-util
+    framework: custom
+    method_full_name:
+      - ".*SqlUtil\\..*"
+      - ".*DbHelper\\..*"
+      - ".*QueryBuilder\\..*"
+      - ".*DAO\\..*execute.*"
+    sensitive_arguments: []
+    semantics: possible-sql-wrapper
+    confidence: medium
+    notes: wrappers require sink expansion into real JDBC/MyBatis/JPA calls

@@ -1,0 +1,37 @@
+id: spring-security-crypto
+name: Spring Security Crypto
+detect:
+  imports:
+    - org.springframework.security.crypto
+    - org.springframework.security.crypto.password
+    - org.springframework.security.crypto.encrypt
+  keywords:
+    - BCryptPasswordEncoder
+    - Pbkdf2PasswordEncoder
+    - Argon2PasswordEncoder
+    - SCryptPasswordEncoder
+    - MessageDigestPasswordEncoder
+    - NoOpPasswordEncoder
+    - Encryptors
+
+sources: inherit-global
+sinks:
+  - password-encoder-weak
+
+safe_patterns:
+  - BCryptPasswordEncoder
+  - Argon2PasswordEncoder
+  - SCryptPasswordEncoder
+  - Pbkdf2PasswordEncoder_with_adequate_params
+  - Encryptors.delux_or_stronger
+
+unsafe_patterns:
+  - NoOpPasswordEncoder
+  - MessageDigestPasswordEncoder
+  - StandardPasswordEncoder
+  - Md5PasswordEncoder
+  - ShaPasswordEncoder
+  - Encryptors.queryableText_with_weak_secret
+
+notes:
+  - Prefer DelegatingPasswordEncoder with modern defaults

@@ -1,0 +1,42 @@
+l0_stack_detection:
+  - pattern: "Runtime\\.getRuntime\\(\\)|Runtime\\.exec"
+    implies: runtime-exec
+  - pattern: "ProcessBuilder"
+    implies: process-builder
+  - pattern: "org\\.apache\\.commons\\.exec|CommandLine\\.parse|DefaultExecutor"
+    implies: apache-commons-exec
+
+l1_sink_keywords:
+  - "Runtime.getRuntime().exec"
+  - "Runtime.exec"
+  - "ProcessBuilder"
+  - ".start()"
+  - "CommandLine.parse"
+  - "DefaultExecutor"
+  - "/bin/sh"
+  - "cmd.exe"
+  - "\"-c\""
+  - "\"/c\""
+  - "bash"
+  - "powershell"
+  - "ShellUtil"
+  - "ProcessHelper"
+  - "ExecHelper"
+
+high_risk_concat_hints:
+  - 'exec\\s*\\(\\s*".*"\\s*\\+'
+  - 'exec\\s*\\(\\s*String\\.format'
+  - 'ProcessBuilder\\s*\\(\\s*"(sh|bash|/bin/sh|cmd|cmd\\.exe)"'
+  - '"-c"\\s*,'
+  - '"/c"\\s*,'
+  - 'CommandLine\\.parse\\s*\\('
+
+rg_commands:
+  stack: |
+    rg -n "Runtime\\.(getRuntime|exec)|ProcessBuilder|org\\.apache\\.commons\\.exec|CommandLine\\.parse|DefaultExecutor" --glob '*.java'
+  sinks: |
+    rg -n "Runtime\\.getRuntime\\(\\)\\.exec|ProcessBuilder|CommandLine\\.parse|DefaultExecutor\\.execute|/bin/sh|cmd\\.exe" --glob '*.java'
+  concat: |
+    rg -n 'exec\s*\(\s*["'"'"'].*["'"'"']\s*\+|exec\s*\(\s*String\.format|ProcessBuilder\s*\(\s*"(sh|bash|/bin/sh|cmd)"|"-c"\s*,' --glob '*.java'
+  shell_wrappers: |
+    rg -n '"/bin/sh"|"cmd.exe"|"-c"|"/c"|powershell' --glob '*.java'

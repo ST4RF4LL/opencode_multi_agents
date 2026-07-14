@@ -1,0 +1,10 @@
+transferable_lessons:
+  - DN construction via string concat is a distinct subtype from filter injection
+  - filterEncode is not a substitute for nameEncode / DN-safe builders
+  - constant search base + filter search is often safer than user-influenced lookup DN
+  - getAttributes/lookup/bind with user DN are sinks even without a filter string
+non_transferable_details:
+  - original base DN
+  - original RDN attribute name
+  - original payload strings
+  - directory-specific DN escaping rules

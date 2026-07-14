@@ -1,0 +1,9 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: id
+path:
+  - UserDao.findById
+sink:
+  method: Statement.executeQuery
+  argument: 1
+influence: where_clause_value_and_structure

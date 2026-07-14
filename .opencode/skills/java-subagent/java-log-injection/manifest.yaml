@@ -1,0 +1,76 @@
+id: java-log-injection
+name: Java Log Injection
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-117
+  - CWE-93
+owasp:
+  - A09:2021-Security Logging and Monitoring Failures
+  - A03:2021-Injection
+maturity: 3
+description: >
+  Detect attacker-controlled input reaching log message construction or emission
+  such that CRLF/log structure can be forged without effective structured logging
+  or newline sanitization.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-log-injection-sinks.yaml
+      - java-log-injection-patterns.yaml
+    codeql:
+      - java-log-injection.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - slf4j
+  - log4j2
+  - logback
+  - jul

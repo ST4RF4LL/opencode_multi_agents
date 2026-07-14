@@ -1,0 +1,34 @@
+id: logback
+name: Logback
+detect:
+  imports:
+    - ch.qos.logback.classic.Logger
+    - ch.qos.logback.core.encoder
+  keywords:
+    - logback
+    - ch.qos.logback
+  config_files:
+    - logback.xml
+    - logback-spring.xml
+    - logback-test.xml
+
+sources: inherit-global
+sinks:
+  - logback-logger
+  - slf4j-logger
+  - mdc-threadcontext-put
+
+safe_patterns:
+  - slf4j_parameterized_logging
+  - JsonEncoder_or_logstash_logback_encoder
+  - pattern_with_replace_converter_for_newlines
+
+unsafe_patterns:
+  - PatternLayout_percent_msg_with_untrusted_concat
+  - raw_file_appender_without_escaping
+  - mdc_untrusted_in_pattern
+
+notes:
+  - Most apps use SLF4J API with Logback backend
+  - Prefer JsonEncoder; strip/encode CR/LF in message converters
+  - Parameterized SLF4J is recommended but layout still matters

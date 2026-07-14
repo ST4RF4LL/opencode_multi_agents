@@ -1,0 +1,108 @@
+rules:
+  - id: java-xss-jsp-raw-el
+    message: JSP EL or scriptlet may output unescaped user data
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include:
+        - "*.jsp"
+        - "*.jspx"
+        - "*.tag"
+    pattern-either:
+      - pattern-regex: '<%=\s*request\.getParameter\s*\('
+      - pattern-regex: '\$\{\s*param\.[A-Za-z0-9_]+'
+      - pattern-regex: '\$\{\s*requestScope\.'
+    metadata:
+      cwe: CWE-79
+      subtype: reflected-html
+      confidence: high
+
+  - id: java-xss-jstl-escape-false
+    message: JSTL c:out with escapeXml=false disables HTML escaping
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include:
+        - "*.jsp"
+        - "*.jspx"
+        - "*.tag"
+        - "*.xml"
+    pattern-regex: 'escapeXml\s*=\s*["'']false["'']'
+    metadata:
+      cwe: CWE-79
+      subtype: template-unescape
+      confidence: high
+
+  - id: java-xss-thymeleaf-utext
+    message: Thymeleaf th:utext outputs unescaped HTML
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include:
+        - "*.html"
+        - "*.xhtml"
+    pattern-regex: 'th:utext\s*='
+    metadata:
+      cwe: CWE-79
+      subtype: template-unescape
+      confidence: medium
+      notes: Confirm bound expression is user-controlled
+
+  - id: java-xss-freemarker-no-esc
+    message: FreeMarker ?no_esc or #noescape disables escaping
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include:
+        - "*.ftl"
+        - "*.ftlh"
+    pattern-either:
+      - pattern-regex: '\?no_esc'
+      - pattern-regex: '<#noescape'
+    metadata:
+      cwe: CWE-79
+      subtype: template-unescape
+      confidence: medium
+
+  - id: java-xss-wrong-encode-context-hint
+    message: Possible wrong-context encoding (HTML encoder near script construction)
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Encode.forHtml($X)
+          - pattern: |
+              HtmlUtils.htmlEscape($X)
+      - pattern-either:
+          - pattern-inside: |
+              ...
+              "<script" + ...
+              ...
+          - pattern-inside: |
+              ...
+              String.format("<script>%s</script>", ...)
+              ...
+          - pattern-inside: |
+              ...
+              $SB.append("<script")
+              ...
+    metadata:
+      cwe: CWE-79
+      subtype: wrong-encoding-context
+      confidence: medium
+
+  - id: java-xss-blacklist-filter
+    message: Weak XSS defense via blacklist replace/contains on script tags
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: $X.replace("<script", ...)
+      - pattern: $X.replaceAll("(?i)<script.*?>", ...)
+      - pattern: $X.contains("<script")
+      - pattern: $X.replace("javascript:", ...)
+    metadata:
+      cwe: CWE-79
+      subtype: reflected-html
+      confidence: low
+      notes: Blacklist is weak; treat as invalid/weak sanitizer during L3

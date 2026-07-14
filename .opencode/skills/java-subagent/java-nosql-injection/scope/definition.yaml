@@ -1,0 +1,22 @@
+id: java-nosql-injection
+name: NoSQL Injection
+language: java
+cwe:
+  - CWE-943
+  - CWE-74
+objective:
+  detect: >
+    Attacker-controlled data reaching NoSQL API call construction or execution
+    such that query structure, operators, or script expressions can be influenced
+    without effective API query builders or special-character/operator controls.
+core_condition:
+  - external_input_exists
+  - nosql_query_structure_operator_or_script_is_influenced
+  - nosql_execution_is_reachable
+  - effective_query_builder_or_operator_control_is_missing
+not_in_scope:
+  - pure_sql_injection_without_nosql
+  - ldap_injection
+  - xpath_injection
+  - command_injection
+  - hardcoded_query_with_no_external_influence

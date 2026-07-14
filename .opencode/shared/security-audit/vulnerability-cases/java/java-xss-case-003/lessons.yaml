@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Presence of Encode.* does not imply safety; context must match
+  - HTML body encoding is not a substitute for JavaScript-context encoding
+  - Inline script embedding of user data is high risk even with partial encoding
+non_transferable_details:
+  - original endpoint path
+  - original function name showNotify
+  - original payload strings

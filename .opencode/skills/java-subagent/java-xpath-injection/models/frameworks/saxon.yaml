@@ -1,0 +1,19 @@
+id: saxon
+name: Saxon XPath
+detection:
+  imports:
+    - net.sf.saxon.s9api.XPathCompiler
+    - net.sf.saxon.s9api.XPathSelector
+    - net.sf.saxon.xpath.XPathEvaluator
+  classes:
+    - XPathCompiler
+    - XPathEvaluator
+sinks:
+  - XPathCompiler.compile(String)
+  - XPathEvaluator.compile(String)
+  - XPathEvaluator.evaluate(...)
+strong_controls:
+  - declare variables on compiler and set bound values
+  - avoid concatenating untrusted data into compile string
+notes:
+  - Saxon supports external variables; treat unparameterized string queries as high risk

@@ -1,0 +1,114 @@
+rules:
+  - id: java-xss-writer-print-param
+    message: Request parameter written to HTTP response without obvious encoding
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $W.print($X)
+          - pattern: |
+              $W.println($X)
+          - pattern: |
+              $W.write($X)
+          - pattern: |
+              $W.append($X)
+      - pattern-either:
+          - pattern-inside: |
+              $X = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $X = $REQ.getHeader(...);
+              ...
+          - pattern-inside: |
+              $X = $REQ.getQueryString();
+              ...
+          - pattern-inside: |
+              String $X = $REQ.getParameter(...);
+              ...
+      - pattern-not-inside: |
+          $X = Encode.forHtml(...);
+          ...
+      - pattern-not-inside: |
+          $X = Encode.forHtmlContent(...);
+          ...
+      - pattern-not-inside: |
+          $X = HtmlUtils.htmlEscape(...);
+          ...
+    metadata:
+      cwe: CWE-79
+      category: xss
+      confidence: high
+
+  - id: java-xss-writer-concat-html
+    message: HTML string concatenation written to response writer
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $W.print($HTML)
+          - pattern: $W.println($HTML)
+          - pattern: $W.write($HTML)
+      - pattern-either:
+          - pattern-inside: |
+              $HTML = $A + $B;
+              ...
+          - pattern-inside: |
+              $HTML = String.format(...);
+              ...
+          - pattern-inside: |
+              $HTML = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $HTML += $B;
+              ...
+    metadata:
+      cwe: CWE-79
+      category: xss
+      confidence: medium
+
+  - id: java-xss-senderror-message
+    message: sendError message may reflect user input into HTML error page
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern: $R.sendError($CODE, $MSG)
+      - pattern-either:
+          - pattern-inside: |
+              $MSG = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $MSG = $A + $B;
+              ...
+    metadata:
+      cwe: CWE-79
+      category: xss
+      confidence: medium
+
+  - id: java-xss-model-attribute-from-param
+    message: User input added to model/view without encoding at controller boundary
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $M.addAttribute($NAME, $X)
+          - pattern: $M.addObject($NAME, $X)
+          - pattern: $RA.addFlashAttribute($NAME, $X)
+      - pattern-either:
+          - pattern-inside: |
+              $X = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $X = $REQ.getHeader(...);
+              ...
+      - pattern-not-inside: |
+          $X = Encode.forHtml(...);
+          ...
+      - pattern-not-inside: |
+          $X = HtmlUtils.htmlEscape(...);
+          ...
+    metadata:
+      cwe: CWE-79
+      category: xss
+      confidence: medium
+      notes: Final risk depends on template escaping (th:text vs th:utext / JSP EL)

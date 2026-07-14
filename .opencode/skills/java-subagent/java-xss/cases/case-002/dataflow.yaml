@@ -1,0 +1,12 @@
+source:
+  method: RequestParam
+  parameter: q
+path:
+  - SearchController.search
+  - Model.addAttribute
+  - search.jsp ${q}
+sink:
+  method: jsp-el-unescaped
+  argument: q
+output_context: html_body
+influence: html_body_text

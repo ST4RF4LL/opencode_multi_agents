@@ -1,0 +1,8 @@
+transferable_lessons:
+  - $where / Filters.where is server-side JavaScript; treat any user influence as critical
+  - Prefer typed Filters comparisons; do not accept free-form expressions
+  - Disabling or avoiding $where is stronger than trying to sanitize JS snippets
+non_transferable_details:
+  - original route
+  - original expression parameter name
+  - original payload

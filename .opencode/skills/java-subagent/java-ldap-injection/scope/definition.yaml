@@ -1,0 +1,21 @@
+id: java-ldap-injection
+name: LDAP Injection
+language: java
+cwe:
+  - CWE-90
+objective:
+  detect: >
+    Attacker-controlled data reaching LDAP filter expression or distinguished name (DN)
+    construction such that filter structure, operators, or DN components can be influenced
+    without effective encoding, parameterized filters, or allowlisting.
+core_condition:
+  - external_input_exists
+  - ldap_filter_or_dn_structure_is_influenced
+  - ldap_search_or_bind_is_reachable
+  - effective_encoding_or_parameterization_is_missing
+not_in_scope:
+  - pure_sql_injection
+  - xpath_injection
+  - command_injection
+  - jndi_injection_via_lookup_name_without_ldap_filter
+  - hardcoded_ldap_filter_with_no_external_influence

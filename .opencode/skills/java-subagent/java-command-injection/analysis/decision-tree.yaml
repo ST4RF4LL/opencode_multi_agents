@@ -1,0 +1,56 @@
+name: java-command-injection-decision-tree
+steps:
+  - id: find_command_sink
+    question: 是否发现 OS 命令构造/执行 Sink？
+    no: stop_no_sink
+    yes: check_command_origin
+
+  - id: check_command_origin
+    question: Sink 的命令/参数是否完全由常量或固定映射产生，且用户输入不进入命令字符串或 argv？
+    yes: reject_safe_construction
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到命令字符串/参数的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是完整 shell 字符串、命令名、还是独立 argv 参数？
+    next: check_shell_and_controls
+
+  - id: check_shell_and_controls
+    question: 是否经 shell 解释（sh -c / cmd /c）或存在有效命令/参数白名单？
+    shell_with_taint: high_risk_candidate
+    no_shell_fixed_binary_validated_arg: reject_effective_control
+    no_shell_unvalidated_args: argument_injection_candidate
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（固定命令映射 / 无 shell 的列表模式 + 严格参数约束 / Java API 替代）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_safe_construction: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  argument_injection_candidate: Candidate
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

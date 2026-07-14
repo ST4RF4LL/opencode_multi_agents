@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - /search renders search.jsp
+  - q is placed into model and printed via EL
+request_context:
+  endpoint: /search
+  parameter: q
+observed_result:
+  - query string reflected unescaped in HTML
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

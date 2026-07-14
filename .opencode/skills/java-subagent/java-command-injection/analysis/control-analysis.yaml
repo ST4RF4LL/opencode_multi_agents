@@ -1,0 +1,44 @@
+questions:
+  - id: command_origin
+    ask: 命令字符串/参数列表是常量、固定映射，还是包含外部输入？
+    outcomes:
+      constant_or_mapped_only: likely_safe
+      user_in_shell_string: high_risk
+      user_in_argv_token: argument_injection_risk
+      user_controls_binary: command_name_control_risk
+
+  - id: shell_vs_list
+    ask: 是否通过 shell（sh -c / cmd /c）执行？
+    strong_yes:
+      - ProcessBuilder("sh","-c", tainted)
+      - Runtime.exec(new String[]{"cmd.exe","/c", tainted})
+      - single string with shell metacharacters interpreted by shell
+    safer_pattern:
+      - ProcessBuilder list with constant binary and separate args (no shell)
+
+  - id: argument_handling
+    ask: 用户输入如何成为参数？
+    accept:
+      - fixed_binary_plus_allowlisted_arg
+      - enum_or_id_maps_to_constant_argv
+    reject_as_strong:
+      - concat_into_shell_string
+      - unvalidated_user_string_as_entire_command
+      - blacklist_of_metacharacters_only
+
+  - id: java_api_alternative
+    ask: 是否可用纯 Java API 替代 shell 调用？
+    examples:
+      - InetAddress.isReachable vs ping
+      - Files NIO vs shell file ops
+    if_yes_and_used: likely_safe
+
+  - id: encoding_and_escape
+    ask: 是否依赖手工转义/引号包裹？
+    assessment: weak_or_invalid_unless_proven_no_shell_and_arg_safe
+
+control_grades:
+  strong: effective_blocks_command_or_shell_control
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

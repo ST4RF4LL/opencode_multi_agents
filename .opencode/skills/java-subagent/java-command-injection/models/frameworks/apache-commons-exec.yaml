@@ -1,0 +1,29 @@
+id: apache-commons-exec
+name: Apache Commons Exec
+detect:
+  imports:
+    - org.apache.commons.exec.CommandLine
+    - org.apache.commons.exec.DefaultExecutor
+    - org.apache.commons.exec.Executor
+  keywords:
+    - CommandLine.parse
+    - DefaultExecutor
+    - commons-exec
+
+sources: inherit-global
+sinks:
+  - commons-exec-executor
+  - commons-exec-commandline
+
+safe_patterns:
+  - CommandLine constructed with constant executable and addArgument for validated tokens
+  - no CommandLine.parse on user-controlled strings
+
+unsafe_patterns:
+  - CommandLine.parse(userControlled)
+  - string concat into parse/executable
+  - addArguments with handleQuoting disabled on untrusted input
+
+notes:
+  - CommandLine.parse performs shell-like tokenization of a single string
+  - Expand wrappers that hide Executor.execute

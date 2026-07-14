@@ -1,0 +1,29 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_xpath_structure_influence
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_structure_influence
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - auth_logic_xpath
+    - confirmed_data_disclosure
+    - boolean_bypass
+  decrease:
+    - partial_allowlist
+    - uncertain_reachability
+    - xxe_noise_without_expression_control

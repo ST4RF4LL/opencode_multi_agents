@@ -1,0 +1,24 @@
+id: case-001
+vulnerability_type: xpath-injection
+subtype: classic-string-concat
+source:
+  type: request-parameter
+  expression: request.getParameter("bookId")
+sink:
+  api: XPath.compile / XPath.evaluate
+  sensitive_argument: 1
+propagation:
+  - BookController.getById
+  - BookService.findById
+  - BookXPathDao.findById
+root_cause:
+  - xpath_string_concatenated_with_user_input
+  - no_xpath_variable_resolver
+prerequisites:
+  - reachable_http_endpoint
+  - xml_document_available_as_context
+observed_behavior:
+  - attacker_can_alter_predicate_and_selected_nodes
+fix:
+  - use_constant_expression_with_dollar_variables
+  - set_xpath_variable_resolver_and_bind_bookId

@@ -1,0 +1,19 @@
+subtypes:
+  - id: classic-string-concat
+    description: 字符串拼接/格式化构造 SQL，用户输入成为查询结构的一部分
+  - id: dynamic-identifier
+    description: ORDER BY / GROUP BY / 列名 / 表名 等标识符由用户输入控制
+  - id: mybatis-dollar-injection
+    description: MyBatis ${} 直接替换导致注入，#{} 参数绑定被绕过或混用
+  - id: orm-native-query
+    description: JPA/Hibernate createNativeQuery/createSQLQuery 等原生 SQL 字符串拼接
+  - id: jpa-jpql-injection
+    description: 不可信输入拼入 JPQL/HQL 字符串（EntityManager.createQuery 等，非原生 SQL）；与 SQL 注入同理，应用 setParameter 命名参数
+  - id: second-order
+    description: 输入先入库，后续查询拼接已存储数据触发二次注入
+  - id: partial-parameterization
+    description: 部分参数绑定，但 WHERE/LIKE/IN 子句仍有拼接片段
+  - id: batch-or-multi-statement
+    description: 可注入分号或堆叠查询导致多语句执行
+  - id: like-wildcard-abuse
+    description: LIKE 子句用户输入未转义通配符或未参数化导致逻辑操纵

@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_weak_primitive_or_misconfiguration
+      - security_sensitive_usage
+      - production_reachability
+      - missing_strong_controls
+  medium:
+    requires:
+      - weak_pattern_present
+      - likely_security_use
+      - controls_absent_or_suspicious
+    missing_optional:
+      - full_call_chain
+      - dynamic_confirmation
+  low:
+    requires:
+      - crypto_api_or_weak_literal_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - password_or_auth_path
+    - encrypts_pii_or_secrets_at_rest
+    - hardcoded_key_in_repo
+    - gcm_nonce_reuse
+    - unauthenticated_token_generation
+  decrease:
+    - possible_non_security_checksum
+    - test_scope_uncertainty
+    - algorithm_selected_by_remote_config_unknown_at_runtime

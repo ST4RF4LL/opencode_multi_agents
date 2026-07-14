@@ -1,0 +1,17 @@
+allowed:
+  - read_only_search_proof_when_possible
+  - boolean_confirmation_with_minimal_impact
+  - use_of_staging_or_authorized_test_environments
+  - auth_bypass_proof_with_test_accounts_when_authorized
+
+forbidden:
+  - mass_directory_export_beyond_minimal_proof
+  - unauthorized_modification_of_directory_entries
+  - credential_stuffing_unrelated_to_the_finding
+  - lateral_movement_outside_agreed_scope
+  - production_password_spray_via_ldap_filter
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_screenshots_logs_and_minimal_result_samples
+  - redact_sensitive_directory_attributes_in_reports

@@ -1,0 +1,30 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_output_context_and_influence
+      - missing_or_wrong_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_html_or_script_context_influence
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - stored_cross_user
+    - javascript_context
+    - confirmed_script_execution_in_lab
+  decrease:
+    - partial_encoding
+    - strong_csp_mitigation_only
+    - uncertain_reachability
+    - json_only_uncertain_consumer

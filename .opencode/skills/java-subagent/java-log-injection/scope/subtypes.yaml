@@ -1,0 +1,20 @@
+subtypes:
+  - id: crlf-log-forging
+    description: >
+      用户输入中的 CR/LF 写入非结构化日志行，伪造额外日志条目
+      （如伪造 login success / audit 行）
+  - id: unstructured-string-concat
+    description: >
+      字符串拼接/格式化构造 log 消息（logger.info("... " + user)），
+      参数化占位符未使用
+  - id: format-string-injection
+    description: >
+      日志格式串本身受用户影响（非编译期常量 pattern），或 MessageFormat/String.format 误用
+  - id: multi-line-field-pollution
+    description: 多行输入污染后续字段解析、SIEM 规则匹配或审计关联
+  - id: log-viewer-xss-risk
+    description: >
+      日志在 Web UI 中原样展示时，注入内容可触发 XSS；本子类型需同时证明
+      日志内容可达查看路径（常与 CWE-79 相邻）
+  - id: marker-mdc-abuse
+    description: MDC/ThreadContext/Marker 值来自不可信输入且进入布局输出

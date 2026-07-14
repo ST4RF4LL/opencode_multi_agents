@@ -1,0 +1,40 @@
+id: spring-mvc
+name: Spring MVC / Spring Web
+detect:
+  imports:
+    - org.springframework.web
+    - org.springframework.stereotype.Controller
+    - org.springframework.web.bind.annotation
+  keywords:
+    - "@Controller"
+    - "@RestController"
+    - "@RequestMapping"
+    - "@ResponseBody"
+    - "ModelAndView"
+    - "HtmlUtils"
+  dependencies:
+    - spring-webmvc
+    - spring-boot-starter-web
+
+sources: inherit-global
+sinks:
+  - spring-model-and-view
+  - spring-response-body
+  - spring-redirect-attributes
+  - servlet-writer-print
+
+safe_patterns:
+  - responsebody_json_only_with_user_data
+  - model_attribute_rendered_via_escaped_template
+  - HtmlUtils_htmlEscape_before_html_text_output
+
+unsafe_patterns:
+  - response_getWriter_print_user_input
+  - produces_text_html_with_concatenated_user_input
+  - model_to_th_utext_or_raw_jsp
+  - error_message_reflected_in_html_without_encoding
+
+notes:
+  - RestController JSON is usually not classic XSS; check Content-Type and HTML embedding
+  - Model.addAttribute is a propagator; final risk depends on view engine escaping
+  - Prefer OWASP Java Encoder over ad-hoc replace for HTML/JS/CSS contexts

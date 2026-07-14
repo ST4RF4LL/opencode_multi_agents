@@ -1,0 +1,41 @@
+finding_id: XSS-001
+status: finding # finding | candidate | rejected
+vulnerability_type: xss
+subtype: reflected-html
+confidence: high # high | medium | low
+entry:
+  route: "GET /search"
+  method: SearchController.search
+  parameter: q
+source:
+  file: SearchController.java
+  line: 42
+  expression: request.getParameter("q")
+sink:
+  file: SearchController.java
+  line: 55
+  expression: response.getWriter().print(html)
+output_context: html_body # html_body | html_attribute | javascript | css | url
+dataflow:
+  - SearchController.search
+  - HtmlBuilder.render
+controls:
+  observed: []
+  assessment:
+    - missing-output-encoding
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - output context
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - html_source_snippet
+limitations: []
+rejection_reason: null

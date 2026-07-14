@@ -1,0 +1,40 @@
+finding_id: SQLI-001
+status: finding # finding | candidate | rejected
+vulnerability_type: sql-injection
+subtype: classic-string-concat
+confidence: high # high | medium | low
+entry:
+  route: "GET /api/users"
+  method: UserController.getUser
+  parameter: id
+source:
+  file: UserController.java
+  line: 42
+  expression: request.getParameter("id")
+sink:
+  file: UserDao.java
+  line: 88
+  expression: statement.executeQuery(sql)
+dataflow:
+  - UserController.getUser
+  - UserService.find
+  - UserDao.queryById
+controls:
+  observed: []
+  assessment:
+    - missing-parameterization
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - timing_or_error_diff
+limitations: []
+rejection_reason: null

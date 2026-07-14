@@ -1,0 +1,21 @@
+id: case-002
+vulnerability_type: weak-cryptography
+subtype: static-iv
+source:
+  type: iv-nonce-static
+  expression: 'new GCMParameterSpec(128, FIXED_IV)'
+sink:
+  api: Cipher.init
+  sensitive_argument: gcm_nonce
+propagation:
+  - TokenEncryptor.encrypt
+root_cause:
+  - gcm_nonce_reused_across_messages
+  - nonce_hardcoded_constant
+prerequisites:
+  - multiple_encryptions_under_same_key
+observed_behavior:
+  - nonce_reuse_breaks_gcm_confidentiality_and_authenticity
+fix:
+  - generate_12_byte_nonce_with_SecureRandom_per_message
+  - never_reuse_nonce_under_same_key

@@ -1,0 +1,40 @@
+finding_id: CMDI-001
+status: finding # finding | candidate | rejected
+vulnerability_type: command-injection
+subtype: runtime-exec-concat
+confidence: high # high | medium | low
+entry:
+  route: "GET /api/ping"
+  method: NetController.ping
+  parameter: host
+source:
+  file: NetController.java
+  line: 42
+  expression: request.getParameter("host")
+sink:
+  file: NetService.java
+  line: 88
+  expression: Runtime.getRuntime().exec(cmd)
+dataflow:
+  - NetController.ping
+  - NetService.pingHost
+controls:
+  observed: []
+  assessment:
+    - missing-argument-separation
+    - shell-or-concat-command-construction
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - process_or_log_evidence
+limitations: []
+rejection_reason: null

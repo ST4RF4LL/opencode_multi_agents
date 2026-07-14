@@ -1,0 +1,88 @@
+rules:
+  - id: java-xpathi-compile-concat
+    message: XPath.compile called with possible string concatenation of untrusted data
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $X.compile($EXPR)
+          - pattern: $X.compile($EXPR, ...)
+      - pattern-either:
+          - pattern-inside: |
+              $EXPR = $A + $B;
+              ...
+          - pattern-inside: |
+              $EXPR = String.format(...);
+              ...
+          - pattern-inside: |
+              $EXPR = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $EXPR += $B;
+              ...
+    metadata:
+      cwe: CWE-643
+      category: xpath-injection
+      confidence: high
+
+  - id: java-xpathi-evaluate-concat
+    message: XPath.evaluate called with expression possibly built from concatenated input
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $X.evaluate($EXPR, $ITEM)
+          - pattern: $X.evaluate($EXPR, $ITEM, $Q)
+          - pattern: $X.evaluate($EXPR, $SOURCE)
+          - pattern: $X.evaluate($EXPR, $SOURCE, $Q)
+      - pattern-either:
+          - pattern-inside: |
+              $EXPR = $A + $B;
+              ...
+          - pattern-inside: |
+              $EXPR = String.format(...);
+              ...
+          - pattern-inside: |
+              $EXPR = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $EXPR += $B;
+              ...
+    metadata:
+      cwe: CWE-643
+      category: xpath-injection
+      confidence: high
+
+  - id: java-xpathi-inline-evaluate-concat
+    message: XPath.evaluate with inline string concatenation
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $X.evaluate($A + $B, ...)
+      - pattern: |
+          $X.evaluate(String.format(...), ...)
+      - pattern: |
+          $X.compile($A + $B)
+      - pattern: |
+          $X.compile(String.format(...))
+    metadata:
+      cwe: CWE-643
+      category: xpath-injection
+      confidence: high
+
+  - id: java-xpathi-saxon-compile-concat
+    message: Saxon XPathCompiler/Evaluator compile may include concatenated user input
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $C.compile($A + $B)
+      - pattern: |
+          $C.compile(String.format(...))
+      - pattern: |
+          $E.evaluate($A + $B, ...)
+    metadata:
+      cwe: CWE-643
+      category: xpath-injection
+      confidence: medium

@@ -1,0 +1,15 @@
+subtypes:
+  - id: runtime-exec-concat
+    description: Runtime.exec 接收字符串拼接/格式化命令，用户输入成为 shell 命令的一部分
+  - id: processbuilder-shell-wrapper
+    description: ProcessBuilder 通过 /bin/sh -c 或 cmd.exe /c 调用 shell，用户输入进入 -c 参数
+  - id: argument-injection
+    description: 命令名固定，但用户输入作为参数可注入额外选项或操作数（无 shell 时仍可能有害）
+  - id: command-name-control
+    description: 攻击者控制可执行文件路径或命令名本身
+  - id: commons-exec-string
+    description: Apache Commons Exec CommandLine 由字符串解析或拼接构造
+  - id: environment-or-cwd-abuse
+    description: 用户输入影响进程环境变量、工作目录或 PATH 导致命令劫持
+  - id: partial-sanitization
+    description: 存在黑名单/部分转义，但 shell 元字符或参数分隔仍可绕过

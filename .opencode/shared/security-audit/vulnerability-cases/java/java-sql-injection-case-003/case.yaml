@@ -1,0 +1,22 @@
+id: case-003
+vulnerability_type: sql-injection
+subtype: orm-native-query
+source:
+  type: request-parameter
+  expression: "@RequestParam String email"
+sink:
+  api: EntityManager.createNativeQuery
+  sensitive_argument: 1
+propagation:
+  - AccountController.search
+  - AccountRepository.searchByEmail
+root_cause:
+  - jpa_native_query_string_concat
+  - false_sense_of_safety_from_orm_usage
+prerequisites:
+  - jpa_entity_manager_available
+observed_behavior:
+  - native SQL predicate controlled by attacker
+fix:
+  - constant_native_sql_with_setParameter
+  - or_use_criteria_api

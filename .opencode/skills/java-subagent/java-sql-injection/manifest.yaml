@@ -1,0 +1,99 @@
+id: java-sql-injection
+name: Java SQL Injection
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-89
+owasp:
+  - A03:2021-Injection
+maturity: 3
+description: >
+  Detect attacker-controlled input reaching SQL query construction or execution
+  without effective parameterization or identifier allowlisting.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+      - derived/dynamic-identifier.sc
+      - derived/map-key-to-sql.sc
+      - derived/raw-sql-execution.sc
+      - derived/operator-connector-inject.sc
+      - derived/dynamic-filter-fragment.sc
+      - derived/path-param-to-sql.sc
+  references:
+    - cases.md
+    - pattern-to-joern.yaml
+    - owasp-java-cs-jpa.md
+    semgrep:
+      - java-sqli-sinks.yaml
+      - java-sqli-patterns.yaml
+    codeql:
+      - java-sqli.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+    - case-004
+  real_world_cases:
+    source: ghsa-skill-builder
+    references: references/cases.md
+    entries:
+      - R1-CVE-2026-26198
+      - R2-CVE-2025-65896
+      - R3-CVE-2024-12909
+      - R4-H1-3335709
+      - R5-H1-3292573
+      - R6-H1-2958619
+      - R7-H1-blind-business-params
+      - R8-H1-IBM
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - jdbc
+  - spring-jdbc
+  - mybatis
+  - hibernate-jpa
+  - spring-data-jpa
+  - jooq

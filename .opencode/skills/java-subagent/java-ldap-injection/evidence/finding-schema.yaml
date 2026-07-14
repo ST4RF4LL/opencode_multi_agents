@@ -1,0 +1,40 @@
+finding_id: LDAP-001
+status: finding # finding | candidate | rejected
+vulnerability_type: ldap-injection
+subtype: filter-string-concat
+confidence: high # high | medium | low
+entry:
+  route: "POST /login"
+  method: AuthController.login
+  parameter: username
+source:
+  file: AuthController.java
+  line: 42
+  expression: request.getParameter("username")
+sink:
+  file: LdapAuthService.java
+  line: 88
+  expression: ctx.search(base, filter, controls)
+dataflow:
+  - AuthController.login
+  - AuthService.authenticate
+  - LdapAuthService.searchUser
+controls:
+  observed: []
+  assessment:
+    - missing-filter-encoding
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - auth_or_search_diff
+limitations: []
+rejection_reason: null

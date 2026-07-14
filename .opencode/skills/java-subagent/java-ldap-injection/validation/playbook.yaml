@@ -1,0 +1,33 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_ldap_influence_surface
+  - inspect_input_transformations
+  - inspect_encoding_parameterization_and_allowlists
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - filter_assertion_value
+  - filter_boolean_structure
+  - filter_wildcard
+  - search_base_dn
+  - bind_or_lookup_dn
+  - attribute_list
+
+observable_behaviors:
+  - authentication_bypass_effect
+  - unexpected_directory_entries_returned
+  - ldap_error_message_difference
+  - boolean_content_difference
+  - timing_difference
+  - data_disclosure_in_response
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - prefer_minimal_proof_on_authorized_targets_only

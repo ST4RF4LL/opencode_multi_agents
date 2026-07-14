@@ -1,0 +1,90 @@
+rules:
+  - id: java-sqli-statement-concat
+    message: SQL executed via Statement with possible string concatenation
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $S.execute($SQL)
+          - pattern: $S.executeQuery($SQL)
+          - pattern: $S.executeUpdate($SQL)
+          - pattern: $S.addBatch($SQL)
+      - pattern-either:
+          - pattern-inside: |
+              $SQL = $X + $Y;
+              ...
+          - pattern-inside: |
+              $SQL = String.format(...);
+              ...
+          - pattern-inside: |
+              $SQL = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $SQL += $Y;
+              ...
+    metadata:
+      cwe: CWE-89
+      category: sql-injection
+      confidence: medium
+
+  - id: java-sqli-jdbctemplate-concat
+    message: JdbcTemplate SQL first argument may include concatenated user input
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $JT.query($SQL + $X, ...)
+      - pattern: |
+          $JT.queryForObject($SQL + $X, ...)
+      - pattern: |
+          $JT.queryForList($SQL + $X, ...)
+      - pattern: |
+          $JT.update($SQL + $X, ...)
+      - pattern: |
+          $JT.execute($SQL + $X, ...)
+      - pattern: |
+          $JT.query(String.format(...), ...)
+      - pattern: |
+          $JT.update(String.format(...), ...)
+    metadata:
+      cwe: CWE-89
+      category: sql-injection
+      confidence: high
+
+  - id: java-sqli-preparestatement-concat
+    message: prepareStatement called with concatenated SQL string
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: $C.prepareStatement($SQL)
+      - pattern-either:
+          - pattern-inside: |
+              $SQL = $A + $B;
+              ...
+          - pattern-inside: |
+              $SQL = String.format(...);
+              ...
+          - pattern-inside: |
+              $SQL += $B;
+              ...
+    metadata:
+      cwe: CWE-89
+      category: sql-injection
+      confidence: high
+
+  - id: java-sqli-jpa-native-concat
+    message: JPA/Hibernate native/HQL query built with string concatenation
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: $EM.createNativeQuery($SQL + $X, ...)
+      - pattern: $EM.createQuery($SQL + $X, ...)
+      - pattern: $S.createSQLQuery($SQL + $X)
+      - pattern: $S.createNativeQuery($SQL + $X, ...)
+      - pattern: $S.createQuery($SQL + $X, ...)
+      - pattern: $EM.createNativeQuery(String.format(...), ...)
+      - pattern: $EM.createQuery(String.format(...), ...)
+    metadata:
+      cwe: CWE-89
+      category: sql-injection
+      confidence: high

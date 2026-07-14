@@ -1,0 +1,85 @@
+rules:
+  - id: java-ldap-dircontext-search-concat
+    message: DirContext.search filter may include concatenated user input (LDAP injection)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $CTX.search($BASE, $FILTER, $CTRLS)
+          - pattern: $CTX.search($BASE, $FILTER, $ARGS, $CTRLS)
+          - pattern: $CTX.search($BASE, $FILTER, $CTRLS, $HANDLER)
+      - pattern-either:
+          - pattern-inside: |
+              $FILTER = $X + $Y;
+              ...
+          - pattern-inside: |
+              $FILTER = String.format(...);
+              ...
+          - pattern-inside: |
+              $FILTER = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $FILTER += $Y;
+              ...
+    metadata:
+      cwe: CWE-90
+      category: ldap-injection
+      confidence: high
+
+  - id: java-ldap-spring-template-concat
+    message: LdapTemplate search/authenticate with concatenated filter string
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $LT.search($BASE, $FILTER + $X, ...)
+      - pattern: |
+          $LT.search($BASE, String.format(...), ...)
+      - pattern: |
+          $LT.authenticate($BASE, $FILTER + $X, ...)
+      - pattern: |
+          $LT.authenticate($BASE, String.format(...), ...)
+      - pattern: |
+          $LT.searchForObject($BASE, $FILTER + $X, ...)
+      - pattern: |
+          $LT.find($BASE, $FILTER + $X, ...)
+    metadata:
+      cwe: CWE-90
+      category: ldap-injection
+      confidence: high
+
+  - id: java-ldap-hardcoded-filter-concat
+    message: HardcodedFilter constructed with string concatenation
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: new HardcodedFilter($FILTER)
+          - pattern: new HardcodedFilter($X + $Y)
+      - pattern-either:
+          - pattern-inside: |
+              $FILTER = $A + $B;
+              ...
+          - pattern: new HardcodedFilter($X + $Y)
+          - pattern-inside: |
+              $FILTER = String.format(...);
+              ...
+    metadata:
+      cwe: CWE-90
+      category: ldap-injection
+      confidence: high
+
+  - id: java-ldap-lookup-dn-concat
+    message: Context/DirContext lookup or bind with concatenated DN
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: $CTX.lookup($DN + $X)
+      - pattern: $CTX.lookup(String.format(...))
+      - pattern: $CTX.bind($DN + $X, ...)
+      - pattern: $CTX.rebind($DN + $X, ...)
+      - pattern: $LT.lookup($DN + $X)
+    metadata:
+      cwe: CWE-90
+      subtype: dn-injection
+      confidence: medium

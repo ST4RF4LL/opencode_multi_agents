@@ -1,0 +1,28 @@
+id: bouncycastle
+name: BouncyCastle
+detect:
+  imports:
+    - org.bouncycastle
+    - org.bouncycastle.jce.provider.BouncyCastleProvider
+    - org.bouncycastle.crypto
+  keywords:
+    - BouncyCastleProvider
+    - BC
+    - org.bouncycastle
+
+sources: inherit-global
+sinks:
+  - cipher-getinstance
+  - messagedigest-getinstance
+
+safe_patterns:
+  - modern_AEAD_via_BC_or_JCA_provider
+  - Argon2_via_BC
+
+unsafe_patterns:
+  - weak_algorithm_names_with_BC_provider
+  - custom_block_cipher_modes_without_review
+
+notes:
+  - Provider name "BC" does not make weak algorithms safe
+  - Still flag DES/ECB/MD5 when selected through BC

@@ -1,0 +1,34 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_nosql_influence_surface
+  - inspect_input_transformations
+  - inspect_query_builder_and_operator_controls
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - json_operator_in_filter
+  - where_script_expression
+  - query_string_structure
+  - field_name
+  - regex_operator
+  - authentication_logic_bypass
+  - update_or_delete_filter
+
+observable_behaviors:
+  - authentication_bypass_with_operator_payload
+  - unexpected_document_set_returned
+  - boolean_content_difference
+  - mongo_error_revealing_query_parse
+  - timing_difference_for_where_or_regex
+  - data_disclosure_in_response
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - prefer_operator_injection_proofs_over_destructive_writes
