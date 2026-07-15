@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_missing_or_bypassable_type_policy
+      - clear_storage_or_serving_impact
+      - one_of_strong_dynamic_fake_marker_or_unambiguous_static
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_policy_gap
+      - storage_location_or_mime_only_trust
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - upload_api_and_store_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - webroot_or_static_mapping
+    - content_type_only
+    - original_filename_preserved
+    - conceptual_dangerous_extension_accepted
+  decrease:
+    - private_storage_uncertain_url_mapping
+    - partial_allowlist_present
+    - uncertain_reachability
+    - only_size_limit_without_type_proof

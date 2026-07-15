@@ -1,0 +1,48 @@
+id: spring-oauth2-resource-server
+name: Spring Security OAuth2 Resource Server
+detect:
+  imports:
+    - org.springframework.security.oauth2.jwt.JwtDecoder
+    - org.springframework.security.oauth2.jwt.NimbusJwtDecoder
+    - org.springframework.security.oauth2.jwt.JwtDecoders
+    - org.springframework.security.oauth2.jwt.Jwt
+    - org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
+    - org.springframework.security.config.annotation.web.configurers.oauth2.server.resource.OAuth2ResourceServerConfigurer
+  keywords:
+    - oauth2ResourceServer
+    - jwt
+    - NimbusJwtDecoder
+    - JwtDecoders.fromIssuerLocation
+    - spring.security.oauth2.resourceserver.jwt
+    - JwtAuthenticationToken
+  maven:
+    - org.springframework.boot:spring-boot-starter-oauth2-resource-server
+    - org.springframework.security:spring-security-oauth2-resource-server
+
+sources: inherit-global
+sinks:
+  - spring-jwt-decoder
+  - claims-used-for-authz
+
+safe_patterns:
+  - JwtDecoders_fromIssuerLocation_or_jwkSetUri
+  - NimbusJwtDecoder_with_jwsAlgorithm_RS256_or_ES256
+  - JwtIssuerValidator_and_JwtClaimValidator_for_aud
+  - oauth2ResourceServer_jwt_dsl_enabled
+
+unsafe_patterns:
+  - custom_JwtDecoder_that_skips_signature
+  - secret_based_decoder_with_hardcoded_key
+  - missing_issuer_uri_and_no_validators
+  - disabling_jwt_timestamp_validation
+  - accepting_none_or_unconstrained_algorithms
+
+config_keys:
+  - spring.security.oauth2.resourceserver.jwt.issuer-uri
+  - spring.security.oauth2.resourceserver.jwt.jwk-set-uri
+  - spring.security.oauth2.resourceserver.jwt.audiences
+
+notes:
+  - default NimbusJwtDecoder validates exp/nbf when properly built
+  - custom decoder beans are highest-risk review targets
+  - audience validation often needs explicit JwtClaimValidator

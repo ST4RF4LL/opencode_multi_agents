@@ -1,0 +1,19 @@
+allowed:
+  - use_authorized_staging_or_lab_environments
+  - synthetic_example_domains_evil.example
+  - conceptual_discussion_of_phishing_impact
+  - minimal_proof_requests_within_agreed_scope
+  - inspect_Location_headers_and_status_codes
+
+forbidden:
+  - real_phishing_campaigns_against_users
+  - credential_harvesting_page_deployment
+  - weaponized_payloads_or_exploit_kits
+  - attacks_outside_agreed_scope
+  - using_real_brand_domains_as_attacker_targets_in_live_tests
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_Location_header_and_status_evidence_over_user_interaction
+  - use_only_fake_example_URLs_in_writeups
+  - never_include_steps_to_steal_real_user_sessions_via_phishing

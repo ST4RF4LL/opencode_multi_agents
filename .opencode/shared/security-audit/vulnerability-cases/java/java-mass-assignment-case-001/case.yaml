@@ -1,0 +1,28 @@
+id: case-001
+vulnerability_type: mass-assignment
+subtype: spring-mvc-entity-binding
+source:
+  type: model-attribute
+  expression: '@ModelAttribute UserEntity user'
+sink:
+  api: UserRepository.save
+  sensitive_argument: 1
+propagation:
+  - UserController.updateProfile
+  - UserService.update
+  - userRepository.save
+root_cause:
+  - domain_entity_bound_from_request_parameters
+  - isAdmin_writable_via_parameter_name
+  - no_initbinder_allowlist
+  - no_dto_isolation
+prerequisites:
+  - authenticated_user_can_call_profile_update
+  - endpoint_reachable
+observed_behavior:
+  - attacker_sets_isAdmin_true_via_form_or_query_param
+  - elevated_privileges_persisted
+fix:
+  - introduce_UserUpdateRequest_dto
+  - map_only_displayName_email
+  - setAllowedFields_or_remove_entity_binding

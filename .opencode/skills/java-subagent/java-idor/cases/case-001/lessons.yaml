@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Authentication does not imply object-level authorization
+  - findById(pathId) returning entity is the classic horizontal IDOR pattern
+  - Prefer query binding owner from SecurityContext (findByIdAndUserId) over post-load optional checks alone
+  - Return 404 on unauthorized id to reduce enumeration oracles when appropriate
+non_transferable_details:
+  - original endpoint path
+  - original order id values
+  - original account names

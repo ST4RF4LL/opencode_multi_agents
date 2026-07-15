@@ -1,0 +1,10 @@
+transferable_lessons:
+  - new File(base, userFilename) without normalize + startsWith is a primary classic path traversal pattern
+  - download-by-filename parameters are high-frequency sources
+  - FileInputStream on joined path is a primary sink family
+  - FilenameUtils.getName alone is PARTIAL and does not replace base-dir confinement
+non_transferable_details:
+  - original endpoint path
+  - original base directory location
+  - original payload strings
+  - specific lab marker file paths

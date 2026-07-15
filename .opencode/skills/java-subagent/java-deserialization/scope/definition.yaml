@@ -1,0 +1,21 @@
+id: java-deserialization
+name: Unsafe Deserialization
+language: java
+cwe:
+  - CWE-502
+dimension: D4
+objective:
+  detect: >
+    Attacker-controlled data reaching deserialization or polymorphic object
+    reconstruction operations without effective type allowlisting, safe
+    constructors, or equivalent type-resolution controls.
+core_condition:
+  - external_input_exists
+  - untrusted_bytes_or_structured_payload_reaches_deserializer
+  - deserialization_or_polymorphic_reconstruction_is_reachable
+  - effective_type_allowlist_or_safe_mode_is_missing
+not_in_scope:
+  - pure_jndi_lookup_in_log_messages_without_deserial_path
+  - sql_injection
+  - weak_cryptography
+  - hardcoded_trusted_internal_only_serialization_with_no_external_influence

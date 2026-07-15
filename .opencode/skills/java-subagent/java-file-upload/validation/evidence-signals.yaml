@@ -1,0 +1,23 @@
+strong_signals:
+  - upload_accepted_for_conceptual_dangerous_extension_and_file_present_on_disk
+  - stored_path_under_webapp_static_or_public_url_reachable
+  - mime_only_check_bypassed_with_fake_marker_body
+  - double_extension_name_accepted_against_weak_policy
+  - application_logs_confirm_store_of_disallowed_type
+
+medium_signals:
+  - deterministic_accept_vs_reject_difference_on_extension
+  - response_returns_public_url_to_uploaded_object
+  - content_disposition_or_static_mapping_exposes_upload
+  - svg_html_served_with_inline_capable_type_in_lab
+
+weak_signals:
+  - multipart_api_present_only
+  - generic_500_on_upload
+  - client_side_accept_missing
+  - size_limit_error_without_type_semantics
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

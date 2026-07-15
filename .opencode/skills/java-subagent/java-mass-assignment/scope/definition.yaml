@@ -1,0 +1,25 @@
+id: java-mass-assignment
+name: Mass Assignment / Over-Posting
+language: java
+cwe:
+  - CWE-915
+owasp:
+  - A04:2021-Insecure Design
+  - A08:2021-Software and Data Integrity Failures
+dimension: D4
+objective:
+  detect: >
+    Attacker-controlled request fields binding or deserializing onto domain
+    entity sensitive properties without effective field allowlisting, DTO
+    isolation, or serialization write protection.
+core_condition:
+  - external_input_exists
+  - binding_or_deserialization_targets_domain_object
+  - sensitive_property_is_writable_from_input
+  - effective_field_control_is_missing
+not_in_scope:
+  - pure_idor_without_field_binding
+  - sql_injection
+  - xss
+  - csrf_without_over_posting
+  - business_logic_price_manipulation_without_binding

@@ -1,0 +1,41 @@
+id: auth0-java-jwt
+name: Auth0 java-jwt
+detect:
+  imports:
+    - com.auth0.jwt.JWT
+    - com.auth0.jwt.algorithms.Algorithm
+    - com.auth0.jwt.JWTVerifier
+    - com.auth0.jwt.interfaces.DecodedJWT
+    - com.auth0.jwt.exceptions.JWTVerificationException
+  keywords:
+    - JWT.decode
+    - JWT.require
+    - Algorithm.HMAC256
+    - Algorithm.HMAC384
+    - Algorithm.HMAC512
+    - Algorithm.RSA256
+    - Algorithm.none
+    - JWTVerifier.verify
+  maven:
+    - com.auth0:java-jwt
+
+sources: inherit-global
+sinks:
+  - auth0-java-jwt
+  - claims-used-for-authz
+
+safe_patterns:
+  - JWT_require_Algorithm_withIssuer_withAudience_withClaim_build_verify
+  - Algorithm_RSA256_with_public_key_from_JWKS
+  - acceptLeeway_small_for_exp_only
+
+unsafe_patterns:
+  - JWT_decode_without_verify_for_auth
+  - Algorithm_none
+  - Algorithm_HMAC256_with_string_literal
+  - require_without_acceptExpiresAt_or_exp_claim_check
+  - HMAC_with_RSA_public_key_bytes
+
+notes:
+  - JWT.decode is parse-only by design - never sufficient for trust
+  - Algorithm.none is an explicit footgun

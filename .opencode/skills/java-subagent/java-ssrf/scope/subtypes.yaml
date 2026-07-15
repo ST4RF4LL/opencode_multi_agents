@@ -1,0 +1,56 @@
+subtypes:
+  - id: full-url-control
+    description: 攻击者控制完整 URL（scheme + host + path + query）
+    typical_sinks:
+      - RestTemplate.getForObject
+      - URL.openStream
+      - OkHttp Request.Builder.url
+
+  - id: host-control
+    description: 攻击者控制 host 或 IP（path 可能固定）
+    typical_patterns:
+      - "http://" + host + "/api"
+      - URI.create with user host component
+
+  - id: port-control
+    description: 攻击者控制网络端口，可能探测内网服务
+    typical_patterns:
+      - host fixed, port from input
+      - "http://internal:" + port
+
+  - id: path-confusion
+    description: 固定前缀与用户输入拼接造成目标逃逸（@、#、//、编码绕过）
+    typical_patterns:
+      - baseUrl + userPath
+      - startsWith("https://trusted/") without parse-host check
+
+  - id: redirect-bypass
+    description: 初始目标合法，但客户端跟随重定向后未重新校验目标
+    notes: depends on HTTP client redirect policy
+
+  - id: protocol-smuggling
+    description: 非 HTTP scheme（file/gopher/dict/jar 等）被客户端接受
+    typical_schemes:
+      - file
+      - gopher
+      - dict
+      - jar
+      - netdoc
+
+  - id: cloud-metadata
+    description: 可访问云元数据地址（如 169.254.169.254）获取凭证/配置
+    indicators:
+      - "169.254.169.254"
+      - metadata.google.internal
+      - "100.100.100.200"
+
+  - id: dns-rebinding
+    description: 域名校验与实际连接阶段解析结果不一致（TOCTOU）
+    confidence_note: often needs-info; hard to prove statically
+    typical_status: candidate_or_needs_info
+
+  - id: proxy-abuse
+    description: 用户输入影响代理目标或转发目标
+    typical_patterns:
+      - proxy endpoint with user URL
+      - reverse-proxy style fetch

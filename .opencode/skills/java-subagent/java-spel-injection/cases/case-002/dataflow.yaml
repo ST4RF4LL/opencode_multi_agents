@@ -1,0 +1,15 @@
+source:
+  method: GreetingController.greet
+  parameter: name
+  annotation: RequestParam
+path:
+  - GreetingController.greet
+  - TemplateSpelService.render
+  - string_concat_into_template
+sink:
+  method: SpelExpressionParser.parseExpression
+  argument: 1
+  parser_context: TemplateParserContext
+evaluation:
+  method: Expression.getValue
+influence: template_hash_fragment

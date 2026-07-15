@@ -1,0 +1,19 @@
+allowed:
+  - use_authorized_staging_or_lab_environments
+  - two_or_more_test_accounts_you_control
+  - minimal_read_proof_with_non_sensitive_fixture_data
+  - controlled_mutation_only_on_lab_fixtures_you_own
+
+forbidden:
+  - accessing_real_customer_data_outside_authorization
+  - mass_id_enumeration_in_production_without_explicit_authorization
+  - destructive_deletes_on_shared_or_production_resources
+  - privilege_escalation_beyond_agreed_scope
+  - exfiltration_of_pii_beyond_minimal_proof
+  - weaponized_scripts_for_third_party_targets
+
+reporting:
+  - document_account_roles_and_resource_ownership_assumptions
+  - redact_sensitive_fields_in_evidence
+  - prefer_status_and_field_presence_over_full_pii_dumps
+  - state_lab_only_when_validation_was_lab_only

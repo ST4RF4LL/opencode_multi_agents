@@ -1,0 +1,35 @@
+id: commons-fileupload
+name: Apache Commons FileUpload
+detection:
+  imports:
+    - org.apache.commons.fileupload.FileItem
+    - org.apache.commons.fileupload.disk.DiskFileItem
+    - org.apache.commons.fileupload.disk.DiskFileItemFactory
+    - org.apache.commons.fileupload.servlet.ServletFileUpload
+    - org.apache.commons.fileupload2
+  classes:
+    - FileItem
+    - DiskFileItem
+    - ServletFileUpload
+    - DiskFileItemFactory
+  config_hints:
+    - commons-fileupload
+sources:
+  - FileItem.getName()
+  - FileItem.getContentType()
+  - FileItem.get() / getInputStream()
+  - ServletFileUpload.parseRequest
+sinks:
+  - FileItem.write(File)
+  - stream copy to webapp path using getName()
+strong_controls:
+  - repository path outside webroot
+  - size thresholds + extension allowlist
+  - server-side rename before write
+weak_controls:
+  - trust getContentType()
+  - blacklist only .jsp
+notes:
+  - FileItem.getName() may include full client path on some browsers
+  - DiskFileItemFactory repository location matters for temp then move patterns
+  - still separate path-traversal analysis if name has ../

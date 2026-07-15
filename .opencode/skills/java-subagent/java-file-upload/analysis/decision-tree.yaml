@@ -1,0 +1,67 @@
+name: java-file-upload-decision-tree
+steps:
+  - id: find_upload_sink
+    question: 是否发现 multipart 存储 / transferTo / Files.copy 上传写出 / Part.write 等 Sink？
+    no: stop_no_sink
+    yes: check_path_vs_policy
+
+  - id: check_path_vs_policy
+    question: 问题是否仅为 filename 中的 ../ 路径逃逸，而无类型/存储策略问题？
+    yes_pure_path: handoff_path_traversal
+    no_or_both: check_external_upload_flow
+
+  - id: check_external_upload_flow
+    question: 是否存在外部可控上传（文件体/原始文件名/Content-Type）到存储操作的数据流？
+    no: candidate_needs_modeling
+    yes: classify_subtype
+
+  - id: classify_subtype
+    question: >
+      属于 unrestricted-extension、executable-in-webroot、mime-only-validation、
+      double-extension-bypass，还是 svg-html-stored-content？
+    next: check_type_policy
+
+  - id: check_type_policy
+    question: 是否存在有效扩展名 allowlist / 魔数校验 / 服务端重编码等类型策略？
+    none: high_risk_candidate
+    content_type_only: high_risk_candidate
+    blacklist_only: high_risk_candidate
+    strong_allowlist: check_storage_location
+
+  - id: check_storage_location
+    question: 存储路径是否位于 webapp/static/public 等可映射执行或直接访问目录？
+    web_accessible_dangerous_type: high_risk_candidate
+    private_with_strong_policy: evaluate_control_strength
+    private_without_policy: conditional_candidate
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（allowlist fail-closed + 安全存储名 + 非执行位置 / 消毒）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: double_extension_or_mismatch
+    question: 策略是否可被双扩展名、大小写、content/extension 不一致绕过？
+    yes: high_risk_candidate
+    no: reachability
+
+  - id: reachability
+    question: 上传入口是否可达（非测试/死代码），参数/文件是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract（含类型策略失效与存储影响）？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  handoff_path_traversal: Rejected_or_Handoff
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

@@ -1,0 +1,16 @@
+id: servlet
+name: Java Servlet API sources for object identifiers
+detection:
+  imports:
+    - javax.servlet.http.HttpServletRequest
+    - jakarta.servlet.http.HttpServletRequest
+  classes:
+    - HttpServlet
+    - HttpServletRequest
+    - HttpServletResponse
+sources:
+  - HttpServletRequest.getParameter (id, orderId, userId, tenantId, ...)
+  - HttpServletRequest.getPathInfo / getRequestURI path segments
+notes:
+  - Map parameter names that look like resource keys to L1 candidates
+  - Session.getAttribute("userId") is trusted subject baseline when server-set

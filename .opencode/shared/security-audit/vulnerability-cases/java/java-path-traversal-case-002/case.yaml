@@ -1,0 +1,26 @@
+id: case-002
+vulnerability_type: path-traversal
+subtype: zip-slip
+source:
+  type: zip-entry-name
+  expression: zipEntry.getName()
+sink:
+  api: FileOutputStream / Files.copy to dest.resolve(entryName)
+  sensitive_argument: path_from_entry
+propagation:
+  - ArchiveExtractService.extract
+  - ZipInputStream.getNextEntry
+  - ZipEntry.getName
+  - new File(destDir, entryName)
+  - FileOutputStream
+root_cause:
+  - untrusted_archive_entry_name_used_as_relative_path
+  - no_normalize_startswith_before_extract_write
+prerequisites:
+  - reachable_upload_or_import_of_zip
+  - extract_to_filesystem_enabled
+observed_behavior:
+  - crafted_zip_entry_writes_outside_extract_root
+fix:
+  - resolve_entry_under_destDir
+  - normalize_and_require_startsWith_destDir_before_write

@@ -1,0 +1,20 @@
+case_specific: true
+preconditions:
+  - /api/poly accepts JSON body
+  - ObjectMapper has enableDefaultTyping
+  - target type Object or open polymorphic root
+request_context:
+  endpoint: /api/poly
+  parameter: body
+observed_result:
+  - polymorphic_type_metadata_influences_class_selection
+  - impact_abstract_polymorphic_deserialization
+safe_markers_only:
+  - contrast_with_closed_DTO_baseline
+  - do_not_embed_weaponized_jackson_gadget_payloads
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - forbidden_ysoserial_or_weaponized_payloads
+notes:
+  - Jackson default DTO mapping without typing is usually safe and must not be reported from this case pattern alone

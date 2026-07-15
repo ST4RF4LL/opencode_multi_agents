@@ -1,0 +1,37 @@
+id: xstream
+name: XStream
+detect:
+  imports:
+    - com.thoughtworks.xstream.XStream
+    - com.thoughtworks.xstream.security.AnyTypePermission
+    - com.thoughtworks.xstream.security.NoTypePermission
+    - com.thoughtworks.xstream.security.WildcardTypePermission
+  keywords:
+    - XStream
+    - fromXML
+    - setupDefaultSecurity
+    - allowTypes
+    - addPermission
+    - AnyTypePermission
+    - NoTypePermission
+
+sources: inherit-global
+sinks:
+  - xstream-fromxml
+
+safe_patterns:
+  - setupDefaultSecurity_plus_allowTypes_narrow_list
+  - NoTypePermission_THEN_allow_specific_types
+  - deny_AnyTypePermission
+  - process_annotations_only_on_expected_types
+
+unsafe_patterns:
+  - new_XStream_fromXML_without_security_framework
+  - addPermission_AnyTypePermission
+  - allowTypesByWildcard_overly_broad
+  - fromXML_on_request_body_or_untrusted_file
+
+notes:
+  - XStream without security framework is historically RCE-prone
+  - Type allowlisting is required for untrusted XML
+  - Do not confuse XXE hardening of DocumentBuilder with XStream type security

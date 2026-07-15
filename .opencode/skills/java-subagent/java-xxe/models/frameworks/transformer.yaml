@@ -1,0 +1,25 @@
+id: transformer
+name: TransformerFactory / XSLT
+detection:
+  imports:
+    - javax.xml.transform.TransformerFactory
+    - javax.xml.transform.Transformer
+    - javax.xml.transform.sax.SAXTransformerFactory
+    - jakarta.xml.transform.TransformerFactory
+    - javax.xml.XMLConstants
+  classes:
+    - TransformerFactory
+    - Transformer
+    - SAXTransformerFactory
+sinks:
+  - TransformerFactory.newTransformer(Source)
+  - TransformerFactory.newTemplates(Source)
+  - Transformer.transform(Source, Result)
+strong_controls:
+  - setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+  - setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+  - setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "")
+notes:
+  - Untrusted XSLT stylesheets can include external documents and scripts
+  - Untrusted XML Source into transform is also XXE-relevant when DTD/entities resolve
+  - Always set ACCESS_EXTERNAL_* empty on the same TransformerFactory instance

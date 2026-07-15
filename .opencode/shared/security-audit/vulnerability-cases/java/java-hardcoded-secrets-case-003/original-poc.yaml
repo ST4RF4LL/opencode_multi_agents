@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - application verifies JWT with same hardcoded HMAC secret
+  - sample secret is fake (jwt-secret-CHANGE_ME_NOT_REAL)
+request_context:
+  note: static proof via SecretKeySpec literal; do not forge tokens against production
+observed_result:
+  - signing secret recoverable from source
+  - attacker can compute valid HMAC over chosen payload
+reuse_policy:
+  - reference_only
+  - do_not_forge_production_tokens

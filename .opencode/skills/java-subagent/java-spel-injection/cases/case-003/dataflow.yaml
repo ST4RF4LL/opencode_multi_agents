@@ -1,0 +1,19 @@
+source:
+  method: ContextCompareController.eval
+  parameter: expression
+  annotation: RequestParam
+path:
+  - ContextCompareController.eval
+  - ContextCompareService.evaluate
+sink:
+  method: SpelExpressionParser.parseExpression
+  argument: 1
+evaluation:
+  method: Expression.getValue
+  context_vulnerable: StandardEvaluationContext
+  context_fixed: SimpleEvaluationContext
+influence: full_expression_text_and_context_capability
+contrast:
+  - StandardEvaluationContext enables type references and broad method invocation by default
+  - SimpleEvaluationContext without custom dangerous accessors is a strong control signal
+  - SimpleEvaluationContext is not auto-safe if custom MethodResolver/PropertyAccessor re-expand power

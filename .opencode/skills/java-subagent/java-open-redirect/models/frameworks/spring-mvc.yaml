@@ -1,0 +1,37 @@
+id: spring-mvc
+name: Spring MVC redirect mechanisms
+detection:
+  imports:
+    - org.springframework.web.servlet.view.RedirectView
+    - org.springframework.web.servlet.ModelAndView
+    - org.springframework.http.ResponseEntity
+    - org.springframework.http.HttpHeaders
+    - org.springframework.web.bind.annotation.RequestParam
+  classes:
+    - RedirectView
+    - ModelAndView
+    - ResponseEntity
+    - HttpHeaders
+    - RedirectAttributes
+  dependencies:
+    - spring-web
+    - spring-webmvc
+sinks:
+  - 'return "redirect:" + url'
+  - 'return "redirect:" + requestParam'
+  - new RedirectView(url)
+  - RedirectView.setUrl(url)
+  - ModelAndView("redirect:" + url)
+  - ResponseEntity.status(3xx).location(URI)
+  - ResponseEntity.status(3xx).header("Location", url)
+  - HttpHeaders.setLocation(URI)
+sensitive_argument: redirect target after redirect: prefix or Location/URI
+redirect_notes:
+  - Spring treats view names starting with redirect: as HTTP redirects
+  - RedirectView(url, contextRelative) behavior depends on constructor flags
+  - contextRelative true still unsafe if url is absolute //host or http(s)://
+strong_controls:
+  - fixed destination map before redirect: construction
+  - parse host/scheme allowlist for absolute URLs
+  - only allow relative paths that do not start with //
+  - prefer RedirectView with server-controlled base only

@@ -1,0 +1,107 @@
+sinks:
+  - id: spring-modelattribute-entity
+    framework: spring-mvc
+    method_full_name:
+      - ".*@ModelAttribute.*"
+    sensitive_object: bound_parameter_type
+    semantics: request-parameter-binding-to-type
+    confidence: high
+    notes: >
+      Sink is the binding of external params onto a type that is a domain/JPA entity
+      or contains sensitive privilege fields. Elevate when type has isAdmin/role/balance.
+
+  - id: spring-requestbody-entity
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+    sensitive_object: parameter_type
+    semantics: json-deserialization-to-type
+    confidence: high
+    notes: high risk when parameter type is entity or shares entity field graph
+
+  - id: jpa-repository-save
+    framework: spring-data
+    method_full_name:
+      - ".*CrudRepository\\.save.*"
+      - ".*JpaRepository\\.save.*"
+      - ".*JpaRepository\\.saveAndFlush.*"
+      - ".*JpaRepository\\.saveAll.*"
+      - ".*EntityManager\\.persist.*"
+      - ".*EntityManager\\.merge.*"
+    sensitive_arguments: [1]
+    semantics: persist-bound-entity
+    confidence: high
+    notes: persistence of attacker-shaped entity materializes mass assignment
+
+  - id: beanutils-copy-properties
+    framework: apache-commons / spring
+    method_full_name:
+      - ".*BeanUtils\\.copyProperties.*"
+      - ".*org\\.apache\\.commons\\.beanutils\\.BeanUtils\\.copyProperties.*"
+      - ".*PropertyUtils\\.copyProperties.*"
+      - ".*BeanWrapperImpl\\.setPropertyValue.*"
+    sensitive_arguments: [1, 2]
+    semantics: bulk-property-transfer
+    confidence: high
+    notes: full copy without ignore list transfers sensitive fields DTO→entity or request→entity
+
+  - id: mapstruct-or-modelmapper-full
+    framework: mapping
+    method_full_name:
+      - ".*ModelMapper\\.map.*"
+      - ".*mapper\\.map\\(.*Entity.*"
+    sensitive_arguments: [1]
+    semantics: object-mapping-transfer
+    confidence: medium
+    notes: unsafe when source is request body and mapping includes role/admin fields
+
+  - id: jackson-update-value
+    framework: jackson
+    method_full_name:
+      - ".*ObjectMapper\\.readerForUpdating.*"
+      - ".*ObjectMapper\\.updateValue.*"
+      - ".*ObjectReader\\.readValue.*"
+    sensitive_arguments: [1]
+    semantics: merge-json-into-existing-entity
+    confidence: high
+    notes: classic PATCH merge without field allowlist
+
+  - id: json-patch-apply
+    framework: jackson
+    method_full_name:
+      - ".*JsonPatch\\.apply.*"
+      - ".*JsonMergePatch\\.apply.*"
+    sensitive_arguments: [1]
+    semantics: patch-arbitrary-paths
+    confidence: high
+
+  - id: authorization-decision-field
+    framework: application
+    method_full_name:
+      - ".*hasRole.*"
+      - ".*hasAuthority.*"
+      - ".*isAdmin.*"
+      - ".*getRole.*"
+      - ".*setRole.*"
+      - ".*setAdmin.*"
+      - ".*setBalance.*"
+      - ".*setOwner.*"
+    sensitive_object: field_or_method
+    semantics: privilege-or-value-use
+    confidence: medium
+    notes: impact sink when bound field later drives authz or financial state
+
+  - id: spring-data-rest-export
+    framework: spring-data-rest
+    annotation:
+      - RepositoryRestResource
+      - RestResource
+    sensitive_object: exported_entity
+    semantics: http-exposed-entity-mutation
+    confidence: high
+
+adjacent_not_sink:
+  - id: response-only-entity
+    notes: returning entity as @ResponseBody is data exposure risk, not mass assignment write
+  - id: dto-without-sensitive-fields
+    notes: dedicated request DTO with only safe fields is not a mass-assignment sink

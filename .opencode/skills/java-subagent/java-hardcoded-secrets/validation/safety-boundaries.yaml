@@ -1,0 +1,18 @@
+allowed:
+  - static_code_and_config_review
+  - redacted_reporting_of_secret_locations
+  - confirmation_of_config_load_path_in_authorized_staging
+  - packaging_checks_for_test_vs_main_resources
+
+forbidden:
+  - using_discovered_secrets_against_production_or_third_parties
+  - exfiltrating_full_secret_values_to_external_systems
+  - mass_credential_stuffing_or_account_takeover
+  - committing_new_real_secrets_while_testing
+  - rotating_or_disabling_accounts_without_authorization
+
+reporting:
+  - redact_secret_values_in_findings
+  - document_secret_type_and_blast_radius
+  - recommend_rotation_secret_manager_and_history_scrub
+  - prefer_code_snippets_with_redaction_over_full_credentials

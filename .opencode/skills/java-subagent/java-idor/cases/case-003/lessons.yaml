@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Tenant isolation must use server-derived tenant context, never client tenantId alone
+  - findByTenantIdAndId is safe only when tenantId is not attacker-controlled
+  - Mass-assignment or request params that set tenantId are classic multi-tenant IDOR
+  - Prefer Hibernate filters / JWT tenant claims bound in the persistence layer
+non_transferable_details:
+  - original tenant ids
+  - original document ids
+  - original JWT claim names

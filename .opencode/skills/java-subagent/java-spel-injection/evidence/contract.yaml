@@ -1,0 +1,33 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - expression_text_or_dangerous_evaluation_capability_is_influenced
+    - effective_sandbox_or_allowlist_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - evaluation_context_type
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - expression_is_constant_and_inputs_are_variable_or_root_bound_only
+  - user_input_only_selects_from_fixed_expression_map
+  - simple_evaluation_context_is_restricted_and_effective
+  - input_does_not_influence_expression_text_or_dangerous_capability
+  - path_is_test_only_or_dead_code
+  - only_constant_value_annotation_without_external_expression_control
+  - evidence_is_only_a_dangerous_api_match
+  - validation_is_effective_and_complete
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

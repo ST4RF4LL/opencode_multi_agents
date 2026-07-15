@@ -1,0 +1,25 @@
+id: java-path-traversal
+name: Path Traversal / Zip Slip / Unsafe File Path
+language: java
+cwe:
+  - CWE-22
+  - CWE-23
+  - CWE-36
+  - CWE-59
+dimension: D5
+objective:
+  detect: >
+    Attacker-controlled path segments reaching file read, write, delete, move,
+    or archive extract operations without effective path normalization and
+    base-directory confinement (or equivalent strict allowlisting).
+core_condition:
+  - external_input_exists
+  - path_component_is_influenced
+  - file_or_archive_operation_is_reachable
+  - effective_normalize_and_base_dir_confinement_is_missing
+not_in_scope:
+  - file_upload_extension_mime_policy_without_path_escape
+  - ssrf_via_file_scheme
+  - command_injection_where_path_is_only_a_command_argument
+  - pure_authorization_flaws_without_path_control
+  - hardcoded_paths_with_no_external_influence

@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - endpoint accepts url query parameter
+  - sendRedirect uses parameter without validation
+request_context:
+  endpoint: /redirect
+  parameter: url
+  example_value: "https://evil.example/phish"
+observed_result:
+  - response 302 with Location https://evil.example/phish
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - use_only_example_domains

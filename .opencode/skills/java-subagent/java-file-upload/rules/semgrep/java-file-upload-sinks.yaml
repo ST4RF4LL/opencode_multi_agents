@@ -1,0 +1,97 @@
+rules:
+  - id: java-file-upload-transfer-to-original-name
+    message: Multipart transferTo/store uses client original filename without visible type policy
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $F.transferTo(new File($DIR, $F.getOriginalFilename()))
+      - pattern: |
+          $F.transferTo($DIR.resolve($F.getOriginalFilename()))
+      - pattern: |
+          new File($DIR, $F.getOriginalFilename())
+      - pattern: |
+          $DIR.resolve($F.getOriginalFilename())
+      - pattern: |
+          new File($DIR, $P.getSubmittedFileName())
+      - pattern: |
+          $DIR.resolve($P.getSubmittedFileName())
+    metadata:
+      cwe: CWE-434
+      category: file-upload
+      subtype: unrestricted-extension
+      confidence: high
+      notes: L1 candidate; verify allowlist and storage location
+
+  - id: java-file-upload-files-copy-original
+    message: Upload stream copied to path derived from original filename
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: Files.copy($F.getInputStream(), $PATH, ...)
+          - pattern: Files.copy($P.getInputStream(), $PATH, ...)
+          - pattern: Files.write($PATH, $F.getBytes(), ...)
+      - pattern-either:
+          - pattern-inside: |
+              $PATH = $DIR.resolve($F.getOriginalFilename());
+              ...
+          - pattern-inside: |
+              $PATH = new File($DIR, $F.getOriginalFilename());
+              ...
+          - pattern-inside: |
+              $PATH = $DIR.resolve($P.getSubmittedFileName());
+              ...
+          - pattern-inside: |
+              String $N = $F.getOriginalFilename();
+              ...
+              $PATH = $DIR.resolve($N);
+              ...
+    metadata:
+      cwe: CWE-434
+      confidence: high
+
+  - id: java-file-upload-part-write
+    message: Servlet Part.write may store client-controlled upload
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $P.write($PATH)
+      - pattern: |
+          $ITEM.write($FILE)
+    metadata:
+      cwe: CWE-434
+      confidence: medium
+
+  - id: java-file-upload-webroot-realpath
+    message: Upload path resolved via ServletContext.getRealPath (webroot storage signal)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $CTX.getRealPath($X)
+          - pattern: |
+              $REQ.getServletContext().getRealPath($X)
+      - pattern-either:
+          - pattern-inside: |
+              ...
+              $F.transferTo(...);
+              ...
+          - pattern-inside: |
+              ...
+              Files.copy(...);
+              ...
+          - pattern-inside: |
+              ...
+              new FileOutputStream(...);
+              ...
+          - pattern-inside: |
+              ...
+              $P.write(...);
+              ...
+    metadata:
+      cwe: CWE-434
+      subtype: executable-in-webroot
+      confidence: high

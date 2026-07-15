@@ -1,0 +1,32 @@
+in_scope:
+  - browser_redirect_with_user_influenced_destination
+  - servlet_sendRedirect
+  - location_header_3xx_responses
+  - spring_redirect_prefix_and_RedirectView
+  - full_url_protocol_relative_path_relative_control
+  - weak_startswith_and_contains_redirect_checks
+  - returnUrl_next_continue_callback_style_parameters
+
+out_of_scope:
+  - server_side_http_fetch_of_user_url
+  - pure_xss_reflected_or_stored
+  - csrf_state_changing_cross_site_request
+  - client_side_only_javascript_navigation_without_server_redirect
+  - meta_refresh_or_js_redirect_in_templates_without_java_sink
+  - oauth_provider_side_redirect_uri_validation_outside_app_code
+
+adjacent_skills:
+  - id: java-ssrf
+    relation: server-side fetch of user-controlled URL; not browser Location/sendRedirect alone
+  - id: java-header-injection
+    relation: generic response header injection; open-redirect focuses on Location/redirect semantics
+  - id: java-xss
+    relation: script execution in page context; open redirect is browser navigation to attacker site
+
+boundary_notes:
+  - open_redirect_is_not_ssrf_unless_server_also_fetches_the_url
+  - relative_path_only_with_forced_same_site_join_is_usually_not_open_redirect
+  - startsWith_prefix_checks_are_not_host_constraints
+  - fixed_destination_id_mapping_is_not_open_redirect
+  - allowlisting_parsed_host_with_https_only_is_strong_when_complete
+  - protocol_relative_urls_bypass_many_http_prefix_checks

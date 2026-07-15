@@ -1,0 +1,73 @@
+sanitizers:
+  strong:
+    - id: forced-signature-verify
+      condition:
+        - parse_path_requires_jws_signature
+        - verify_or_process_invoked_before_claims_trust
+        - verification_failure_rejects_request
+    - id: algorithm-allowlist
+      condition:
+        - server_enforces_allowed_algorithms
+        - alg_none_explicitly_rejected
+        - asymmetric_and_hmac_not_interchangeable_for_same_key
+    - id: managed-asymmetric-verify
+      condition:
+        - RS256_or_ES256_with_JWKS_or_managed_public_key
+        - key_not_hardcoded_hmac_secret
+    - id: claim-validation-complete
+      condition:
+        - exp_required_and_enforced
+        - nbf_checked_when_present
+        - iss_validated_against_expected_issuer
+        - aud_validated_against_expected_audience
+    - id: spring-resource-server-baseline
+      condition:
+        - NimbusJwtDecoder_or_fromIssuerLocation
+        - jwt_authentication_converter_does_not_skip_validation
+        - issuer_and_audience_configured
+
+  contextual:
+    - id: hmac-with-managed-long-secret
+      condition:
+        - HS256_or_better_with_secret_from_secret_manager
+        - secret_entropy_sufficient
+        - algorithm_locked_to_hmac_only
+      notes: prefer asymmetric for multi-service; acceptable for single service
+    - id: clock-skew-tolerance
+      condition:
+        - small_leeway_for_exp_nbf_only
+        - not_disabling_exp_entirely
+    - id: decode-for-non-auth-logging
+      condition:
+        - JWT_decode_or_parse_without_verify
+        - claims_not_used_for_authn_or_authz
+      notes: document non-trust use to reject finding
+
+  weak:
+    - id: optional-exp-check
+      pattern:
+        - getExpiration without reject-if-null
+        - manual exp compare without clock policy
+      notes: easy to skip or mis-handle null exp
+    - id: issuer-string-equals-only
+      pattern:
+        - string equals on iss without scheme/host normalization
+      notes: may miss spoofed issuer variants
+    - id: secret-from-config-default
+      pattern:
+        - default value secret or changeme in config
+      notes: treat as hardcoded weak secret
+
+  invalid:
+    - id: alg-none-accepted
+      notes: unsigned tokens must never be trusted
+    - id: parse-without-verify
+      notes: integrity not established
+    - id: hardcoded-hmac-secret
+      notes: key extraction enables forgery
+    - id: public-key-as-hmac-secret
+      notes: classic algorithm confusion
+    - id: no-exp-validation
+      notes: infinite token lifetime / replay
+    - id: no-aud-iss-when-multi-audience
+      notes: token confusion across services

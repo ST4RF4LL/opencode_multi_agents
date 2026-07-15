@@ -1,0 +1,44 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous deserialization API or polymorphic typing config found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach deserializer argument or stream construction
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_type_policy_analysis
+
+  L3_semantic_candidate:
+    meaning: type allowlist / safe mode / ObjectInputFilter missing or bypassable
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - request_body_or_cookie_bytes_to_native_deserial
+  - fastjson_autotype_enabled
+  - jackson_default_typing_on_shared_mapper
+  - snakeyaml_default_ctor_on_user_yaml
+  - xstream_without_security_framework
+  - mq_redis_deserial_of_attacker_writable_data
+  - gadget_libraries_on_classpath  # amplifier only, still needs path
+
+priority_reduce:
+  - test_code_only
+  - constant_or_trusted_internal_only_payload
+  - jackson_closed_dto_without_typing
+  - effective_object_input_filter
+  - safe_constructor_or_tag_inspector
+  - fastjson_safemode_autotype_off
+  - dead_code
+  - gadget_lib_present_without_deserial_path
+
+hard_rules:
+  - gadget_library_alone_is_not_a_finding
+  - jackson_default_dto_without_typing_usually_safe
+  - pure_log4shell_jndi_without_deserial_path_out_of_scope

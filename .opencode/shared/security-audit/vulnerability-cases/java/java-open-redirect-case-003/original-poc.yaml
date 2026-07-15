@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - /continue accepts next query parameter
+  - validation is startsWith("https://app.example.com")
+  - Location header set on success
+request_context:
+  endpoint: /continue
+  parameter: next
+  example_values:
+    - "https://app.example.com.evil.example/login"
+    - "https://app.example.com@evil.example/phish"
+observed_result:
+  - weak prefix check passes
+  - response 302 Location points off trusted host
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - use_only_example_domains

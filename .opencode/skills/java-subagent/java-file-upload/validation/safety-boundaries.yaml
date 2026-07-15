@@ -1,0 +1,20 @@
+allowed:
+  - lab_only_uploads_with_FAKE_markers
+  - empty_or_benign_files_with_conceptual_dangerous_extensions
+  - content_type_mismatch_tests_using_marker_text_not_exploits
+  - authorized_staging_environments
+  - verification_of_stored_path_and_http_accessibility_of_marker
+
+forbidden:
+  - real_webshell_payloads_jsp_jspx_php_aspx_war_with_exec
+  - reverse_shell_or_command_execution_payloads
+  - destructive_overwrite_of_application_binaries
+  - mass_upload_dos_without_authorization
+  - production_testing_outside_agreed_scope
+  - credential_harvesting_via_uploaded_content
+
+reporting:
+  - document_storage_path_and_url_mapping_assumptions
+  - prefer_acceptance_logs_stored_path_and_marker_retrieval
+  - never_require_webshell_execution_for_confirmation
+  - conceptual_extension_acceptance_is_sufficient_type_policy_proof

@@ -1,0 +1,17 @@
+case_specific: true
+preconditions:
+  - /api/config/yaml accepts YAML body
+  - new Yaml() default constructor used
+request_context:
+  endpoint: /api/config/yaml
+  parameter: body
+observed_result:
+  - untrusted_yaml_reaches_Yaml.load_without_SafeConstructor
+  - impact_abstract_arbitrary_type_via_yaml_tags
+safe_markers_only:
+  - document_missing_SafeConstructor
+  - do_not_embed_weaponized_yaml_tags
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - forbidden_ysoserial_or_weaponized_payloads

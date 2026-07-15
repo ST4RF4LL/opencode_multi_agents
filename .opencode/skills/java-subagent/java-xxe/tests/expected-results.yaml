@@ -1,0 +1,53 @@
+positive:
+  P01_DocumentBuilderDefault.java:
+    expect: candidate_or_finding
+    subtype: sax-dom-stax-insecure-defaults
+    sink: DocumentBuilder.parse
+  P02_StaxMissingExternalEntitiesFalse.java:
+    expect: candidate_or_finding
+    subtype: sax-dom-stax-insecure-defaults
+    sink: XMLInputFactory.createXMLStreamReader
+  P03_JaxbUnmarshalStream.java:
+    expect: candidate_or_finding
+    subtype: soap-unmarshaller-jaxb
+    sink: Unmarshaller.unmarshal
+  P04_TransformerFactoryInsecure.java:
+    expect: candidate_or_finding
+    subtype: transformer-factory-xslt
+    sink: Transformer.transform
+  P05_SaxParserDefault.java:
+    expect: candidate_or_finding
+    subtype: sax-dom-stax-insecure-defaults
+    sink: SAXParser.parse
+
+negative:
+  N01_DocumentBuilderHardened.java:
+    expect: rejected
+    reason: strong_dom_secure_features
+  N02_StaxExternalEntitiesFalse.java:
+    expect: rejected
+    reason: stax_external_entities_and_dtd_disabled
+  N03_TransformerAccessExternalEmpty.java:
+    expect: rejected
+    reason: transformer_access_external_empty
+  N04_JaxbHardenedStaxReader.java:
+    expect: rejected
+    reason: jaxb_via_hardened_xmlstreamreader
+  N05_ConstantClasspathXml.java:
+    expect: rejected
+    reason: trusted_classpath_xml_only
+
+regression:
+  R01_DocumentBuilderDefaultParse.java:
+    expect: sink_candidate
+    subtype: sax-dom-stax-insecure-defaults
+    must_not_regress: false_negative_on_default_documentbuilder_parse
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count
+    - impact_classification_accuracy

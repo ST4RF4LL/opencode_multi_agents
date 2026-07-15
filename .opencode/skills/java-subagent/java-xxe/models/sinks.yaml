@@ -1,0 +1,145 @@
+sinks:
+  - id: document-builder-parse
+    framework: jdk-dom
+    method_full_name:
+      - ".*javax\\.xml\\.parsers\\.DocumentBuilder\\.parse.*"
+      - ".*jakarta\\.xml\\.parsers\\.DocumentBuilder\\.parse.*"
+    sensitive_arguments: [1]
+    semantics: xml-dom-parse
+    confidence: high
+    notes: >
+      Also track DocumentBuilderFactory.newInstance / newDocumentBuilder as factory
+      configuration points; vulnerability is insecure factory + parse of untrusted input.
+
+  - id: sax-parser-parse
+    framework: jdk-sax
+    method_full_name:
+      - ".*javax\\.xml\\.parsers\\.SAXParser\\.parse.*"
+      - ".*jakarta\\.xml\\.parsers\\.SAXParser\\.parse.*"
+      - ".*org\\.xml\\.sax\\.XMLReader\\.parse.*"
+    sensitive_arguments: [1]
+    semantics: xml-sax-parse
+    confidence: high
+
+  - id: stax-xml-input
+    framework: jdk-stax
+    method_full_name:
+      - ".*javax\\.xml\\.stream\\.XMLInputFactory\\.createXMLStreamReader.*"
+      - ".*javax\\.xml\\.stream\\.XMLInputFactory\\.createXMLEventReader.*"
+      - ".*jakarta\\.xml\\.stream\\.XMLInputFactory\\.createXMLStreamReader.*"
+      - ".*jakarta\\.xml\\.stream\\.XMLInputFactory\\.createXMLEventReader.*"
+    sensitive_arguments: [1]
+    semantics: xml-stax-parse
+    confidence: high
+    notes: >
+      Factory must set IS_SUPPORTING_EXTERNAL_ENTITIES and SUPPORT_DTD to false.
+      createFilteredReader / createXMLStreamReader overloads all count as sinks.
+
+  - id: transformer-factory
+    framework: transformer
+    method_full_name:
+      - ".*javax\\.xml\\.transform\\.TransformerFactory\\.newTransformer.*"
+      - ".*javax\\.xml\\.transform\\.TransformerFactory\\.newTemplates.*"
+      - ".*javax\\.xml\\.transform\\.sax\\.SAXTransformerFactory\\..*"
+      - ".*jakarta\\.xml\\.transform\\.TransformerFactory\\.newTransformer.*"
+      - ".*javax\\.xml\\.transform\\.Transformer\\.transform.*"
+    sensitive_arguments: []
+    semantics: xml-xslt-transform
+    confidence: high
+    notes: sensitive when Source is untrusted XML/XSLT; check ACCESS_EXTERNAL_DTD/STYLESHEET
+
+  - id: schema-factory
+    framework: jdk-schema
+    method_full_name:
+      - ".*javax\\.xml\\.validation\\.SchemaFactory\\.newSchema.*"
+      - ".*jakarta\\.xml\\.validation\\.SchemaFactory\\.newSchema.*"
+    sensitive_arguments: [1]
+    semantics: xml-schema-load
+    confidence: medium
+    notes: untrusted XSD/XML Schema can trigger external entity resolution
+
+  - id: jaxb-unmarshaller
+    framework: jaxb
+    method_full_name:
+      - ".*javax\\.xml\\.bind\\.Unmarshaller\\.unmarshal.*"
+      - ".*jakarta\\.xml\\.bind\\.Unmarshaller\\.unmarshal.*"
+      - ".*javax\\.xml\\.bind\\.JAXBContext\\.createUnmarshaller.*"
+      - ".*jakarta\\.xml\\.bind\\.JAXBContext\\.createUnmarshaller.*"
+    sensitive_arguments: [1]
+    semantics: xml-unmarshal
+    confidence: high
+    notes: Unmarshaller inherits underlying SAX/StAX parser security; harden factory or use secure XMLInputFactory
+
+  - id: spring-oxm-unmarshaller
+    framework: spring-oxm
+    method_full_name:
+      - ".*org\\.springframework\\.oxm\\.Unmarshaller\\.unmarshal.*"
+      - ".*org\\.springframework\\.oxm\\.jaxb\\.Jaxb2Marshaller\\.unmarshal.*"
+      - ".*org\\.springframework\\.oxm\\.xstream\\.XStreamMarshaller\\.unmarshal.*"
+    sensitive_arguments: [1]
+    semantics: xml-unmarshal
+    confidence: high
+
+  - id: dom4j-saxreader
+    framework: dom4j
+    method_full_name:
+      - ".*org\\.dom4j\\.io\\.SAXReader\\.read.*"
+      - ".*org\\.dom4j\\.DocumentHelper\\.parseText.*"
+    sensitive_arguments: [1]
+    semantics: xml-dom4j-parse
+    confidence: high
+
+  - id: jdom-saxbuilder
+    framework: jdom
+    method_full_name:
+      - ".*org\\.jdom2?\\.input\\.SAXBuilder\\.build.*"
+      - ".*org\\.jdom\\.input\\.SAXBuilder\\.build.*"
+    sensitive_arguments: [1]
+    semantics: xml-jdom-parse
+    confidence: high
+
+  - id: xml-decoder
+    framework: jdk-beans
+    method_full_name:
+      - ".*java\\.beans\\.XMLDecoder\\.<init>.*"
+      - ".*java\\.beans\\.XMLDecoder\\.readObject.*"
+    sensitive_arguments: [1]
+    semantics: xml-decoder-deserialize
+    confidence: high
+    notes: XMLDecoder is deserialization-adjacent; still report under XXE skill when parsing untrusted XML streams
+
+factory_config_points:
+  - id: document-builder-factory
+    method_full_name:
+      - ".*DocumentBuilderFactory\\.newInstance.*"
+      - ".*DocumentBuilderFactory\\.newDocumentBuilder.*"
+      - ".*DocumentBuilderFactory\\.setFeature.*"
+      - ".*DocumentBuilderFactory\\.setAttribute.*"
+      - ".*DocumentBuilderFactory\\.setXIncludeAware.*"
+      - ".*DocumentBuilderFactory\\.setExpandEntityReferences.*"
+  - id: sax-parser-factory
+    method_full_name:
+      - ".*SAXParserFactory\\.newInstance.*"
+      - ".*SAXParserFactory\\.newSAXParser.*"
+      - ".*SAXParserFactory\\.setFeature.*"
+  - id: xml-input-factory
+    method_full_name:
+      - ".*XMLInputFactory\\.newInstance.*"
+      - ".*XMLInputFactory\\.newFactory.*"
+      - ".*XMLInputFactory\\.setProperty.*"
+  - id: transformer-factory-config
+    method_full_name:
+      - ".*TransformerFactory\\.newInstance.*"
+      - ".*TransformerFactory\\.setAttribute.*"
+      - ".*TransformerFactory\\.setFeature.*"
+
+adjacent_not_sink:
+  - id: xpath-compile-evaluate
+    framework: javax-xpath
+    method_full_name:
+      - ".*XPath\\.compile.*"
+      - ".*XPath\\.evaluate.*"
+    semantics: xpath-query
+    notes: >
+      XPath injection (CWE-643) is owned by java-xpath-injection.
+      Do not report XPath string concat as XXE.

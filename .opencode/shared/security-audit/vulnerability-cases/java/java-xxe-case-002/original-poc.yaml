@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - multipart upload endpoint accepts XML file part named file
+  - application uses vulnerable StaxXmlProcessor path
+request_context:
+  endpoint: POST /api/upload-xml
+  parameter: multipart file
+observed_result:
+  - upload stream reaches createXMLStreamReader without IS_SUPPORTING_EXTERNAL_ENTITIES false
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - no_weaponized_oob_kits

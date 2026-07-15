@@ -1,0 +1,34 @@
+steps:
+  - identify_reachable_entry
+  - determine_http_method_and_route
+  - determine_auth_credential_mechanism
+  - confirm_state_change_semantics
+  - inspect_csrf_token_or_header_requirements
+  - inspect_cookie_samesite_and_cors
+  - identify_observable_behavior
+  - derive_conceptual_validation_plan
+  - document_baseline_vs_cross_site_difference
+  - preserve_evidence
+  - never_emit_weaponized_poc
+
+influence_surfaces:
+  - form_post_fields_with_session_cookie
+  - json_body_with_session_cookie
+  - query_params_on_get_mutation
+  - missing_csrf_token_header
+  - samesite_none_cookie
+  - origin_referer_absent_or_unvalidated
+
+observable_behaviors:
+  - state_change_occurs_without_csrf_token
+  - response_indicates_success_for_unauthenticated_cross_site_shape
+  - session_cookie_accepted_without_custom_header
+  - get_mutation_triggers_delete_or_update
+  - server_logs_show_state_write_from_cross_origin_referer
+
+notes:
+  - conceptual_validation_only
+  - derive_from_actual_routes_auth_and_controls
+  - do_not_blindly_reuse_historical_html_poc
+  - do_not_generate_exploit_pages_for_production_targets
+  - prefer_code_level_proof_of_missing_control_plus_state_change

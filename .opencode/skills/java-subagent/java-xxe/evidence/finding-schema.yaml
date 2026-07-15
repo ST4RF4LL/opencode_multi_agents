@@ -1,0 +1,50 @@
+finding_id: XXE-001
+status: finding # finding | candidate | rejected
+vulnerability_type: xxe
+subtype: classic-external-entity # classic-external-entity | parameter-entity | xinclude | billion-laughs-expansion-dos | soap-unmarshaller-jaxb | transformer-factory-xslt | sax-dom-stax-insecure-defaults
+confidence: high # high | medium | low
+impact: data_disclosure # data_disclosure | ssrf_via_entity | denial_of_service | mixed
+severity_hint: high # high | medium
+entry:
+  route: "POST /api/import"
+  method: ImportController.importXml
+  parameter: body
+source:
+  file: ImportController.java
+  line: 42
+  expression: request.getInputStream()
+sink:
+  file: XmlImportService.java
+  line: 88
+  expression: documentBuilder.parse(inputStream)
+factory:
+  type: DocumentBuilderFactory
+  secure_features_observed: []
+  assessment:
+    - default-factory-no-features
+    - missing-disallow-doctype-decl
+    - missing-external-entity-disable
+dataflow:
+  - ImportController.importXml
+  - XmlImportService.parse
+  - DocumentBuilder.parse
+controls:
+  observed: []
+  assessment:
+    - missing-secure-features
+    - same-instance-hardening-absent
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - factory configuration analysis
+    - propagation path
+  dynamic:
+    - request
+    - response
+    - lab_listener_or_file_fixture_diff
+limitations: []
+rejection_reason: null

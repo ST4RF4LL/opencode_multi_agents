@@ -1,0 +1,12 @@
+source:
+  method: ResourceController.fetch
+  parameter: path
+  annotation: RequestParam
+path:
+  - ResourceController.fetch
+  - BASE + path
+  - startsWith check (weak)
+sink:
+  method: RestTemplate.getForObject
+  argument: 1
+influence: path_with_prefix_escape

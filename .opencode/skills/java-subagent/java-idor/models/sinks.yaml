@@ -1,0 +1,116 @@
+sinks:
+  - id: spring-data-find-by-id
+    framework: spring-data
+    method_full_name:
+      - ".*JpaRepository\\.findById.*"
+      - ".*CrudRepository\\.findById.*"
+      - ".*PagingAndSortingRepository\\.findById.*"
+      - ".*Repository\\.findById.*"
+      - ".*EntityManager\\.find.*"
+      - ".*EntityManager\\.getReference.*"
+      - ".*JpaRepository\\.getOne.*"
+      - ".*JpaRepository\\.getById.*"
+      - ".*JpaRepository\\.getReferenceById.*"
+    sensitive_arguments: [1]
+    semantics: load-resource-by-id
+    confidence: high
+    notes: loading entity by client id without subsequent ownership filter is IDOR candidate
+
+  - id: spring-data-delete-by-id
+    framework: spring-data
+    method_full_name:
+      - ".*JpaRepository\\.deleteById.*"
+      - ".*CrudRepository\\.deleteById.*"
+      - ".*JpaRepository\\.delete.*"
+      - ".*CrudRepository\\.delete.*"
+      - ".*EntityManager\\.remove.*"
+    sensitive_arguments: [1]
+    semantics: delete-resource-by-id
+    confidence: high
+
+  - id: spring-data-save-update
+    framework: spring-data
+    method_full_name:
+      - ".*JpaRepository\\.save.*"
+      - ".*CrudRepository\\.save.*"
+      - ".*JpaRepository\\.saveAndFlush.*"
+      - ".*EntityManager\\.merge.*"
+      - ".*EntityManager\\.persist.*"
+    sensitive_arguments: [1]
+    semantics: mutate-resource
+    confidence: medium
+    notes: elevate when entity was loaded or keyed by client id without ownership check
+
+  - id: custom-finder-by-id
+    framework: spring-data
+    method_full_name:
+      - ".*findByIdAnd.*"
+      - ".*findOneById.*"
+      - ".*getOrderById.*"
+      - ".*getUserById.*"
+      - ".*loadById.*"
+      - ".*fetchById.*"
+    sensitive_arguments: [1]
+    semantics: load-resource-by-id
+    confidence: medium
+    notes: findByIdAndUserId may be strong control; plain findById is not
+
+  - id: mybatis-select-by-id
+    framework: mybatis
+    method_full_name:
+      - ".*Mapper\\.selectByPrimaryKey.*"
+      - ".*Mapper\\.selectById.*"
+      - ".*Mapper\\.deleteByPrimaryKey.*"
+      - ".*Mapper\\.updateByPrimaryKey.*"
+    sensitive_arguments: [1]
+    semantics: load-or-mutate-by-id
+    confidence: high
+
+  - id: jdbc-query-by-id
+    framework: jdbc
+    method_full_name:
+      - ".*JdbcTemplate\\.query.*"
+      - ".*JdbcTemplate\\.queryForObject.*"
+      - ".*JdbcTemplate\\.update.*"
+      - ".*NamedParameterJdbcTemplate\\..*"
+    sensitive_arguments: []
+    semantics: possible-id-in-sql
+    confidence: medium
+    notes: require SQL/parameter analysis to confirm id binding without owner clause
+
+  - id: service-layer-get-delete
+    framework: custom
+    method_full_name:
+      - ".*Service\\.(get|find|load|fetch|delete|remove|update|save).*"
+      - ".*OrderService\\..*"
+      - ".*UserService\\..*"
+      - ".*DocumentService\\..*"
+    sensitive_arguments: []
+    semantics: possible-resource-access-wrapper
+    confidence: medium
+    notes: wrappers require expansion into repository/DAO sinks
+
+  - id: response-return-entity
+    framework: spring-mvc
+    method_full_name:
+      - ".*ResponseEntity\\.ok.*"
+      - ".*ResponseEntity\\.body.*"
+    sensitive_arguments: []
+    semantics: expose-loaded-resource
+    confidence: low
+    notes: secondary; primary sink is load/mutate without authz
+
+adjacent_not_sink:
+  - id: security-context-read
+    framework: spring-security
+    method_full_name:
+      - ".*SecurityContextHolder.*"
+    semantics: trusted-subject
+    notes: reading current user is control baseline, not sink
+
+  - id: authentication-only-annotation
+    framework: spring-security
+    method_full_name:
+      - ".*@Authenticated.*"
+    semantics: authentication-gate
+    notes: authentication without object ownership is insufficient

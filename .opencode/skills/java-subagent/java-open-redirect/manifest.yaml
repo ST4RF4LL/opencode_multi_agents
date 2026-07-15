@@ -1,0 +1,75 @@
+id: java-open-redirect
+name: Java Open Redirect / Unvalidated Redirects
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-601
+owasp:
+  - A01:2021-Broken Access Control
+dimension: D6
+maturity: 3
+description: >
+  Detect attacker-controlled redirect destination data reaching browser
+  redirect responses (sendRedirect, Location header, Spring redirect:
+  prefix, RedirectView) without effective host, scheme, or relative-path
+  allowlisting.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-open-redirect-sinks.yaml
+      - java-open-redirect-patterns.yaml
+    codeql:
+      - java-open-redirect.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - servlet
+  - spring-mvc

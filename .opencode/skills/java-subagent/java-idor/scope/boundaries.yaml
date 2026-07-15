@@ -1,0 +1,34 @@
+in_scope:
+  - object_id_from_path_query_body_header_used_for_resource_access
+  - spring_mvc_pathvariable_requestparam_requestbody_ids
+  - spring_data_findbyid_getone_deletebyid_getreferencebyid
+  - jpa_entitymanager_find_native_query_by_id
+  - servlet_parameter_id_to_dao
+  - ownership_and_tenant_checks_missing_or_bypassable
+  - horizontal_and_vertical_object_privilege
+  - mutation_without_ownership_on_update_delete
+  - client_supplied_tenant_id_breaking_isolation
+
+out_of_scope:
+  - authentication_bypass_login_logic_without_object_reference
+  - pure_csrf_without_idor
+  - pure_xss
+  - mass_assignment_of_non_id_fields_without_object_access_path
+  - function_level_missing_role_check_with_no_object_id
+  - open_redirect
+  - sql_injection_without_authorization_angle
+
+adjacent_skills:
+  - id: java-missing-authorization
+    relation: function/endpoint role checks without object-level focus
+  - id: java-mass-assignment
+    relation: binder over-posting of fields; may enable tenantId override (related)
+  - id: java-sql-injection
+    relation: id in query string may also be SQLi; separate skill if injection is primary
+
+boundary_notes:
+  - authentication_is_not_object_level_authorization
+  - public_catalog_resources_may_be_intentionally_unscoped
+  - sequential_ids_increase_exploitability_but_missing_authz_is_the_root_cause
+  - tenant_id_must_come_from_server_side_security_context_not_client
+  - self_access_patterns_need_explicit_current_user_binding

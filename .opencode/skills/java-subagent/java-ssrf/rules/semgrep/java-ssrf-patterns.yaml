@@ -1,0 +1,81 @@
+rules:
+  - id: java-ssrf-host-concat
+    message: Host or base URL built by concatenating user input
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "http://" + $HOST + $PATH
+      - pattern: |
+          "https://" + $HOST + $PATH
+      - pattern: |
+          "http://" + $HOST
+      - pattern: |
+          "https://" + $HOST
+      - pattern: |
+          String.format("http://%s", $HOST)
+      - pattern: |
+          String.format("https://%s/%s", $HOST, $PATH)
+      - pattern: |
+          String.format("%s://%s", $SCHEME, $HOST)
+    metadata:
+      cwe: CWE-918
+      subtype: host-control
+      confidence: high
+
+  - id: java-ssrf-weak-startswith
+    message: Weak startsWith prefix check on URL (bypassable; not host validation)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $URL.startsWith("http://")
+      - pattern: |
+          $URL.startsWith("https://")
+      - pattern: |
+          $URL.startsWith($PREFIX)
+      - pattern: |
+          if ($URL.startsWith(...)) {
+            ...
+            $CLIENT.$METHOD($URL, ...)
+            ...
+          }
+    metadata:
+      cwe: CWE-918
+      subtype: path-confusion
+      confidence: medium
+      notes: L1/L3 hint; not a finding without dataflow to network sink
+
+  - id: java-ssrf-base-path-concat
+    message: Fixed base URL concatenated with user path may allow destination escape
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $BASE + $USER
+      - pattern: |
+          $BASE.concat($USER)
+      - pattern: |
+          String.format("%s%s", $BASE, $USER)
+    metadata:
+      cwe: CWE-918
+      subtype: path-confusion
+      confidence: low
+      notes: elevate when $BASE is URL-like and result hits HTTP client
+
+  - id: java-ssrf-metadata-literal-hint
+    message: Cloud metadata address literal near network client (review destination control)
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "169.254.169.254"
+      - pattern: |
+          "metadata.google.internal"
+      - pattern: |
+          "100.100.100.200"
+    metadata:
+      cwe: CWE-918
+      subtype: cloud-metadata
+      confidence: low
+      notes: L0/L1 context only; do not report as finding without user-controlled path

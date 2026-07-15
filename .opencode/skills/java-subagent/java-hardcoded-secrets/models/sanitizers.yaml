@@ -1,0 +1,52 @@
+sanitizers:
+  strong:
+    - id: env-or-vault-injection
+      condition:
+        - secret_loaded_from_environment_or_vault_or_kms
+        - no_plaintext_secret_literal_in_source_or_committed_config
+    - id: secret-manager-sdk
+      condition:
+        - uses_AWS_Secrets_Manager_or_HashiCorp_Vault_or_Azure_KeyVault_or_GCP_Secret_Manager
+        - credentials_not_embedded_in_repo
+    - id: ci-secret-scan-and-rotation
+      condition:
+        - secrets_only_in_ephemeral_ci_secrets_store
+        - rotation_policy_enforced
+      notes: process control; still reject if plaintext remains in git history of active defaults
+
+  contextual:
+    - id: obvious-placeholder
+      condition:
+        - value_is_CHANGE_ME_or_your_api_key_or_example_docs_key
+        - not_used_as_unconditional_production_default
+      notes: AWS docs example AKIAIOSFODNN7EXAMPLE is placeholder
+    - id: test-scoped-fixture
+      condition:
+        - only_under_src_test_or_test_resources
+        - not_packaged_into_production_artifact
+        - value_is_clearly_fake
+    - id: public-key-or-certificate-only
+      condition:
+        - material_is_public_key_or_certificate_not_private_key
+      notes: not a secret
+
+  weak:
+    - id: obfuscation-or-base64
+      pattern:
+        - Base64 decode of embedded string used as password
+        - string reverse / xor "encryption" of secret in source
+      notes: reversible embedding still hardcoded secret
+    - id: default-with-env-override
+      pattern:
+        - System.getenv("X") != null ? env : "hardcoded-default"
+      notes: hardcoded default still ships if env missing
+
+  invalid:
+    - id: plaintext-password-literal
+      notes: password in source/config is not mitigated by comments
+    - id: committed-private-key
+      notes: PEM private key in repo is always high risk
+    - id: static-cloud-keys
+      notes: AKIA + secret in code is not fixed by IAM comments
+    - id: jwt-hs-secret-in-source
+      notes: anyone with source can forge tokens

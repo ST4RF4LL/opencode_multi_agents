@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Jackson @RequestBody onto entities with balance/role is high-signal mass assignment
+  - @JsonIgnore on getters alone is insufficient; protect setters or use READ_ONLY
+  - DTO isolation is preferred over annotating entities for dual read/write use
+  - Financial fields must only change via server-side ledger logic, never raw body binding
+non_transferable_details:
+  - original endpoint path
+  - original currency amounts
+  - original account identifiers

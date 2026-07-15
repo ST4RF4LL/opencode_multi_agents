@@ -1,0 +1,64 @@
+name: java-mass-assignment-decision-tree
+steps:
+  - id: find_binding_entry
+    question: 是否发现请求绑定入口（@ModelAttribute / @RequestBody / ObjectMapper.readValue / Spring Data REST / PATCH merge）？
+    no: stop_no_binding
+    yes: check_target_type
+
+  - id: check_target_type
+    question: 绑定目标是否为领域实体 / JPA Entity / 含敏感字段的类型，或随后被全量拷贝到此类对象？
+    no: reject_safe_dto
+    yes: check_sensitive_writable
+
+  - id: check_sensitive_writable
+    question: 是否存在可被外部赋值的敏感属性（role/isAdmin/balance/owner/status 等）？
+    no: reject_no_sensitive_fields
+    yes: check_external_control
+
+  - id: check_external_control
+    question: 外部输入是否能影响这些敏感属性的值（参数名匹配、JSON 属性、嵌套路径、PATCH path）？
+    no: candidate_needs_modeling
+    yes: classify_subtype
+
+  - id: classify_subtype
+    question: 属于 spring-mvc-entity-binding / jackson-requestbody-sensitive-fields / entity-as-dto / nested-binding-privilege / patch-without-allowlist 中哪一类？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在字段控制（DTO 隔离 / @JsonIgnore READ_ONLY / InitBinder allowlist / 显式字段拷贝 / PATCH 白名单）？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（完整 allowlist 或敏感字段不可写）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: impact_path
+    question: 绑定后的对象是否进入持久化、授权决策或资金状态更新？
+    no: candidate_limited_impact
+    yes: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），调用者角色是否低于被提升权限？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_binding: Rejected
+  reject_safe_dto: Rejected
+  reject_no_sensitive_fields: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  candidate_limited_impact: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

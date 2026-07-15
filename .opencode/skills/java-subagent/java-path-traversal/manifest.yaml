@@ -1,0 +1,79 @@
+id: java-path-traversal
+name: Java Path Traversal / Zip Slip
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-22
+  - CWE-23
+  - CWE-36
+  - CWE-59
+owasp:
+  - A01:2021-Broken Access Control
+maturity: 3
+dimension: D5
+description: >
+  Detect attacker-controlled path segments reaching file read/write/delete/extract
+  operations without effective normalization and base-directory confinement.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-path-traversal-sinks.yaml
+      - java-path-traversal-patterns.yaml
+    codeql:
+      - java-path-traversal.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - jdk-nio
+  - jdk-file
+  - zip-extract
+  - servlet-multipart
+  - spring-resource

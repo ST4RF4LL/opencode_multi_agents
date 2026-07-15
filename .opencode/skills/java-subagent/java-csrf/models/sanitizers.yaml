@@ -1,0 +1,86 @@
+sanitizers:
+  strong:
+    - id: synchronizer-token-pattern
+      condition:
+        - server_generates_unpredictable_token_per_session
+        - token_bound_to_session
+        - server_validates_token_on_every_state_changing_request
+        - token_rejected_when_missing_mismatched_or_expired
+      notes: classic Spring Security CsrfFilter / _csrf / X-CSRF-TOKEN
+
+    - id: double-submit-cookie-validated
+      condition:
+        - csrf_cookie_and_request_token_compared_server_side
+        - cookie_flags_httponly_secure_samesite_considered
+        - comparison_is_constant_time_or_equivalent_safe
+      notes: weaker if cookie is readable cross-site or not compared
+
+    - id: mandatory-custom-header
+      condition:
+        - non_simple_custom_header_required_for_mutations
+        - preflight_or_cors_does_not_allow_untrusted_origins_with_credentials
+        - header_checked_server_side_not_only_client
+      notes: common for SPA cookie-session JSON APIs (e.g. X-Requested-With, X-CSRF-TOKEN)
+
+    - id: samesite-strict-cookie-auth
+      condition:
+        - session_cookie_SameSite_Strict
+        - no_get_based_state_change
+        - no_cross_site_top_level_navigation_mutation_paths
+      notes: Strict helps; Lax still allows some top-level GET mutations
+
+  contextual:
+    - id: samesite-lax
+      condition:
+        - session_cookie_SameSite_Lax
+        - mutations_are_non_safe_methods_only
+      notes: blocks many cross-site POSTs from third-party sites; not full defense alone
+
+    - id: origin-referer-check
+      condition:
+        - Origin_or_Referer_validated_against_allowlist
+        - missing_header_policy_is_deny_for_mutations
+      notes: useful defense-in-depth; incomplete alone for all browsers/clients
+
+    - id: bearer-header-auth-no-cookie
+      condition:
+        - authentication_only_via_Authorization_header
+        - no_session_cookie_auth_fallback
+      notes: typically removes CSRF browser auto-credential path
+
+  weak:
+    - id: client-side-only-token
+      pattern:
+        - token in SPA only
+        - no server validation
+      notes: attacker-controlled page does not run victim SPA checks
+
+    - id: static-or-predictable-token
+      pattern:
+        - constant token
+        - sequential token
+        - timestamp-only token
+      notes: token-not-bound-to-session subtype
+
+    - id: csrf-enabled-only-for-forms
+      pattern:
+        - form CSRF only
+        - JSON API excluded without alternative control
+      notes: cookie-json-api-no-custom-header risk
+
+    - id: referer-optional-accept-empty
+      pattern:
+        - if referer present check else allow
+      notes: empty Referer often allowed by mistake
+
+  invalid:
+    - id: csrf-disable-global
+      notes: http.csrf().disable() removes Spring CSRF for cookie sessions
+    - id: get-mutation-as-defense
+      notes: using GET for mutations increases CSRF surface
+    - id: secret-url-as-csrf-token
+      notes: security-by-obscurity endpoint paths are not CSRF tokens
+    - id: cors-star-as-csrf-defense
+      notes: CORS does not stop simple cookie-authenticated form posts
+    - id: captcha-without-token-binding
+      notes: CAPTCHA may slow abuse but is not a CSRF session-binding control

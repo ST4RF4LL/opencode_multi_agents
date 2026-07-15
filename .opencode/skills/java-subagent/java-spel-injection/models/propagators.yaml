@@ -1,0 +1,58 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"#{" + userExpr + "}"'
+      - '"T(java.lang.Runtime).getRuntime().exec(''' + cmd + "')"'
+      - 'base + userFragment'
+      - 'new StringBuilder().append("#root.").append(prop).toString()'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("#{%s}", userExpr)'
+      - 'String.format("name == ''%s''", name)'
+      - 'MessageFormat.format(...)'
+
+  - pattern: template-parser-context
+    examples:
+      - 'parser.parseExpression(userTemplate, new TemplateParserContext())'
+      - 'parser.parseExpression("Hello #{#name}", new TemplateParserContext()) with user in template body'
+
+  - pattern: getter-setter
+    examples:
+      - setExpression -> getExpression
+      - setSpel -> getSpel
+      - setFilterExpression -> getFilterExpression
+      - setKeyExpression -> getKeyExpression
+
+  - pattern: builder
+    examples:
+      - ExpressionBuilder.with(userExpr).build()
+      - CacheKeyBuilder.expression(userInput)
+
+  - pattern: collection
+    examples:
+      - map.put("expression", input)
+      - params.get("spel")
+      - headers.get("X-Filter-Expr")
+
+  - pattern: dto-field
+    examples:
+      - EvalRequest.expression
+      - FilterSpec.spel
+      - RuleConfig.conditionExpression
+
+  - pattern: wrapper-method
+    examples:
+      - SpelUtil.evaluate(expr)
+      - ExpressionHelper.getValue(expr, ctx)
+      - ExpressionService.parseAndRun(expr)
+
+  - pattern: evaluation-context-variable
+    examples:
+      - context.setVariable("input", userValue) with constant expression
+      - context.setRootObject(userObject)
+    notes: variable/root values are not expression-text injection unless expression text is also controlled
+
+  - pattern: second-order-store
+    examples:
+      - save(userExpression) -> later load() -> parseExpression / getValue

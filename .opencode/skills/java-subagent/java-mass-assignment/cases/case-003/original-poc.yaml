@@ -1,0 +1,15 @@
+case_specific: true
+preconditions:
+  - PUT /api/users/{id} accepts UserEntity JSON
+  - service uses BeanUtils.copyProperties without ignore list
+request_context:
+  endpoint: PUT /api/users/1
+  content_type: application/json
+  body: |
+    {"displayName": "x", "email": "x@example.com", "admin": true, "role": "ADMIN"}
+observed_result:
+  - managed entity receives isAdmin/role from request via copyProperties
+  - save persists elevated privileges
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

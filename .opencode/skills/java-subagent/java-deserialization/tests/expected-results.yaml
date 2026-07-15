@@ -1,0 +1,57 @@
+positive:
+  P01_ObjectInputStreamBody.java:
+    expect: candidate_or_finding
+    subtype: java-native-serialization
+    sink: ObjectInputStream.readObject
+  P02_FastjsonAutoType.java:
+    expect: candidate_or_finding
+    subtype: fastjson-autotype
+    sink: JSON.parseObject
+  P03_SnakeYamlDefault.java:
+    expect: candidate_or_finding
+    subtype: snakeyaml-unsafe-constructor
+    sink: Yaml.load
+  P04_JacksonDefaultTyping.java:
+    expect: candidate_or_finding
+    subtype: jackson-default-typing
+    sink: ObjectMapper.readValue
+  P05_XStreamFromXml.java:
+    expect: candidate_or_finding
+    subtype: xstream-unprotected
+    sink: XStream.fromXML
+
+negative:
+  N01_ObjectInputFilter.java:
+    expect: rejected
+    reason: effective_object_input_filter
+  N02_SnakeYamlSafeConstructor.java:
+    expect: rejected
+    reason: safe_constructor
+  N03_JacksonClosedDto.java:
+    expect: rejected
+    reason: jackson_closed_dto_without_typing
+  N04_FastjsonSafeMode.java:
+    expect: rejected
+    reason: autotype_off_safemode_fixed_type
+  N05_ConstantInternalBlob.java:
+    expect: rejected
+    reason: no_external_input
+
+regression:
+  R01_ObjectInputStreamMustDetect.java:
+    expect: sink_candidate
+    subtype: java-native-serialization
+    must_not_regress: false_negative_on_ObjectInputStream
+  R02_GadgetLibNotFinding.java:
+    expect: rejected
+    reason: gadget_library_alone_not_finding
+    must_not_regress: false_positive_on_gadget_dependency_only
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count
+    - jackson_closed_dto_false_positive_rate

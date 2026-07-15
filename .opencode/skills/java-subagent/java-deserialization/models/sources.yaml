@@ -1,0 +1,130 @@
+sources:
+  - id: servlet-inputstream-bytes
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getInputStream.*"
+      - ".*ServletInputStream.*read.*"
+      - ".*IOUtils\\.toByteArray.*"
+      - ".*StreamUtils\\.copyToByteArray.*"
+    controlled_value: return
+    confidence: high
+    notes: HTTP body bytes commonly fed to ObjectInputStream / Hessian / Kryo
+
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+    controlled_value: return
+    confidence: high
+    notes: base64-encoded serialized blobs or JSON/YAML strings
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+    notes: custom headers carrying base64 serialized or typed JSON
+
+  - id: servlet-cookie
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getCookies.*"
+      - ".*Cookie\\.getValue.*"
+    controlled_value: return
+    confidence: high
+    notes: remember-me / session-like serialized cookies
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: high
+    notes: >
+      raw byte[] / String body for native deserial; JSON for Fastjson/Jackson;
+      YAML string for SnakeYAML; XML for XStream/XMLDecoder
+
+  - id: spring-multipart
+    framework: spring-mvc
+    method_full_name:
+      - ".*MultipartFile\\.getBytes.*"
+      - ".*MultipartFile\\.getInputStream.*"
+      - ".*Part\\.getInputStream.*"
+    controlled_value: return
+    confidence: high
+
+  - id: rpc-payload
+    framework: rpc
+    method_full_name:
+      - ".*RemoteInvocation.*getArguments.*"
+      - ".*HttpInvokerServiceExporter.*"
+      - ".*RmiServiceExporter.*"
+      - ".*HessianServiceExporter.*"
+      - ".*BurlapServiceExporter.*"
+    controlled_value: return_or_stream
+    confidence: high
+    notes: Java remoting / Hessian / HTTP invoker payloads
+
+  - id: message-queue-bytes
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+      - ".*BytesMessage.*readBytes.*"
+      - ".*JmsTemplate\\.receive.*"
+      - ".*@JmsListener.*"
+      - ".*@RabbitListener.*"
+      - ".*@KafkaListener.*"
+    controlled_value: return
+    confidence: high
+    notes: MQ/Kafka/JMS message body as deserialization source
+
+  - id: redis-bytes
+    framework: redis
+    method_full_name:
+      - ".*RedisTemplate\\.opsForValue\\.get.*"
+      - ".*StringRedisTemplate\\.opsForValue\\.get.*"
+      - ".*Jedis\\.get.*"
+      - ".*Lettuce.*get.*"
+      - ".*RedisConnection\\.get.*"
+      - ".*RedisSerializer\\.deserialize.*"
+      - ".*JdkSerializationRedisSerializer\\.deserialize.*"
+    controlled_value: return
+    confidence: high
+    notes: Redis values or serializers that invoke ObjectInputStream
+
+  - id: base64-decode
+    framework: jdk
+    method_full_name:
+      - ".*Base64\\.getDecoder\\.decode.*"
+      - ".*Base64\\.Decoder\\.decode.*"
+      - ".*DatatypeConverter\\.parseBase64Binary.*"
+      - ".*Base64\\.decodeBase64.*"
+    controlled_value: return
+    confidence: medium
+    notes: intermediate; taint when decode result feeds deserializer
+
+  - id: file-or-cache-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*Files\\.readAllBytes.*"
+      - ".*FileInputStream\\.<init>.*"
+      - ".*Paths\\.get.*"
+    controlled_value: return
+    confidence: low
+    notes: second-order when path or content influenced by attacker

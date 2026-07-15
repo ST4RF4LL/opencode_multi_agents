@@ -1,0 +1,11 @@
+source:
+  method: LoginController.success
+  parameter: returnUrl
+  annotation: RequestParam
+path:
+  - LoginController.success
+  - '"redirect:" + returnUrl'
+sink:
+  method: Spring redirect view resolution
+  argument: return value
+influence: full_url_or_external_target_after_prefix

@@ -1,0 +1,53 @@
+id: java-native
+name: Java Native Serialization / XMLDecoder
+detect:
+  imports:
+    - java.io.ObjectInputStream
+    - java.io.ObjectInput
+    - java.io.ObjectInputFilter
+    - java.beans.XMLDecoder
+    - org.apache.commons.io.serialization.ValidatingObjectInputStream
+    - org.springframework.util.SerializationUtils
+  keywords:
+    - ObjectInputStream
+    - readObject
+    - readUnshared
+    - XMLDecoder
+    - ObjectInputFilter
+    - ValidatingObjectInputStream
+    - SerializationUtils.deserialize
+    - aced0005
+
+sources: inherit-global
+sinks:
+  - objectinputstream-readobject
+  - xmldecoder-readobject
+  - jdk-serialization-redis
+  - spring-http-invoker
+  - custom-deserialize-wrapper
+
+safe_patterns:
+  - ObjectInputFilter_allowlist_before_readObject
+  - ValidatingObjectInputStream_accept_fixed_classes
+  - trusted_internal_stream_only_with_auth_boundary
+  - no_external_bytes_to_ObjectInputStream
+
+unsafe_patterns:
+  - new_ObjectInputStream_on_request_body_or_cookie_bytes
+  - SerializationUtils_deserialize_untrusted
+  - XMLDecoder_on_untrusted_xml
+  - JdkSerializationRedisSerializer_on_attacker_writable_keys
+  - HttpInvokerServiceExporter_exposed_to_untrusted_network
+
+gadget_amplifiers_only:
+  - commons-collections
+  - commons-beanutils
+  - c3p0
+  - spring-beans
+  - groovy
+  notes: classpath presence amplifies risk; not a finding alone
+
+notes:
+  - Stream origin is as important as the readObject call
+  - ObjectInputFilter is the primary strong control for native deserial
+  - XMLDecoder is not "just XML parsing"; it reconstructs objects/method calls

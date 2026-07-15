@@ -1,0 +1,25 @@
+id: case-002
+vulnerability_type: open-redirect
+subtype: spring-redirect-prefix
+source:
+  type: request-parameter
+  expression: '@RequestParam String returnUrl'
+sink:
+  api: Spring "redirect:" view name
+  sensitive_argument: return value string after redirect: prefix
+propagation:
+  - LoginController.success
+  - string concat "redirect:" + returnUrl
+root_cause:
+  - spring_redirect_prefix_with_user_suffix
+  - no_host_or_relative_path_validation
+  - absolute_external_url_accepted
+prerequisites:
+  - spring_mvc_controller_reachable
+  - post_login_or_success_handler_uses_returnUrl
+observed_behavior:
+  - spring_issues_302_to_attacker_controlled_host
+fix:
+  - allow_only_relative_paths_rejecting_double_slash
+  - or_map_return_target_ids_to_fixed_paths
+  - parse_and_allowlist_host_if_absolute_urls_required

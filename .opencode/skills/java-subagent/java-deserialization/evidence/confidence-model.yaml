@@ -1,0 +1,33 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_type_or_object_graph_influence
+      - missing_or_weak_type_controls
+      - one_of_strong_safe_probe_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_untrusted_deserial
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - request_body_or_cookie_to_native_deserial
+    - autotype_or_default_typing_enabled
+    - snakeyaml_default_ctor
+    - mq_redis_attacker_writable
+    - gadget_amplifiers_present
+    - confirmed_type_resolution_from_payload
+  decrease:
+    - partial_package_blacklist
+    - uncertain_reachability
+    - jackson_without_clear_typing
+    - internal_only_trust_boundary_claimed_without_proof

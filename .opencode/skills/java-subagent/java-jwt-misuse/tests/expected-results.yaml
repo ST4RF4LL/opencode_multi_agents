@@ -1,0 +1,53 @@
+positive:
+  P01_DecodeWithoutVerify.java:
+    expect: candidate_or_finding
+    subtype: missing-signature-verify
+    sink: JWT.decode
+    notes: decode without verify is high confidence when used for identity
+  P02_HardcodedHmacSecret.java:
+    expect: candidate_or_finding
+    subtype: weak-hardcoded-hmac-secret
+    sink: Algorithm.HMAC256
+  P03_NoExpAudCheck.java:
+    expect: candidate
+    subtype: claims-not-validated
+    notes: signature present but exp/aud/iss not required
+  P04_AlgNone.java:
+    expect: candidate_or_finding
+    subtype: alg-none
+    sink: Algorithm.none
+  P05_AlgorithmConfusion.java:
+    expect: candidate_or_finding
+    subtype: algorithm-confusion-rs-hs
+    sink: HMAC256 with public key encoded
+
+negative:
+  N01_Auth0RequireVerify.java:
+    expect: rejected
+    reason: rsa_verify_with_issuer_audience
+  N02_JjwtSignedWithRequire.java:
+    expect: rejected
+    reason: parseClaimsJws_with_require_and_exp
+  N03_SpringJwtDecoderJwks.java:
+    expect: rejected
+    reason: spring_issuer_jwks_and_audience_validator
+  N04_DecodeLoggingOnly.java:
+    expect: rejected
+    reason: decode_for_logging_only_non_trust
+  N05_NimbusProcessorConfigured.java:
+    expect: rejected
+    reason: nimbus_processor_jws_and_claims_verifier
+
+regression:
+  R01_ParseClaimsJwt.java:
+    expect: sink_candidate
+    subtype: alg-none
+    must_not_regress: false_negative_on_unsigned_jjwt_parse
+
+metrics:
+  track:
+    - jwt_candidate_recall
+    - subtype_classification_accuracy
+    - false_positive_rate
+    - finding_precision
+    - static_semantics_finding_rate

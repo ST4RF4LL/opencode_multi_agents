@@ -1,0 +1,25 @@
+in_scope:
+  - jwt_jws_parse_verify_decode_misuse
+  - alg_none_acceptance
+  - missing_or_skipped_signature_verification
+  - weak_or_hardcoded_hmac_secrets
+  - algorithm_confusion_asymmetric_to_hmac
+  - missing_exp_nbf_aud_iss_validation
+  - jjwt_nimbus_auth0_spring_resource_server_patterns
+  - custom_wrappers_around_jwt_libraries
+  - jwt_used_for_session_or_api_authorization
+
+out_of_scope:
+  - pure_tls_or_mtls_without_jwt
+  - cookie_flags_only_without_jwt_logic
+  - sql_injection_or_command_injection
+  - jwe_encryption_strength_only_without_integrity_bypass
+  - production_token_forgery_weaponization
+
+boundary_notes:
+  - parse_only_for_logging_or_debug_may_be_acceptable_if_not_used_for_authz
+  - clock_skew_tolerance_is_contextual_not_always_finding
+  - jwks_based_rs256_with_issuer_audience_is_strong_baseline
+  - algorithm_must_be_allowlisted_not_taken_from_token_header_alone
+  - never_emit_real_forged_tokens_for_production_targets
+  - fake_secrets_and_abstract_pocs_only

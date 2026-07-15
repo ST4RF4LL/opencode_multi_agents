@@ -1,0 +1,17 @@
+source:
+  method: ContinueServlet.doGet
+  parameter: next
+  expression: request.getParameter("next")
+path:
+  - ContinueServlet.doGet
+  - startsWith("https://app.example.com") weak check
+  - setHeader Location
+sink:
+  method: HttpServletResponse.setHeader
+  argument: 2
+  header: Location
+influence: full_url_with_prefix_bypass
+bypass_examples:
+  - "https://app.example.com.evil.example/"
+  - "https://app.example.com@evil.example/"
+  - note: protocol-relative //evil.example fails this particular startsWith but other weak checks accept it

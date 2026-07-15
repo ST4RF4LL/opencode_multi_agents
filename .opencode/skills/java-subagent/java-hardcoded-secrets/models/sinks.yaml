@@ -1,0 +1,89 @@
+sinks:
+  - id: secretkeyspec-literal
+    framework: jca-jce
+    method_full_name:
+      - ".*javax\\.crypto\\.spec\\.SecretKeySpec\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: crypto-key-binding
+    confidence: high
+    notes: maps to jwt-secret-literal or crypto key material
+
+  - id: pbekeyspec-password
+    framework: jca-jce
+    method_full_name:
+      - ".*javax\\.crypto\\.spec\\.PBEKeySpec\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: password-based-key
+    confidence: high
+
+  - id: keystore-load-password
+    framework: jdk
+    method_full_name:
+      - ".*java\\.security\\.KeyStore\\.load.*"
+      - ".*KeyStore\\.getKey.*"
+    sensitive_arguments: [2]
+    semantics: keystore-password
+    confidence: high
+
+  - id: drivermanager-credentials
+    framework: jdbc
+    method_full_name:
+      - ".*java\\.sql\\.DriverManager\\.getConnection.*"
+    sensitive_arguments: [1, 2, 3]
+    semantics: db-authentication
+    confidence: high
+
+  - id: datasource-set-password
+    framework: jdbc
+    method_full_name:
+      - ".*setPassword.*"
+      - ".*setUrl.*"
+      - ".*DataSourceBuilder.*"
+    semantics: db-pool-credentials
+    confidence: medium
+
+  - id: http-auth-header
+    framework: app
+    method_full_name:
+      - ".*setHeader.*Authorization.*"
+      - ".*header\\(\"Authorization\".*"
+      - ".*addHeader\\(\"X-Api-Key\".*"
+    semantics: api-authentication
+    confidence: high
+
+  - id: jwt-sign-secret
+    framework: jwt
+    method_full_name:
+      - ".*signWith.*"
+      - ".*setSigningKey.*"
+      - ".*Keys\\.hmacShaKeyFor.*"
+    sensitive_arguments: [1]
+    semantics: jwt-hmac-signing
+    confidence: high
+
+  - id: aws-static-credentials
+    framework: aws-sdk
+    method_full_name:
+      - ".*BasicAWSCredentials\\.<init>.*"
+      - ".*AwsBasicCredentials\\.create.*"
+      - ".*StaticCredentialsProvider\\.create.*"
+    sensitive_arguments: [1, 2]
+    semantics: cloud-authentication
+    confidence: high
+
+  - id: basic-auth-encoder
+    framework: http
+    method_full_name:
+      - ".*Base64.*encode.*(user|password|credentials).*"
+      - ".*CredentialsProvider\\.setCredentials.*"
+    semantics: basic-or-proxy-auth
+    confidence: medium
+
+  - id: config-property-binding
+    framework: spring-config
+    patterns:
+      - @Value("${...password...}")
+      - @ConfigurationProperties with secret fields populated from plaintext yml
+    semantics: config-secret-injection
+    confidence: high
+    notes: sink is the plaintext config entry when bound to security use

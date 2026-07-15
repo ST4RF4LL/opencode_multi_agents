@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_path_component_influence
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_path_escape
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - write_or_delete_capability
+    - zip_slip_untrusted_archive
+    - confirmed_file_content_disclosure
+    - multipart_path_escape
+  decrease:
+    - partial_filenameutils_getname
+    - uncertain_reachability
+    - normalize_present_but_startswith_unclear
+    - only_weak_blacklist_without_successful_escape

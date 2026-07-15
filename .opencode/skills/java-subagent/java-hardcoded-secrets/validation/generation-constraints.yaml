@@ -1,0 +1,33 @@
+must_derive_from:
+  - actual_secret_location_in_target_repo
+  - actual_subtype_and_secret_type
+  - actual_usage_binding_api_or_config
+  - actual_placeholder_vs_real_assessment
+  - actual_deployment_or_packaging_constraints
+
+must_include:
+  - subtype
+  - secret_type
+  - redacted_location
+  - why_hardcoded
+  - security_impact
+  - static_locations
+  - remediation_hint
+
+must_not:
+  - paste_full_live_secrets_into_reports_or_tickets
+  - reuse_discovered_credentials_against_third_party_systems
+  - claim_compromise_without_location_and_usage_evidence
+  - use_real_production_secrets_in_skill_samples_or_PoCs
+  - perform_destructive_rotation_or_account_changes_without_authorization
+
+sample_secret_policy:
+  allowed_in_skill_tests_and_cases:
+    - AKIAIOSFODNN7EXAMPLE
+    - wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    - CHANGE_ME_NOT_REAL
+    - password-not-real-example
+    - jwt-secret-CHANGE_ME_NOT_REAL
+  forbidden:
+    - real_customer_or_production_credentials
+    - live_cloud_keys

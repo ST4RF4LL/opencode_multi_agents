@@ -1,0 +1,24 @@
+id: jdk-stax
+name: JDK StAX XMLInputFactory
+detection:
+  imports:
+    - javax.xml.stream.XMLInputFactory
+    - javax.xml.stream.XMLStreamReader
+    - javax.xml.stream.XMLEventReader
+    - jakarta.xml.stream.XMLInputFactory
+  classes:
+    - XMLInputFactory
+    - XMLStreamReader
+    - XMLEventReader
+sinks:
+  - XMLInputFactory.createXMLStreamReader(...)
+  - XMLInputFactory.createXMLEventReader(...)
+  - XMLInputFactory.createFilteredReader(...)
+strong_controls:
+  - setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)
+  - setProperty(XMLInputFactory.SUPPORT_DTD, false)
+  - setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "") when supported
+notes:
+  - Missing IS_SUPPORTING_EXTERNAL_ENTITIES=false is a primary StAX XXE pattern
+  - SUPPORT_DTD=false further reduces DTD-based attacks and expansion DoS
+  - Property names may also appear as string literals "javax.xml.stream.isSupportingExternalEntities"

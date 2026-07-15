@@ -1,0 +1,82 @@
+rules:
+  - id: java-jwt-auth0-decode-only
+    message: Auth0 JWT.decode does not verify signature; unsafe if used for auth
+    severity: ERROR
+    languages: [java]
+    pattern: JWT.decode(...)
+    metadata:
+      cwe: CWE-347
+      subtype: missing-signature-verify
+      confidence: high
+      notes: elevate when claims used for authorization
+
+  - id: java-jwt-auth0-algorithm-none
+    message: Algorithm.none accepts unsigned JWTs
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Algorithm.none()
+      - pattern: Algorithm.NONE
+    metadata:
+      cwe: CWE-347
+      subtype: alg-none
+      confidence: high
+
+  - id: java-jwt-jjwt-unsigned-parse
+    message: jjwt unsigned parse path (parseClaimsJwt / parseUnsecuredClaims)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: $P.parseClaimsJwt(...)
+      - pattern: $P.parseUnsecuredClaims(...)
+      - pattern: Jwts.parser().parseClaimsJwt(...)
+    metadata:
+      cwe: CWE-347
+      subtype: alg-none
+      confidence: high
+
+  - id: java-jwt-nimbus-parse-claims
+    message: Nimbus SignedJWT/JWTParser parse without nearby verify is suspicious
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: SignedJWT.parse(...)
+      - pattern: JWTParser.parse(...)
+    metadata:
+      cwe: CWE-347
+      subtype: missing-signature-verify
+      confidence: medium
+      notes: confirm verify/process before claims trust
+
+  - id: java-jwt-hmac-hardcoded-secret
+    message: Hardcoded HMAC secret for JWT signing/verification
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: Algorithm.HMAC256("...")
+      - pattern: Algorithm.HMAC384("...")
+      - pattern: Algorithm.HMAC512("...")
+      - pattern: $P.setSigningKey("...")
+      - pattern: $P.setSigningKey("...".getBytes(...))
+      - pattern: Keys.hmacShaKeyFor("...".getBytes(...))
+      - pattern: new MACVerifier("...")
+      - pattern: new MACVerifier("...".getBytes(...))
+    metadata:
+      cwe: CWE-798
+      subtype: weak-hardcoded-hmac-secret
+      confidence: high
+
+  - id: java-jwt-spring-custom-decoder-hint
+    message: Custom JwtDecoder bean requires review for skipped validation
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern: |
+          @Bean
+          JwtDecoder $M(...) {
+            ...
+          }
+    metadata:
+      cwe: CWE-347
+      subtype: missing-signature-verify
+      confidence: low

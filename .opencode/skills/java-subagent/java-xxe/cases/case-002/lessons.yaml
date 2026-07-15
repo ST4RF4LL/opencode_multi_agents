@@ -1,0 +1,9 @@
+transferable_lessons:
+  - StAX XMLInputFactory defaults often allow external entities until explicitly disabled
+  - IS_SUPPORTING_EXTERNAL_ENTITIES=false and SUPPORT_DTD=false are the strong StAX pair
+  - Multipart XML upload is a frequent untrusted document channel
+  - Property must be set on the same factory before createXMLStreamReader
+non_transferable_details:
+  - original endpoint path
+  - original multipart field name
+  - original payload strings

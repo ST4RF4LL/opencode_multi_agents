@@ -1,0 +1,25 @@
+id: case-002
+vulnerability_type: xxe
+subtype: sax-dom-stax-insecure-defaults
+source:
+  type: multipart-upload
+  expression: "@RequestPart MultipartFile file / file.getInputStream()"
+sink:
+  api: XMLInputFactory.createXMLStreamReader
+  sensitive_argument: 1
+propagation:
+  - UploadController.upload
+  - StaxXmlProcessor.process
+  - XMLInputFactory.newFactory / createXMLStreamReader
+root_cause:
+  - stax_factory_missing_is_supporting_external_entities_false
+  - support_dtd_not_disabled
+  - untrusted_upload_stream_parsed
+prerequisites:
+  - multipart_upload_endpoint_reachable
+  - stax_processor_used_for_uploaded_xml
+observed_behavior:
+  - external_entities_supported_by_default_stax_factory
+fix:
+  - set_IS_SUPPORTING_EXTERNAL_ENTITIES_false
+  - set_SUPPORT_DTD_false

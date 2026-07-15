@@ -1,0 +1,62 @@
+propagators:
+  - pattern: inputstream-handoff
+    examples:
+      - request.getInputStream() -> DocumentBuilder.parse(InputStream)
+      - multipartFile.getInputStream() -> SAXParser.parse(InputStream, handler)
+      - Files.newInputStream(path) -> XMLInputFactory.createXMLStreamReader(InputStream)
+
+  - pattern: string-to-stream
+    examples:
+      - new ByteArrayInputStream(xmlString.getBytes())
+      - new StringReader(xmlBody)
+      - new InputSource(new StringReader(body))
+
+  - pattern: getter-setter
+    examples:
+      - setXmlPayload -> getXmlPayload
+      - setDocumentBody -> getDocumentBody
+      - setUploadStream -> getUploadStream
+
+  - pattern: builder
+    examples:
+      - XmlRequest.builder().body(xml).build()
+      - ImportJob.withSource(stream).parse()
+
+  - pattern: dto-field
+    examples:
+      - ImportRequest.xmlContent
+      - SoapEnvelope.body
+      - UploadForm.file
+
+  - pattern: collection
+    examples:
+      - map.put("xml", input)
+      - params.get("payload")
+
+  - pattern: wrapper-method
+    examples:
+      - XmlUtil.parse(stream)
+      - XmlHelper.toDocument(body)
+      - SecureXmlParser.parse (must verify internal flags)
+      - JaxbUtil.unmarshal(xml)
+
+  - pattern: factory-to-parser
+    examples:
+      - DocumentBuilderFactory.newInstance() -> newDocumentBuilder() -> parse
+      - XMLInputFactory.newFactory() -> createXMLStreamReader
+      - SAXParserFactory.newInstance() -> newSAXParser() -> parse
+
+  - pattern: unmarshaller-source
+    examples:
+      - new StreamSource(inputStream) -> unmarshaller.unmarshal(source)
+      - new SAXSource(inputSource) -> unmarshaller.unmarshal(source)
+      - XMLStreamReader -> unmarshaller.unmarshal(reader)
+
+  - pattern: url-fetch-then-parse
+    examples:
+      - restTemplate.getForObject(url, String.class) -> DocumentBuilder.parse
+      - url.openStream() -> SAXReader.read
+
+  - pattern: second-order-store
+    examples:
+      - save(xmlUpload) -> later load() -> parse without secure flags

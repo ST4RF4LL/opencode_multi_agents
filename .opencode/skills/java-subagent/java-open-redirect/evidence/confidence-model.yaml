@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_redirect_destination_influence
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_destination_influence
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - full_url_control
+    - post_login_returnUrl
+    - protocol_relative_bypass_of_weak_check
+    - confirmed_3xx_Location_to_evil_example
+  decrease:
+    - partial_host_allowlist
+    - uncertain_reachability
+    - relative_path_only_influence
+    - ssrf_noise_without_browser_redirect

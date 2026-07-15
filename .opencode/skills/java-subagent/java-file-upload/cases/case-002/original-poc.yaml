@@ -1,0 +1,16 @@
+case_specific: true
+preconditions:
+  - endpoint uses Content-Type startsWith image/ check only
+  - lab environment only
+request_context:
+  endpoint: /api/avatar
+  parameter: file
+  notes: >
+    Upload FAKE_MARKER plain body with Content-Type image/png and optional
+    non-image extension to show MIME-only trust. No webshell content.
+observed_result:
+  - server accepts and stores non-image body when Content-Type is image/*
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - never_use_real_webshell_payloads

@@ -1,0 +1,45 @@
+id: nimbus-jose
+name: Nimbus JOSE + JWT
+detect:
+  imports:
+    - com.nimbusds.jwt.SignedJWT
+    - com.nimbusds.jwt.JWTParser
+    - com.nimbusds.jwt.JWTClaimsSet
+    - com.nimbusds.jose.JWSVerifier
+    - com.nimbusds.jose.crypto.MACVerifier
+    - com.nimbusds.jose.crypto.RSASSAVerifier
+    - com.nimbusds.jose.proc.DefaultJOSEObjectTypeVerifier
+    - com.nimbusds.jwt.proc.DefaultJWTProcessor
+    - com.nimbusds.jwt.proc.ConfigurableJWTProcessor
+  keywords:
+    - SignedJWT.parse
+    - JWTParser.parse
+    - MACVerifier
+    - RSASSAVerifier
+    - DefaultJWTProcessor
+    - JWSAlgorithm
+    - JWSKeySelector
+  maven:
+    - com.nimbusds:nimbus-jose-jwt
+
+sources: inherit-global
+sinks:
+  - nimbus-parse-verify
+  - claims-used-for-authz
+  - jws-header-alg-trust
+
+safe_patterns:
+  - DefaultJWTProcessor_with_JWSKeySelector_and_JWSAlgorithm_family
+  - SignedJWT_verify_with_RSASSAVerifier_or_MACVerifier_before_claims
+  - DefaultJWTClaimsVerifier_for_exp_iss_aud
+  - reject_Algorithm_none
+
+unsafe_patterns:
+  - SignedJWT_parse_then_getJWTClaimsSet_without_verify
+  - MACVerifier_with_hardcoded_shared_secret
+  - accepting_alg_from_header_without_allowlist
+  - public_key_material_as_MAC_secret
+
+notes:
+  - Spring Resource Server uses Nimbus under the hood
+  - process() path is safer than raw parse+claims when configured

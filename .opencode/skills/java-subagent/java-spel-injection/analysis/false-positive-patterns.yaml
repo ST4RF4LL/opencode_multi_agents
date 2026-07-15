@@ -1,0 +1,49 @@
+not_vulnerability:
+  - id: constant-expression-with-variable-binding
+    pattern: parseExpression with constant string; user data only via setVariable/root
+    reason: user input cannot change expression structure
+
+  - id: simple-evaluation-context-restricted
+    pattern: SimpleEvaluationContext without dangerous custom accessors; limited expression surface
+    reason: sandbox reduces type/constructor/method power; still verify no expression-text injection needs
+
+  - id: expression-allowlist
+    pattern: user input mapped through immutable allowlist/enum to constant SpEL strings
+    reason: attacker selects among fixed safe expressions only
+
+  - id: constant-value-annotation
+    pattern: @Value("#{systemProperties['x']}") or @Value("${prop}") compile-time constants
+    reason: not user-controlled SpEL injection
+
+  - id: test-only-spel
+    pattern: SpEL helper only referenced from test sources
+    reason: not production reachable
+
+  - id: cache-constant-spel
+    pattern: @Cacheable(key = "#id") constant expression text using method args as variables
+    reason: normal Spring Cache SpEL; no expression-string injection
+
+needs_deeper_review:
+  - id: parse-expression-user-string
+    pattern: parseExpression(requestParam) or concat into expression
+    reason: classic SpEL injection
+
+  - id: standard-context-full-power
+    pattern: StandardEvaluationContext + user expression + getValue
+    reason: high RCE/capability surface
+
+  - id: simple-context-custom-accessors
+    pattern: SimpleEvaluationContext with addMethodResolver/addPropertyAccessor
+    reason: not auto-safe; capability may re-expand
+
+  - id: template-parser-context-user
+    pattern: TemplateParserContext with user-influenced template body
+    reason: embeds user data into #{...} evaluation
+
+  - id: wrapper-util
+    pattern: custom SpelUtil/ExpressionHelper evaluate(String)
+    reason: sink is indirection; expand to real parseExpression/getValue
+
+  - id: second-order-stored-expression
+    pattern: expressions loaded from DB/config then evaluated
+    reason: second-order SpEL injection

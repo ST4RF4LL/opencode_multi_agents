@@ -1,0 +1,28 @@
+id: spring-oxm
+name: Spring OXM Unmarshaller
+detection:
+  imports:
+    - org.springframework.oxm.Unmarshaller
+    - org.springframework.oxm.jaxb.Jaxb2Marshaller
+    - org.springframework.oxm.xstream.XStreamMarshaller
+    - org.springframework.oxm.mime.MimeUnmarshaller
+  classes:
+    - Jaxb2Marshaller
+    - XStreamMarshaller
+    - Unmarshaller
+  config_hints:
+    - spring-oxm
+    - Jaxb2Marshaller
+sinks:
+  - Unmarshaller.unmarshal(Source)
+  - Jaxb2Marshaller.unmarshal(Source)
+  - XStreamMarshaller.unmarshal(Source)
+strong_controls:
+  - Jaxb2Marshaller configured with secure process engine / XMLInputFactory
+  - processExternalEntities false when property available
+  - supportDtd false when property available
+  - feed StreamSource only after StAX hardening for JAXB path
+notes:
+  - Spring OXM often wraps JAXB; inspect bean configuration for processExternalEntities
+  - XStreamMarshaller is also deserialization-sensitive; still treat untrusted XML Source as high risk
+  - MessageConverter / @RequestBody XML paths may invoke OXM unmarshallers

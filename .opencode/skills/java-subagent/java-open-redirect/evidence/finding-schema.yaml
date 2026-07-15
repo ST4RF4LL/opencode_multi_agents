@@ -1,0 +1,43 @@
+finding_id: OPENREDIRECT-001
+status: finding # finding | candidate | rejected
+vulnerability_type: open-redirect
+subtype: full-url-redirect
+confidence: high # high | medium | low
+entry:
+  route: "GET /login/success"
+  method: LoginController.success
+  parameter: returnUrl
+source:
+  file: LoginController.java
+  line: 42
+  expression: request.getParameter("returnUrl")
+sink:
+  file: LoginController.java
+  line: 48
+  expression: response.sendRedirect(returnUrl)
+dataflow:
+  - LoginController.success
+  - response.sendRedirect
+controls:
+  observed:
+    - startsWith("https://app.example.com/")
+  assessment:
+    - weak
+    - string-prefix-check
+    - parsed-host-not-validated
+validation:
+  status: verified # verified | not_attempted | failed
+  observable:
+    - response 302 Location https://evil.example
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response status
+    - Location header
+limitations: []
+rejection_reason: null

@@ -1,0 +1,8 @@
+transferable_lessons:
+  - sendRedirect itself is not the vulnerability; the location argument source is
+  - Full absolute URL from request parameter is the highest-signal open-redirect pattern
+  - Prefer destination-id to constant path/URL mapping over allowlisting arbitrary URLs
+non_transferable_details:
+  - original endpoint path
+  - original domain names
+  - original payload strings

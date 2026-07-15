@@ -1,0 +1,17 @@
+case_specific: true
+preconditions:
+  - /api/json accepts JSON body
+  - autoType support enabled on ParserConfig
+request_context:
+  endpoint: /api/json
+  parameter: body
+observed_result:
+  - type_id_in_json_influences_class_resolution
+  - impact_abstract_polymorphic_type_selection
+safe_markers_only:
+  - use_nonexistent_marker_type_name_for_error_differential_if_authorized
+  - do_not_embed_weaponized_atype_gadget_payloads
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - forbidden_ysoserial_or_weaponized_payloads

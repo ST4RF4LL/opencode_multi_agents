@@ -1,0 +1,35 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: resource load/update/delete by id API or path-id pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external object id can reach repository/DAO/service resource access
+    not_a_finding_until: object_authz_and_reachability_checked
+    next: ownership_tenant_role_analysis
+
+  L3_semantic_candidate:
+    meaning: object-level authorization missing or bypassable; cross-user/tenant impact plausible
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe, public by design, or non-reachable
+
+priority_boost:
+  - authenticated_but_no_ownership_check
+  - delete_or_update_mutation
+  - sequential_or_enumerable_ids
+  - tenant_id_from_client
+  - admin_only_data_exposed_to_normal_users
+  - sensitive_pii_or_financial_resource
+
+priority_reduce:
+  - test_code_only
+  - server_scoped_me_endpoints_only
+  - strong_findByIdAndUserId_with_security_context
+  - intentional_public_catalog
+  - dead_code
+  - mock_repository_only

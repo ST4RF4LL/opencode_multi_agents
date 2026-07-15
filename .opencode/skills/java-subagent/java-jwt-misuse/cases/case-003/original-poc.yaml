@@ -1,0 +1,15 @@
+case_specific: true
+preconditions:
+  - signature verifies with known lab key
+  - no exp/aud/iss enforcement on auth path
+request_context:
+  note: >
+    ABSTRACT ONLY — use fake tokens in local lab.
+    Conceptually: expired token or token minted for another audience
+    still passes if only signature is checked.
+observed_result:
+  - role_claim_honored_despite_missing_temporal_or_audience_binding
+reuse_policy:
+  - reference_only
+  - abstract_poc_fake_secrets_only
+  - do_not_execute_on_production

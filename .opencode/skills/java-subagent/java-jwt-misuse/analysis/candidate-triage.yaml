@@ -1,0 +1,34 @@
+triage_levels:
+  L1_jwt_candidate:
+    meaning: JWT library API, key binding, or suspicious alg/secret pattern found
+    not_a_finding: true
+    next: classify_subtype_and_trace_token_key_claims
+
+  L2_config_or_dataflow_candidate:
+    meaning: token/key/algorithm path to parse or trust decision established
+    not_a_finding_until: verification_and_claim_controls_checked
+    next: sanitizer_and_usage_analysis
+
+  L3_semantic_candidate:
+    meaning: weak JWT handling with security-sensitive use; controls missing or bypassable
+    next: reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied (often complete static semantics for JWT misuse)
+  rejected:
+    meaning: proven strong verification and claims validation, non-trust use, or non-reachable
+
+priority_boost:
+  - authentication_or_authorization_filter
+  - api_gateway_or_resource_server_entry
+  - hardcoded_hmac_secret_in_repo
+  - alg_none_or_unsigned_parse_path
+  - public_key_used_as_hmac_secret
+  - claims_drive_role_or_tenant_decisions
+
+priority_reduce:
+  - test_code_only
+  - example_or_docs_only
+  - decode_for_logging_only_with_evidence
+  - dead_code
+  - local_dev_tooling

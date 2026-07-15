@@ -1,0 +1,27 @@
+id: case-002
+vulnerability_type: csrf
+subtype: cookie-json-api-no-custom-header
+source:
+  type: browser-session-cookie
+  expression: JSESSIONID / session cookie on JSON API
+sink:
+  api: ProfileService.updateEmail via JSON POST
+  sensitive_argument: body.email
+propagation:
+  - ProfileController.update
+  - @RequestBody ProfileUpdate
+  - ProfileService.updateEmail
+root_cause:
+  - cookie_session_json_api
+  - no_csrf_token_header_required
+  - no_mandatory_custom_header
+  - spring_csrf_disabled_or_ignored_for_api
+prerequisites:
+  - victim_authenticated_with_session_cookie
+  - browser_sends_cookie_on_cross_site_request_depending_on_samesite
+observed_behavior:
+  - email_or_profile_updated_without_csrf_header
+fix:
+  - require_csrf_header_token_for_json_mutations
+  - CookieCsrfTokenRepository_with_server_validation
+  - or_migrate_to_bearer_header_auth_without_cookie_session

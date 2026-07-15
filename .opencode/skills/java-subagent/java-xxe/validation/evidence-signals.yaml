@@ -1,0 +1,29 @@
+strong_signals:
+  - lab_response_includes_content_from_authorized_local_file_via_entity
+  - authorized_lab_listener_receives_http_from_app_host_via_external_entity
+  - application_logs_confirm_dtd_or_entity_resolution_of_attacker_controlled_system_id
+  - deterministic_parser_behavior_change_with_doctype_entity_vs_benign_xml
+  - confirmed_missing_secure_flags_on_same_factory_with_clear_static_dataflow
+
+medium_signals:
+  - stable_error_message_difference_tied_to_doctype_or_entity
+  - resource_usage_spike_consistent_with_entity_expansion
+  - partial_entity_resolution_errors_without_full_file_content
+  - insecure_defaults_with_untrusted_body_and_no_controls_visible
+
+weak_signals:
+  - generic_500_without_xml_entity_semantics
+  - presence_of_DocumentBuilderFactory_api_only
+  - single_malformed_xml_error_without_entity_influence
+  - xpath_error_without_parser_misconfiguration
+  - network_timeout_without_entity_or_listener_evidence
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone
+
+severity_mapping:
+  file_disclosure_or_ssrf_via_entity: high
+  entity_expansion_dos_only: medium
+  uncertain_impact: candidate_until_classified

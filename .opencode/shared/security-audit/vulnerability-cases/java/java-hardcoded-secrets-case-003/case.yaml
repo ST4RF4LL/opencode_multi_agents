@@ -1,0 +1,23 @@
+id: case-003
+vulnerability_type: hardcoded-secrets
+subtype: jwt-secret-literal
+source:
+  type: string-literal-secret
+  expression: 'new SecretKeySpec("jwt-secret-CHANGE_ME_NOT_REAL".getBytes(...), "HmacSHA256")'
+sink:
+  api: SecretKeySpec / JWT HMAC sign
+  sensitive_argument: key_bytes
+propagation:
+  - JwtService.SECRET
+  - JwtService.sign
+root_cause:
+  - hmac_signing_secret_hardcoded_in_source
+  - anyone_with_source_can_forge_tokens
+prerequisites:
+  - JWT used for authentication or authorization decisions
+observed_behavior:
+  - forged_tokens_accepted_if_secret_known
+fix:
+  - load_signing_key_from_secret_manager
+  - use_asymmetric_keys_when_appropriate
+  - rotate_signing_secret

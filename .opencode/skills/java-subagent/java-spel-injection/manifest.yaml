@@ -1,0 +1,76 @@
+id: java-spel-injection
+name: Java SpEL / Expression Language Injection
+version: "1.0.0"
+language: java
+dimension: D1
+cwe:
+  - CWE-917
+  - CWE-94
+owasp:
+  - A03:2021-Injection
+maturity: 3
+description: >
+  Detect attacker-controlled strings reaching SpEL parse/evaluate sinks or
+  Spring EL evaluation without sandbox/SimpleEvaluationContext or expression allowlisting.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-spel-sinks.yaml
+      - java-spel-patterns.yaml
+    codeql:
+      - java-spel-injection.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - spring-expression
+  - spring-context-value
+  - spring-cache-spel
+  - spring-integration-spel

@@ -1,0 +1,8 @@
+transferable_lessons:
+  - getContentType is client-controlled and never a strong type control alone
+  - image/* check then store-as-is is the mime-only-validation archetype
+  - combine extension allowlist with magic-byte or ImageIO decode
+non_transferable_details:
+  - original endpoint path
+  - original storage directory
+  - original Content-Type strings used in tests

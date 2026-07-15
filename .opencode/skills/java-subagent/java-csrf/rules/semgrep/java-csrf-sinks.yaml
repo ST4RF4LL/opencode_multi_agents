@@ -1,0 +1,127 @@
+rules:
+  - id: java-csrf-spring-csrf-disable
+    message: Spring Security CSRF protection is disabled
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $H.csrf().disable()
+      - pattern: |
+          $H.csrf($C -> $C.disable())
+      - pattern: |
+          $H.csrf(AbstractHttpConfigurer::disable)
+      - pattern: |
+          csrf().disable()
+    metadata:
+      cwe: CWE-352
+      category: csrf
+      subtype: spring-csrf-disabled
+      confidence: high
+      notes: L1 config candidate; require cookie-auth state-changing endpoints
+
+  - id: java-csrf-postmapping-password-change
+    message: State-changing password/profile endpoint candidate (verify CSRF controls)
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @PostMapping(...)
+              public $T $M(...) {
+                ...
+              }
+          - pattern: |
+              @RequestMapping(method = RequestMethod.POST, ...)
+              public $T $M(...) {
+                ...
+              }
+      - pattern-either:
+          - pattern-inside: |
+              public $T $M(...) {
+                ...
+                $S.changePassword(...);
+                ...
+              }
+          - pattern-inside: |
+              public $T $M(...) {
+                ...
+                $S.updatePassword(...);
+                ...
+              }
+          - pattern-inside: |
+              public $T $M(...) {
+                ...
+                $S.setPassword(...);
+                ...
+              }
+    metadata:
+      cwe: CWE-352
+      category: csrf
+      subtype: missing-csrf-token
+      confidence: medium
+
+  - id: java-csrf-get-based-delete
+    message: GET mapping may perform state-changing delete/remove
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @GetMapping($PATH)
+              public $T $M(...) {
+                ...
+                $R.delete(...);
+                ...
+              }
+          - pattern: |
+              @GetMapping($PATH)
+              public $T $M(...) {
+                ...
+                $R.deleteById(...);
+                ...
+              }
+          - pattern: |
+              @GetMapping($PATH)
+              public $T $M(...) {
+                ...
+                $S.remove(...);
+                ...
+              }
+    metadata:
+      cwe: CWE-352
+      category: csrf
+      subtype: get-based-state-change
+      confidence: high
+
+  - id: java-csrf-cookie-json-post
+    message: Cookie-session JSON mutating endpoint candidate (check CSRF header/token)
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @PostMapping(..., consumes = "application/json", ...)
+              public $T $M(..., @RequestBody $B $BODY, ...) {
+                ...
+              }
+          - pattern: |
+              @PostMapping(...)
+              public $T $M(..., @RequestBody $B $BODY, ...) {
+                ...
+              }
+          - pattern: |
+              @PutMapping(...)
+              public $T $M(..., @RequestBody $B $BODY, ...) {
+                ...
+              }
+          - pattern: |
+              @DeleteMapping(...)
+              public $T $M(...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-352
+      category: csrf
+      subtype: cookie-json-api-no-custom-header
+      confidence: low
+      notes: elevate when session cookie auth and no CSRF header requirement

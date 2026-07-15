@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: unsafe-deserialization
+subtype: java-native-serialization
+source:
+  type: request-body-bytes
+  expression: "request.getInputStream()"
+sink:
+  api: ObjectInputStream.readObject
+  sensitive_argument: receiver
+propagation:
+  - ImportController.importBlob
+  - BlobService.deserialize
+root_cause:
+  - untrusted_http_body_bytes_to_ObjectInputStream
+  - no_ObjectInputFilter
+  - no_type_allowlist
+prerequisites:
+  - reachable_http_endpoint
+  - content_type_or_raw_body_accepted
+observed_behavior:
+  - attacker_controlled_bytes_reconstruct_object_graph
+fix:
+  - apply_ObjectInputFilter_allowlist_before_readObject
+  - prefer_non_java_serialization_format
+  - reject_unexpected_content_types

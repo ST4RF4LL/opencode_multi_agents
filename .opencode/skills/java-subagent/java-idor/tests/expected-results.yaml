@@ -1,0 +1,53 @@
+positive:
+  P01_FindByIdPathVariable.java:
+    expect: candidate_or_finding
+    subtype: horizontal-idor
+    sink: findById
+  P02_DeleteByIdNoOwner.java:
+    expect: candidate_or_finding
+    subtype: missing-ownership-on-mutation
+    sink: deleteById
+  P03_ClientTenantId.java:
+    expect: candidate_or_finding
+    subtype: tenant-id-from-client
+    sink: findByTenantIdAndId
+  P04_AuthOnlyFindById.java:
+    expect: candidate_or_finding
+    subtype: horizontal-idor
+    control: authentication-only
+  P05_ServletParamOrderId.java:
+    expect: candidate_or_finding
+    subtype: horizontal-idor
+    sink: findById
+    source: servlet-parameter
+
+negative:
+  N01_FindByIdAndUserId.java:
+    expect: rejected
+    reason: query_scoped_to_owner_from_security_context
+  N02_PostAuthorizeOwner.java:
+    expect: rejected
+    reason: object_level_security_expression
+  N03_MeEndpointNoForeignId.java:
+    expect: rejected
+    reason: server_scoped_no_foreign_object_id
+  N04_ServerTenantContext.java:
+    expect: rejected
+    reason: tenant_from_security_context
+  N05_AdminOnlyDelete.java:
+    expect: rejected
+    reason: vertical_admin_role_enforced
+
+regression:
+  R01_PathVariableFindById.java:
+    expect: sink_candidate
+    subtype: horizontal-idor
+    must_not_regress: false_negative_on_pathvariable_findbyid
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

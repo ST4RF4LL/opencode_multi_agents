@@ -1,0 +1,58 @@
+name: java-path-traversal-decision-tree
+steps:
+  - id: find_file_path_sink
+    question: 是否发现文件读/写/删/解压或路径构造 Sink？
+    no: stop_no_sink
+    yes: check_path_origin
+
+  - id: check_path_origin
+    question: Sink 路径是否完全由常量或固定映射产生，且用户输入不进入路径段？
+    yes: reject_safe_path
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入 / ZipEntry.getName / getOriginalFilename 到路径或文件操作的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是相对路径段（../）、绝对路径、Zip 条目名，还是 multipart 原始文件名？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在 normalize + startsWith(baseDir) 或等价严格白名单/固定映射？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（normalize+startsWith / 固定映射 / 服务端生成名）？
+    strong: reject_effective_control
+    partial_filenameutils_only: high_risk_candidate
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: zip_or_multipart_special
+    question: 若为 Zip 解压或 multipart 存储，条目名/原始文件名是否在写出前做基目录约束？
+    no: high_risk_candidate
+    yes: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_safe_path: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

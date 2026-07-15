@@ -1,0 +1,133 @@
+rules:
+  - id: java-deser-objectinputstream-readobject
+    message: ObjectInputStream.readObject/readUnshared may deserialize untrusted data (CWE-502)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: (ObjectInputStream $OIS).readObject()
+      - pattern: (ObjectInputStream $OIS).readUnshared()
+      - pattern: new ObjectInputStream($IN)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      confidence: medium
+      notes: Confirm $IN / stream bytes are user-controlled; not a finding alone
+
+  - id: java-deser-xmldecoder
+    message: XMLDecoder may reconstruct arbitrary objects from untrusted XML
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: new XMLDecoder($IN)
+      - pattern: (XMLDecoder $D).readObject()
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      confidence: high
+
+  - id: java-deser-fastjson-parse
+    message: Fastjson parse/parseObject may honor @type when autoType is enabled or bypassable
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: JSON.parse($X)
+      - pattern: JSON.parseObject($X)
+      - pattern: JSON.parseObject($X, ...)
+      - pattern: JSONObject.parseObject($X)
+      - pattern: JSONObject.parse($X)
+      - pattern: com.alibaba.fastjson.JSON.parse($X)
+      - pattern: com.alibaba.fastjson.JSON.parseObject($X)
+      - pattern: com.alibaba.fastjson2.JSON.parse($X)
+      - pattern: com.alibaba.fastjson2.JSON.parseObject($X)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      subtype: fastjson-autotype
+      confidence: medium
+
+  - id: java-deser-fastjson-autotype-config
+    message: Fastjson autoType explicitly enabled (high-risk configuration)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: $CFG.setAutoTypeSupport(true)
+      - pattern: ParserConfig.getGlobalInstance().setAutoTypeSupport(true)
+      - pattern: JSON.parseObject($X, Feature.SupportAutoType)
+      - pattern: JSON.parse($X, Feature.SupportAutoType)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      subtype: fastjson-autotype
+      confidence: high
+
+  - id: java-deser-jackson-default-typing
+    message: Jackson default/polymorphic typing enabled; untrusted JSON may select types
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: $M.enableDefaultTyping(...)
+      - pattern: $M.enableDefaultTyping()
+      - pattern: $M.activateDefaultTyping(...)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      subtype: jackson-default-typing
+      confidence: high
+
+  - id: java-deser-snakeyaml-load
+    message: SnakeYAML Yaml.load may construct arbitrary types without SafeConstructor
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: (Yaml $Y).load($X)
+      - pattern: (Yaml $Y).loadAll($X)
+      - pattern: (Yaml $Y).loadAs($X, ...)
+      - pattern: new Yaml().load($X)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      subtype: snakeyaml-unsafe-constructor
+      confidence: high
+
+  - id: java-deser-xstream-fromxml
+    message: XStream.fromXML without security framework may allow arbitrary type reconstruction
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: (XStream $XS).fromXML($X)
+      - pattern: (XStream $XS).fromXML($X, ...)
+      - pattern: (XStream $XS).unmarshal($X)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      subtype: xstream-unprotected
+      confidence: high
+
+  - id: java-deser-hessian-kryo
+    message: Hessian/Kryo readObject on potentially untrusted binary data
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: (Hessian2Input $H).readObject()
+      - pattern: (Hessian2Input $H).readObject(...)
+      - pattern: (HessianInput $H).readObject()
+      - pattern: (Kryo $K).readObject($IN, ...)
+      - pattern: (Kryo $K).readClassAndObject($IN)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      subtype: hessian-kryo
+      confidence: high
+
+  - id: java-deser-serialization-utils
+    message: Spring SerializationUtils.deserialize / Redis JDK serializer may use ObjectInputStream
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: SerializationUtils.deserialize($X)
+      - pattern: (JdkSerializationRedisSerializer $S).deserialize($X)
+      - pattern: (RedisSerializer $S).deserialize($X)
+    metadata:
+      cwe: CWE-502
+      category: unsafe-deserialization
+      confidence: medium

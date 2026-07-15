@@ -1,0 +1,36 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous SpEL API or dynamic expression pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach expression string, template fragment, or dangerous evaluation context
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_context_analysis
+
+  L3_semantic_candidate:
+    meaning: sandbox/allowlist missing or bypassable; attacker influences SpEL text or capability surface
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - standard_evaluation_context_with_user_expression
+  - template_parser_context_user_embed
+  - expression_used_for_auth_or_access_control
+  - multi_tenant_or_stored_expression_second_order
+  - getValue_or_setValue_on_shared_application_context_root
+
+priority_reduce:
+  - test_code_only
+  - constant_expression_only
+  - simple_evaluation_context_restricted
+  - expression_allowlist_only
+  - dead_code
+  - constant_value_annotation_only
+  - local_dev_tooling

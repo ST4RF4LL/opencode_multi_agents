@@ -1,0 +1,29 @@
+in_scope:
+  - documentbuilderfactory_and_documentbuilder_parse
+  - saxparserfactory_and_saxparser_parse
+  - xmlinputfactory_stax_create_reader_or_stream
+  - transformerfactory_newtransformer_or_newtemplates
+  - schemafactory_newschema
+  - jaxb_unmarshaller_unmarshal
+  - spring_oxm_unmarshaller
+  - dom4j_saxreader_and_jdom_saxbuilder
+  - untrusted_xml_body_upload_or_url_fetched_xml
+  - missing_or_incomplete_secure_parser_features
+  - xinclude_and_entity_expansion_misconfiguration
+
+out_of_scope:
+  - pure_xpath_injection_without_parser_misconfiguration  # owned by java-xpath-injection
+  - pure_ssrf_without_xml_entity_vector                   # owned by java-ssrf
+  - json_deserialization
+  - sql_injection
+  - command_injection
+  - hardcoded_trusted_xml_only_with_no_external_influence
+  - xpath_string_concat_into_compile_or_evaluate          # CWE-643, not CWE-611
+
+boundary_notes:
+  - XPath injection (CWE-643) is adjacent: do not report as XXE solely because DocumentBuilder is used as XPath context
+  - Generic SSRF is out of scope unless the vector is XML external entity resolution (SSRF-via-entity impact)
+  - Strong secure feature flags on the same factory instance before parse are effective XXE controls
+  - FEATURE_SECURE_PROCESSING alone is often incomplete; prefer disallow-doctype-decl + disable external entities + ACCESS_EXTERNAL_* empty
+  - Billion-laughs / entity expansion DoS (CWE-776) is in scope but impact is DoS, not arbitrary file read
+  - Parameterized XPath VariableResolver does not remediate XXE

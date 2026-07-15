@@ -1,0 +1,82 @@
+id: java-xxe
+name: Java XXE (XML External Entity)
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-611
+  - CWE-827
+  - CWE-776
+owasp:
+  - A05:2021-Security Misconfiguration
+  - A03:2021-Injection
+maturity: 3
+description: >
+  Detect untrusted XML input reaching XML parsers or unmarshallers without
+  effective secure feature flags (external entities, DTD processing, XInclude,
+  entity expansion limits) — CWE-611 with related CWE-827 / CWE-776.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-xxe-sinks.yaml
+      - java-xxe-patterns.yaml
+    codeql:
+      - java-xxe.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - document-builder
+  - sax-parser
+  - stax-xml-input
+  - transformer-factory
+  - schema-factory
+  - jaxb-unmarshaller
+  - spring-oxm
+  - dom4j-jdom

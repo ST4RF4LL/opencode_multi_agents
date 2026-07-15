@@ -1,0 +1,102 @@
+rules:
+  - id: java-path-traversal-dotdot-concat
+    message: Path string built with concatenation that may allow ../ traversal
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $BASE + "/" + $USER
+      - pattern: |
+          $BASE + File.separator + $USER
+      - pattern: |
+          $BASE + "\\" + $USER
+      - pattern: |
+          String.format("%s/%s", $BASE, $USER)
+      - pattern: |
+          new StringBuilder($BASE).append("/").append($USER).toString()
+    metadata:
+      cwe: CWE-22
+      subtype: classic-dotdot
+      confidence: medium
+
+  - id: java-path-traversal-weak-dotdot-blacklist
+    message: Weak blacklist of ".." without normalize + baseDir confinement
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          if ($P.contains("..")) { ... }
+      - pattern: |
+          $P.replace("..", "")
+      - pattern: |
+          $P.replaceAll("\\.\\.", "")
+    metadata:
+      cwe: CWE-22
+      category: weak-sanitizer
+      confidence: low
+      notes: blacklist alone is weak; still need full dataflow analysis
+
+  - id: java-path-traversal-filenameutils-getname-alone
+    message: FilenameUtils.getName used; treat as PARTIAL control only
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: FilenameUtils.getName($X)
+      - pattern: FilenameUtils.getBaseName($X)
+    metadata:
+      cwe: CWE-22
+      category: partial-sanitizer
+      confidence: low
+      notes: PARTIAL not strong; still require base-dir confinement when path is resolved
+
+  - id: java-path-traversal-download-param-hint
+    message: Download/read helper may take filename/path request parameter
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $REQ.getParameter("filename")
+          - pattern: |
+              $REQ.getParameter("file")
+          - pattern: |
+              $REQ.getParameter("path")
+          - pattern: |
+              $REQ.getParameter("name")
+          - pattern: |
+              $REQ.getParameter("fileName")
+      - pattern-either:
+          - pattern-inside: |
+              ...
+              new File(...);
+              ...
+          - pattern-inside: |
+              ...
+              Files.$METHOD(...);
+              ...
+          - pattern-inside: |
+              ...
+              new FileInputStream(...);
+              ...
+    metadata:
+      cwe: CWE-22
+      subtype: download-path-param
+      confidence: medium
+
+  - id: java-path-traversal-normalize-without-startswith
+    message: Path.normalize present without nearby startsWith base check may be incomplete
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern: |
+          $P.normalize()
+      - pattern-not-inside: |
+          ...
+          $P.normalize()
+          ...
+          $X.startsWith(...)
+          ...
+    metadata:
+      cwe: CWE-22
+      category: incomplete-control
+      confidence: low

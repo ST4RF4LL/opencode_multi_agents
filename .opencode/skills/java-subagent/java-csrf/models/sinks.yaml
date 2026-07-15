@@ -1,0 +1,79 @@
+sinks:
+  - id: state-changing-http-mapping
+    framework: spring-mvc
+    method_full_name:
+      - ".*@PostMapping.*"
+      - ".*@PutMapping.*"
+      - ".*@PatchMapping.*"
+      - ".*@DeleteMapping.*"
+      - ".*@RequestMapping.*method.*POST.*"
+      - ".*@RequestMapping.*method.*PUT.*"
+      - ".*@RequestMapping.*method.*DELETE.*"
+      - ".*@RequestMapping.*method.*PATCH.*"
+    semantics: state-changing-endpoint
+    confidence: high
+    notes: annotation-level candidate; confirm side effects in handler body
+
+  - id: get-based-mutation
+    framework: spring-mvc
+    method_full_name:
+      - ".*@GetMapping.*"
+      - ".*@RequestMapping.*method.*GET.*"
+    semantics: possible-state-changing-get
+    confidence: medium
+    notes: elevate when handler deletes/updates/transfers/logs out/changes password
+
+  - id: session-or-db-mutation
+    framework: persistence
+    method_full_name:
+      - ".*EntityManager\\.(persist|merge|remove).*"
+      - ".*JdbcTemplate\\.(update|batchUpdate).*"
+      - ".*Repository\\.(save|delete|deleteById|deleteAll).*"
+      - ".*HttpSession\\.(setAttribute|invalidate|removeAttribute).*"
+      - ".*PasswordEncoder\\.encode.*"
+      - ".*UserDetailsService\\..*"
+      - ".*UserRepository\\..*"
+    semantics: state-mutation
+    confidence: high
+    notes: sink for side-effect confirmation after entry reachability
+
+  - id: spring-security-csrf-disable
+    framework: spring-security
+    method_full_name:
+      - ".*CsrfConfigurer\\.disable.*"
+      - ".*HttpSecurity\\.csrf.*"
+    semantics: csrf-protection-disabled
+    confidence: high
+    notes: configuration sink; pair with cookie-auth mutable endpoints
+
+  - id: form-login-password-change
+    framework: spring-security
+    method_full_name:
+      - ".*changePassword.*"
+      - ".*updatePassword.*"
+      - ".*resetPassword.*"
+      - ".*transferFunds.*"
+      - ".*deleteAccount.*"
+      - ".*updateEmail.*"
+      - ".*updateProfile.*"
+    semantics: high-value-state-change
+    confidence: high
+
+  - id: servlet-do-post-mutation
+    framework: servlet
+    method_full_name:
+      - ".*HttpServlet\\.doPost.*"
+      - ".*HttpServlet\\.doPut.*"
+      - ".*HttpServlet\\.doDelete.*"
+    semantics: state-changing-endpoint
+    confidence: medium
+
+adjacent_not_sink:
+  - id: read-only-get
+    framework: spring-mvc
+    semantics: safe-method-read
+    notes: pure read without side effects is not CSRF impact
+  - id: bearer-only-api
+    framework: spring-security
+    semantics: non-cookie-auth
+    notes: Authorization header not auto-attached cross-site by browsers

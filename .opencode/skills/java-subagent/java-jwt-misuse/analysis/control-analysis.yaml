@@ -1,0 +1,61 @@
+questions:
+  - id: signature_verification
+    ask: 信任 claims 前是否强制验签？失败是否拒绝请求？
+    accept:
+      - parseClaimsJws_or_parseSignedClaims
+      - JWTVerifier_verify
+      - SignedJWT_verify_or_JWTProcessor_process
+      - Spring_JwtDecoder_decode_throws_on_invalid
+    reject_as_strong:
+      - JWT_decode_only
+      - parseClaimsJwt_or_parseUnsecuredClaims
+      - verify_result_ignored
+      - catch_and_continue_on_verification_exception
+
+  - id: algorithm_constraint
+    ask: 算法是否由服务端白名单锁定？是否拒绝 none？
+    accept:
+      - explicit_RS256_or_ES256_only
+      - explicit_HS256_family_only_with_managed_secret
+      - JWSAlgorithm_family_on_key_selector
+    reject_as_strong:
+      - algorithm_from_token_header_unconstrained
+      - Algorithm_none_enabled
+      - mixed_hmac_and_rsa_with_same_key_material
+
+  - id: key_management
+    ask: 验签密钥从何而来？
+    accept:
+      - JWKS_from_trusted_issuer
+      - KMS_HSM_secret_manager
+      - KeyStore_protected_entry
+    reject_as_strong:
+      - source_code_literal_secret
+      - default_secret_changeme
+      - RSA_public_key_as_HMAC_secret
+      - empty_or_short_shared_secret
+
+  - id: claim_validation
+    ask: exp/nbf/aud/iss 如何校验？
+    accept:
+      - require_exp_and_reject_expired
+      - iss_matches_expected_issuer
+      - aud_contains_expected_audience_when_multi_party
+    reject_as_strong:
+      - no_expiration_check
+      - exp_optional_null_accepted
+      - no_iss_aud_in_multi_service_deployment
+
+  - id: error_handling
+    ask: 校验失败时是否 fail-closed？
+    accept:
+      - 401_or_reject_on_any_verification_failure
+    reject_as_strong:
+      - swallow_exception_and_treat_as_anonymous_user_with_claims
+      - fallback_to_unsigned_parse
+
+control_grades:
+  strong: effective_verify_algo_lock_key_mgmt_and_claims
+  contextual: acceptable_for_single_service_hmac_with_managed_secret
+  weak: partial_checks_or_bypassable
+  invalid: none_missing_verify_hardcoded_or_confusion

@@ -2,20 +2,60 @@
   "version": 1,
   "cases": [
     {
-      "id": "java-sql-injection-fp",
+      "id": "java-command-injection-fp",
       "language": "java",
-      "skill": "java-sql-injection",
-      "weakness": "sql-injection",
-      "path": "java/java-sql-injection-fp.md",
-      "yaml": "java/java-sql-injection-fp.yaml"
+      "skill": "java-command-injection",
+      "weakness": "command-injection",
+      "path": "java/java-command-injection-fp.md",
+      "yaml": "java/java-command-injection-fp.yaml"
     },
     {
-      "id": "java-nosql-injection-fp",
+      "id": "java-csrf-fp",
       "language": "java",
-      "skill": "java-nosql-injection",
-      "weakness": "nosql-injection",
-      "path": "java/java-nosql-injection-fp.md",
-      "yaml": "java/java-nosql-injection-fp.yaml"
+      "skill": "java-csrf",
+      "weakness": "csrf",
+      "path": "java/java-csrf-fp.md",
+      "yaml": "java/java-csrf-fp.yaml"
+    },
+    {
+      "id": "java-deserialization-fp",
+      "language": "java",
+      "skill": "java-deserialization",
+      "weakness": "deserialization",
+      "path": "java/java-deserialization-fp.md",
+      "yaml": "java/java-deserialization-fp.yaml"
+    },
+    {
+      "id": "java-file-upload-fp",
+      "language": "java",
+      "skill": "java-file-upload",
+      "weakness": "file-upload",
+      "path": "java/java-file-upload-fp.md",
+      "yaml": "java/java-file-upload-fp.yaml"
+    },
+    {
+      "id": "java-hardcoded-secrets-fp",
+      "language": "java",
+      "skill": "java-hardcoded-secrets",
+      "weakness": "hardcoded-secrets",
+      "path": "java/java-hardcoded-secrets-fp.md",
+      "yaml": "java/java-hardcoded-secrets-fp.yaml"
+    },
+    {
+      "id": "java-idor-fp",
+      "language": "java",
+      "skill": "java-idor",
+      "weakness": "idor",
+      "path": "java/java-idor-fp.md",
+      "yaml": "java/java-idor-fp.yaml"
+    },
+    {
+      "id": "java-jwt-misuse-fp",
+      "language": "java",
+      "skill": "java-jwt-misuse",
+      "weakness": "jwt-misuse",
+      "path": "java/java-jwt-misuse-fp.md",
+      "yaml": "java/java-jwt-misuse-fp.yaml"
     },
     {
       "id": "java-ldap-injection-fp",
@@ -26,20 +66,84 @@
       "yaml": "java/java-ldap-injection-fp.yaml"
     },
     {
+      "id": "java-log-injection-fp",
+      "language": "java",
+      "skill": "java-log-injection",
+      "weakness": "log-injection",
+      "path": "java/java-log-injection-fp.md",
+      "yaml": "java/java-log-injection-fp.yaml"
+    },
+    {
+      "id": "java-mass-assignment-fp",
+      "language": "java",
+      "skill": "java-mass-assignment",
+      "weakness": "mass-assignment",
+      "path": "java/java-mass-assignment-fp.md",
+      "yaml": "java/java-mass-assignment-fp.yaml"
+    },
+    {
+      "id": "java-nosql-injection-fp",
+      "language": "java",
+      "skill": "java-nosql-injection",
+      "weakness": "nosql-injection",
+      "path": "java/java-nosql-injection-fp.md",
+      "yaml": "java/java-nosql-injection-fp.yaml"
+    },
+    {
+      "id": "java-open-redirect-fp",
+      "language": "java",
+      "skill": "java-open-redirect",
+      "weakness": "open-redirect",
+      "path": "java/java-open-redirect-fp.md",
+      "yaml": "java/java-open-redirect-fp.yaml"
+    },
+    {
+      "id": "java-path-traversal-fp",
+      "language": "java",
+      "skill": "java-path-traversal",
+      "weakness": "path-traversal",
+      "path": "java/java-path-traversal-fp.md",
+      "yaml": "java/java-path-traversal-fp.yaml"
+    },
+    {
+      "id": "java-spel-injection-fp",
+      "language": "java",
+      "skill": "java-spel-injection",
+      "weakness": "spel-injection",
+      "path": "java/java-spel-injection-fp.md",
+      "yaml": "java/java-spel-injection-fp.yaml"
+    },
+    {
+      "id": "java-sql-injection-fp",
+      "language": "java",
+      "skill": "java-sql-injection",
+      "weakness": "sql-injection",
+      "path": "java/java-sql-injection-fp.md",
+      "yaml": "java/java-sql-injection-fp.yaml"
+    },
+    {
+      "id": "java-ssrf-fp",
+      "language": "java",
+      "skill": "java-ssrf",
+      "weakness": "ssrf",
+      "path": "java/java-ssrf-fp.md",
+      "yaml": "java/java-ssrf-fp.yaml"
+    },
+    {
+      "id": "java-weak-cryptography-fp",
+      "language": "java",
+      "skill": "java-weak-cryptography",
+      "weakness": "weak-cryptography",
+      "path": "java/java-weak-cryptography-fp.md",
+      "yaml": "java/java-weak-cryptography-fp.yaml"
+    },
+    {
       "id": "java-xpath-injection-fp",
       "language": "java",
       "skill": "java-xpath-injection",
       "weakness": "xpath-injection",
       "path": "java/java-xpath-injection-fp.md",
       "yaml": "java/java-xpath-injection-fp.yaml"
-    },
-    {
-      "id": "java-command-injection-fp",
-      "language": "java",
-      "skill": "java-command-injection",
-      "weakness": "command-injection",
-      "path": "java/java-command-injection-fp.md",
-      "yaml": "java/java-command-injection-fp.yaml"
     },
     {
       "id": "java-xss-fp",
@@ -50,20 +154,12 @@
       "yaml": "java/java-xss-fp.yaml"
     },
     {
-      "id": "java-log-injection-fp",
+      "id": "java-xxe-fp",
       "language": "java",
-      "skill": "java-log-injection",
-      "weakness": "log-injection",
-      "path": "java/java-log-injection-fp.md",
-      "yaml": "java/java-log-injection-fp.yaml"
-    },
-    {
-      "id": "java-weak-cryptography-fp",
-      "language": "java",
-      "skill": "java-weak-cryptography",
-      "weakness": "weak-cryptography",
-      "path": "java/java-weak-cryptography-fp.md",
-      "yaml": "java/java-weak-cryptography-fp.yaml"
+      "skill": "java-xxe",
+      "weakness": "xxe",
+      "path": "java/java-xxe-fp.md",
+      "yaml": "java/java-xxe-fp.yaml"
     }
   ]
 }

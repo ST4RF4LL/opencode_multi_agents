@@ -1,0 +1,26 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_path_construction_logic
+  - actual_file_or_zip_api
+  - actual_validation_or_confinement_logic
+  - actual_base_directory_if_known
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+  - lab_only_scope_statement
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_system_file_paths_exist_on_target
+  - claim_success_from_generic_500_only
+  - perform_destructive_delete_or_overwrite_of_system_files
+  - target_production_system_paths_for_delete_proof
+  - exfiltrate_unrelated_sensitive_data_beyond_minimal_proof
+  - use_zip_slip_to_overwrite_application_binaries_without_authorization

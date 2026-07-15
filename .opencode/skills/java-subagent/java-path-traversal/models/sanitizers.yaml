@@ -1,0 +1,94 @@
+sanitizers:
+  strong:
+    - id: normalize-and-startswith-basedir
+      condition:
+        - path_is_normalized_via_Path_normalize_or_getCanonicalPath
+        - resolved_path_checked_with_startsWith_baseDir_absolute_or_canonical
+        - baseDir_is_fixed_trusted_directory
+        - reject_or_fail_closed_when_outside_base
+      notes: >
+        Strong pattern: Path base = baseDir.toAbsolutePath().normalize();
+        Path target = base.resolve(user).normalize();
+        if (!target.startsWith(base)) reject;
+
+    - id: getcanonical-prefix-check
+      condition:
+        - uses_File_getCanonicalPath_or_Path_toRealPath
+        - result_prefix_or_startsWith_checked_against_base_canonical
+        - fail_closed_on_IOException_and_outside_base
+      notes: getCanonicalPath alone without base prefix check is incomplete
+
+    - id: basename-allowlist-only-storage
+      condition:
+        - only_basename_used_after_strict_filename_allowlist_or_uuid_rename
+        - no_directory_separators_accepted_in_user_filename
+        - storage_path_is_baseDir_plus_safe_name_only
+      notes: valid when user never supplies path segments, only a mapped basename
+
+    - id: fixed-path-id-mapping
+      condition:
+        - user_input_only_selects_predefined_file_ids
+        - mapped_paths_are_constants_under_baseDir
+        - reject_or_default_on_unknown
+
+  contextual:
+    - id: reject-absolute-and-dotdot
+      condition:
+        - rejects_absolute_paths
+        - rejects_dotdot_segments_before_resolve
+        - still_normalizes_and_checks_base_when_possible
+      notes: helpful but incomplete alone against encoding/symlink variants
+
+    - id: content-disposition-filename-strip
+      condition:
+        - extracts_filename_only_from_Content_Disposition
+        - rejects_path_separators
+        - stores_under_fixed_upload_dir_with_generated_name
+      notes: contextual for multipart; still verify final path confinement
+
+    - id: zip-entry-normalize-startswith
+      condition:
+        - ZipEntry_getName_resolved_under_targetDir
+        - normalize_and_startsWith_targetDir_before_write
+        - directories_created_only_inside_target
+      notes: required strong control for Zip Slip subtype
+
+  weak:
+    - id: blacklist-dotdot-only
+      pattern:
+        - contains("..")
+        - replace("..", "")
+        - replaceAll("\\.\\.", "")
+      notes: bypassable via ....//, encoded variants, absolute paths, null bytes historically
+
+    - id: filename-utils-get-name-alone
+      pattern:
+        - FilenameUtils.getName
+        - FilenameUtils.getBaseName
+      notes: >
+        PARTIAL only. Strips parent directories from a string but does not replace
+        normalize+startsWith when code still resolves relative segments or absolute
+        paths elsewhere. Never treat as strong sanitizer by itself.
+
+    - id: startsWith-without-normalize
+      pattern:
+        - startsWith(baseDir)
+      notes: without normalize, ../ segments may still escape depending on check order
+
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without path structure control
+      notes: insufficient if separators or absolute paths still accepted
+
+  invalid:
+    - id: client-side-filename-check-only
+      notes: browser or JS validation is not server enforcement
+    - id: validate-after-open
+      notes: opening/writing before confinement check is invalid
+    - id: decode-after-dotdot-filter
+      notes: filter then URL-decode allows double-encoding bypass
+    - id: string-prefix-without-path-api
+      notes: raw string startsWith on non-normalized paths is not confinement
+    - id: trust-multipart-original-filename
+      notes: getOriginalFilename is attacker-controlled; not a control

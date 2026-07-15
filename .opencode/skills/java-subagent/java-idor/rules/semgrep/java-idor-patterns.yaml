@@ -1,0 +1,85 @@
+rules:
+  - id: java-idor-client-tenant-id
+    message: Client-supplied tenantId used for data scoping (tenant isolation risk)
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          public $RET $M(..., @RequestParam $T tenantId, ...) {
+            ...
+          }
+      - pattern: |
+          public $RET $M(..., @RequestParam $T $TENANT, ...) {
+            ...
+            $X.findByTenantId($TENANT, ...);
+            ...
+          }
+      - pattern: |
+          $TENANT = $REQ.getParameter("tenantId");
+          ...
+      - pattern: |
+          $BODY.getTenantId()
+    metadata:
+      cwe: CWE-639
+      subtype: tenant-id-from-client
+      confidence: high
+      notes: elevate when tenantId filters queries without matching SecurityContext
+
+  - id: java-idor-auth-only-then-findbyid
+    message: Authenticated-only gate with findById may lack object-level authorization
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern: $REPO.findById($ID)
+      - pattern-either:
+          - pattern-inside: |
+              @PreAuthorize("isAuthenticated()")
+              public $RET $M(...) {
+                ...
+              }
+          - pattern-inside: |
+              @Secured(...)
+              public $RET $M(...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-862
+      category: idor
+      confidence: medium
+      notes: L1/L3 hint; authentication is not ownership
+
+  - id: java-idor-return-optional-get
+    message: findById result returned after orElseThrow/get without ownership compare
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          return $REPO.findById($ID).orElseThrow(...);
+      - pattern: |
+          return $REPO.findById($ID).get();
+      - pattern: |
+          $E = $REPO.findById($ID).orElseThrow(...);
+          return $E;
+    metadata:
+      cwe: CWE-639
+      subtype: horizontal-idor
+      confidence: medium
+
+  - id: java-idor-user-id-path-as-subject
+    description: Path userId treated as current user without SecurityContext binding
+    message: Path/request userId may be trusted as subject (vertical/horizontal IDOR risk)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          public $RET $M(..., @PathVariable $T userId, ...) {
+            ...
+          }
+      - pattern: |
+          public $RET $M(..., @PathVariable("userId") $T $UID, ...) {
+            ...
+          }
+    metadata:
+      cwe: CWE-639
+      confidence: low
+      notes: review whether userId is compared to principal or used as foreign key only

@@ -1,0 +1,33 @@
+steps:
+  - identify_reachable_entry
+  - determine_binding_mechanism
+  - determine_bound_type_and_sensitive_fields
+  - inspect_serialization_and_binder_controls
+  - inspect_transfer_to_entity_and_persistence
+  - determine_caller_privilege_vs_target_fields
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_overpost_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - form_parameter_name_matching_sensitive_property
+  - json_property_matching_sensitive_field
+  - nested_json_path_roles_authorities
+  - patch_op_path_to_sensitive_field
+  - query_or_multipart_field_names
+
+observable_behaviors:
+  - response_or_db_shows_isAdmin_true_or_role_elevated
+  - balance_or_credit_changed_beyond_allowed_business_rules
+  - ownerId_or_tenantId_rewritten
+  - subsequent_request_gains_admin_functionality
+  - persisted_entity_diff_includes_overposted_fields
+
+notes:
+  - derive_tests_from_actual_route_and_bound_type
+  - do_not_blindly_reuse_historical_payloads
+  - use_minimal_field_overpost_proof_not_full_account_takeover_scripts
+  - prefer_staging_or_lab_with_test_accounts

@@ -1,0 +1,33 @@
+id: spring-data
+name: Spring Data JPA / repositories as resource access sinks
+detection:
+  imports:
+    - org.springframework.data.jpa.repository.JpaRepository
+    - org.springframework.data.repository.CrudRepository
+    - jakarta.persistence.EntityManager
+    - javax.persistence.EntityManager
+  classes:
+    - JpaRepository
+    - CrudRepository
+    - EntityManager
+  dependencies:
+    - spring-data-jpa
+    - spring-data-commons
+sinks:
+  - findById / getOne / getById / getReferenceById
+  - deleteById / delete
+  - save / saveAndFlush / merge
+  - custom findBy* with only id predicate
+sensitive_argument: first id argument or entity keyed by client id
+ownership_safe_patterns:
+  - findByIdAndUserId(id, currentUserId)
+  - findByIdAndTenantId(id, serverTenantId)
+  - "@Query with AND owner = :currentUser"
+  - Specification / Criteria with forced owner predicate
+ownership_unsafe_patterns:
+  - findById(clientId) then return without owner check
+  - deleteById(clientId) without prior ownership verify
+  - save(entity) where entity.id from client and no authz
+notes:
+  - Repository method name alone is not a finding; analyze caller for ownership
+  - Soft-delete and status updates are still mutations

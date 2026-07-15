@@ -1,0 +1,29 @@
+must_derive_from:
+  - actual_api_route
+  - actual_http_method
+  - actual_content_type_and_binding_mechanism
+  - actual_bound_type_and_property_names
+  - actual_serialization_or_initbinder_controls
+  - actual_authn_authz_on_entry
+  - actual_persistence_or_impact_path
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - overpost_test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - claim_success_based_only_on_entity_field_presence
+  - perform_destructive_financial_actions_beyond_minimal_proof
+  - escalate_to_production_admin_without_authorization
+  - brute_force_or_spray_overpost_across_unrelated_endpoints
+  - include_real_credentials_or_pii_in_reports_unnecessarily
+
+preferred_proofs:
+  - single_boolean_or_role_field_overpost_on_staging_user
+  - balance_delta_within_lab_account_limits
+  - read-back_of_updated_resource_after_overpost

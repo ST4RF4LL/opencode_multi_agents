@@ -1,0 +1,36 @@
+must_derive_from:
+  - actual_api_route
+  - actual_xml_channel_location
+  - actual_parser_or_unmarshaller_api
+  - actual_factory_configuration_logic
+  - actual_secure_feature_flags_or_absence
+  - actual_deployment_and_authorization_constraints
+
+must_include:
+  - prerequisites
+  - baseline_benign_xml_request
+  - lab_test_description
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+  - impact_classification_disclosure_ssrf_or_dos
+
+must_not:
+  - reuse_historical_payload_blindly
+  - ship_or_recommend_weaponized_oob_exfiltration_kits
+  - scan_or_probe_internal_network_ranges
+  - use_file_entity_paths_outside_authorized_lab_targets
+  - claim_success_from_generic_500_only
+  - treat_xpath_injection_symptoms_as_xxe_proof
+  - treat_pure_http_ssrf_without_xml_entity_as_xxe
+  - perform_destructive_or_unrelated_actions
+  - exfiltrate_production_secrets_beyond_minimal_authorized_proof
+
+lab_only_guidance:
+  local_file_entity:
+    allowed: conceptual_reference_in_authorized_lab
+    example_intent: demonstrate_entity_resolution_against_lab_fixture_file
+    forbidden: arbitrary_etc_passwd_style_targeting_outside_lab_agreement
+  oob_network_entity:
+    allowed: single_callback_to_preauthorized_lab_listener
+    forbidden: weaponized_kits_mass_callbacks_internal_port_scans

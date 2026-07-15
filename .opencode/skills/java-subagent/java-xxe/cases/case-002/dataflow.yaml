@@ -1,0 +1,13 @@
+source:
+  method: MultipartFile.getInputStream
+  parameter: file
+path:
+  - UploadController.upload
+  - StaxXmlProcessor.process
+sink:
+  method: XMLInputFactory.createXMLStreamReader
+  argument: 1
+factory:
+  type: XMLInputFactory
+  secure_features: none
+influence: full_xml_document_content

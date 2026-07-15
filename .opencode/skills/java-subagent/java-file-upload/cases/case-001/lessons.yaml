@@ -1,0 +1,9 @@
+transferable_lessons:
+  - transferTo with getOriginalFilename and no extension allowlist is primary unrestricted-extension pattern
+  - storage under webapp/static amplifies to executable-in-webroot
+  - server-generated UUID name + allowlist + private dir is the strong fix pattern
+  - conceptual dangerous extension acceptance is enough proof; never need webshell body
+non_transferable_details:
+  - original endpoint path
+  - original webapp directory layout
+  - original payload strings

@@ -1,0 +1,26 @@
+strong_signals:
+  - JWT_decode_or_parseClaimsJwt_or_parseUnsecuredClaims_on_auth_path
+  - Algorithm_none_or_SignatureAlgorithm_NONE_enabled
+  - HMAC_secret_string_literal_secret_or_changeme
+  - setSigningKey_or_HMAC256_with_hardcoded_bytes
+  - MACVerifier_or_HMAC_with_RSA_public_key_encoded
+  - no_exp_check_before_authorizing
+  - custom_JwtDecoder_returns_claims_without_signature_validation
+
+medium_signals:
+  - parser_without_visible_verifyWith_or_setSigningKey
+  - manual_claim_get_without_library_verifier
+  - secret_from_config_with_insecure_default
+  - missing_audience_validator_in_multi_service_api
+  - algorithm_selected_from_token_header
+
+weak_signals:
+  - presence_of_jjwt_or_nimbus_import_only
+  - JWT_in_comments_or_disabled_code
+  - test_helpers_with_fake_tokens
+  - clock_skew_setting_without_other_weakness
+
+interpretation:
+  strong: supports Finding when auth use and reachability are clear
+  medium: supports Candidate; may upgrade with path/context
+  weak: insufficient alone

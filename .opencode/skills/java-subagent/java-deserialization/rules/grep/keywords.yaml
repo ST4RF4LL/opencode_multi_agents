@@ -1,0 +1,80 @@
+l0_stack_detection:
+  - pattern: "java\\.io\\.ObjectInputStream|ObjectInputStream|readUnshared|ObjectInputFilter"
+    implies: java-native
+  - pattern: "java\\.beans\\.XMLDecoder|XMLDecoder"
+    implies: java-native
+  - pattern: "com\\.alibaba\\.fastjson|com\\.alibaba\\.fastjson2|ParserConfig|autoType"
+    implies: fastjson
+  - pattern: "com\\.fasterxml\\.jackson\\.databind\\.ObjectMapper|enableDefaultTyping|activateDefaultTyping"
+    implies: jackson
+  - pattern: "org\\.yaml\\.snakeyaml\\.Yaml|SafeConstructor|snakeyaml"
+    implies: snakeyaml
+  - pattern: "com\\.thoughtworks\\.xstream\\.XStream|XStream\\.fromXML"
+    implies: xstream
+  - pattern: "com\\.caucho\\.hessian|Hessian2Input|HessianInput|HessianServiceExporter"
+    implies: hessian-kryo
+  - pattern: "com\\.esotericsoftware\\.kryo|Kryo|readClassAndObject"
+    implies: hessian-kryo
+  - pattern: "JdkSerializationRedisSerializer|RedisSerializer|SerializationUtils\\.deserialize"
+    implies: java-native
+
+l1_sink_keywords:
+  - "ObjectInputStream"
+  - "readObject"
+  - "readUnshared"
+  - "XMLDecoder"
+  - "JSON.parse"
+  - "JSON.parseObject"
+  - "parseObject"
+  - "enableDefaultTyping"
+  - "activateDefaultTyping"
+  - "new Yaml()"
+  - "Yaml.load"
+  - "XStream"
+  - "fromXML"
+  - "Hessian2Input"
+  - "HessianInput"
+  - "Kryo"
+  - "readClassAndObject"
+  - "SerializationUtils.deserialize"
+  - "JdkSerializationRedisSerializer"
+  - "setAutoTypeSupport"
+  - "Feature.SupportAutoType"
+  - "@type"
+
+# Amplifiers only — presence is NOT a finding
+gadget_library_amplifiers:
+  - "commons-collections"
+  - "commons-beanutils"
+  - "c3p0"
+  - "org.apache.commons.collections"
+  - "org.apache.commons.collections4"
+  - "InvokerTransformer"
+  - "ChainedTransformer"
+  - "TemplatesImpl"
+  - "JdbcRowSetImpl"
+  - "com.sun.rowset"
+  - "groovy.lang.GroovyShell"
+  - "org.springframework.beans.factory.ObjectFactory"
+
+high_risk_config_hints:
+  - "setAutoTypeSupport\\(true\\)"
+  - "Feature\\.SupportAutoType"
+  - "enableDefaultTyping"
+  - "activateDefaultTyping"
+  - "AnyTypePermission"
+  - "new Yaml\\(\\)"
+  - "ObjectInputStream\\("
+  - "XMLDecoder\\("
+
+rg_commands:
+  stack: |
+    rg -n "ObjectInputStream|XMLDecoder|com\\.alibaba\\.fastjson|enableDefaultTyping|activateDefaultTyping|org\\.yaml\\.snakeyaml|XStream|Hessian2Input|com\\.esotericsoftware\\.kryo" --glob '*.java'
+  sinks: |
+    rg -n "readObject|readUnshared|JSON\\.parse|parseObject|enableDefaultTyping|activateDefaultTyping|Yaml\\.load|fromXML|readClassAndObject|SerializationUtils\\.deserialize|JdkSerializationRedisSerializer" --glob '*.java'
+  configs: |
+    rg -n "setAutoTypeSupport|SupportAutoType|enableDefaultTyping|activateDefaultTyping|AnyTypePermission|SafeConstructor|ObjectInputFilter|ValidatingObjectInputStream|setupDefaultSecurity|allowTypes" --glob '*.java'
+  gadgets_amplifiers_only: |
+    rg -n "commons-collections|commons-beanutils|c3p0|InvokerTransformer|TemplatesImpl|JdbcRowSetImpl" -g 'pom.xml' -g 'build.gradle*' -g '*.java'
+  sources_bytes: |
+    rg -n "getInputStream|getCookies|Base64\\.getDecoder|MultipartFile|ConsumerRecord|Jedis\\.get|getPayload" --glob '*.java'

@@ -1,0 +1,37 @@
+subtypes:
+  - id: missing-csrf-token
+    description: 状态变更端点依赖 Cookie 会话，但未校验 CSRF 同步器令牌 / 双重提交 Cookie
+    typical_patterns:
+      - form POST without _csrf / X-CSRF-TOKEN
+      - HttpSession auth + no CsrfFilter equivalent
+
+  - id: spring-csrf-disabled
+    description: Spring Security 显式或等效关闭 CSRF 保护，且存在 Cookie 认证状态变更
+    typical_patterns:
+      - csrf().disable()
+      - http.csrf().disable()
+      - CsrfConfigurer disabled
+      - securityMatcher excluding CSRF for mutating routes
+
+  - id: cookie-json-api-no-custom-header
+    description: Cookie 会话的 JSON API（POST/PUT/PATCH/DELETE）未强制自定义头或 token
+    typical_patterns:
+      - @RequestBody JSON + JSESSIONID / session cookie
+      - Content-Type application/json without CSRF header requirement
+    notes: >
+      Simple form CSRF may not apply; need custom header, token in header,
+      or SameSite-effective strategy.
+
+  - id: get-based-state-change
+    description: 使用 GET（或其它安全方法）执行状态变更，可被 img/link 跨站触发
+    typical_patterns:
+      - @GetMapping delete/update/logout/transfer
+      - GET with side effects on session or data store
+
+  - id: token-not-bound-to-session
+    description: 存在 CSRF token 字段但未与会话绑定、可预测、可复用或未服务端校验
+    typical_patterns:
+      - static token
+      - client-only token check
+      - token accepted without session match
+      - token not rotated / not compared server-side

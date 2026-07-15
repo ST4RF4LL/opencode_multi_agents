@@ -1,0 +1,15 @@
+subtypes:
+  - id: spel-expression-parser-parse
+    description: SpelExpressionParser / ExpressionParser.parseExpression 接收用户可控表达式字符串
+  - id: spel-get-value-user-string
+    description: 用户可控字符串经 parse 后调用 Expression.getValue/setValue 求值
+  - id: spring-value-annotation-dynamic
+    description: @Value("#{...}") 或类似占位表达式内容受外部配置/用户输入影响（非纯编译期常量）
+  - id: evaluation-context-standard-vs-simple
+    description: 使用 StandardEvaluationContext 且暴露危险 root/变量/类型定位；相对 SimpleEvaluationContext 能力面过大
+  - id: template-parser-context
+    description: TemplateParserContext 或自定义 ParserContext 将用户输入嵌入 #{...} 模板片段
+  - id: cache-abstraction-spel
+    description: Spring Cache @Cacheable key/condition/unless 等 SpEL 片段由外部输入拼接（可选）
+  - id: spring-integration-spel
+    description: Spring Integration 中动态 SpEL 过滤器/路由器/转换器表达式来自外部输入（可选）

@@ -1,0 +1,26 @@
+id: jdk-file
+name: java.io.File and classic stream I/O
+detection:
+  imports:
+    - java.io.File
+    - java.io.FileInputStream
+    - java.io.FileOutputStream
+    - java.io.FileReader
+    - java.io.FileWriter
+    - java.io.RandomAccessFile
+  classes:
+    - File
+    - FileInputStream
+    - FileOutputStream
+sinks:
+  - new File(path)
+  - new File(parent, child)
+  - FileInputStream / FileOutputStream / FileReader / FileWriter
+  - File.delete
+  - RandomAccessFile
+strong_controls:
+  - File.getCanonicalPath() prefix-checked against base canonical path
+  - convert to Path and apply normalize + startsWith(base)
+notes:
+  - new File(base, userChild) is high-frequency download/upload join pattern
+  - getCanonicalPath without base comparison is incomplete

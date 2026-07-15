@@ -1,0 +1,63 @@
+name: java-spel-injection-decision-tree
+steps:
+  - id: find_spel_sink
+    question: 是否发现 SpEL 解析/求值 Sink（parseExpression / getValue / setValue / 动态模板 EL）？
+    no: stop_no_sink
+    yes: check_expr_origin
+
+  - id: check_expr_origin
+    question: 表达式是否完全由常量或白名单映射产生，且用户输入仅作为 root/variable 值？
+    yes: check_constant_value_annotation
+    no: check_external_dataflow
+
+  - id: check_constant_value_annotation
+    question: 是否仅为常量 @Value / Cache SpEL 且无外部表达式文本控制？
+    yes: reject_constant_el
+    no: check_context_capability
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到表达式字符串或模板片段的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是完整表达式、#{...} 模板片段、还是 EvaluationContext 能力/root？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在 SimpleEvaluationContext（受限）或严格表达式白名单？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（受限 SimpleEvaluationContext / 完整表达式映射 / 常量表达式）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+    simple_with_dangerous_custom_accessors: high_risk_candidate
+
+  - id: check_context_capability
+    question: 常量表达式下 root/context 是否仍暴露危险方法且用户控制调用路径？
+    notes: rare; usually not classic SpEL injection if expression text is fixed
+    next: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_constant_el: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

@@ -1,0 +1,15 @@
+source:
+  method: AccountController.update
+  parameter: account
+  annotation: RequestBody
+  type: Account
+path:
+  - AccountController.update
+  - AccountRepository.save
+sink:
+  method: AccountRepository.save
+  argument: 1
+sensitive_fields:
+  - balance
+  - role
+influence: json_property_to_entity_setter

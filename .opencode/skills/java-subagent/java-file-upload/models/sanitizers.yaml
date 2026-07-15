@@ -1,0 +1,96 @@
+sanitizers:
+  strong:
+    - id: extension-allowlist-fail-closed
+      condition:
+        - extracts_final_extension_from_basename_case_insensitive
+        - compares_against_explicit_allowlist_only
+        - rejects_unknown_empty_double_and_compound_dangerous_extensions
+        - fail_closed_on_missing_or_ambiguous_extension
+      notes: >
+        Strong when combined with server-generated storage name and non-executable
+        storage location. Allowlist must not treat last-of-many extensions naively
+        if container maps .jsp/.war.
+
+    - id: server-generated-name-plus-type-policy
+      condition:
+        - storage_name_is_uuid_or_random_not_client_filename
+        - extension_or_content_type_policy_still_enforced_on_content
+        - client_original_name_only_as_metadata
+      notes: rename alone without type policy is incomplete if content is served insecurely
+
+    - id: magic-byte-and-allowlist
+      condition:
+        - server_sniffs_content_magic_bytes_or_safe_parser
+        - sniffed_type_must_match_allowlist
+        - mismatch_rejects_upload
+      notes: stronger than Content-Type header alone
+
+    - id: non-webroot-private-storage
+      condition:
+        - stores_outside_servlet_static_webapp_public_dirs
+        - served_only_via_controlled_download_handler
+        - no_container_script_mapping_on_storage_path
+      notes: reduces executable-in-webroot; still need type policy for stored XSS (SVG/HTML)
+
+    - id: svg-html-sanitize-or-block
+      condition:
+        - blocks_svg_html_xml_or_sanitizes_with_proven_library
+        - serves_with_safe_content_type_and_nosniff
+      notes: required for svg-html-stored-content subtype
+
+  contextual:
+    - id: size-limit-with-partial-type-check
+      condition:
+        - enforces_max_size
+        - has_some_extension_check
+      notes: size alone never strong; contextual with other controls
+
+    - id: image-decode-reencode
+      condition:
+        - decodes_image_with_safe_library_and_reencodes
+        - discards_original_bytes
+      notes: mitigates polyglot/script-in-image for image-only products
+
+    - id: object-storage-private-acl
+      condition:
+        - uploads_to_private_bucket_with_no_public_acl
+        - access_via_signed_url_only
+      notes: contextual for cloud storage; still check type policy for app-served content
+
+  weak:
+    - id: content-type-header-only
+      pattern:
+        - getContentType
+        - startsWith("image/")
+        - equals("image/png")
+      notes: >
+        Client-controlled Content-Type. Bypass by setting image/png while uploading
+        conceptual dangerous extension/content. Grade weak/invalid for type trust.
+
+    - id: extension-blacklist-only
+      pattern:
+        - endsWith(".jsp")
+        - contains(".jsp")
+        - blacklist of few extensions
+      notes: bypassable via double extension, case, alternate handlers (.jspx, .war, .shtml)
+
+    - id: client-side-accept-attribute
+      pattern:
+        - accept="image/*"
+        - frontend validation only
+      notes: not server enforcement
+
+    - id: filename-endswith-image-ext
+      pattern:
+        - endsWith(".png") || endsWith(".jpg")
+      notes: weak if not basename-only, case-sensitive, or allows file.png.jsp
+
+  invalid:
+    - id: trust-original-filename-extension-without-check
+      notes: using getOriginalFilename as-is with no policy is absence of control
+    - id: validate-content-type-then-store-client-name
+      notes: MIME-only then store as-is is mime-only-validation subtype, not a sanitizer
+    - id: store-under-webapp-without-policy
+      notes: webroot storage without type policy is risk amplifier, not control
+    - id: antivirus-hook-unverified
+      notes: presence of AV API call without proven fail-closed is not strong sanitizer

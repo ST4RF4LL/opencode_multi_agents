@@ -1,0 +1,34 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_redirect_destination_component
+  - inspect_input_transformations
+  - inspect_existing_validation
+  - identify_redirect_mechanism
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_control_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - full_absolute_url
+  - protocol_relative_url
+  - path_relative_bypass
+  - spring_redirect_prefix_suffix
+  - location_header_value
+
+observable_behaviors:
+  - response_status_3xx
+  - Location_header_points_to_attacker_controlled_host
+  - browser_would_navigate_offsite
+  - application_logs_show_redirect_target
+  - difference_between_allowed_relative_and_external_absolute
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - use_only_example_domains_such_as_evil.example
+  - confirm_Location_or_sendRedirect_semantics_not_ssrf_fetch
+  - for_weak_startswith_test_protocol_relative_and_suffix_host_bypass

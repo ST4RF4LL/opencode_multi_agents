@@ -1,0 +1,26 @@
+id: jdk-nio
+name: java.nio.file (JDK NIO.2)
+detection:
+  imports:
+    - java.nio.file.Path
+    - java.nio.file.Paths
+    - java.nio.file.Files
+  classes:
+    - Path
+    - Paths
+    - Files
+sinks:
+  - Paths.get(...)
+  - Path.of(...)
+  - Path.resolve(String|Path)
+  - Files.readAllBytes / readString / newInputStream
+  - Files.write / writeString / newOutputStream
+  - Files.delete / deleteIfExists
+  - Files.copy / move / createFile / createDirectories
+strong_controls:
+  - Path.normalize() then startsWith(baseDir.toAbsolutePath().normalize())
+  - Path.toRealPath() with base confinement when symlink policy requires
+  - fail closed when !target.startsWith(base)
+notes:
+  - resolve alone is not safe; always pair with normalize + base check
+  - absolute user paths ignore base when using Paths.get(user) without resolve

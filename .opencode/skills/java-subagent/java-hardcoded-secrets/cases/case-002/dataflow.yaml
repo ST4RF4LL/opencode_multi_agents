@@ -1,0 +1,11 @@
+source:
+  kind: config_plaintext
+  expression: 'spring.datasource.password: CHANGE_ME_NOT_REAL'
+path:
+  - application.yml
+  - Spring Boot binding / DataSourceConfig.dataSource
+sink:
+  method: DataSourceBuilder.password / pool authentication
+influence: database_credential_exposure
+related_issues:
+  - db-url-with-password if password embedded in JDBC URL

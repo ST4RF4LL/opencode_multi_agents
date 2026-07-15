@@ -1,0 +1,10 @@
+transferable_lessons:
+  - ZipEntry.getName is an untrusted source when the archive is untrusted
+  - new File(dest, entry.getName()) without confinement is the classic Zip Slip sink pattern
+  - getNextEntry loop alone is not enough; track entry name to write path
+  - strong fix is resolve + normalize + startsWith(destDir) before any write
+non_transferable_details:
+  - original import endpoint
+  - original extract directory
+  - original malicious zip contents
+  - specific lab marker paths

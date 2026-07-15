@@ -1,0 +1,87 @@
+sanitizers:
+  strong:
+    - id: dedicated-request-dto
+      condition:
+        - request_type_is_not_domain_or_jpa_entity
+        - request_type_contains_only_intended_writable_fields
+        - service_layer_maps_explicitly_to_entity
+      notes: preferred fix — never bind HTTP input directly to entity
+
+    - id: json-write-protection
+      condition:
+        - sensitive_fields_marked_JsonIgnore_on_setter_or_field
+        - or_JsonProperty_access_READ_ONLY
+        - or_JsonSetter_null_with_no_writable_accessor
+      notes: Jackson-level; verify setter is ignored not only getter
+
+    - id: initbinder-allowed-fields
+      condition:
+        - InitBinder_sets_allowedFields_explicit_list
+        - list_excludes_all_sensitive_properties
+        - applies_to_correct_command_object_name
+      notes: Spring DataBinder allowlist for @ModelAttribute
+
+    - id: explicit-field-copy
+      condition:
+        - only_safe_fields_copied_manually
+        - no_BeanUtils_full_copy_of_request_to_entity
+        - sensitive_fields_set_only_from_server_side_logic
+      notes: e.g. entity.setDisplayName(dto.getDisplayName()) only
+
+    - id: patch-path-allowlist
+      condition:
+        - JsonPatch_or_merge_paths_restricted_to_allowlist
+        - sensitive_paths_rejected
+      notes: required for PATCH subtypes
+
+  contextual:
+    - id: jsonignore-properties-class
+      condition:
+        - JsonIgnoreProperties_lists_sensitive_names
+        - ignoreUnknown_true_does_not_block_known_sensitive_names
+      notes: must list every sensitive property; easy to miss nested fields
+
+    - id: views-or-jsonview
+      condition:
+        - JsonView_separates_write_vs_read_views
+        - controller_specifies_write_view_without_sensitive_fields
+      notes: misconfigured views are weak
+
+    - id: role-gated-admin-fields
+      condition:
+        - only_admin_endpoints_accept_role_or_isAdmin
+        - non_admin_entry_uses_dto_without_those_fields
+      notes: still verify non-admin path cannot bind same entity type
+
+  weak:
+    - id: client-side-hidden-fields
+      pattern:
+        - HTML hidden input removal
+        - frontend form omits isAdmin
+      notes: not a server control
+
+    - id: documentation-only-fields
+      pattern:
+        - OpenAPI omit field
+        - swagger hide
+      notes: does not prevent raw JSON posting
+
+    - id: beanutils-ignore-incomplete
+      pattern:
+        - copyProperties with partial ignore list missing sensitive fields
+      notes: incomplete ignore lists still transfer unprotected fields
+
+    - id: null-check-only
+      pattern:
+        - if (dto.getRole() != null) entity.setRole(...)
+      notes: still allows attacker to set role when provided
+
+  invalid:
+    - id: trust-frontend-not-to-send-field
+    - id: validate-only-business-fields-ignore-privilege
+    - id: entity-validation-annotations-only
+      notes: @NotNull/@Size do not block unexpected privilege fields
+    - id: transient-without-json-ignore
+      notes: JPA @Transient does not stop Jackson binding
+    - id: getter-only-jsonignore
+      notes: ignoring getter still allows setter/field deserialization unless configured

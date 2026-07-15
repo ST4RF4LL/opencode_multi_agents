@@ -1,0 +1,24 @@
+id: case-003
+vulnerability_type: spel-injection
+subtype: evaluation-context-standard-vs-simple
+source:
+  type: request-parameter
+  expression: "@RequestParam String expression"
+sink:
+  api: parseExpression + getValue with StandardEvaluationContext (vuln) vs SimpleEvaluationContext (fix)
+  sensitive_argument: 1
+propagation:
+  - ContextCompareController.eval
+  - ContextCompareService.evaluate
+root_cause:
+  - StandardEvaluationContext_used_for_user_expression
+  - full_type_and_method_capability_enabled
+prerequisites:
+  - reachable_http_endpoint
+  - expression_parameter_accepted
+observed_behavior:
+  - same_user_expression_path_is_dangerous_under_StandardEvaluationContext
+  - SimpleEvaluationContext_restricts_type_constructor_and_most_reflective_power
+fix:
+  - switch_to_SimpleEvaluationContext_without_dangerous_custom_accessors
+  - prefer_expression_allowlist_in_addition

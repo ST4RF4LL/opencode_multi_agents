@@ -1,0 +1,74 @@
+name: java-jwt-misuse-decision-tree
+steps:
+  - id: find_jwt_sink
+    question: 是否发现 JWT parse/decode/verify/decoder 或密钥绑定相关调用？
+    no: stop_no_sink
+    yes: classify_subtype
+
+  - id: classify_subtype
+    question: 属于哪种子类型？alg-none / missing-signature-verify / weak-hardcoded-hmac-secret / algorithm-confusion-rs-hs / claims-not-validated
+    next: check_security_relevance
+
+  - id: check_security_relevance
+    question: token/claims 是否用于认证、授权、身份绑定或信任决策？
+    no: reject_non_security_use
+    yes: check_verification
+
+  - id: check_verification
+    question: 是否在信任 claims 前完成有效签名校验，且算法受服务端约束？
+    no_verify_or_alg_none: high_risk_candidate
+    yes_verify: check_key_and_algo
+    unclear: emit_candidate
+
+  - id: check_key_and_algo
+    question: 密钥是否硬编码/过弱？是否存在 RS→HS 算法混淆？
+    weak_or_confused: high_risk_candidate
+    strong_key_and_locked_algo: check_claims
+
+  - id: check_claims
+    question: 是否强制校验 exp（及 nbf），并在需要时校验 aud/iss？
+    missing_critical_claims: high_risk_candidate
+    complete: reject_strong_jwt_handling
+    partial: conditional_candidate
+
+  - id: reachability
+    question: 是否生产可达（非仅测试/示例/死代码）？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract（静态语义清晰或授权环境下抽象验证）？
+    yes: emit_finding
+    no: emit_candidate
+
+subtype_rules:
+  alg-none:
+    auto_high_when:
+      - Algorithm_none_or_parseUnsecuredClaims_or_parseClaimsJwt_trusted
+      - none_not_rejected_in_algorithm_allowlist
+  missing-signature-verify:
+    auto_high_when:
+      - JWT_decode_or_parse_without_verify_feeds_authz
+      - verify_return_value_ignored
+  weak-hardcoded-hmac-secret:
+    auto_high_when:
+      - HMAC_secret_literal_secret_changeme_password_or_short_constant
+      - SecretKeySpec_or_setSigningKey_from_source_literal
+  algorithm-confusion-rs-hs:
+    auto_high_when:
+      - HMAC_verifier_uses_RSA_public_key_bytes
+      - algorithm_taken_from_token_header_without_family_lock
+  claims-not-validated:
+    auto_high_when:
+      - no_exp_check_on_auth_path
+      - multi_service_token_without_aud_or_iss
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_non_security_use: Rejected
+  reject_strong_jwt_handling: Rejected
+  reject_unreachable: Rejected
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

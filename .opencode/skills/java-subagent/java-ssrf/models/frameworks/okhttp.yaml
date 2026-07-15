@@ -1,0 +1,26 @@
+id: okhttp
+name: OkHttp
+detection:
+  imports:
+    - okhttp3.OkHttpClient
+    - okhttp3.Request
+    - okhttp3.HttpUrl
+  classes:
+    - OkHttpClient
+    - Request
+    - Request.Builder
+    - HttpUrl
+  dependencies:
+    - okhttp
+sinks:
+  - Request.Builder.url(String|URL|HttpUrl)
+  - OkHttpClient.newCall(Request)
+  - HttpUrl.parse / HttpUrl.get
+sensitive_argument: url argument to Builder.url
+redirect_notes:
+  - followRedirects / followSslRedirects default true
+  - network interceptor can revalidate final host
+strong_controls:
+  - parse HttpUrl and allowlist host/scheme before newCall
+  - disable followRedirects or revalidate redirect Location
+  - EventListener/Interceptor for connect-time host checks

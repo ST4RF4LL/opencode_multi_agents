@@ -1,0 +1,10 @@
+source:
+  method: RedirectServlet.doGet
+  parameter: url
+  expression: request.getParameter("url")
+path:
+  - RedirectServlet.doGet
+sink:
+  method: HttpServletResponse.sendRedirect
+  argument: 1
+influence: full_url

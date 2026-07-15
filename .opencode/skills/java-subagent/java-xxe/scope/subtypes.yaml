@@ -1,0 +1,38 @@
+subtypes:
+  - id: classic-external-entity
+    description: 外部通用实体解析导致本地文件读取或 SSRF-via-entity
+    impact: data_disclosure_or_ssrf
+    severity_hint: high
+
+  - id: parameter-entity
+    description: 参数实体（%entity）绕过部分仅禁用 general entity 的配置
+    impact: data_disclosure_or_ssrf
+    severity_hint: high
+
+  - id: xinclude
+    description: XInclude 处理导致外部资源包含，即使 DTD 部分受限
+    impact: data_disclosure_or_ssrf
+    severity_hint: high
+
+  - id: billion-laughs-expansion-dos
+    description: 嵌套/递归实体展开导致 CPU/内存耗尽（CWE-776）；影响为 DoS 而非任意文件读
+    impact: denial_of_service
+    severity_hint: medium
+    notes: >
+      Severity/impact differs from classic XXE file-read. Still report when
+      expansion limits / secure processing are missing, but classify impact as DoS.
+
+  - id: soap-unmarshaller-jaxb
+    description: JAXB / SOAP Unmarshaller 解析不可信 XML 且未 hardening
+    impact: data_disclosure_or_ssrf
+    severity_hint: high
+
+  - id: transformer-factory-xslt
+    description: TransformerFactory / SAXTransformerFactory 处理不可信 XML/XSLT 时启用外部访问
+    impact: data_disclosure_or_ssrf
+    severity_hint: high
+
+  - id: sax-dom-stax-insecure-defaults
+    description: SAX/DOM/StAX 工厂使用不安全默认配置直接 parse
+    impact: data_disclosure_ssrf_or_dos
+    severity_hint: high

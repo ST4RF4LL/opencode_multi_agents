@@ -1,0 +1,25 @@
+id: case-002
+vulnerability_type: unsafe-deserialization
+subtype: fastjson-autotype
+source:
+  type: request-body
+  expression: "@RequestBody String body"
+sink:
+  api: JSON.parseObject
+  sensitive_argument: 1
+propagation:
+  - ApiController.parse
+  - JsonService.fromJson
+root_cause:
+  - autoType_enabled_or_SupportAutoType
+  - untrusted_JSON_with_type_id_honored
+  - no_safeMode
+prerequisites:
+  - reachable_http_endpoint
+  - fastjson_on_classpath
+observed_behavior:
+  - payload_type_id_selects_class_during_parse
+fix:
+  - disable_autoType_enable_safeMode
+  - parse_to_fixed_DTO_class_only
+  - upgrade_fastjson_and_deny_dangerous_types

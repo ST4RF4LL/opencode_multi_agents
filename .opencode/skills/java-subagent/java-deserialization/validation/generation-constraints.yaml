@@ -1,0 +1,30 @@
+must_derive_from:
+  - actual_api_route_or_listener
+  - actual_parameter_or_byte_location
+  - actual_deserializer_api
+  - actual_type_filter_or_safe_mode_logic
+  - actual_deployment_constraints
+  - actual_classpath_context_for_impact_only
+
+must_include:
+  - prerequisites
+  - baseline_request_or_message
+  - safe_type_probe_description
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_gadget_payload_blindly
+  - generate_or_embed_ysoserial_gadget_chains
+  - generate_weaponized_RCE_exploit_payloads
+  - claim_success_from_generic_500_only
+  - claim_finding_from_gadget_library_dependency_alone
+  - perform_destructive_actions_beyond_minimal_proof
+  - exfiltrate_unrelated_sensitive_data_beyond_proof
+
+allowed_probe_classes:
+  - non_existent_marker_class_name_to_observe_type_resolution_errors
+  - benign_expected_DTO_roundtrip_for_baseline
+  - configuration_inspection_static_only
+  - filter_reject_vs_accept_differential_if_authorized

@@ -1,0 +1,22 @@
+id: spring-webclient
+name: Spring WebClient
+detection:
+  imports:
+    - org.springframework.web.reactive.function.client.WebClient
+  classes:
+    - WebClient
+    - WebClient.Builder
+  dependencies:
+    - spring-webflux
+sinks:
+  - WebClient.create(String baseUrl) when baseUrl tainted
+  - uri(String|URI|Function) on request specs
+  - retrieve() / exchangeToMono after tainted uri
+sensitive_argument: uri / baseUrl
+redirect_notes:
+  - Reactor Netty followRedirect settings matter
+  - baseUrl + path join can still allow host escape if base tainted
+strong_controls:
+  - constant baseUrl with path-only user input after safe join
+  - allowlisted host before uri()
+  - ExchangeFilterFunction validating final URI

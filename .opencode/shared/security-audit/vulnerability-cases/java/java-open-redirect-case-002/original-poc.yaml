@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - /login/success accepts returnUrl query parameter
+  - controller returns "redirect:" + returnUrl
+request_context:
+  endpoint: /login/success
+  parameter: returnUrl
+  example_value: "https://evil.example/login"
+observed_result:
+  - Spring responds with 302 Location https://evil.example/login
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - use_only_example_domains

@@ -1,0 +1,27 @@
+id: java-idor
+name: Insecure Direct Object Reference / Broken Object Level Authorization
+language: java
+cwe:
+  - CWE-639
+  - CWE-862
+  - CWE-284
+owasp:
+  - A01:2021-Broken Access Control
+dimension: D1
+objective:
+  detect: >
+    Attacker-controlled object identifiers reaching resource load, update, or
+    delete operations without effective ownership, tenant, or object-level
+    authorization checks. Authentication alone is insufficient.
+core_condition:
+  - external_object_id_exists
+  - resource_access_or_mutation_is_reachable
+  - object_level_authorization_is_missing_or_bypassable
+  - cross_user_or_cross_tenant_or_privilege_impact_is_possible
+not_in_scope:
+  - authentication_bypass_without_object_id
+  - pure_csrf
+  - pure_xss
+  - mass_assignment_without_object_reference
+  - function_level_authz_only_without_object_id
+  - open_redirect

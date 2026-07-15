@@ -1,0 +1,40 @@
+id: hessian-kryo
+name: Hessian / Kryo binary deserialization
+detect:
+  imports:
+    - com.caucho.hessian.io.Hessian2Input
+    - com.caucho.hessian.io.HessianInput
+    - com.caucho.hessian.io.Hessian2Output
+    - com.esotericsoftware.kryo.Kryo
+    - com.esotericsoftware.kryo.io.Input
+    - com.esotericsoftware.kryo.io.Output
+  keywords:
+    - Hessian2Input
+    - HessianInput
+    - readObject
+    - Kryo
+    - readClassAndObject
+    - HessianServiceExporter
+    - Burlap
+
+sources: inherit-global
+sinks:
+  - hessian-readobject
+  - kryo-readobject
+
+safe_patterns:
+  - type_registration_allowlist_on_Kryo
+  - trusted_peer_only_rpc_with_auth
+  - no_untrusted_network_to_Hessian_endpoint
+  - custom_serializers_without_arbitrary_class_load
+
+unsafe_patterns:
+  - Hessian2Input_readObject_on_request_or_mq_bytes
+  - Kryo_readClassAndObject_untrusted
+  - HessianServiceExporter_exposed_externally
+  - default_Kryo_without_registration_required
+
+notes:
+  - Binary RPC frameworks often deserialize attacker-controlled wire formats
+  - Treat message/RPC bytes as high-confidence sources
+  - Gadget amplifiers apply similarly to native Java serialization

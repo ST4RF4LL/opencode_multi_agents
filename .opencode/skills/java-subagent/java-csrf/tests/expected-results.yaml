@@ -1,0 +1,52 @@
+positive:
+  P01_SpringCsrfDisablePasswordPost.java:
+    expect: candidate_or_finding
+    subtype: spring-csrf-disabled
+    sink: csrf().disable + POST password
+  P02_CookieJsonApiNoCsrfHeader.java:
+    expect: candidate_or_finding
+    subtype: cookie-json-api-no-custom-header
+    sink: JSON POST profile email
+  P03_GetBasedDelete.java:
+    expect: candidate_or_finding
+    subtype: get-based-state-change
+    sink: GET deleteById
+  P04_MissingCsrfTokenFormPost.java:
+    expect: candidate_or_finding
+    subtype: missing-csrf-token
+    sink: session-auth transfer POST
+  P05_StaticCsrfTokenNotBound.java:
+    expect: candidate_or_finding
+    subtype: token-not-bound-to-session
+    sink: static CSRF_TOKEN constant
+
+negative:
+  N01_CsrfEnabledSessionBound.java:
+    expect: rejected
+    reason: csrf_enabled_default_session_bound
+  N02_BearerOnlyNoCookie.java:
+    expect: rejected
+    reason: stateless_bearer_only_no_cookie_session
+  N03_ReadOnlyGet.java:
+    expect: rejected
+    reason: read_only_no_state_change
+  N04_MandatoryCustomHeader.java:
+    expect: rejected
+    reason: mandatory_csrf_header_present
+  N05_PostDeleteWithCsrfTokenCheck.java:
+    expect: rejected
+    reason: session_bound_csrf_token_validated
+
+regression:
+  R01_CsrfDisableFormPost.java:
+    expect: sink_candidate
+    subtype: spring-csrf-disabled
+    must_not_regress: false_negative_on_csrf_disable_with_form_password_post
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - auth_mutation_pairing_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

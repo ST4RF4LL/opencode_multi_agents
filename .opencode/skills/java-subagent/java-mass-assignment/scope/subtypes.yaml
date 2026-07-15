@@ -1,0 +1,35 @@
+subtypes:
+  - id: spring-mvc-entity-binding
+    description: Spring MVC 将请求参数绑定到领域实体（@ModelAttribute / 无注解 form 对象）
+    typical_patterns:
+      - "@ModelAttribute UserEntity user"
+      - "public String update(UserEntity user)"
+      - form POST sets isAdmin/role via parameter names
+
+  - id: jackson-requestbody-sensitive-fields
+    description: Jackson @RequestBody 反序列化到含敏感字段的实体/聚合根
+    typical_patterns:
+      - "@RequestBody Account account"
+      - "@RequestBody User user"
+      - JSON body sets balance/role/status
+
+  - id: entity-as-dto
+    description: 领域实体 / JPA Entity 直接作为 API 入参或出参 DTO
+    typical_patterns:
+      - controller parameter type is @Entity class
+      - repository.save(requestBodyEntity)
+      - no separate request DTO layer
+
+  - id: nested-binding-privilege
+    description: 嵌套对象/关联实体被绑定导致权限或从属关系被改写
+    typical_patterns:
+      - user.roles[*].name
+      - order.customer.admin
+      - nested organization.ownerId overwrite
+
+  - id: patch-without-allowlist
+    description: PATCH/merge/partial update 未限制可写字段，敏感属性可被覆盖
+    typical_patterns:
+      - JsonMergePatch / JsonPatch applied to entity
+      - BeanUtils.copyProperties(src, dest) without ignore list
+      - Map-based patch applied via reflection/setters

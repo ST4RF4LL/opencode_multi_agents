@@ -1,0 +1,9 @@
+transferable_lessons:
+  - parseExpression(userInput) is the primary SpEL injection sink family
+  - StandardEvaluationContext + user expression is high capability surface
+  - Strong fix: expression allowlist of constants and/or SimpleEvaluationContext with restricted accessors
+  - Binding user data as root/variables with constant expression text is preferred
+non_transferable_details:
+  - original endpoint path
+  - original parameter names
+  - original exploit expressions

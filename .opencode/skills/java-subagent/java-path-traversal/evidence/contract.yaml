@@ -1,0 +1,33 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - path_component_is_influenced
+    - effective_normalize_and_base_dir_confinement_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - intended_base_directory_if_known
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - path_is_constant_and_user_input_does_not_enter_path_segments
+  - user_input_only_selects_from_fixed_path_map
+  - normalize_and_startswith_basedir_is_effective_and_complete
+  - path_is_test_only_or_dead_code
+  - validation_is_effective_and_complete
+  - evidence_is_only_a_dangerous_api_match
+  - only_filenameutils_getname_present_without_proving_escape
+  - evidence_requires_destructive_system_file_operations
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

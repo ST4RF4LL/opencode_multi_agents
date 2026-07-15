@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Mutations (DELETE/PUT) without ownership are higher impact than reads
+  - deleteById(pathId) is missing-ownership-on-mutation when no self/admin gate
+  - PreAuthorize must bind to object id or role; bare authentication is insufficient
+  - Prefer admin-only for cross-user delete and self-id for account deletion
+non_transferable_details:
+  - original user id values
+  - original role names
+  - original endpoint path

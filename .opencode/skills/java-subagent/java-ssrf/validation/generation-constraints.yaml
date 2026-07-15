@@ -1,0 +1,31 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_url_construction_logic
+  - actual_http_client
+  - actual_validation_logic
+  - actual_redirect_policy
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_network_access_without_evidence
+  - claim_success_based_only_on_generic_error
+  - perform_destructive_or_unrelated_actions
+  - attack_real_cloud_metadata_endpoints_in_production
+  - use_weaponized_payloads_against_third_party_systems
+  - scan_broad_internal_ip_ranges_without_authorization
+
+preferred_destinations:
+  - authorized_collaborator_or_oast_endpoint
+  - local_mock_http_server_in_lab
+  - synthetic_hosts_in_staging
+  - conceptual_metadata_examples_for_documentation_only

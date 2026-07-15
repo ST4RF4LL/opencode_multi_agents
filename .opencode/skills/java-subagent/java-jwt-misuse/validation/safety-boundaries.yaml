@@ -1,0 +1,18 @@
+allowed:
+  - static_code_and_config_review
+  - abstract_poc_with_fake_secrets_in_local_or_authorized_staging
+  - verification_that_decoder_rejects_unsigned_or_expired_tokens_in_non_prod
+  - documentation_of_missing_claim_validators
+
+forbidden:
+  - real_token_forgery_against_production
+  - exfiltration_or_publication_of_live_signing_secrets
+  - algorithm_confusion_or_alg_none_attacks_on_live_users
+  - session_hijack_or_account_takeover_outside_authorized_scope
+  - brute_force_of_production_hmac_secrets
+
+reporting:
+  - document_affected_auth_decision_and_cwe
+  - prefer_code_snippets_and_config_over_weaponized_tokens
+  - use_placeholder_secrets_like_TEST_ONLY_SECRET
+  - recommend_algorithm_allowlist_managed_keys_and_claim_validation

@@ -1,0 +1,28 @@
+id: jdk-sax
+name: JDK SAXParser / SAXParserFactory / XMLReader
+detection:
+  imports:
+    - javax.xml.parsers.SAXParser
+    - javax.xml.parsers.SAXParserFactory
+    - jakarta.xml.parsers.SAXParser
+    - jakarta.xml.parsers.SAXParserFactory
+    - org.xml.sax.XMLReader
+    - org.xml.sax.helpers.XMLReaderFactory
+  classes:
+    - SAXParserFactory
+    - SAXParser
+    - XMLReader
+sinks:
+  - SAXParser.parse(...)
+  - XMLReader.parse(InputSource)
+  - XMLReader.parse(String systemId)
+strong_controls:
+  - SAXParserFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+  - SAXParserFactory.setFeature("http://xml.org/sax/features/external-general-entities", false)
+  - SAXParserFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+  - SAXParserFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+  - XMLReader.setFeature same feature URIs
+  - setXIncludeAware(false)
+notes:
+  - Features may be set on factory or on XMLReader obtained via getXMLReader()
+  - Default configuration allows external entities on many JDKs

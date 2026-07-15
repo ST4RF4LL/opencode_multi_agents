@@ -1,0 +1,26 @@
+id: case-002
+vulnerability_type: ssrf
+subtype: path-confusion
+source:
+  type: request-parameter
+  expression: '@RequestParam String path'
+sink:
+  api: RestTemplate.getForObject
+  sensitive_argument: 1
+propagation:
+  - ResourceController.fetch
+  - string concat base + path
+  - weak startsWith check
+root_cause:
+  - fixed_prefix_concat_with_user_input
+  - startsWith_used_as_host_validation
+  - parsed_host_not_checked
+prerequisites:
+  - reachable_http_endpoint
+  - outbound_network_allowed
+observed_behavior:
+  - prefix_check_bypassed_and_request_sent_to_untrusted_host
+fix:
+  - parse_URI_and_allowlist_host
+  - use_UriComponentsBuilder_with_fixed_host_only
+  - reject_userinfo_and_scheme_host_override

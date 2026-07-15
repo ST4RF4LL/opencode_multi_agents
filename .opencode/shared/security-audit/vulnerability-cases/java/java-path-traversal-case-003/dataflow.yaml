@@ -1,0 +1,10 @@
+source:
+  method: MultipartFile.getOriginalFilename
+  parameter: client Content-Disposition filename
+path:
+  - StorageService.store
+  - uploadDir.resolve(original)
+sink:
+  method: Files.copy
+  argument: target path
+influence: multipart_filename_as_relative_or_absolute_path

@@ -1,0 +1,113 @@
+rules:
+  - id: java-path-traversal-file-join-user
+    message: File/Path constructed by joining base directory with possibly untrusted path segment
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          new File($BASE, $USER)
+      - pattern: |
+          $BASE.resolve($USER)
+      - pattern: |
+          Paths.get($BASE, $USER)
+      - pattern: |
+          Path.of($BASE, $USER)
+    metadata:
+      cwe: CWE-22
+      category: path-traversal
+      confidence: medium
+      notes: L1 candidate; verify source of $USER and confinement
+
+  - id: java-path-traversal-stream-from-joined
+    message: File stream opened on path that may include untrusted segments
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: new FileInputStream($PATH)
+          - pattern: new FileOutputStream($PATH)
+          - pattern: new FileReader($PATH)
+          - pattern: new FileWriter($PATH)
+          - pattern: Files.readAllBytes($PATH)
+          - pattern: Files.readString($PATH)
+          - pattern: Files.newInputStream($PATH, ...)
+          - pattern: Files.newOutputStream($PATH, ...)
+          - pattern: Files.write($PATH, ...)
+          - pattern: Files.delete($PATH)
+          - pattern: Files.copy($SRC, $PATH, ...)
+      - pattern-either:
+          - pattern-inside: |
+              $PATH = new File($BASE, $USER);
+              ...
+          - pattern-inside: |
+              $PATH = $BASE.resolve($USER);
+              ...
+          - pattern-inside: |
+              $PATH = Paths.get($BASE, $USER);
+              ...
+          - pattern-inside: |
+              $PATH = $BASE + "/" + $USER;
+              ...
+          - pattern-inside: |
+              $PATH = $BASE + File.separator + $USER;
+              ...
+    metadata:
+      cwe: CWE-22
+      category: path-traversal
+      confidence: high
+
+  - id: java-path-traversal-zip-slip
+    message: Zip/Jar entry name used to build extract path without confinement check
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              new File($DEST, $ENTRY.getName())
+          - pattern: |
+              $DEST.resolve($ENTRY.getName())
+          - pattern: |
+              Paths.get($DEST, $ENTRY.getName())
+      - metavariable-regex:
+          metavariable: $ENTRY
+          regex: (?i).*(entry|zip|jar|archive).*
+    metadata:
+      cwe: CWE-22
+      subtype: zip-slip
+      confidence: high
+
+  - id: java-path-traversal-zip-slip-generic
+    message: Archive entry getName used in path construction
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          new File($DEST, $E.getName())
+      - pattern: |
+          $DEST.resolve($E.getName())
+      - pattern: |
+          Files.copy($IS, $DEST.resolve($E.getName()), ...)
+    metadata:
+      cwe: CWE-22
+      subtype: zip-slip
+      confidence: medium
+
+  - id: java-path-traversal-multipart-filename
+    message: Multipart original filename used directly as storage path component
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          new File($DIR, $MF.getOriginalFilename())
+      - pattern: |
+          $DIR.resolve($MF.getOriginalFilename())
+      - pattern: |
+          new File($DIR, $PART.getSubmittedFileName())
+      - pattern: |
+          $DIR.resolve($PART.getSubmittedFileName())
+      - pattern: |
+          $MF.transferTo(new File($DIR, $MF.getOriginalFilename()))
+    metadata:
+      cwe: CWE-22
+      subtype: multipart-filename
+      confidence: high

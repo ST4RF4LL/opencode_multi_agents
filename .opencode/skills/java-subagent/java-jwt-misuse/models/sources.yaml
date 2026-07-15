@@ -1,0 +1,88 @@
+# For JWT: "sources" = external tokens, key/algorithm config, claim config origins.
+sources:
+  - id: jwt-token-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+    patterns:
+      - Authorization Bearer
+      - X-Auth-Token
+    controlled_value: jwt_string
+    confidence: high
+    notes: primary external JWT input
+
+  - id: jwt-token-cookie
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getCookies.*"
+      - ".*Cookie.*getValue.*"
+    controlled_value: jwt_string
+    confidence: high
+
+  - id: jwt-token-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+    annotation:
+      - RequestParam
+      - RequestBody
+      - PathVariable
+    controlled_value: jwt_string
+    confidence: high
+
+  - id: jwt-token-spring-security
+    framework: spring-oauth2-resource-server
+    patterns:
+      - BearerTokenAuthenticationFilter
+      - JwtAuthenticationToken
+      - ServerHttpSecurity.oauth2ResourceServer
+    controlled_value: bearer_token
+    confidence: high
+
+  - id: hmac-secret-hardcoded
+    framework: app
+    patterns:
+      - string/byte literals passed to setSigningKey / withSecret / SecretKeySpec
+      - constants named SECRET, JWT_SECRET, SIGNING_KEY
+    controlled_value: hmac_key_bytes
+    confidence: high
+    notes: maps to subtype weak-hardcoded-hmac-secret
+
+  - id: algorithm-config
+    framework: jwt-lib
+    patterns:
+      - algorithm string literals HS256/RS256/none
+      - Algorithm.HMAC256 / Algorithm.RSA256 construction
+      - JWSAlgorithm selection
+    controlled_value: algorithm_choice
+    confidence: high
+
+  - id: asymmetric-key-material
+    framework: jwt-lib
+    patterns:
+      - RSA public key bytes used where HMAC secret expected
+      - PublicKey passed to HMAC path
+      - JWK set loaded but algorithm not constrained
+    controlled_value: key_material
+    confidence: medium
+    notes: algorithm-confusion candidate when used as HMAC secret
+
+  - id: claim-config
+    framework: config
+    patterns:
+      - spring.security.oauth2.resourceserver.jwt.issuer-uri
+      - spring.security.oauth2.resourceserver.jwt.jwk-set-uri
+      - audience / issuer properties
+    controlled_value: validation_config
+    confidence: medium
+    notes: missing config can mean claims-not-validated
+
+  - id: keystore-or-env-secret
+    framework: secrets
+    method_full_name:
+      - ".*System\\.getenv.*"
+      - ".*System\\.getProperty.*"
+      - ".*KeyStore\\.getKey.*"
+    controlled_value: key_material
+    confidence: low
+    notes: not weak by itself; track if default/predictable or short

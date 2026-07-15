@@ -1,0 +1,30 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_spel_construction_logic
+  - actual_spel_api_or_wrapper
+  - actual_evaluation_context_type
+  - actual_validation_or_allowlist_logic
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - include_weaponized_rce_expressions
+  - include_process_execution_or_reverse_shell_spel
+  - assume_spel_error_messages_are_exposed
+  - claim_success_from_generic_500_only
+  - exfiltrate_unrelated_sensitive_data_beyond_proof
+  - treat_constant_value_annotation_as_injection_proof
+
+safe_marker_examples:
+  - harmless_literal_or_property_access_markers_in_authorized_lab
+  - expression_syntax_that_only_proves_parse_or_evaluate_influence
+  - abstract_impact_description_instead_of_exploit_code

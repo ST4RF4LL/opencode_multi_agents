@@ -1,0 +1,99 @@
+sinks:
+  - id: jjwt-parse
+    framework: jjwt
+    method_full_name:
+      - ".*io\\.jsonwebtoken\\.JwtParser\\.parse.*"
+      - ".*io\\.jsonwebtoken\\.JwtParserBuilder\\.build.*"
+      - ".*Jwts\\.parser.*"
+      - ".*Jwts\\.parserBuilder.*"
+      - ".*parseClaimsJws.*"
+      - ".*parseClaimsJwt.*"
+      - ".*parseSignedClaims.*"
+      - ".*parseUnsecuredClaims.*"
+    semantics: jwt-parse
+    confidence: high
+    weak_when:
+      - parseClaimsJwt or parseUnsecuredClaims without signature
+      - parser without requireSignature / verifyWith
+      - allow none algorithm
+
+  - id: jjwt-set-signing-key
+    framework: jjwt
+    method_full_name:
+      - ".*setSigningKey.*"
+      - ".*verifyWith.*"
+      - ".*signWith.*"
+    sensitive_arguments: [1]
+    semantics: jwt-key-binding
+    confidence: high
+    notes: inspect key origin and algorithm family
+
+  - id: nimbus-parse-verify
+    framework: nimbus-jose
+    method_full_name:
+      - ".*com\\.nimbusds\\.jwt\\.SignedJWT\\.parse.*"
+      - ".*com\\.nimbusds\\.jwt\\.JWTParser\\.parse.*"
+      - ".*SignedJWT\\.verify.*"
+      - ".*DefaultJWTProcessor\\.process.*"
+      - ".*ConfigurableJWTProcessor\\.process.*"
+      - ".*JWTClaimsSet\\.get.*"
+    semantics: jwt-parse-or-claim-use
+    confidence: high
+    weak_when:
+      - parse without verify
+      - JWSVerifier not applied
+      - JWTClaimsSet used after parse-only
+
+  - id: auth0-java-jwt
+    framework: auth0-java-jwt
+    method_full_name:
+      - ".*com\\.auth0\\.jwt\\.JWT\\.decode.*"
+      - ".*com\\.auth0\\.jwt\\.JWT\\.require.*"
+      - ".*JWTVerifier\\.verify.*"
+      - ".*Algorithm\\.HMAC256.*"
+      - ".*Algorithm\\.HMAC384.*"
+      - ".*Algorithm\\.HMAC512.*"
+      - ".*Algorithm\\.none.*"
+      - ".*Algorithm\\.RSA256.*"
+    semantics: jwt-decode-or-verify
+    confidence: high
+    weak_when:
+      - JWT.decode without verify
+      - Algorithm.none
+      - HMAC with hardcoded secret
+
+  - id: spring-jwt-decoder
+    framework: spring-oauth2-resource-server
+    method_full_name:
+      - ".*NimbusJwtDecoder.*"
+      - ".*JwtDecoders\\.fromIssuerLocation.*"
+      - ".*JwtDecoders\\.fromOidcIssuerLocation.*"
+      - ".*ReactiveJwtDecoders.*"
+      - ".*JwtDecoder\\.decode.*"
+      - ".*NimbusReactiveJwtDecoder.*"
+    semantics: spring-jwt-decode
+    confidence: high
+    notes: inspect algorithm constraints, issuer, audience validators
+
+  - id: claims-used-for-authz
+    framework: app
+    method_full_name:
+      - ".*getSubject.*"
+      - ".*getClaim.*"
+      - ".*getAudience.*"
+      - ".*getIssuer.*"
+      - ".*getExpiration.*"
+      - ".*SecurityContextHolder.*"
+    semantics: trust-decision
+    confidence: medium
+    notes: elevate when claims drive authorization without prior verify
+
+  - id: jws-header-alg-trust
+    framework: jwt-lib
+    patterns:
+      - reading alg from token header to select verifier
+      - no algorithm allowlist
+    semantics: algorithm-selection-from-token
+    confidence: high
+    weak_when:
+      - token-controlled algorithm without server-side allowlist

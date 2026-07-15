@@ -1,0 +1,15 @@
+case_specific: true
+preconditions:
+  - filter trusts JWT.decode claims for identity
+  - no signature verification on path
+request_context:
+  note: >
+    ABSTRACT ONLY — do not forge tokens against production.
+    Conceptually, an unsigned JWT-shaped string with attacker-controlled
+    sub/role claims would be accepted if decode-only is used.
+observed_result:
+  - subject_and_role_taken_from_unverified_payload
+reuse_policy:
+  - reference_only
+  - abstract_poc_fake_secrets_only
+  - do_not_execute_real_forgeries_on_production

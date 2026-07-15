@@ -1,0 +1,43 @@
+finding_id: SPEL-001
+status: finding # finding | candidate | rejected
+vulnerability_type: spel-injection
+subtype: spel-expression-parser-parse
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/eval"
+  method: SpelController.evaluate
+  parameter: expression
+source:
+  file: SpelController.java
+  line: 24
+  expression: "@RequestParam String expression"
+sink:
+  file: SpelService.java
+  line: 40
+  expression: parser.parseExpression(expression) / expr.getValue(context)
+dataflow:
+  - SpelController.evaluate
+  - SpelService.run
+  - SpelExpressionParser.parseExpression
+  - Expression.getValue
+controls:
+  observed: []
+  assessment:
+    - missing-simple-evaluation-context
+    - standard-evaluation-context-full-power
+    - user-controlled-expression-text
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - result_or_error_diff
+limitations: []
+rejection_reason: null

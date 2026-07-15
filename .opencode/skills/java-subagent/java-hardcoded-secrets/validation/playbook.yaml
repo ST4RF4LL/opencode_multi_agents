@@ -1,0 +1,36 @@
+# Hardcoded-secret findings are often static-only. Dynamic validation is limited and non-exfiltrating.
+steps:
+  - identify_secret_location_and_subtype
+  - determine_secret_shape_and_redact_for_notes
+  - determine_usage_binding
+  - inspect_placeholder_vs_real
+  - inspect_secret_management_controls
+  - classify_static_semantics_strength
+  - if_needed_confirm_packaging_or_config_load_path
+  - preserve_evidence_without_full_secret
+
+validation_modes:
+  static_preferred:
+    when:
+      - clear_literal_or_config_plaintext
+      - pem_private_key_in_repo
+      - secretkeyspec_or_jwt_secret_literal
+    action: satisfy Evidence Contract via complete static semantics
+
+  limited_dynamic:
+    when:
+      - need_to_confirm_config_profile_loaded_in_runtime
+      - need_to_confirm_test_vs_main_packaging
+    action: non-destructive observation only; never use live credentials against third parties
+
+observable_behaviors:
+  - config_loads_plaintext_password_into_DataSource
+  - client_sends_static_api_key_header
+  - jwt_tokens_forgeable_with_source_secret
+  - aws_sdk_accepts_static_credentials_from_constants
+
+notes:
+  - do_not_authenticate_to_production_with_discovered_secrets
+  - do_not_exfiltrate_or_publish_full_secret_values
+  - prefer_code_and_config_evidence_over_live_cloud_calls
+  - use_only_obviously_fake_secrets_in_skill_samples

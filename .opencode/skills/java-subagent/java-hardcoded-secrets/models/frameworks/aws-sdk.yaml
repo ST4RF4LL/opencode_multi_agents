@@ -1,0 +1,46 @@
+id: aws-sdk
+name: AWS SDK static credentials
+detect:
+  imports:
+    - com.amazonaws.auth.BasicAWSCredentials
+    - com.amazonaws.auth.AWSStaticCredentialsProvider
+    - software.amazon.awssdk.auth.credentials.AwsBasicCredentials
+    - software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+    - com.amazonaws.services.s3.AmazonS3Client
+  keywords:
+    - BasicAWSCredentials
+    - AwsBasicCredentials
+    - StaticCredentialsProvider
+    - aws.accessKeyId
+    - aws.secretKey
+    - AKIA
+  dependencies:
+    - aws-java-sdk
+    - software.amazon.awssdk
+
+sources: inherit-global
+sinks:
+  - aws-static-credentials
+  - config-property-binding
+
+sensitive_locations:
+  - BasicAWSCredentials(accessKey, secretKey)
+  - AwsBasicCredentials.create(accessKey, secretKey)
+  - system properties / yml aws.access-key / secret-key literals
+
+safe_patterns:
+  - DefaultCredentialsProvider_or_instance_profile
+  - environment_variables_AWS_ACCESS_KEY_ID_outside_source
+  - IAM_roles_for_EC2_ECS_EKS_Lambda
+  - Secrets_Manager_or_SSO_for_long_term_keys
+
+unsafe_patterns:
+  - AKIA_literal_in_source
+  - secret_access_key_string_literal
+  - StaticCredentialsProvider_with_hardcoded_keys
+  - committed_credentials_csv_or_properties
+
+notes:
+  - AKIAIOSFODNN7EXAMPLE is the official AWS docs example (placeholder)
+  - wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY is docs secret example
+  - prefer instance/task roles over long-lived access keys

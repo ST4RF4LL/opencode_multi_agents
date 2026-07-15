@@ -1,0 +1,53 @@
+propagators:
+  - pattern: framework-binding
+    examples:
+      - '@ModelAttribute UserEntity user → user.isAdmin'
+      - '@RequestBody Account account → account.balance'
+      - form field name "role" → setRole(String)
+
+  - pattern: jackson-deserialization
+    examples:
+      - ObjectMapper.readValue(json, User.class)
+      - RequestBody → HttpMessageConverter → entity setters
+      - readerForUpdating(entity).readValue(patchJson)
+
+  - pattern: getter-setter
+    examples:
+      - setAdmin → isAdmin / getAdmin
+      - setRole → getRole
+      - setBalance → getBalance
+      - setOwnerId → getOwnerId
+
+  - pattern: bean-copy
+    examples:
+      - BeanUtils.copyProperties(request, entity)
+      - BeanUtils.copyProperties(src, dest, "id")
+      - PropertyUtils.copyProperties
+
+  - pattern: builder-or-mapstruct
+    examples:
+      - UserMapper.INSTANCE.toEntity(requestDto)
+      - modelMapper.map(body, Account.class)
+      - entity.toBuilder().role(dto.getRole()).build()
+
+  - pattern: nested-object
+    examples:
+      - user.profile.isAdmin
+      - order.customer.roles
+      - account.permissions[*].name
+
+  - pattern: collection-element
+    examples:
+      - list of Role entities bound from JSON array
+      - Map<String,Object> applied via reflection
+
+  - pattern: persistence
+    examples:
+      - repository.save(entity)
+      - entityManager.merge(entity)
+      - session.update(entity)
+
+  - pattern: wrapper-service
+    examples:
+      - userService.update(userEntity)
+      - accountService.saveFromRequest(body)

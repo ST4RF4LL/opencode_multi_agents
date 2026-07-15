@@ -1,0 +1,98 @@
+sanitizers:
+  strong:
+    - id: object-input-filter
+      condition:
+        - ObjectInputFilter_or_ObjectInputStream_setObjectInputFilter_applied
+        - filter_allowlists_expected_classes_only
+        - reject_status_for_unknown_classes
+        - applied_before_readObject
+      notes: Java 9+ ObjectInputFilter / JEP 290 style filtering
+
+    - id: validating-object-input-stream
+      condition:
+        - uses_ValidatingObjectInputStream_or_equivalent
+        - accept_list_of_classes_is_fixed_and_narrow
+        - no_wildcards_on_dangerous_packages
+      notes: commons-io ValidatingObjectInputStream with explicit accept
+
+    - id: snakeyaml-safe-constructor
+      condition:
+        - uses_SafeConstructor_or_LoaderOptions_TagInspector
+        - untrusted_tags_rejected
+        - no_default_Constructor_on_untrusted_input
+      notes: Yaml(new SafeConstructor()) or TagInspector allowlist
+
+    - id: xstream-security-framework
+      condition:
+        - XStream_setupDefaultSecurity_or_allowTypes_configured
+        - only_expected_types_allowed
+        - no_AnyTypePermission
+      notes: XStream 1.4.7+ security framework
+
+    - id: fastjson-safemode-no-autotype
+      condition:
+        - safeMode_enabled_or_autoType_disabled
+        - no_ParserConfig_setAutoTypeSupport_true
+        - no_Feature_SupportAutoType_on_untrusted_parse
+        - expected_type_passed_to_parseObject_when_needed
+      notes: Fastjson safeMode / autoType off is strong when not bypassable
+
+    - id: jackson-no-default-typing
+      condition:
+        - no_enableDefaultTyping_or_activateDefaultTyping
+        - target_type_is_closed_DTO_graph
+        - no_attacker_influenced_JsonTypeInfo_CLASS
+      notes: default Jackson DTO mapping without polymorphic typing is strong
+
+  contextual:
+    - id: expected-type-only-parse
+      condition:
+        - parseObject_or_readValue_with_fixed_Class_literal
+        - no_polymorphic_type_id_in_payload_honored
+        - library_version_does_not_force_autotype
+      notes: fixed Class helps but Fastjson @type may still override if autoType on
+
+    - id: hmac-or-signature-on-blob
+      condition:
+        - serialized_blob_integrity_verified_before_deserial
+        - key_not_attacker_controlled
+        - fail_closed_on_bad_mac
+      notes: does not remove need for type filter if MAC key leaks
+
+    - id: network-trust-boundary-internal-only
+      condition:
+        - only_trusted_internal_peers_can_send_payload
+        - authentication_and_authorization_enforced
+      notes: operational control; still prefer type filters
+
+  weak:
+    - id: package-prefix-blacklist
+      pattern:
+        - reject_sun_reflect
+        - reject_commons_collections_substring
+      notes: incomplete; gadgets evolve; prefer allowlist
+
+    - id: length-or-magic-header-only
+      pattern:
+        - length check
+        - aced0005 magic check only
+      notes: does not constrain reconstructed types
+
+    - id: try-catch-around-readobject
+      pattern:
+        - catch Exception
+      notes: error handling is not a type control
+
+  invalid:
+    - id: gadget-lib-absent-as-defense
+      notes: absence of known gadgets is not a sanitizer; new gadgets appear
+
+    - id: jackson-readvalue-assumed-safe-with-typing
+      notes: readValue with enableDefaultTyping is not safe
+
+    - id: snakeyaml-new-yaml-as-safe
+      notes: new Yaml() without SafeConstructor is the vulnerability pattern
+
+    - id: html-or-sql-encoding-as-deserial-defense
+    - id: base64-decode-as-validation
+      notes: decoding is not type validation

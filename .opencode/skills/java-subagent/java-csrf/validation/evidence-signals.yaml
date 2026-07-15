@@ -1,0 +1,22 @@
+strong_signals:
+  - csrf_disabled_with_cookie_session_and_confirmed_mutation
+  - state_change_succeeds_without_csrf_token_in_authorized_lab
+  - get_endpoint_performs_delete_or_update_with_session_cookie
+  - code_proves_no_token_header_origin_check_on_cookie_auth_mutation
+
+medium_signals:
+  - csrf_disable_config_near_form_login_security_chain
+  - json_api_uses_session_cookie_without_csrf_header_requirement
+  - samesite_none_or_missing_with_mutating_routes
+  - token_field_present_but_no_server_side_comparison
+
+weak_signals:
+  - csrf_disable_alone_without_auth_context
+  - presence_of_postmapping_only
+  - cors_configuration_alone
+  - generic_security_config_without_mutation_path
+
+interpretation:
+  strong: supports Finding when entry and cookie auth are clear
+  medium: supports Candidate; may upgrade with control analysis
+  weak: insufficient alone

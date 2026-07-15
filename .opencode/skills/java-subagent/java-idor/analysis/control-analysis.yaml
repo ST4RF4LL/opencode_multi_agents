@@ -1,0 +1,52 @@
+questions:
+  - id: object_id_origin
+    ask: 对象 ID 来自 PathVariable/RequestParam/Body，还是仅来自 SecurityContext？
+    outcomes:
+      client_object_id: idor_surface
+      server_user_id_only: usually_safe_if_no_foreign_id
+      client_tenant_id: tenant_isolation_risk
+
+  - id: access_kind
+    ask: 操作是读取、更新还是删除？
+    classify:
+      - horizontal-idor
+      - vertical-idor
+      - missing-ownership-on-mutation
+      - tenant-id-from-client
+      - predictable-id-enumeration
+
+  - id: ownership_binding
+    ask: 是否将资源归属与当前认证主体绑定？
+    strong_yes:
+      - findByIdAndUserId(id, principalId)
+      - resource.getUserId().equals(principal.getId()) then deny
+      - "@PostAuthorize returnObject.owner == principal"
+    false_friends:
+      - isAuthenticated only
+      - hasRole USER only
+      - if (entity != null) return entity
+      - compare two client-supplied ids
+
+  - id: tenant_isolation
+    ask: 多租户下 tenant 是否来自服务端上下文？
+    accept:
+      - TenantContext from JWT/session
+      - Hibernate @Filter with server tenant
+    reject_as_strong:
+      - @RequestParam tenantId
+      - body.tenantId trusted without match
+
+  - id: vertical_boundary
+    ask: 低权限用户是否可访问管理员对象或接口？
+    if_yes:
+      - vertical-idor subtype
+
+  - id: mutation_guard
+    ask: 更新/删除前是否重新校验归属（非仅列表页过滤）？
+    assessment: weak_if_only_ui_or_list_filter
+
+control_grades:
+  strong: effective_object_level_authorization
+  contextual: effective_only_for_specific_role_or_self_path
+  weak: bypassable_or_auth_only
+  invalid: does_not_mitigate_idor

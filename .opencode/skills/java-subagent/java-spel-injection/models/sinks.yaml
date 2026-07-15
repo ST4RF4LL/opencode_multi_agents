@@ -1,0 +1,152 @@
+sinks:
+  - id: spel-parse-expression
+    framework: spring-expression
+    method_full_name:
+      - ".*org\\.springframework\\.expression\\.ExpressionParser\\.parseExpression.*"
+      - ".*org\\.springframework\\.expression\\.spel\\.standard\\.SpelExpressionParser\\.parseExpression.*"
+      - ".*SpelExpressionParser\\.parseExpression.*"
+    sensitive_arguments: [1]
+    semantics: spel-construction
+    confidence: high
+    notes: >
+      parseExpression is the primary construction sink when the expression string
+      is attacker-influenced. Optional ParserContext/TemplateParserContext second
+      argument still leaves expression text as the sensitive slot.
+
+  - id: spel-expression-get-value
+    framework: spring-expression
+    method_full_name:
+      - ".*org\\.springframework\\.expression\\.Expression\\.getValue.*"
+      - ".*org\\.springframework\\.expression\\.spel\\.standard\\.SpelExpression\\.getValue.*"
+      - ".*Expression\\.getValue.*"
+    sensitive_arguments: []
+    semantics: spel-evaluation
+    confidence: high
+    notes: >
+      Evaluation sink. High risk when Expression was built from user string or
+      when root/variables on EvaluationContext are attacker-controlled with
+      StandardEvaluationContext capabilities.
+
+  - id: spel-expression-set-value
+    framework: spring-expression
+    method_full_name:
+      - ".*org\\.springframework\\.expression\\.Expression\\.setValue.*"
+      - ".*org\\.springframework\\.expression\\.spel\\.standard\\.SpelExpression\\.setValue.*"
+      - ".*Expression\\.setValue.*"
+    sensitive_arguments: []
+    semantics: spel-evaluation-write
+    confidence: high
+    notes: write-side evaluation can mutate beans/objects reachable from context
+
+  - id: spel-expression-get-value-type
+    framework: spring-expression
+    method_full_name:
+      - ".*org\\.springframework\\.expression\\.Expression\\.getValueType.*"
+      - ".*org\\.springframework\\.expression\\.Expression\\.getValueTypeDescriptor.*"
+    sensitive_arguments: []
+    semantics: spel-evaluation-meta
+    confidence: medium
+    notes: lower impact than getValue but still indicates dynamic evaluation
+
+  - id: standard-evaluation-context
+    framework: spring-expression
+    method_full_name:
+      - ".*org\\.springframework\\.expression\\.spel\\.support\\.StandardEvaluationContext\\.<init>.*"
+      - ".*StandardEvaluationContext\\.setRootObject.*"
+      - ".*StandardEvaluationContext\\.setVariable.*"
+      - ".*StandardEvaluationContext\\.registerFunction.*"
+      - ".*StandardEvaluationContext\\.addPropertyAccessor.*"
+      - ".*StandardEvaluationContext\\.addMethodResolver.*"
+    sensitive_arguments: []
+    semantics: evaluation-context-capability
+    confidence: medium
+    notes: >
+      Not a sink alone; co-locate with parseExpression/getValue. Full type
+      location (T(...)), constructors, and method invocation are enabled by default.
+
+  - id: template-parser-context
+    framework: spring-expression
+    method_full_name:
+      - ".*org\\.springframework\\.expression\\.common\\.TemplateParserContext\\.<init>.*"
+      - ".*org\\.springframework\\.expression\\.ParserContext.*"
+      - ".*parseExpression\\(.*TemplateParserContext.*"
+    sensitive_arguments: []
+    semantics: template-embedding
+    confidence: high
+    notes: user data embedded into #{...} template fragments becomes expression text
+
+  - id: spring-value-dynamic
+    framework: spring-context-value
+    annotation:
+      - Value
+    patterns:
+      - "#{#"
+      - "#{T("
+      - "parseExpression"
+    semantics: annotation-el-evaluation
+    confidence: medium
+    notes: >
+      Constant @Value("#{systemProperties['x']}") is usually safe compile-time EL.
+      Dynamic construction of @Value expression text or runtime SpEL for property
+      placeholders influenced by external data is in scope.
+
+  - id: spring-cache-spel
+    framework: spring-cache-spel
+    annotation:
+      - Cacheable
+      - CacheEvict
+      - CachePut
+      - Caching
+    patterns:
+      - "key = \"#{"
+      - "condition = \"#{"
+      - "unless = \"#{"
+      - "+ "
+      - "String.format"
+    semantics: cache-spel-fragment
+    confidence: medium
+    notes: only when SpEL key/condition/unless fragment is built from user input
+
+  - id: spring-integration-spel
+    framework: spring-integration-spel
+    method_full_name:
+      - ".*ExpressionEvaluating.*"
+      - ".*SpelExpression.*"
+      - ".*IntegrationEvaluationContext.*"
+    patterns:
+      - "expression="
+      - "expression-string"
+      - "parseExpression"
+    semantics: integration-spel-evaluation
+    confidence: medium
+    notes: dynamic filter/router/transformer expressions from external input
+
+  - id: custom-spel-util
+    framework: custom
+    method_full_name:
+      - ".*SpelUtil\\..*"
+      - ".*ExpressionHelper\\..*"
+      - ".*ElEvaluator\\..*"
+      - ".*SpelEvaluator\\..*"
+      - ".*ExpressionService\\..*"
+    sensitive_arguments: []
+    semantics: possible-spel-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real parseExpression/getValue calls
+
+adjacent_not_sink:
+  - id: simple-evaluation-context-alone
+    framework: spring-expression
+    method_full_name:
+      - ".*SimpleEvaluationContext\\..*"
+    semantics: control-signal
+    notes: strong sanitizer signal; not a sink. Verify no custom dangerous accessors.
+
+  - id: constant-value-annotation
+    framework: spring-context-value
+    patterns:
+      - "@Value(\"#{systemProperties"
+      - "@Value(\"#{environment"
+      - "@Value(\"${"
+    semantics: compile-time-config
+    notes: constant annotation EL is out of scope without external influence on expression text

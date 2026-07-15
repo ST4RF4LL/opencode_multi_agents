@@ -1,0 +1,15 @@
+case_specific: true
+preconditions:
+  - GET /items/delete performs deleteById
+  - victim browser has session cookie
+  - resource id known or enumerable
+request_context:
+  endpoint: GET /items/delete
+  parameter: id
+observed_result:
+  - item deleted when victim browser requested the URL cross-site
+validation_style: conceptual
+reuse_policy:
+  - reference_only
+  - do_not_trigger_destructive_deletes_outside_lab
+  - rederive_resource_ids_and_auth_from_target

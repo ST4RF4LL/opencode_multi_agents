@@ -1,0 +1,13 @@
+source:
+  mechanism: browser_auto_session_cookie
+  cookie: JSESSIONID
+  attacker_controlled: form_fields_newPassword
+path:
+  - cross_site_form_post
+  - SecurityFilterChain with csrf disabled
+  - AccountController.changePassword
+  - UserService.updatePassword
+sink:
+  method: UserService.updatePassword
+  effect: password_state_change
+influence: full_state_change_with_victim_session

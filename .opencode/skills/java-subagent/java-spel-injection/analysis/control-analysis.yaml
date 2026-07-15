@@ -1,0 +1,54 @@
+questions:
+  - id: expression_text_origin
+    ask: SpEL 表达式字符串是编译期常量、白名单映射，还是包含外部输入？
+    outcomes:
+      constant_or_allowlisted_only: likely_safe
+      user_in_expression_text: high_risk
+      user_in_template_hash_fragment: template_injection_risk
+
+  - id: evaluation_context_type
+    ask: 使用的是 SimpleEvaluationContext 还是 StandardEvaluationContext？
+    strong_yes:
+      - SimpleEvaluationContext.forReadOnlyDataBinding / restricted builders
+      - no custom MethodResolver/PropertyAccessor expanding power
+    false_friends:
+      - StandardEvaluationContext with default type locator
+      - SimpleEvaluationContext plus dangerous custom accessors
+      - blacklisting T( or Runtime only
+
+  - id: user_data_binding_mode
+    ask: 用户输入是作为表达式文本，还是仅作为 root/variable 值？
+    accept:
+      - constant expression with setVariable / root DTO only
+      - allowlist mapping to constant expressions
+    reject_as_strong:
+      - parseExpression(userInput)
+      - "#{ " + user + " }"
+      - TemplateParserContext over user-controlled template body
+
+  - id: simple_context_misconfiguration
+    ask: SimpleEvaluationContext 是否通过自定义 accessor/resolver 扩大了能力面？
+    if_yes:
+      - do_not_auto_reject
+      - reassess_as_standard_like_capability
+    notes: SimpleEvaluationContext ≠ auto-safe
+
+  - id: constant_value_annotation
+    ask: 是否仅为常量 @Value("#{...}") / @Value("${...}") 而无外部表达式文本控制？
+    assessment: reject_as_not_injection_unless_config_untrusted_as_expression
+
+  - id: second_order
+    ask: 当前表达式是否来自历史存储的用户/租户配置？
+    if_yes:
+      - treat_stored_value_as_untrusted_source
+      - trace_original_write_path
+
+  - id: blacklist_only
+    ask: 是否仅依赖对 T(、Runtime、getClass 等的黑名单？
+    assessment: weak_or_invalid_unless_proven_complete
+
+control_grades:
+  strong: effective_blocks_expression_control_and_dangerous_capability
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

@@ -1,0 +1,56 @@
+id: spring-mvc
+name: Spring MVC state-changing endpoints
+detection:
+  imports:
+    - org.springframework.web.bind.annotation.PostMapping
+    - org.springframework.web.bind.annotation.PutMapping
+    - org.springframework.web.bind.annotation.DeleteMapping
+    - org.springframework.web.bind.annotation.PatchMapping
+    - org.springframework.web.bind.annotation.GetMapping
+    - org.springframework.web.bind.annotation.RequestMapping
+    - org.springframework.web.bind.annotation.RequestBody
+    - org.springframework.web.bind.annotation.ResponseBody
+    - org.springframework.stereotype.Controller
+    - org.springframework.web.bind.annotation.RestController
+  classes:
+    - RestController
+    - Controller
+  annotations:
+    - PostMapping
+    - PutMapping
+    - DeleteMapping
+    - PatchMapping
+    - GetMapping
+    - RequestMapping
+    - RequestBody
+    - ModelAttribute
+
+endpoint_candidates:
+  high_value_names:
+    - password
+    - changePassword
+    - transfer
+    - delete
+    - remove
+    - updateEmail
+    - updateProfile
+    - grant
+    - revoke
+    - logout
+    - bind
+    - unbind
+  content_types:
+    - application/x-www-form-urlencoded
+    - multipart/form-data
+    - application/json
+
+csrf_notes:
+  - Form posts historically covered by Spring CSRF hidden field
+  - JSON cookie-session APIs often need header token or custom header
+  - GetMapping with delete/update semantics is get-based-state-change
+  - Consumes MediaType.APPLICATION_JSON alone does not prevent CSRF for some browsers/clients
+    when credentials include cookies and CORS allows or simple requests apply
+
+pairing:
+  - load spring-security model for csrf().disable() and CsrfFilter
+  - load servlet-session for cookie/session evidence

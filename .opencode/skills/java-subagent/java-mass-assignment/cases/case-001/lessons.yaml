@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Binding domain entities with @ModelAttribute is the classic Spring mass-assignment pattern
+  - Parameter names matching JavaBean properties (isAdmin, role) are enough for over-posting
+  - Prefer dedicated request DTOs and explicit field mapping over entity binding
+  - InitBinder setAllowedFields is a strong control when the allowlist is complete
+non_transferable_details:
+  - original endpoint path
+  - original field names
+  - original payload values

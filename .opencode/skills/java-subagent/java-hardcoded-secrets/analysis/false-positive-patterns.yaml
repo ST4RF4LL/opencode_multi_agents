@@ -1,0 +1,57 @@
+not_vulnerability:
+  - id: env-var-reference
+    pattern: System.getenv / @Value("${SECRET}") without plaintext default
+    reason: secret externalized
+
+  - id: obvious-placeholder
+    pattern: CHANGE_ME / your-api-key / TODO_SECRET / *** / <password>
+    reason: not usable secret material
+
+  - id: aws-docs-example-key
+    pattern: AKIAIOSFODNN7EXAMPLE or wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY in docs/samples
+    reason: official AWS documentation example
+
+  - id: public-key-or-cert
+    pattern: BEGIN PUBLIC KEY / BEGIN CERTIFICATE only
+    reason: not confidential key material
+
+  - id: test-only-fake-secret
+    pattern: clearly fake secret under src/test never packaged to prod
+    reason: not production reachable
+
+  - id: empty-or-null-default
+    pattern: password: or password: "" with required override
+    reason: no secret embedded (verify runtime still requires injection)
+
+  - id: username-only-without-password
+    pattern: datasource username alone with password from env
+    reason: incomplete credential pair (still review)
+
+needs_deeper_review:
+  - id: default-fallback-secret
+    pattern: getenv != null ? env : "hardcoded"
+    reason: production may run with hardcoded default
+
+  - id: base64-embedded
+    pattern: Base64 decode of constant used as key/password
+    reason: still hardcoded after decode
+
+  - id: spring-profile-local
+    pattern: application-local.yml with secrets
+    reason: may be gitignored or committed; verify VCS and packaging
+
+  - id: jasypt-encrypted
+    pattern: ENC(...) values in yml
+    reason: depends on whether encryptor password is also in repo
+
+  - id: jwt-secret-from-config
+    pattern: jwt.secret property
+    reason: finding if plaintext; reject if externalized
+
+  - id: variable-named-secret-string-builder
+    pattern: String secret = buildFromParts(...)
+    reason: expand construction; may still hardcode parts
+
+  - id: docker-compose-env
+    pattern: environment PASSWORD= in compose committed to git
+    reason: often production-like credentials

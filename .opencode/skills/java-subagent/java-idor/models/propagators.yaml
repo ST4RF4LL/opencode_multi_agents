@@ -1,0 +1,44 @@
+propagators:
+  - pattern: path-variable-to-service
+    examples:
+      - '@PathVariable Long id -> orderService.getOrder(id)'
+      - '@PathVariable String userId -> userRepository.findById(userId)'
+
+  - pattern: request-param-to-dao
+    examples:
+      - 'request.getParameter("orderId") -> dao.find(orderId)'
+      - '@RequestParam Long id -> repository.deleteById(id)'
+
+  - pattern: dto-field
+    examples:
+      - OrderRequest.id
+      - UpdateUserCommand.userId
+      - TenantScopedQuery.tenantId
+
+  - pattern: getter-setter
+    examples:
+      - setOrderId -> getOrderId
+      - setUserId -> getUserId
+      - setTenantId -> getTenantId
+
+  - pattern: optional-unwrap
+    examples:
+      - findById(id).orElseThrow()
+      - findById(id).get()
+      - Optional.map then return entity
+
+  - pattern: entity-to-response
+    examples:
+      - Order entity -> OrderDto.from(entity)
+      - ResponseEntity.ok(entity)
+
+  - pattern: collection
+    examples:
+      - map.get("id")
+      - pathVariables.get("orderId")
+
+  - pattern: wrapper-method
+    examples:
+      - OrderFacade.load(id)
+      - ResourceLoader.get(resourceType, id)
+      - GenericCrudService.find(id)

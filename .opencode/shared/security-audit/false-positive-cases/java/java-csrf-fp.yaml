@@ -1,0 +1,49 @@
+not_vulnerability:
+  - id: bearer-only-api
+    pattern: authentication only via Authorization Bearer; no session/auth cookie
+    reason: browsers do not auto-attach custom Authorization headers cross-site
+
+  - id: csrf-enabled-session-bound
+    pattern: Spring CsrfFilter on; token session-bound and validated for mutations
+    reason: effective synchronizer token pattern
+
+  - id: read-only-endpoints
+    pattern: GET/POST handlers with no side effects
+    reason: CSRF impact requires state change
+
+  - id: samesite-strict-no-get-mutation
+    pattern: session cookie SameSite=Strict and mutations use non-safe methods only
+    reason: cross-site automatic credentialed requests largely blocked
+
+  - id: test-only-security-config
+    pattern: csrf disable only in test SecurityFilterChain
+    reason: not production reachable
+
+  - id: stateless-jwt-no-cookie
+    pattern: Spring Security csrf().disable() with pure stateless JWT header API
+    reason: legitimate disable when no cookie session
+
+needs_deeper_review:
+  - id: spring-csrf-disable
+    pattern: csrf().disable()
+    reason: high signal only if cookie/session auth + mutations exist
+
+  - id: cookie-json-api
+    pattern: @RequestBody JSON + session cookie auth
+    reason: form CSRF may not apply; need header token or equivalent
+
+  - id: get-delete
+    pattern: @GetMapping delete/remove/logout
+    reason: get-based-state-change; img/link CSRF
+
+  - id: ignoring-api-matchers
+    pattern: csrf ignoringRequestMatchers("/api/**")
+    reason: may leave cookie-session APIs unprotected
+
+  - id: static-token
+    pattern: hardcoded CSRF token value
+    reason: token-not-bound-to-session
+
+  - id: samesite-none
+    pattern: SameSite=None on session cookie
+    reason: preserves cross-site cookie sending; need other controls

@@ -1,0 +1,8 @@
+transferable_lessons:
+  - new Yaml() is the classic unsafe SnakeYAML pattern for untrusted input
+  - SafeConstructor / TagInspector are the primary strong controls
+  - Config-file-only trusted YAML is usually out of scope without external influence
+non_transferable_details:
+  - original endpoint path
+  - original YAML tag payloads
+  - specific historical CVE strings

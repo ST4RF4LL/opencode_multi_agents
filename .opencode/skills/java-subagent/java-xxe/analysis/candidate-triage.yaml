@@ -1,0 +1,49 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: XML parse/unmarshal API or insecure factory pattern found
+    not_a_finding: true
+    next: expand_call_chain_factory_config_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: untrusted XML input can reach parse/unmarshal on a factory without proven strong secure config
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_feature_flag_analysis
+
+  L3_semantic_candidate:
+    meaning: secure features missing, incomplete, on wrong instance, or bypassable; attacker controls XML document content
+    next: entry_reachability_impact_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven secure configuration or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - file_upload_xml
+  - soap_or_public_xml_api
+  - default_factory_no_features
+  - stax_missing_is_supporting_external_entities_false
+  - transformer_or_jaxb_untrusted_source
+  - possible_local_file_disclosure
+  - possible_ssrf_via_entity
+
+priority_reduce:
+  - test_code_only
+  - constant_classpath_xml_only
+  - strong_secure_features_on_same_factory
+  - dead_code
+  - local_dev_tooling
+  - only_billion_laughs_without_external_entity_vector  # still reportable as DoS with lower severity
+
+impact_classification:
+  classic_xxe_file_read:
+    severity_hint: high
+    subtypes: [classic-external-entity, parameter-entity, xinclude, soap-unmarshaller-jaxb, sax-dom-stax-insecure-defaults]
+  ssrf_via_entity:
+    severity_hint: high
+    notes: network entity resolution; do not reclassify as pure java-ssrf if vector is XML entity
+  entity_expansion_dos:
+    severity_hint: medium
+    subtypes: [billion-laughs-expansion-dos]
+    notes: CWE-776; report with DoS impact, not arbitrary file read

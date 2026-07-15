@@ -1,0 +1,12 @@
+source:
+  kind: jwt_token
+  expression: 'request.getHeader("Authorization")'
+path:
+  - AuthFilter.doFilterInternal
+  - JWT.decode
+  - getSubject / getClaim -> request attributes
+sink:
+  method: JWT.decode
+  influence: authentication_identity_and_role
+related_issues:
+  - claims_not_validated_exp_aud_iss

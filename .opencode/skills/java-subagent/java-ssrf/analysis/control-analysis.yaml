@@ -1,0 +1,59 @@
+questions:
+  - id: destination_origin
+    ask: 网络目标是常量、固定映射，还是包含外部输入？
+    outcomes:
+      constant_or_fixed_map: likely_safe
+      user_in_full_url: high_risk
+      user_in_host_or_port: host_control_risk
+      user_in_path_only_fixed_origin: usually_not_full_ssrf
+
+  - id: influenced_component
+    ask: 攻击者影响的是完整 URL、host、port、scheme 还是 path？
+    classify:
+      - full-url-control
+      - host-control
+      - port-control
+      - path-confusion
+      - protocol-smuggling
+      - redirect-bypass
+      - cloud-metadata
+
+  - id: parse_before_check
+    ask: 校验是否在 URL/URI 解析之后基于 scheme/host 进行？
+    strong_yes:
+      - URI.create then getScheme/getHost checks
+      - HttpUrl.parse then host allowlist
+    false_friends:
+      - startsWith("https://trusted.example/")
+      - contains("trusted.example")
+      - blacklist localhost string only
+
+  - id: dns_and_ip
+    ask: 是否解析 DNS 并对全部解析 IP 做内网/元数据段校验？
+    accept:
+      - InetAddress.getAllByName with all addresses checked
+      - connect-time revalidation
+    reject_as_strong:
+      - hostname string allowlist only without resolve when private ranges matter
+      - check only first resolved address
+
+  - id: redirects
+    ask: HTTP 客户端是否跟随重定向，以及是否对每跳重新校验？
+    if_follows_without_revalidate:
+      - redirect-bypass subtype
+      - control grade weak or invalid
+
+  - id: scheme_restriction
+    ask: scheme 是否限制为 http/https（或更严）？
+    if_no:
+      - protocol-smuggling risk for file/gopher/jar depending on client
+
+  - id: encoding_and_confusion
+    ask: 是否处理 userinfo(@)、反斜杠、编码点、DNS 名称别名？
+    assessment: weak_if_raw_string_prefix_only
+
+control_grades:
+  strong: effective_blocks_destination_control
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

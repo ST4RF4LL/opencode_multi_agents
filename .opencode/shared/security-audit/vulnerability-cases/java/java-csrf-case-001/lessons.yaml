@@ -1,0 +1,8 @@
+transferable_lessons:
+  - csrf().disable() is not itself a vulnerability until paired with cookie/session auth and mutations
+  - Form login + session cookie + password change is a high-impact CSRF pattern
+  - Prefer default Spring CSRF for session apps; do not disable globally for convenience
+non_transferable_details:
+  - original endpoint path
+  - original parameter names
+  - original deployment hostnames

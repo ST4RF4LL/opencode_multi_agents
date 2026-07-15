@@ -1,0 +1,113 @@
+rules:
+  - id: java-jwt-hardcoded-secret-constant
+    message: JWT secret constant looks weak or hardcoded
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              String $S = "secret";
+              ...
+              Algorithm.HMAC256($S)
+          - pattern: |
+              String $S = "changeme";
+              ...
+              Algorithm.HMAC256($S)
+          - pattern: |
+              String $S = "password";
+              ...
+              $X.setSigningKey($S)
+          - pattern: |
+              private static final String $S = "secret";
+              ...
+              Keys.hmacShaKeyFor($S.getBytes(...))
+          - pattern: |
+              byte[] $K = "...".getBytes(...);
+              ...
+              new MACVerifier($K)
+    metadata:
+      cwe: CWE-798
+      subtype: weak-hardcoded-hmac-secret
+      confidence: high
+
+  - id: java-jwt-algorithm-confusion-public-key-hmac
+    message: Possible algorithm confusion - public key material used as HMAC secret
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $PK = $X.getPublicKey();
+              ...
+              Algorithm.HMAC256($PK.getEncoded())
+          - pattern: |
+              $PK = $X.getPublic(...);
+              ...
+              $P.setSigningKey($PK.getEncoded())
+          - pattern: |
+              $PK = $X.getPublicKey();
+              ...
+              new MACVerifier($PK.getEncoded())
+          - pattern: |
+              $PK = $X.getPublicKey();
+              ...
+              Keys.hmacShaKeyFor($PK.getEncoded())
+    metadata:
+      cwe: CWE-347
+      subtype: algorithm-confusion-rs-hs
+      confidence: high
+
+  - id: java-jwt-decode-then-claim-auth
+    message: Unverified JWT claims used after decode/parse
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $JWT = JWT.decode($T);
+              ...
+              $JWT.getSubject()
+          - pattern: |
+              $JWT = JWT.decode($T);
+              ...
+              $JWT.getClaim(...)
+          - pattern: |
+              $JWT = SignedJWT.parse($T);
+              ...
+              $JWT.getJWTClaimsSet()
+    metadata:
+      cwe: CWE-347
+      subtype: missing-signature-verify
+      confidence: medium
+      notes: confirm no verify between parse and claim use
+
+  - id: java-jwt-missing-exp-require
+    message: JWT verifier built without issuer/audience/exp constraints (review)
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              JWT.require($ALG).build()
+          - pattern: |
+              JWT.require($ALG).withIssuer(...).build()
+    metadata:
+      cwe: CWE-287
+      subtype: claims-not-validated
+      confidence: low
+      notes: false positives possible; check acceptExpiresAt / claim presence
+
+  - id: java-jwt-jjwt-parser-no-key
+    message: jjwt parser without setSigningKey/verifyWith may accept weak paths
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Jwts.parser().parse($T)
+          - pattern: |
+              Jwts.parserBuilder().build().parse($T)
+    metadata:
+      cwe: CWE-347
+      subtype: missing-signature-verify
+      confidence: medium

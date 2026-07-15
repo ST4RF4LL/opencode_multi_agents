@@ -1,0 +1,27 @@
+must_derive_from:
+  - actual_api_route
+  - actual_multipart_parameter_name
+  - actual_filename_and_content_type_handling
+  - actual_storage_path_construction
+  - actual_type_validation_logic
+  - actual_url_mapping_if_any
+  - actual_deployment_constraints
+
+must_include:
+  - prerequisites
+  - baseline_request
+  - test_request
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+  - lab_only_scope_statement
+  - fake_marker_description
+
+must_not:
+  - reuse_historical_payload_blindly
+  - generate_or_upload_real_webshell_code
+  - include_jsp_servlet_shell_source_or_cmd_exec
+  - claim_success_from_generic_500_only
+  - perform_destructive_overwrite_of_system_files
+  - target_production_without_authorization
+  - exfiltrate_unrelated_sensitive_data

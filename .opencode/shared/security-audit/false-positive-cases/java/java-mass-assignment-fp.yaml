@@ -1,0 +1,49 @@
+not_vulnerability:
+  - id: dedicated-safe-dto
+    pattern: request type is DTO with only intended fields; entity mapped explicitly
+    reason: attacker cannot set privilege/financial fields
+
+  - id: json-read-only-sensitive
+    pattern: sensitive fields have @JsonProperty(READ_ONLY) or @JsonIgnore on write path
+    reason: Jackson will not bind those properties from request
+
+  - id: initbinder-allowlist-complete
+    pattern: setAllowedFields lists only safe form fields for that command object
+    reason: DataBinder rejects unexpected privilege parameters
+
+  - id: admin-only-by-design
+    pattern: endpoint requires admin and only admins may set role; no lower-privilege entry
+    reason: not privilege escalation via over-posting (still document if mis-scoped)
+
+  - id: test-only-binding
+    pattern: ModelAttribute/RequestBody entity only in test sources
+    reason: not production reachable
+
+  - id: response-entity-only
+    pattern: entity used only as response body, never as write binding target
+    reason: may be data exposure, not mass assignment write
+
+needs_deeper_review:
+  - id: modelattribute-user-entity
+    pattern: "@ModelAttribute UserEntity"
+    reason: classic spring-mvc-entity-binding
+
+  - id: requestbody-account
+    pattern: "@RequestBody Account with balance/role"
+    reason: jackson-requestbody-sensitive-fields
+
+  - id: beanutils-request-to-entity
+    pattern: BeanUtils.copyProperties(dto, entity) without full ignore list
+    reason: patch-without-allowlist / transfer sink
+
+  - id: entity-as-controller-param
+    pattern: controller parameter type is @Entity class
+    reason: entity-as-dto
+
+  - id: nested-roles-json
+    pattern: User.roles collection deserializable
+    reason: nested-binding-privilege
+
+  - id: sdr-exported-entity
+    pattern: RepositoryRestResource on User/Account repository
+    reason: full entity write surface via HTTP

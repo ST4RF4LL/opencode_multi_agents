@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Jackson risk for CWE-502 centers on default/polymorphic typing, not readValue itself
+  - Closed DTO @RequestBody binding without typing is typically not a finding
+  - Shared ObjectMapper beans with global typing amplify blast radius
+non_transferable_details:
+  - original endpoint path
+  - original type id formats
+  - historical gadget class names

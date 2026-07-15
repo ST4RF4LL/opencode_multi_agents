@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Entity-as-DTO plus BeanUtils.copyProperties is a common transfer sink for mass assignment
+  - Ignore lists that omit isAdmin/role/passwordHash are incomplete controls
+  - Explicit safe-field assignment is clearer and safer than bulk copy from request objects
+  - Fix pattern pairs DTO isolation with server-side-only sensitive field management
+non_transferable_details:
+  - original endpoint path
+  - original property names
+  - original payload

@@ -1,0 +1,108 @@
+sinks:
+  - id: jdk-url-openconnection
+    framework: jdk-urlconnection
+    method_full_name:
+      - ".*java\\.net\\.URL\\.openConnection.*"
+      - ".*java\\.net\\.URL\\.openStream.*"
+      - ".*java\\.net\\.URL\\.getContent.*"
+    sensitive_object: receiver
+    semantics: outbound-http-request
+    confidence: high
+    notes: receiver URL object carries destination; track URL constructor and string concat
+
+  - id: jdk-httpurlconnection
+    framework: jdk-urlconnection
+    method_full_name:
+      - ".*HttpURLConnection\\.connect.*"
+      - ".*HttpURLConnection\\.getInputStream.*"
+      - ".*HttpURLConnection\\.getResponseCode.*"
+    sensitive_object: receiver
+    semantics: outbound-http-request
+    confidence: high
+
+  - id: resttemplate-exchange
+    framework: spring-resttemplate
+    method_full_name:
+      - ".*RestTemplate\\.exchange.*"
+      - ".*RestTemplate\\.getForObject.*"
+      - ".*RestTemplate\\.getForEntity.*"
+      - ".*RestTemplate\\.postForObject.*"
+      - ".*RestTemplate\\.postForEntity.*"
+      - ".*RestTemplate\\.put.*"
+      - ".*RestTemplate\\.delete.*"
+      - ".*RestTemplate\\.execute.*"
+    sensitive_arguments: [1]
+    semantics: outbound-http-request
+    confidence: high
+    notes: first argument is typically URI/String url
+
+  - id: webclient-uri
+    framework: spring-webclient
+    method_full_name:
+      - ".*WebClient\\.UriSpec\\.uri.*"
+      - ".*WebClient\\.RequestHeadersUriSpec\\.uri.*"
+      - ".*WebClient\\.RequestBodyUriSpec\\.uri.*"
+      - ".*DefaultWebClient\\..*uri.*"
+    sensitive_arguments: [1]
+    semantics: outbound-http-request
+    confidence: high
+    notes: also track WebClient.create(baseUrl) when baseUrl is tainted
+
+  - id: apache-httpclient-execute
+    framework: apache-httpclient
+    method_full_name:
+      - ".*HttpClient\\.execute.*"
+      - ".*CloseableHttpClient\\.execute.*"
+      - ".*HttpRequestBase\\.setURI.*"
+      - ".*HttpGet\\.<init>.*"
+      - ".*HttpPost\\.<init>.*"
+      - ".*RequestBuilder\\.setUri.*"
+      - ".*ClassicRequestBuilder\\.setUri.*"
+    sensitive_arguments: [1]
+    semantics: outbound-http-request
+    confidence: high
+
+  - id: okhttp-url
+    framework: okhttp
+    method_full_name:
+      - ".*okhttp3\\.Request\\.Builder\\.url.*"
+      - ".*okhttp3\\.Request\\.Builder\\.get.*"
+      - ".*okhttp3\\.OkHttpClient\\.newCall.*"
+      - ".*okhttp3\\.HttpUrl\\.parse.*"
+      - ".*okhttp3\\.HttpUrl\\.get.*"
+    sensitive_arguments: [1]
+    semantics: outbound-http-request
+    confidence: high
+
+  - id: java-net-http-client
+    framework: jdk-httpclient
+    method_full_name:
+      - ".*java\\.net\\.http\\.HttpRequest\\.Builder\\.uri.*"
+      - ".*java\\.net\\.http\\.HttpClient\\.send.*"
+      - ".*java\\.net\\.http\\.HttpClient\\.sendAsync.*"
+    sensitive_arguments: [1]
+    semantics: outbound-http-request
+    confidence: high
+
+  - id: custom-http-util
+    framework: custom
+    method_full_name:
+      - ".*HttpUtil\\..*"
+      - ".*HttpClientUtil\\..*"
+      - ".*RemoteClient\\..*"
+      - ".*UrlFetcher\\..*"
+      - ".*ProxyService\\..*fetch.*"
+      - ".*WebhookClient\\..*"
+    sensitive_arguments: []
+    semantics: possible-http-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real HTTP client sinks
+
+adjacent_not_sink:
+  - id: servlet-send-redirect
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletResponse\\.sendRedirect.*"
+      - ".*ResponseEntity\\.status\\(3\\d\\d\\).*"
+    semantics: browser-redirect
+    notes: open redirect class; only SSRF if server later fetches the same URL

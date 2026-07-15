@@ -1,0 +1,25 @@
+id: case-003
+vulnerability_type: xxe
+subtype: soap-unmarshaller-jaxb
+source:
+  type: request-body
+  expression: "@RequestBody InputStream / raw XML body"
+sink:
+  api: Unmarshaller.unmarshal
+  sensitive_argument: 1
+propagation:
+  - OrderController.submit
+  - JaxbOrderService.unmarshal
+  - JAXBContext.createUnmarshaller / Unmarshaller.unmarshal
+root_cause:
+  - jaxb_unmarshal_raw_stream_without_hardened_xmlinputfactory
+  - underlying_parser_defaults_insecure
+prerequisites:
+  - xml_order_endpoint_reachable
+  - jaxb_bindings_for_order_type
+observed_behavior:
+  - untrusted_xml_unmarshalled_with_default_parser_settings
+fix:
+  - create_xmlstreamreader_from_hardened_xmlinputfactory
+  - unmarshal_from_xmlstreamreader_not_raw_inputstream
+  - optionally_harden_transformer_if_xslt_path_also_present

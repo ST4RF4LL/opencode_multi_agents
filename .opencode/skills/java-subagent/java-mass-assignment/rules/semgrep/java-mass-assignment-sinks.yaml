@@ -1,0 +1,127 @@
+rules:
+  - id: java-mass-assignment-modelattribute-entity
+    message: "@ModelAttribute binds request parameters onto a type that may be a domain entity (mass assignment risk)"
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              public $RET $M(..., @ModelAttribute $T $OBJ, ...) {
+                ...
+              }
+          - pattern: |
+              public $RET $M(..., @ModelAttribute($NAME) $T $OBJ, ...) {
+                ...
+              }
+      - pattern-either:
+          - pattern-inside: |
+              @$ENTITY
+              class $T {
+                ...
+              }
+          - metavariable-regex:
+              metavariable: $T
+              regex: ".*(Entity|User|Account|Member|Customer|Order|Admin).*"
+    metadata:
+      cwe: CWE-915
+      category: mass-assignment
+      subtype: spring-mvc-entity-binding
+      confidence: high
+
+  - id: java-mass-assignment-requestbody-entity
+    message: "@RequestBody deserializes JSON onto a type that may be a domain entity with sensitive fields"
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              public $RET $M(..., @RequestBody $T $OBJ, ...) {
+                ...
+              }
+      - pattern-either:
+          - metavariable-regex:
+              metavariable: $T
+              regex: ".*(Entity|User|Account|Member|Customer|Order|Admin).*"
+          - pattern-inside: |
+              class $T {
+                ...
+                $X setRole(...);
+                ...
+              }
+          - pattern-inside: |
+              class $T {
+                ...
+                $X setAdmin(...);
+                ...
+              }
+          - pattern-inside: |
+              class $T {
+                ...
+                $X setBalance(...);
+                ...
+              }
+    metadata:
+      cwe: CWE-915
+      category: mass-assignment
+      subtype: jackson-requestbody-sensitive-fields
+      confidence: high
+
+  - id: java-mass-assignment-beanutils-full-copy
+    message: BeanUtils.copyProperties may transfer attacker-controlled fields onto entity without allowlist
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          BeanUtils.copyProperties($SRC, $DEST)
+      - pattern: |
+          org.springframework.beans.BeanUtils.copyProperties($SRC, $DEST)
+      - pattern: |
+          org.apache.commons.beanutils.BeanUtils.copyProperties($DEST, $SRC)
+    metadata:
+      cwe: CWE-915
+      category: mass-assignment
+      subtype: patch-without-allowlist
+      confidence: medium
+      notes: elevate when $SRC is request DTO/body and $DEST is entity
+
+  - id: java-mass-assignment-reader-for-updating
+    message: Jackson readerForUpdating merges JSON into existing object without field allowlist
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $MAPPER.readerForUpdating($ENTITY).readValue($JSON)
+      - pattern: |
+          $MAPPER.updateValue($ENTITY, $JSON)
+      - pattern: |
+          $MAPPER.readerForUpdating($ENTITY).readValue($NODE)
+    metadata:
+      cwe: CWE-915
+      category: mass-assignment
+      subtype: patch-without-allowlist
+      confidence: high
+
+  - id: java-mass-assignment-save-requestbody
+    message: Repository save of object likely bound from request body
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $REPO.save($OBJ)
+          - pattern: |
+              $REPO.saveAndFlush($OBJ)
+      - pattern-either:
+          - pattern-inside: |
+              public $RET $M(..., @RequestBody $T $OBJ, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $RET $M(..., @ModelAttribute $T $OBJ, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-915
+      category: mass-assignment
+      subtype: entity-as-dto
+      confidence: high

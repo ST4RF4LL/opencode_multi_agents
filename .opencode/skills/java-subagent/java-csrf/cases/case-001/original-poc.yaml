@@ -1,0 +1,16 @@
+case_specific: true
+preconditions:
+  - victim has valid session cookie from form login
+  - SecurityFilterChain calls csrf().disable()
+  - POST /account/password changes password for session user
+request_context:
+  endpoint: POST /account/password
+  content_type: application/x-www-form-urlencoded
+  parameter: newPassword
+observed_result:
+  - password changed without CSRF token when session cookie present
+validation_style: conceptual
+reuse_policy:
+  - reference_only
+  - do_not_execute_weaponized_html_against_real_users
+  - rederive_from_current_target_routes_and_auth

@@ -1,0 +1,37 @@
+id: servlet-multipart
+name: Servlet Part multipart upload
+detection:
+  imports:
+    - javax.servlet.http.Part
+    - jakarta.servlet.http.Part
+    - javax.servlet.annotation.MultipartConfig
+    - jakarta.servlet.annotation.MultipartConfig
+  classes:
+    - Part
+    - HttpServletRequest
+  annotations:
+    - MultipartConfig
+  config_hints:
+    - multipart-config
+    - allowCasualMultipartParsing
+sources:
+  - Part.getSubmittedFileName()
+  - Part.getContentType()
+  - Part.getInputStream()
+  - request.getPart / getParts
+sinks:
+  - Part.write(path)
+  - Files.copy(part.getInputStream(), dest)
+  - new FileOutputStream(uploadDir + submittedName)
+strong_controls:
+  - extension allowlist on basename (case-insensitive, final extension)
+  - server-generated storage name
+  - store outside getRealPath webapp tree
+  - reject dangerous compound extensions
+weak_controls:
+  - Content-Type startsWith image/ only
+  - client accept= attribute
+notes:
+  - getSubmittedFileName is fully client-controlled
+  - getRealPath("/uploads") + write is executable-in-webroot signal
+  - pure path ../ on submitted name → also java-path-traversal

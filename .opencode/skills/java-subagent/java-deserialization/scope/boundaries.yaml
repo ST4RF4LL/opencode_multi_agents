@@ -1,0 +1,26 @@
+in_scope:
+  - objectinputstream_readobject_readunshared
+  - xmldecoder_readobject
+  - fastjson_parse_parseobject_autotype
+  - jackson_default_typing_and_polymorphic_typeinfo_misuse
+  - snakeyaml_default_constructor_untrusted_yaml
+  - xstream_fromxml_without_security_framework
+  - hessian_kryo_readobject_untrusted
+  - redis_mq_listeners_deserializing_bytes
+  - gadget_classpath_as_risk_amplifier_only
+
+out_of_scope:
+  - pure_log4shell_jndi_lookup_in_log_message
+  - sql_injection
+  - weak_cryptography
+  - path_traversal_without_deserialization
+  - jackson_default_dto_mapping_without_polymorphic_typing
+  - trusted_internal_only_serialization_with_no_external_source
+
+boundary_notes:
+  - Log4Shell pure JNDI in log message → adjacent (future java-jndi-injection); mark boundary, do not claim as this skill finding unless deserial path exists
+  - commons-collections / commons-beanutils / c3p0 on classpath amplify risk but are not automatic findings alone
+  - Jackson without enableDefaultTyping / activateDefaultTyping and without attacker-influenced @JsonTypeInfo is typically safe for closed DTO graphs
+  - SnakeYAML new Yaml(new SafeConstructor()) or LoaderOptions TagInspector allowlist is a strong control when correctly applied
+  - dangerous API hit alone is not a vulnerability
+  - gadget chain presence without untrusted input path is not a finding

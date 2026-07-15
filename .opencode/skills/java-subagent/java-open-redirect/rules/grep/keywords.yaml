@@ -1,0 +1,52 @@
+l0_stack_detection:
+  - pattern: "javax.servlet|jakarta.servlet|HttpServletResponse|HttpServletRequest"
+    implies: servlet
+  - pattern: "org.springframework.web.servlet.view.RedirectView|RedirectView"
+    implies: spring-mvc
+  - pattern: "org.springframework.web.servlet.ModelAndView|ModelAndView"
+    implies: spring-mvc
+  - pattern: "org.springframework.http.ResponseEntity|HttpHeaders.setLocation"
+    implies: spring-mvc
+  - pattern: "org.springframework.web.bind.annotation"
+    implies: spring-mvc
+
+l1_sink_keywords:
+  - "sendRedirect"
+  - "setHeader(\"Location\""
+  - "setHeader(\"location\""
+  - "addHeader(\"Location\""
+  - "setLocation("
+  - "RedirectView"
+  - "redirect:"
+  - "HttpStatus.FOUND"
+  - "HttpStatus.SEE_OTHER"
+  - "HttpStatus.TEMPORARY_REDIRECT"
+  - "HttpStatus.MOVED_PERMANENTLY"
+  - "SC_MOVED_TEMPORARILY"
+  - "SC_FOUND"
+  - "SC_SEE_OTHER"
+
+high_risk_destination_hints:
+  - "getParameter\\(\\\"url"
+  - "getParameter\\(\\\"returnUrl"
+  - "getParameter\\(\\\"return_url"
+  - "getParameter\\(\\\"next"
+  - "getParameter\\(\\\"continue"
+  - "getParameter\\(\\\"redirect"
+  - "getParameter\\(\\\"callback"
+  - "getParameter\\(\\\"goto"
+  - "RequestParam.*returnUrl"
+  - "RequestParam.*redirect"
+  - "startsWith\\(\\\"https?://"
+  - "startsWith\\(\\\"/\\\""
+  - "redirect:\"\\s*\\+"
+
+rg_commands:
+  stack: |
+    rg -n "HttpServletResponse|RedirectView|ModelAndView|ResponseEntity|sendRedirect|redirect:" --glob '*.java'
+  sinks: |
+    rg -n "sendRedirect|setHeader\\([\\\"']Location|addHeader\\([\\\"']Location|setLocation\\(|new RedirectView|redirect:\"\\s*\\+" --glob '*.java'
+  weak_validation: |
+    rg -n "startsWith\\([\\\"']https?://|startsWith\\([\\\"']/\\\"|contains\\([\\\"']example" --glob '*.java'
+  params: |
+    rg -n "returnUrl|return_url|redirectUrl|callback|getParameter\\([\\\"'](url|next|continue|redirect|goto)" --glob '*.java'

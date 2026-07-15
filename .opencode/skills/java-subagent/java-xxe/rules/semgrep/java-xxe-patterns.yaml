@@ -1,0 +1,111 @@
+rules:
+  - id: java-xxe-factory-newinstance-no-features
+    message: XML factory created; ensure secure features are set before parse
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          DocumentBuilderFactory.newInstance()
+      - pattern: |
+          SAXParserFactory.newInstance()
+      - pattern: |
+          XMLInputFactory.newInstance()
+      - pattern: |
+          XMLInputFactory.newFactory()
+      - pattern: |
+          TransformerFactory.newInstance()
+      - pattern: |
+          SchemaFactory.newInstance(...)
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      confidence: low
+      notes: L0/L1 stack and factory hint only; not a finding without untrusted parse
+
+  - id: java-xxe-disallow-doctype-present
+    message: disallow-doctype-decl secure feature present (control signal)
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+      - pattern: |
+          $F.setFeature($URI, true)
+    metadata:
+      cwe: CWE-611
+      category: xxe-control
+      confidence: low
+      notes: control detection aid for L3; correlate with same factory instance
+
+  - id: java-xxe-stax-secure-properties
+    message: StAX external entity properties configured (control signal)
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $F.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)
+      - pattern: |
+          $F.setProperty(XMLInputFactory.SUPPORT_DTD, false)
+      - pattern: |
+          $F.setProperty("javax.xml.stream.isSupportingExternalEntities", false)
+      - pattern: |
+          $F.setProperty("javax.xml.stream.supportDTD", false)
+    metadata:
+      cwe: CWE-611
+      category: xxe-control
+      confidence: low
+
+  - id: java-xxe-access-external-empty
+    message: ACCESS_EXTERNAL_* set to empty (control signal)
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $F.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+      - pattern: |
+          $F.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "")
+      - pattern: |
+          $F.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+      - pattern: |
+          $F.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+    metadata:
+      cwe: CWE-611
+      category: xxe-control
+      confidence: low
+
+  - id: java-xxe-feature-secure-processing-only-hint
+    message: FEATURE_SECURE_PROCESSING alone may be incomplete for XXE
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern: |
+          $F.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+      - pattern-not-inside: |
+          ...
+          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+          ...
+      - pattern-not-inside: |
+          ...
+          $F.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+          ...
+      - pattern-not-inside: |
+          ...
+          $F.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+          ...
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      confidence: low
+      notes: weak/incomplete control signal; not a finding by itself
+
+  - id: java-xxe-xinclude-enabled
+    message: XInclude explicitly enabled on XML factory
+    severity: WARNING
+    languages: [java]
+    pattern: |
+      $F.setXIncludeAware(true)
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      subtype: xinclude
+      confidence: medium

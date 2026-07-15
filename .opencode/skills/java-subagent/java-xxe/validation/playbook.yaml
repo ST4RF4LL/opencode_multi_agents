@@ -1,0 +1,55 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_xml_channel
+  - determine_parser_family_and_factory
+  - inspect_secure_feature_flags_on_same_instance
+  - classify_impact_disclosure_ssrf_or_dos
+  - identify_observable_behavior
+  - generate_target_specific_lab_test
+  - execute_baseline_benign_xml
+  - execute_lab_entity_test_if_authorized
+  - compare_results
+  - preserve_evidence
+
+xml_channels:
+  - request_body_xml
+  - multipart_xml_upload
+  - form_parameter_xml_string
+  - url_fetched_xml
+  - soap_body
+  - message_queue_payload
+
+parser_families:
+  - document-builder
+  - sax-parser
+  - stax-xml-input
+  - transformer-factory
+  - jaxb-unmarshaller
+  - spring-oxm
+  - dom4j-jdom
+
+observable_behaviors:
+  - response_contains_local_file_snippet_in_lab
+  - parser_error_reveals_entity_resolution_attempt
+  - timing_or_memory_spike_from_entity_expansion
+  - application_logs_show_entity_or_dtd_resolution
+  - network_callback_to_authorized_lab_listener_only
+
+impact_notes:
+  classic_file_read:
+    severity: high
+    evidence: content from authorized lab file path appears in response or logs
+  ssrf_via_entity:
+    severity: high
+    evidence: authorized lab listener receives request from application host
+  billion_laughs_dos:
+    severity: medium
+    evidence: deterministic resource exhaustion tied to nested entities without file disclosure
+
+notes:
+  - derive_tests_from_actual_route_parser_and_factory_config
+  - do_not_blindly_reuse_historical_payloads
+  - do_not_use_weaponized_oob_kits
+  - conceptual_local_file_entity_only_in_lab_context
+  - forbid_scanning_internal_networks
+  - do_not_conflate_xpath_injection_proof_with_xxe

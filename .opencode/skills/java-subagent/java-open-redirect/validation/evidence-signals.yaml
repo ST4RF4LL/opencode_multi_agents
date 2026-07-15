@@ -1,0 +1,22 @@
+strong_signals:
+  - response_3xx_with_Location_to_attacker_controlled_host
+  - sendRedirect_argument_equals_attacker_absolute_url
+  - spring_redirect_prefix_resolves_to_external_host
+  - reproducible_offsite_navigation_in_authorized_lab
+
+medium_signals:
+  - deterministic_Location_difference_by_parameter
+  - weak_control_bypassed_in_static_analysis_with_clear_parse_gap
+  - protocol_relative_accepted_by_validation_logic
+  - returnUrl_flow_reaches_sendRedirect_without_host_check
+
+weak_signals:
+  - presence_of_sendRedirect_api_only
+  - generic_302_without_attacker_host
+  - startsWith_code_without_dataflow_proof
+  - parameter_named_url_without_sink_link
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

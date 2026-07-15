@@ -1,0 +1,11 @@
+source:
+  method: ImportController.importBlob
+  parameter: request body stream
+  expression: request.getInputStream()
+path:
+  - ImportController.importBlob
+  - new ObjectInputStream(in)
+sink:
+  method: ObjectInputStream.readObject
+  argument: receiver
+influence: native_object_graph_reconstruction

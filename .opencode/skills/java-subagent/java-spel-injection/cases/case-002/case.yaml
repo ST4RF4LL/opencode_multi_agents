@@ -1,0 +1,25 @@
+id: case-002
+vulnerability_type: spel-injection
+subtype: template-parser-context
+source:
+  type: request-parameter
+  expression: "@RequestParam String name"
+sink:
+  api: SpelExpressionParser.parseExpression with TemplateParserContext
+  sensitive_argument: 1
+propagation:
+  - GreetingController.greet
+  - TemplateSpelService.render
+root_cause:
+  - user_input_concatenated_into_hash_template_fragment
+  - TemplateParserContext_evaluates_embedded_spel
+  - no_allowlist_or_escaped_literal_only_path
+prerequisites:
+  - reachable_http_endpoint
+  - template_string_built_with_user_fragment
+observed_behavior:
+  - attacker_can_inject_spel_into_template_hash_slots
+fix:
+  - keep_template_body_constant
+  - bind_user_values_as_variables_only
+  - avoid_string_concat_into_hash_fragments

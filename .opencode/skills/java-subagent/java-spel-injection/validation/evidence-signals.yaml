@@ -1,0 +1,22 @@
+strong_signals:
+  - deterministic_result_difference_from_injected_expression_marker
+  - spel_parse_error_reveals_syntax_influence_on_expression_text
+  - application_logs_show_attacker_controlled_expression
+  - evaluation_context_confirms_user_string_reached_parseExpression
+  - decision_flip_in_auth_or_filter_tied_to_expression_structure
+
+medium_signals:
+  - stable_output_difference_tied_to_spel_metacharacters
+  - template_hash_embedding_changes_evaluated_fragments
+  - error_disclosure_tied_to_expression_operators_or_braces
+
+weak_signals:
+  - generic_500_without_spel_semantics
+  - presence_of_spel_api_only
+  - standard_evaluation_context_without_user_expression_dataflow
+  - constant_value_annotation_match_only
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

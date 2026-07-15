@@ -1,0 +1,82 @@
+questions:
+  - id: stream_or_payload_origin
+    ask: 反序列化输入来自 HTTP body/cookie/header、RPC、MQ/Redis，还是纯内部常量？
+    outcomes:
+      external_untrusted: high_risk
+      trusted_internal_only: likely_safe
+      mixed_or_second_order: needs_trace
+
+  - id: native_type_filter
+    ask: ObjectInputStream 路径是否有 ObjectInputFilter / ValidatingObjectInputStream？
+    strong_yes:
+      - setObjectInputFilter with allowlist before readObject
+      - ValidatingObjectInputStream.accept(fixed classes)
+    false_friends:
+      - try/catch around readObject
+      - length check only
+      - magic header aced0005 check only
+      - gadget library not on classpath
+
+  - id: fastjson_autotype_policy
+    ask: Fastjson 是否开启或可绕过 autoType？parse 目标类型是否固定？
+    strong_safe:
+      - safeMode on / autoType disabled
+      - parseObject(json, FixedDto.class) with no autotype override
+    high_risk:
+      - setAutoTypeSupport(true)
+      - Feature.SupportAutoType
+      - parse to Object/Map with autotype possible
+
+  - id: jackson_typing_policy
+    ask: ObjectMapper 是否 enableDefaultTyping / activateDefaultTyping 或危险 @JsonTypeInfo？
+    strong_safe:
+      - closed DTO readValue without default typing
+      - activateDefaultTyping with PTV allowlist only
+    high_risk:
+      - enableDefaultTyping
+      - activateDefaultTyping without allowlist
+      - @JsonTypeInfo(use=CLASS) on untrusted input
+    note: Jackson default DTO without typing is usually NOT a finding
+
+  - id: snakeyaml_constructor
+    ask: Yaml 是否使用 SafeConstructor / TagInspector？
+    strong_yes:
+      - new Yaml(new SafeConstructor())
+      - LoaderOptions + TagInspector allowlist
+    high_risk:
+      - new Yaml() then load(userInput)
+
+  - id: xstream_security
+    ask: XStream 是否配置 security framework / allowTypes？
+    strong_yes:
+      - setupDefaultSecurity + allowTypes
+      - NoTypePermission then narrow allow
+    high_risk:
+      - new XStream(); fromXML(untrusted)
+      - AnyTypePermission
+
+  - id: hessian_kryo_registration
+    ask: Hessian/Kryo 是否限制可反序列化类型且仅受信对等端？
+    strong_yes:
+      - registration required + allowlist
+      - mutual auth internal RPC only
+    high_risk:
+      - readClassAndObject on external/MQ bytes
+
+  - id: gadget_classpath
+    ask: classpath 是否含 gadget 放大器库？
+    assessment: risk_amplifier_only_not_a_finding
+    if_yes:
+      - raise_priority_if_deserial_path_exists
+      - never_report_on_dependency_alone
+
+  - id: jndi_boundary
+    ask: 证据是否仅为日志 JNDI lookup 而无 deserial 路径？
+    if_yes:
+      - reject_wrong_vuln_class_or_hand_off_jndi_skill
+
+control_grades:
+  strong: effective_blocks_arbitrary_type_reconstruction
+  contextual: effective_only_for_specific_subtype_or_trust_boundary
+  weak: bypassable
+  invalid: does_not_mitigate

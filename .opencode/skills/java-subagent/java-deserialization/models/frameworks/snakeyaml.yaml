@@ -1,0 +1,37 @@
+id: snakeyaml
+name: SnakeYAML
+detect:
+  imports:
+    - org.yaml.snakeyaml.Yaml
+    - org.yaml.snakeyaml.constructor.SafeConstructor
+    - org.yaml.snakeyaml.constructor.Constructor
+    - org.yaml.snakeyaml.LoaderOptions
+    - org.yaml.snakeyaml.inspector.TagInspector
+  keywords:
+    - new Yaml()
+    - Yaml.load
+    - SafeConstructor
+    - TagInspector
+    - LoaderOptions
+    - snakeyaml
+
+sources: inherit-global
+sinks:
+  - snakeyaml-load
+
+safe_patterns:
+  - new_Yaml_new_SafeConstructor
+  - LoaderOptions_with_TagInspector_allowlist
+  - load_only_trusted_config_files_not_user_input
+  - parse_to_Map_with_safe_constructor_only
+
+unsafe_patterns:
+  - new_Yaml_default_constructor_on_untrusted_string
+  - Yaml_load_user_request_body
+  - custom_Constructor_allowing_arbitrary_tags
+  - !! tags_honored_for_arbitrary_classes
+
+notes:
+  - new Yaml() is the classic unsafe pattern for untrusted YAML
+  - SafeConstructor / TagInspector are strong when correctly applied
+  - Config-file-only usage with no external influence is typically out of scope

@@ -1,0 +1,45 @@
+propagators:
+  - pattern: constant-to-field
+    examples:
+      - private static final String API_KEY = "AKIA..."; use(API_KEY)
+      - static final String JWT_SECRET = "CHANGE_ME_NOT_REAL"; sign(JWT_SECRET)
+
+  - pattern: config-to-runtime
+    examples:
+      - application.yml spring.datasource.password -> DataSource
+      - @Value("${app.api-key}") -> field -> HTTP header
+
+  - pattern: string-to-secretkeyspec
+    examples:
+      - "secret".getBytes() -> new SecretKeySpec(bytes, "AES")
+      - Keys.hmacShaKeyFor(secret.getBytes())
+
+  - pattern: credentials-to-connection
+    examples:
+      - user/password literals -> DriverManager.getConnection
+      - jdbc URL with embedded password -> DataSource
+
+  - pattern: credentials-to-aws-sdk
+    examples:
+      - accessKey/secretKey -> BasicAWSCredentials -> AmazonS3Client
+
+  - pattern: getter-setter
+    examples:
+      - setPassword(literal) -> getPassword()
+      - setApiKey -> client.authenticate
+
+  - pattern: builder
+    examples:
+      - Client.builder().apiKey("...").build()
+      - DataSourceBuilder.create().password("...").build()
+
+  - pattern: wrapper-method
+    examples:
+      - AuthUtil.withApiKey(key)
+      - JwtService.sign(payload, secret)
+      - DbConfig.getPassword()
+
+  - pattern: resource-file-load
+    examples:
+      - ClassPathResource("private.pem") -> readAllBytes -> KeyFactory
+      - Files.readString(Path.of("secrets/key.pem"))

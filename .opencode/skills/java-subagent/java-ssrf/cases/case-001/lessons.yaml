@@ -1,0 +1,8 @@
+transferable_lessons:
+  - RestTemplate itself is not the vulnerability; the URI argument source is
+  - Full URL from request parameter is the highest-signal SSRF pattern
+  - Prefer destination-id to constant URL mapping over allowlisting arbitrary URLs
+non_transferable_details:
+  - original endpoint path
+  - original domain names
+  - original collaborator payloads

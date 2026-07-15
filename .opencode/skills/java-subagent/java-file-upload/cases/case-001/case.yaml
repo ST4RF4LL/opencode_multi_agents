@@ -1,0 +1,29 @@
+id: case-001
+vulnerability_type: unsafe-file-upload
+subtype: unrestricted-extension
+source:
+  type: multipart-original-filename
+  expression: multipartFile.getOriginalFilename()
+sink:
+  api: MultipartFile.transferTo / new File(webappDir, original)
+  sensitive_argument: storage_path
+propagation:
+  - UploadController.upload
+  - StorageService.storeAny
+  - MultipartFile.getOriginalFilename
+  - new File(webappUploadDir, original)
+  - transferTo
+root_cause:
+  - no_extension_allowlist
+  - original_filename_used_as_storage_name
+  - storage_under_webapp_directory
+prerequisites:
+  - reachable_multipart_upload_endpoint
+  - filesystem_storage_enabled
+  - container_may_map_webapp_uploads
+observed_behavior:
+  - any_extension_including_conceptual_jsp_accepted_and_stored_under_webapp
+fix:
+  - extension_allowlist_fail_closed
+  - server_generated_storage_name
+  - store_outside_webroot

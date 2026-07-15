@@ -1,0 +1,35 @@
+triage_levels:
+  L1_secret_candidate:
+    meaning: secret-shaped literal, PEM block, sensitive config key, or credential API with literal found
+    not_a_finding: true
+    next: classify_subtype_and_assess_placeholder
+
+  L2_binding_candidate:
+    meaning: secret material bound to auth/crypto/DB/cloud/JWT usage path
+    not_a_finding_until: controls_and_reachability_checked
+    next: sanitizer_and_scope_analysis
+
+  L3_semantic_candidate:
+    meaning: real secret material, security-sensitive use, missing secret management
+    next: reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied (often complete static semantics for hardcoded secrets)
+  rejected:
+    meaning: placeholder, public material, managed secrets, or non-reachable test-only
+
+priority_boost:
+  - private_key_pem_in_repo
+  - cloud_access_key_in_source
+  - production_profile_yml_password
+  - jwt_signing_secret_literal
+  - datasource_password_in_committed_config
+  - secretkeyspec_from_string_literal_on_auth_path
+
+priority_reduce:
+  - obvious_placeholder_or_docs_example
+  - test_code_only_with_fake_values
+  - example_or_docs_only
+  - public_certificate_or_public_key
+  - dead_code
+  - env_var_reference_without_plaintext

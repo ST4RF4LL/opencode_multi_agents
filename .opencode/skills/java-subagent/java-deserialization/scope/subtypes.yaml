@@ -1,0 +1,19 @@
+subtypes:
+  - id: java-native-serialization
+    description: ObjectInputStream.readObject / readUnshared 对不可信字节流反序列化
+  - id: fastjson-autotype
+    description: Fastjson JSON.parse / parseObject 开启或可绕过 autoType，允许 @type 指定任意类
+  - id: jackson-default-typing
+    description: Jackson enableDefaultTyping / activateDefaultTyping 或 @JsonTypeInfo 误用导致多态类型可控
+  - id: snakeyaml-unsafe-constructor
+    description: SnakeYAML new Yaml() 默认构造器（无 SafeConstructor / TagInspector）解析不可信 YAML
+  - id: xstream-unprotected
+    description: XStream.fromXML 未配置 security framework / allowTypes
+  - id: hessian-kryo
+    description: Hessian2Input.readObject / Kryo.readObject 对不可信数据反序列化且无类型过滤
+  - id: xmldecoder
+    description: XMLDecoder.readObject 解析不可信 XML 导致任意对象/方法调用
+  - id: jndi-adjacent-via-deserial
+    description: 反序列化 gadget 触发 JNDI lookup（边界：纯 Log4Shell 日志 lookup 不在本 skill）
+  - id: mq-redis-deserial
+    description: Redis/MQ 消费端对消息字节执行 native 或库反序列化

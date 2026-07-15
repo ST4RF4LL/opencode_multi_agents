@@ -1,0 +1,19 @@
+allowed:
+  - use_authorized_staging_or_lab_environments
+  - synthetic_collaborator_or_local_mock_http_listener
+  - conceptual_discussion_of_cloud_metadata_risks
+  - minimal_proof_requests_within_agreed_scope
+
+forbidden:
+  - real_attacks_against_production_cloud_metadata_169.254.169.254
+  - mass_internal_network_scanning_without_explicit_authorization
+  - weaponized_payloads_or_exploit_kits
+  - credential_theft_beyond_minimal_authorized_proof
+  - lateral_movement_outside_agreed_scope
+  - destructive_actions_on_internal_services
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_collaborator_logs_and_app_logs_over_sensitive_content
+  - if_cloud_metadata_is_relevant_state_risk_conceptually_and_use_mocks_for_proof
+  - never_include_live_metadata_token_exfiltration_steps_in_validation_scripts

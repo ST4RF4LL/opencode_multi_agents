@@ -1,0 +1,26 @@
+id: spring-context-value
+name: Spring @Value / property placeholder EL
+detection:
+  imports:
+    - org.springframework.beans.factory.annotation.Value
+    - org.springframework.context.expression.StandardBeanExpressionResolver
+    - org.springframework.beans.factory.config.BeanExpressionResolver
+  annotations:
+    - Value
+  classes:
+    - StandardBeanExpressionResolver
+    - EmbeddedValueResolver
+sinks:
+  - dynamic construction of @Value expression strings at runtime
+  - BeanExpressionResolver.evaluate with non-constant expression
+  - programmatic parse of expression strings later used like @Value
+strong_controls:
+  - compile-time constant @Value("#{...}") / @Value("${...}") only
+  - external config not used as raw SpEL expression text
+  - SimpleEvaluationContext when evaluating programmatically
+false_positive_notes:
+  - Constant @Value("#{systemProperties['user.home']}") is not SpEL injection
+  - Property placeholder @Value("${app.name}") is configuration injection class only if config is untrusted; not classic expression-string injection
+notes:
+  - Report only when expression text itself is influenced by external/untrusted data
+  - Multi-tenant or user-uploaded config used as SpEL is in scope

@@ -1,0 +1,25 @@
+id: java-xxe
+name: XML External Entity (XXE)
+language: java
+cwe:
+  - CWE-611
+  - CWE-827
+  - CWE-776
+dimension: D1/D4
+objective:
+  detect: >
+    Untrusted XML content reaching XML parser, transformer, or unmarshaller
+    APIs without effective secure configuration that disables external entities,
+    DTD processing, XInclude, or unbounded entity expansion.
+core_condition:
+  - external_xml_input_exists
+  - xml_parser_or_unmarshaller_is_reachable
+  - parser_processes_untrusted_document
+  - effective_secure_parser_configuration_is_missing_or_incomplete
+not_in_scope:
+  - xpath_injection_without_parser_misconfiguration
+  - generic_ssrf_without_xml_entity_vector
+  - json_deserialization
+  - sql_injection
+  - command_injection
+  - hardcoded_trusted_xml_only_with_no_external_influence

@@ -1,0 +1,47 @@
+id: jdbc
+name: JDBC / Datasource credentials
+detect:
+  imports:
+    - java.sql.DriverManager
+    - java.sql.Connection
+    - javax.sql.DataSource
+    - com.zaxxer.hikari.HikariDataSource
+    - org.springframework.jdbc
+    - org.springframework.boot.jdbc.DataSourceBuilder
+  keywords:
+    - DriverManager.getConnection
+    - jdbc:
+    - setPassword
+    - spring.datasource
+  dependencies:
+    - spring-jdbc
+    - hikariCP
+    - mysql-connector
+    - postgresql
+
+sources: inherit-global
+sinks:
+  - drivermanager-credentials
+  - datasource-set-password
+  - config-property-binding
+
+sensitive_locations:
+  - DriverManager.getConnection(url, user, password) args 2 and 3
+  - DriverManager.getConnection(urlWithEmbeddedCredentials) arg 1
+  - DataSource.setPassword / HikariConfig.setPassword
+  - spring.datasource.password and url
+
+safe_patterns:
+  - credentials_from_env_or_secret_manager
+  - iam_auth_or_cloud_sql_connector_without_password_literal
+  - externalized_datasource_config_not_in_git
+
+unsafe_patterns:
+  - getConnection("jdbc:...", "root", "hardcoded")
+  - jdbc:mysql://user:password@host/db
+  - spring.datasource.password: plaintext_in_yml
+  - hardcoded_HikariConfig_password
+
+notes:
+  - username alone without password may be lower severity but still review
+  - testcontainers dynamic passwords are usually test-scoped

@@ -1,0 +1,53 @@
+positive:
+  P01-sendRedirect-userUrl.java:
+    expect: candidate_or_finding
+    subtype: full-url-redirect
+    sink: HttpServletResponse.sendRedirect
+  P02-spring-redirect-prefix.java:
+    expect: candidate_or_finding
+    subtype: spring-redirect-prefix
+    sink: redirect: prefix
+  P03-location-header.java:
+    expect: candidate_or_finding
+    subtype: header-location-injection
+    sink: setHeader Location
+  P04-weak-startswith.java:
+    expect: candidate_or_finding
+    subtype: full-url-redirect
+    sink: HttpServletResponse.sendRedirect
+    control: weak-startswith
+  P05-redirectview-user.java:
+    expect: candidate_or_finding
+    subtype: full-url-redirect
+    sink: RedirectView
+
+negative:
+  N01-fixed-destination-map.java:
+    expect: rejected
+    reason: fixed_destination_mapping
+  N02-parsed-host-allowlist.java:
+    expect: rejected
+    reason: parsed_host_and_scheme_allowlist
+  N03-constant-redirect.java:
+    expect: rejected
+    reason: constant_redirect_target
+  N04-relative-path-enforced.java:
+    expect: rejected
+    reason: forced_relative_same_site_path
+  N05-no-external-input.java:
+    expect: rejected
+    reason: no_external_input_to_destination
+
+regression:
+  R01.java:
+    expect: sink_candidate
+    subtype: full-url-redirect
+    must_not_regress: false_negative_on_sendRedirect_request_parameter_url
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

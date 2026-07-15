@@ -1,0 +1,20 @@
+subtypes:
+  - id: unrestricted-extension
+    description: >
+      未对扩展名做 allowlist（或黑名单可绕过），任意/危险扩展名（含概念性 .jsp/.jspx/.war 等）
+      可被接受并按原名或可预测名落盘
+  - id: executable-in-webroot
+    description: >
+      上传文件写入 webapp / static / public 等可由容器直接映射执行或下载的目录，
+      使危险类型具备远程可达/执行面
+  - id: mime-only-validation
+    description: >
+      仅校验客户端 Content-Type（如 image/*）后原样存储，未校验真实扩展名或内容魔数
+  - id: double-extension-bypass
+    description: >
+      双扩展名、大小写、空格、NUL 历史变体、content/extension 不一致导致策略绕过
+      （如 photo.jpg.jsp、image.php.png 被错误放行）
+  - id: svg-html-stored-content
+    description: >
+      允许 SVG/HTML/XML 上传并原样对外提供，形成存储型 XSS / 内容注入面
+      （扩展名策略“看起来允许图片”但内容可执行脚本）

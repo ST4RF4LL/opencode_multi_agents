@@ -1,0 +1,69 @@
+sources:
+  - id: servlet-parameter-id
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+    controlled_value: return
+    confidence: high
+    notes: >
+      Common param names: id, orderId, userId, accountId, documentId, tenantId
+
+  - id: servlet-path-id
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+    controlled_value: return
+    confidence: medium
+    notes: path-segment IDs extracted from URI
+
+  - id: spring-path-variable
+    framework: spring-mvc
+    annotation:
+      - PathVariable
+    controlled_value: annotated_parameter
+    confidence: high
+    notes: primary IDOR source for REST resources /orders/{id}
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+    notes: query/header object identifiers including tenantId
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: DTO fields such as id, orderId, userId, tenantId require field-level taint
+
+  - id: security-context-trusted
+    framework: spring-security
+    method_full_name:
+      - ".*SecurityContextHolder.*getContext.*"
+      - ".*Authentication.*getPrincipal.*"
+      - ".*Authentication.*getName.*"
+      - ".*Principal.*getName.*"
+    controlled_value: return
+    confidence: trusted
+    notes: >
+      Not a source of attacker id; used as expected ownership baseline.
+      Client-supplied id that is never compared to this is a risk signal.
+
+  - id: message-queue-id
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: async jobs processing attacker-influenced resource ids

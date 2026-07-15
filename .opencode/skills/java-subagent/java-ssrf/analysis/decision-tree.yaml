@@ -1,0 +1,58 @@
+name: java-ssrf-decision-tree
+steps:
+  - id: find_network_sink
+    question: 是否发现服务端网络请求 Sink（URL/RestTemplate/WebClient/HttpClient/OkHttp 等）？
+    no: stop_no_sink
+    yes: check_destination_origin
+
+  - id: check_destination_origin
+    question: Sink 目标是否完全由常量或固定目标映射产生，且用户输入不进入 destination 组件？
+    yes: reject_safe_destination
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入到网络目标（URL/host/port/scheme）的数据流？
+    no: candidate_needs_modeling
+    yes: classify_influence
+
+  - id: classify_influence
+    question: 攻击者影响的是完整 URL、host、port、scheme 还是 path？
+    next: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在目标约束（allowlist / 解析后校验 / 固定映射）？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 约束是否 strong（固定映射 / 解析后 scheme+host(+IP) 且重定向再校验）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: exclude_open_redirect_only
+    question: 证据是否仅为浏览器跳转（sendRedirect）而无服务端 fetch？
+    yes: reject_wrong_vuln_class
+    no: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_safe_destination: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  reject_wrong_vuln_class: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

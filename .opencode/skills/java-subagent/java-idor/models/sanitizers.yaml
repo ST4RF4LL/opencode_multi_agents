@@ -1,0 +1,85 @@
+sanitizers:
+  strong:
+    - id: ownership-compare-current-user
+      condition:
+        - resource_loaded_or_queried_with_current_user_id
+        - comparison_uses_server_side_security_context_not_client_user_id
+        - mismatch_rejects_or_404s
+      notes: resource.ownerId equals Authentication principal id
+
+    - id: query-scoped-to-owner
+      condition:
+        - repository_query_includes_owner_or_user_predicate
+        - owner_parameter_bound_from_security_context
+        - client_id_cannot_override_owner_predicate
+      examples:
+        - findByIdAndUserId(id, currentUserId)
+        - WHERE id = ? AND user_id = ?
+
+    - id: tenant-from-security-context
+      condition:
+        - tenant_id_derived_from_server_session_or_token
+        - client_tenant_id_ignored_or_must_match_context
+        - all_queries_filter_by_server_tenant
+      notes: Hibernate filters / Spring Data multi-tenancy with server tenant
+
+    - id: object-level-security-expression
+      condition:
+        - PreAuthorize_or_PostAuthorize_checks_resource_ownership
+        - expression_uses_loaded_entity_or_permission_evaluator
+        - deny_on_failure
+      examples:
+        - "@PreAuthorize(\"@orderAuth.canAccess(#id)\")"
+        - "@PostAuthorize(\"returnObject.userId == authentication.principal.id\")"
+
+  contextual:
+    - id: self-only-path
+      condition:
+        - endpoint_always_uses_current_user_id_not_path_id
+        - no_client_object_id_for_foreign_resources
+      notes: /me/orders is safer than /orders/{id} without checks
+
+    - id: role-admin-for-all-objects
+      condition:
+        - only_admin_role_can_access_endpoint
+        - vertical_boundary_enforced
+      notes: does not fix horizontal IDOR among admins if that matters
+
+    - id: opaque-unguessable-id-only
+      condition:
+        - ids_are_unguessable_secrets
+        - no_enumeration_oracle
+      notes: defense-in-depth only; not a substitute for ownership checks
+
+  weak:
+    - id: authentication-only
+      pattern:
+        - isAuthenticated
+        - "@Authenticated"
+        - SecurityContext non-null check only
+      notes: proves login, not object ownership
+
+    - id: client-supplied-owner-match
+      pattern:
+        - compare request.userId to resource.userId without security context
+      notes: attacker sets both ids
+
+    - id: presence-check-only
+      pattern:
+        - if (entity != null) return entity
+      notes: existence without ownership
+
+    - id: ui-hide-only
+      pattern:
+        - frontend hides edit button
+      notes: client-side not authorization
+
+  invalid:
+    - id: trust-path-id-as-owner
+      notes: treating path userId as the authenticated user
+    - id: tenant-id-from-request-param
+      notes: client chooses tenant
+    - id: sequential-id-obscurity
+      notes: security through obscurity is not authorization
+    - id: csrf-token-as-idor-defense
+      notes: CSRF does not enforce object ownership

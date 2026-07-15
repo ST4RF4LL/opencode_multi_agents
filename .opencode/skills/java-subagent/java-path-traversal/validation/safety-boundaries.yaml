@@ -1,0 +1,19 @@
+allowed:
+  - lab_only_path_probes_against_authorized_fixture_files
+  - read_only_download_proofs_when_possible
+  - zip_extract_proofs_into_isolated_temp_directories
+  - use_of_staging_or_authorized_test_environments
+  - marker_files_created_specifically_for_validation
+
+forbidden:
+  - destructive_delete_of_system_files_or_production_data
+  - overwrite_of_system_or_application_binaries_as_proof
+  - mass_exfiltration_of_unrelated_sensitive_files
+  - path_probes_outside_agreed_scope
+  - intentional_ransomware_style_file_encryption
+  - credential_file_harvesting_beyond_minimal_authorized_proof
+
+reporting:
+  - document_base_directory_and_marker_file_assumptions
+  - prefer_screenshots_logs_and_minimal_content_samples
+  - never_require_system_path_destruction_for_confirmation

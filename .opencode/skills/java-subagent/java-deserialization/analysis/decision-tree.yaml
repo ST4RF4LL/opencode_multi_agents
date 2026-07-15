@@ -1,0 +1,69 @@
+name: java-deserialization-decision-tree
+steps:
+  - id: find_deserial_sink
+    question: 是否发现反序列化 / 多态重建 Sink（OIS/XMLDecoder/Fastjson/Jackson typing/SnakeYAML/XStream/Hessian/Kryo）？
+    no: stop_no_sink
+    yes: check_payload_origin
+
+  - id: check_payload_origin
+    question: Sink 输入是否完全由常量或可信内部源产生，且无外部影响？
+    yes: reject_no_external_input
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入（HTTP body/bytes、cookie、header、RPC、MQ/Redis）到反序列化参数/流的数据流？
+    no: candidate_needs_modeling
+    yes: classify_subtype
+
+  - id: classify_subtype
+    question: 子类型是 native、Fastjson autoType、Jackson typing、SnakeYAML、XStream、Hessian/Kryo、XMLDecoder 还是 MQ/Redis？
+    next: jackson_guard
+
+  - id: jackson_guard
+    question: 若为 Jackson，是否仅为默认 DTO 映射且无 default typing / 危险 @JsonTypeInfo？
+    yes: reject_jackson_closed_dto
+    no: check_controls
+
+  - id: check_controls
+    question: 路径上是否存在有效类型白名单 / ObjectInputFilter / SafeConstructor / XStream security / Fastjson safeMode？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 控制是否 strong（allowlist before deserial / safe ctor / typing off）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: gadget_amplifier
+    question: classpath 是否含 gadget 放大器？
+    note: 仅提升优先级/影响评估，不得单独构成 Finding
+    next: jndi_boundary
+
+  - id: jndi_boundary
+    question: 证据是否仅为纯 Log4Shell JNDI 而无 deserial 路径？
+    yes: reject_wrong_vuln_class
+    no: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），参数是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_no_external_input: Rejected
+  reject_jackson_closed_dto: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  reject_wrong_vuln_class: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

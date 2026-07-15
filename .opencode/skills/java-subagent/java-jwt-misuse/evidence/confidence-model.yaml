@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_weak_jwt_pattern
+      - security_sensitive_auth_usage
+      - production_reachability
+      - missing_strong_controls
+  medium:
+    requires:
+      - weak_pattern_present
+      - likely_auth_use
+      - controls_absent_or_suspicious
+    missing_optional:
+      - full_call_chain
+      - behavioral_confirmation
+  low:
+    requires:
+      - jwt_api_or_secret_literal_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - authentication_filter_or_resource_server
+    - hardcoded_secret_in_repo
+    - alg_none_or_unsigned_parse
+    - public_key_as_hmac_secret
+    - role_or_tenant_from_unverified_claims
+  decrease:
+    - possible_logging_only_decode
+    - test_scope_uncertainty
+    - algorithm_selected_by_remote_config_unknown_at_runtime

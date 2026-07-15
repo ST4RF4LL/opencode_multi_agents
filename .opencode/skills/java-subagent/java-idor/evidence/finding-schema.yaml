@@ -1,0 +1,44 @@
+finding_id: IDOR-001
+status: finding # finding | candidate | rejected
+vulnerability_type: idor
+subtype: horizontal-idor
+confidence: high # high | medium | low
+entry:
+  route: "GET /orders/{id}"
+  method: OrderController.getOrder
+  parameter: id
+source:
+  file: OrderController.java
+  line: 28
+  expression: "@PathVariable Long id"
+sink:
+  file: OrderRepository.java
+  line: 12
+  expression: findById(id)
+dataflow:
+  - OrderController.getOrder
+  - OrderService.getOrder
+  - OrderRepository.findById
+controls:
+  observed:
+    - isAuthenticated only
+  assessment:
+    - weak
+    - authentication-not-ownership
+    - no-owner-predicate
+validation:
+  status: verified # verified | not_attempted | failed
+  observable:
+    - user A token retrieves user B order by id
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - baseline request as owner
+    - cross-user request with substituted id
+    - response comparison
+limitations: []
+rejection_reason: null

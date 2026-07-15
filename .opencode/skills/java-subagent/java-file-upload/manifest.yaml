@@ -1,0 +1,77 @@
+id: java-file-upload
+name: Java Unsafe File Upload
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-434
+  - CWE-79
+owasp:
+  - A03:2021-Injection
+  - A04:2021-Insecure Design
+maturity: 3
+dimension: D5
+description: >
+  Detect attacker-controlled file uploads accepted without effective type/extension
+  allowlisting, with Content-Type-only trust, double-extension bypass, or storage
+  of dangerous types under web-accessible paths (CWE-434).
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-file-upload-sinks.yaml
+      - java-file-upload-patterns.yaml
+    codeql:
+      - java-file-upload.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - servlet-multipart
+  - spring-multipart
+  - commons-fileupload

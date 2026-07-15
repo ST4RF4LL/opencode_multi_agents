@@ -1,0 +1,61 @@
+not_vulnerability:
+  - id: constant-path-io
+    pattern: File/NIO I/O with fully constant path and no external influence
+    reason: no attacker-controlled path component
+
+  - id: fixed-id-to-path-map
+    pattern: user selects among predefined file ids mapped to constant paths under baseDir
+    reason: attacker cannot introduce path segments
+
+  - id: normalize-and-startswith-basedir
+    pattern: resolve + normalize + startsWith(baseDir absolute) with fail-closed reject
+    reason: effective base-directory confinement
+
+  - id: server-generated-upload-name
+    pattern: multipart stored with UUID/random name under fixed upload root; original name only metadata
+    reason: client filename does not enter filesystem path
+
+  - id: zip-entry-confined
+    pattern: Zip extract with normalize + startsWith(destDir) before write
+    reason: Zip Slip mitigated
+
+  - id: test-only-file-io
+    pattern: path helpers only referenced from test sources
+    reason: not production reachable
+
+  - id: basename-allowlist-storage
+    pattern: only allowlisted basenames under fixed dir; separators rejected
+    reason: no directory traversal surface
+
+needs_deeper_review:
+  - id: filenameutils-getname-alone
+    pattern: FilenameUtils.getName(user) then new File(base, name)
+    reason: PARTIAL only; absolute/edge cases and missing normalize+startsWith still matter; do not treat as strong
+
+  - id: blacklist-dotdot
+    pattern: if (path.contains("..")) reject
+    reason: weak; encoding and alternate separators may bypass
+
+  - id: startsWith-without-normalize
+    pattern: path.startsWith(base) without normalize
+    reason: incomplete confinement depending on check order
+
+  - id: normalize-without-startswith
+    pattern: path.normalize() then open without base check
+    reason: absolute or multi-segment escape still possible
+
+  - id: download-by-filename-param
+    pattern: getParameter("filename") -> FileInputStream(base + name)
+    reason: classic classic-dotdot / download-path-param
+
+  - id: zip-slip-extract-loop
+    pattern: while ((e = zis.getNextEntry()) != null) write to dest/e.getName()
+    reason: Zip Slip subtype
+
+  - id: multipart-original-as-path
+    pattern: getOriginalFilename used in storage path
+    reason: multipart-filename subtype
+
+  - id: wrapper-util
+    pattern: custom FileUtil/StorageService read(String)
+    reason: sink is indirection; expand to real File/NIO I/O

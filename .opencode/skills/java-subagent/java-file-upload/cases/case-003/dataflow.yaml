@@ -1,0 +1,11 @@
+source:
+  method: FileItem.getName
+  parameter: item
+path:
+  - UploadHelper.acceptImageName
+  - endsWith .png/.jpg check
+  - new File(uploadDir, basename)
+sink:
+  method: FileItem.write
+  argument: 1
+influence: double_extension_or_content_mismatch_bypass

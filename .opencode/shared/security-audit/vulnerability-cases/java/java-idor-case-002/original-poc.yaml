@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - DELETE /users/{id} reachable by authenticated non-admin
+  - no self-or-admin authorization on delete
+request_context:
+  endpoint: DELETE /users/{id}
+  parameter: id
+observed_result:
+  - user A deleted user B by substituting path id
+  - vertical impact if admin accounts share same id space
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - lab_fixtures_only_never_production_user_delete

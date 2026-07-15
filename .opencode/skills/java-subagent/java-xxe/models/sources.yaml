@@ -1,0 +1,101 @@
+sources:
+  - id: servlet-request-body
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getInputStream.*"
+      - ".*HttpServletRequest.*getReader.*"
+      - ".*ServletInputStream.*"
+    controlled_value: return
+    confidence: high
+    notes: raw request body often parsed as XML
+
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+    controlled_value: return
+    confidence: medium
+    notes: XML may be passed as a form parameter string
+
+  - id: servlet-part-upload
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPart.*"
+      - ".*HttpServletRequest.*getParts.*"
+      - ".*Part.*getInputStream.*"
+      - ".*MultipartFile.*getInputStream.*"
+      - ".*MultipartFile.*getBytes.*"
+      - ".*MultipartFile.*getResource.*"
+    controlled_value: return
+    confidence: high
+    notes: multipart XML file upload
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - RequestPart
+    controlled_value: object_fields_or_raw_body
+    confidence: high
+    notes: body may be String, byte[], InputStream, MultiValueMap, or MultipartFile
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+    controlled_value: annotated_parameter
+    confidence: medium
+    notes: XML string or path to XML resource supplied by client
+
+  - id: url-fetched-xml
+    framework: io-network
+    method_full_name:
+      - ".*URL.*openStream.*"
+      - ".*URLConnection.*getInputStream.*"
+      - ".*HttpClient.*execute.*"
+      - ".*RestTemplate.*getForObject.*"
+      - ".*RestTemplate.*exchange.*"
+      - ".*WebClient.*bodyToMono.*"
+      - ".*WebClient.*bodyToFlux.*"
+    controlled_value: return
+    confidence: medium
+    notes: >
+      URL-fetched XML is an XXE source when the fetched content is attacker-influenced
+      (or when fetch target is attacker-controlled). Distinguish pure SSRF (java-ssrf)
+      from parse-of-fetched-XML without secure flags (this skill).
+
+  - id: file-upload-path
+    framework: io
+    method_full_name:
+      - ".*Files.*newInputStream.*"
+      - ".*Files.*readAllBytes.*"
+      - ".*Files.*readString.*"
+      - ".*FileInputStream\\.<init>.*"
+      - ".*FileReader\\.<init>.*"
+    controlled_value: return
+    confidence: medium
+    notes: only when file path or content originates from untrusted upload or external store
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+      - ".*BytesMessage.*readBytes.*"
+    controlled_value: return
+    confidence: medium
+    notes: async XML payloads
+
+  - id: soap-message
+    framework: soap
+    method_full_name:
+      - ".*SOAPMessage.*getSOAPBody.*"
+      - ".*SOAPPart.*getContent.*"
+      - ".*MessageFactory.*createMessage.*"
+    controlled_value: return_or_stream
+    confidence: high
+    notes: SOAP/XML endpoints often feed JAXB or DOM parsers

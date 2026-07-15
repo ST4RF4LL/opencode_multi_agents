@@ -1,0 +1,112 @@
+sanitizers:
+  strong:
+    - id: disallow-doctype-decl
+      condition:
+        - setFeature_http_apache_org_xml_features_disallow_doctype_decl_true
+        - applied_on_same_factory_instance_before_parse
+      notes: >
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        blocks DTD-based classic XXE when supported by the parser implementation.
+
+    - id: disable-external-entities
+      condition:
+        - external_general_entities_false
+        - external_parameter_entities_false
+        - applied_on_same_factory_instance_before_parse
+      notes: >
+        setFeature("http://xml.org/sax/features/external-general-entities", false)
+        setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+
+    - id: stax-disable-external-and-dtd
+      condition:
+        - XMLInputFactory_IS_SUPPORTING_EXTERNAL_ENTITIES_false
+        - XMLInputFactory_SUPPORT_DTD_false
+        - applied_on_same_factory_before_create_reader
+      notes: >
+        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)
+        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false)
+
+    - id: access-external-empty
+      condition:
+        - ACCESS_EXTERNAL_DTD_empty_or_none
+        - ACCESS_EXTERNAL_SCHEMA_or_STYLESHEET_empty_when_applicable
+        - applied_via_setAttribute_or_setProperty_on_same_factory
+      notes: >
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "")  # TransformerFactory
+        factory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")       # SchemaFactory
+
+    - id: feature-secure-processing-with-complements
+      condition:
+        - FEATURE_SECURE_PROCESSING_true
+        - plus_disallow_doctype_or_disable_external_entities_or_access_external_empty
+      notes: >
+        XMLConstants.FEATURE_SECURE_PROCESSING alone is often incomplete on older JDKs;
+        treat as strong only when combined with other flags.
+
+    - id: xinclude-disabled
+      condition:
+        - setXIncludeAware_false_or_default_false
+        - not_explicitly_enabled
+      notes: factory.setXIncludeAware(false); required when XInclude subtype is relevant
+
+    - id: non-expanding-entity-refs
+      condition:
+        - setExpandEntityReferences_false
+      notes: DocumentBuilderFactory.setExpandEntityReferences(false); helps DoS/classic entity
+
+  contextual:
+    - id: partial-secure-flags
+      condition:
+        - only_some_of_disallow_doctype_external_entities_access_external_set
+        - parser_implementation_may_still_allow_alternate_vector
+      notes: e.g. only general entities disabled but parameter entities still on
+
+    - id: secure-xml-input-factory-for-jaxb
+      condition:
+        - Unmarshaller_fed_by_XMLStreamReader_from_hardened_XMLInputFactory
+        - not_unmarshalling_raw_InputStream_without_factory_control
+      notes: JAXB Unmarshaller is safe when underlying StAX/SAX reader is hardened
+
+    - id: schema-only-trusted-xsd
+      condition:
+        - Schema_loaded_from_classpath_constant_only
+        - instance_document_still_needs_secure_parse
+      notes: trusted schema does not secure untrusted instance parse
+
+  weak:
+    - id: feature-secure-processing-only
+      pattern:
+        - FEATURE_SECURE_PROCESSING
+      notes: incomplete on many JDKs; still allow DTD/external entities in some versions
+
+    - id: entity-resolver-returning-null
+      pattern:
+        - setEntityResolver
+        - resolveEntity returns null or empty
+      notes: may break resolution but easy to misconfigure; incomplete for all entity types
+
+    - id: input-content-type-check-only
+      pattern:
+        - content-type equals application/xml
+        - size limit only
+      notes: does not disable entity resolution
+
+    - id: blacklist-doctype-string
+      pattern:
+        - contains("<!DOCTYPE")
+        - replace DOCTYPE
+      notes: bypassable with encoding tricks, parameter entities, XInclude
+
+  invalid:
+    - id: default-factory-no-features
+      notes: newInstance() + parse without setFeature/setProperty
+    - id: flags-on-different-factory-instance
+      notes: secure features set on factory A but parse uses factory B
+    - id: flags-after-parse
+      notes: setFeature after DocumentBuilder already created/used incorrectly
+    - id: xpath-variable-resolver-as-xxe-defense
+      notes: XPath parameterization does not disable XML external entities
+    - id: html-escape-xml-body
+      notes: escaping for HTML output does not secure parser configuration
+    - id: client-side-only-validation

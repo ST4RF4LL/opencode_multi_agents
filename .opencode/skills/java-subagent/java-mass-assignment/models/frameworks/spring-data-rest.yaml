@@ -1,0 +1,34 @@
+id: spring-data-rest
+name: Spring Data REST entity exposure
+detection:
+  imports:
+    - org.springframework.data.rest.core.annotation.RepositoryRestResource
+    - org.springframework.data.rest.core.annotation.RestResource
+    - org.springframework.data.rest.webmvc.config.RepositoryRestConfigurer
+  classes:
+    - RepositoryRestResource
+    - RestResource
+    - RepositoryRestConfigurer
+  dependencies:
+    - spring-data-rest-webmvc
+sources:
+  - HTTP POST/PUT/PATCH body to exported repository resources
+  - association resource links that rebind relations
+sinks:
+  - exported CrudRepository save paths
+  - PATCH merge on entity resources
+controls:
+  strong:
+    - export = false on sensitive repositories
+    - "@RestResource(exported = false) on mutators"
+    - Jackson mixins / @JsonIgnore on entity sensitive fields
+    - RepositoryRestConfigurer exposeIds / projection only for safe fields
+    - Spring Security method security on repositories
+  contextual:
+    - projections for read; still verify write path field set
+  weak:
+    - documentation that clients should not send role fields
+notes:
+  - SDR binds full entity graph unless Jackson/security restricts properties
+  - PATCH is high-risk for patch-without-allowlist subtype
+  - Prefer non-exported repositories + custom controllers with DTOs

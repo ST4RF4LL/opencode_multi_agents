@@ -1,0 +1,47 @@
+l0_stack_detection:
+  - pattern: "MultipartFile|transferTo|RequestPart|spring\\.servlet\\.multipart"
+    implies: spring-multipart
+  - pattern: "javax\\.servlet\\.http\\.Part|jakarta\\.servlet\\.http\\.Part|getSubmittedFileName|MultipartConfig"
+    implies: servlet-multipart
+  - pattern: "commons\\.fileupload|FileItem|ServletFileUpload|DiskFileItemFactory"
+    implies: commons-fileupload
+  - pattern: "getOriginalFilename|getContentType"
+    implies: multipart-upload
+
+l1_sink_keywords:
+  - "transferTo"
+  - "getOriginalFilename"
+  - "getSubmittedFileName"
+  - "Part.write"
+  - "FileItem.write"
+  - "MultipartFile"
+  - "Files.copy"
+  - "FileOutputStream"
+  - "getRealPath"
+  - "webapp"
+  - "uploads"
+  - "getContentType"
+  - "Content-Type"
+  - "startsWith(\"image"
+  - "FilenameUtils.getExtension"
+
+high_risk_upload_hints:
+  - 'transferTo\\('
+  - 'getOriginalFilename\\(\\)'
+  - 'getSubmittedFileName\\(\\)'
+  - 'getContentType\\(\\)\\.startsWith'
+  - 'getRealPath\\('
+  - 'new File\\([^,]+,\\s*.*getOriginalFilename'
+  - '\\.resolve\\(.*getOriginalFilename'
+  - 'endsWith\\("\\.(jsp|jspx|war|html|svg)"\\)'
+  - 'webapp|/static/|/public/|resources/static'
+
+rg_commands:
+  stack: |
+    rg -n "MultipartFile|getOriginalFilename|getSubmittedFileName|FileItem|ServletFileUpload|Part\\.write|transferTo" --glob '*.java'
+  sinks: |
+    rg -n "transferTo\\(|Part\\.write|FileItem\\.write|Files\\.copy|FileOutputStream|getRealPath" --glob '*.java'
+  weak_controls: |
+    rg -n 'getContentType\\(\\)|startsWith\\("image|endsWith\\("\\.(png|jpg|jpeg|gif)' --glob '*.java'
+  webroot: |
+    rg -n "getRealPath|webapp|/static/|/public/|addResourceHandler|addResourceLocations" --glob '*.{java,xml,yml,yaml,properties}'

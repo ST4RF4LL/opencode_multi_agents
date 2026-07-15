@@ -1,0 +1,64 @@
+name: java-xxe-decision-tree
+steps:
+  - id: find_xml_sink
+    question: 是否发现 XML parse / unmarshal / transform Sink？
+    no: stop_no_sink
+    yes: check_input_origin
+
+  - id: check_input_origin
+    question: 被解析的 XML 是否完全来自常量/内置资源且无外部可控影响？
+    yes: reject_trusted_xml_only
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控输入（body/upload/URL 拉取/消息）到 parse 文档的数据流？
+    no: candidate_needs_modeling
+    yes: check_secure_config
+
+  - id: check_secure_config
+    question: 同一工厂实例在 parse 前是否应用了 strong secure features？
+    strong_complete: reject_effective_hardening
+    partial: evaluate_partial_controls
+    none_or_invalid: classify_impact
+
+  - id: evaluate_partial_controls
+    question: 部分标志是否仍允许 classic entity / parameter entity / XInclude / expansion？
+    bypass_possible: classify_impact
+    likely_effective_for_all_vectors: reject_effective_hardening
+    uncertain: conditional_candidate
+
+  - id: classify_impact
+    question: 主要影响是本地文件读 / SSRF-via-entity，还是仅实体展开 DoS？
+    file_read_or_ssrf: high_risk_candidate
+    expansion_dos_only: dos_candidate
+    mixed: high_risk_candidate
+
+  - id: exclude_adjacent
+    question: 证据是否仅表明 XPath 注入或纯 SSRF 而无 XML 实体/解析器配置问题？
+    xpath_only: reject_wrong_vuln_class_xpathi
+    ssrf_only: reject_wrong_vuln_class_ssrf
+    no: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），XML 内容是否真实可控？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_trusted_xml_only: Rejected
+  reject_effective_hardening: Rejected
+  reject_unreachable: Rejected
+  reject_wrong_vuln_class_xpathi: Rejected
+  reject_wrong_vuln_class_ssrf: Rejected
+  candidate_needs_modeling: Candidate
+  conditional_candidate: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  dos_candidate: Candidate_or_Finding_with_dos_impact
+  emit_finding: Finding
+  emit_candidate: Candidate

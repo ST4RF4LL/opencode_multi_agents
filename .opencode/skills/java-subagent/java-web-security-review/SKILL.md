@@ -25,3 +25,20 @@ Use this skill for Java/JVM HTTP services, API servers, admin panels, and framew
 ## Evidence Requirements
 
 Tie each issue to an entrypoint and exact framework configuration path. Verify that filters and annotations apply to the route under review.
+
+## Progressive Deep Packs
+
+| Signal | Load skill |
+|--------|------------|
+| SSRF / RestTemplate / WebClient / URL.openConnection | `java-ssrf` |
+| Open redirect / sendRedirect / Location / redirect: | `java-open-redirect` |
+| Path traversal / Zip Slip / getOriginalFilename | `java-path-traversal` |
+| Unrestricted upload / MultipartFile | `java-file-upload` |
+| IDOR / findById without ownership | `java-idor` |
+| Mass assignment / @ModelAttribute entity | `java-mass-assignment` |
+| CSRF / csrf().disable / cookie-session mutations | `java-csrf` |
+| JWT decode without verify / alg=none | `java-jwt-misuse` |
+| Hardcoded secrets in yml/properties/source | `java-hardcoded-secrets` |
+| XSS / templates | `java-xss` |
+| Log forging | `java-log-injection` |
+

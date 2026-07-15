@@ -1,0 +1,16 @@
+case_specific: true
+preconditions:
+  - endpoint accepts application/xml body
+  - application uses vulnerable XmlImportService path
+  - lab authorization for parser configuration verification
+request_context:
+  endpoint: POST /api/import
+  parameter: raw XML body
+observed_result:
+  - untrusted XML reaches DocumentBuilder.parse on default factory
+  - external entity resolution possible when entities present
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - no_weaponized_oob_kits
+  - conceptual_local_file_entity_only_in_lab_context

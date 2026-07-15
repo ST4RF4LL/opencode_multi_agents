@@ -1,0 +1,72 @@
+l0_stack_detection:
+  - pattern: "application\\.yml|application\\.yaml|application\\.properties|@Value|ConfigurationProperties"
+    implies: spring-config
+  - pattern: "DriverManager|DataSource|jdbc:|HikariDataSource|spring\\.datasource"
+    implies: jdbc
+  - pattern: "BasicAWSCredentials|AwsBasicCredentials|StaticCredentialsProvider|software\\.amazon\\.awssdk|com\\.amazonaws"
+    implies: aws-sdk
+  - pattern: "SecretKeySpec|jjwt|signWith|hmacShaKeyFor|JWT"
+    implies: jwt-or-crypto-key
+
+l1_sink_keywords:
+  - "SecretKeySpec"
+  - "PBEKeySpec"
+  - "DriverManager.getConnection"
+  - "setPassword"
+  - "BasicAWSCredentials"
+  - "AwsBasicCredentials"
+  - "StaticCredentialsProvider"
+  - "signWith"
+  - "setSigningKey"
+  - "hmacShaKeyFor"
+  - "Authorization"
+  - "X-Api-Key"
+  - "apiKey"
+  - "api-key"
+  - "client-secret"
+  - "clientSecret"
+  - "privateKey"
+  - "private-key"
+  - "BEGIN PRIVATE KEY"
+  - "BEGIN RSA PRIVATE KEY"
+  - "spring.datasource.password"
+
+secret_shape_patterns:
+  - "AKIA[0-9A-Z]{16}"
+  - "-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"
+  - "password\\s*[:=]"
+  - "secret\\s*[:=]"
+  - "api[_-]?key\\s*[:=]"
+  - "jdbc:[^\\s\"']+"
+  - "Bearer\\s+[A-Za-z0-9\\-._~+/]+=*"
+
+placeholder_allowlist:
+  - "CHANGE_ME"
+  - "CHANGE_ME_NOT_REAL"
+  - "your-api-key"
+  - "your_api_key"
+  - "AKIAIOSFODNN7EXAMPLE"
+  - "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  - "password"
+  - "secret"
+  - "TODO"
+  - "XXXX"
+  - "\\$\\{.*\\}"
+
+high_risk_hints:
+  - 'static\\s+final\\s+String\\s+(API_KEY|SECRET|PASSWORD|TOKEN|PRIVATE_KEY)'
+  - 'new\\s+SecretKeySpec\\s*\\('
+  - 'BasicAWSCredentials\\s*\\('
+  - 'AwsBasicCredentials\\.create'
+  - '-----BEGIN.*PRIVATE KEY-----'
+  - 'spring\\.datasource\\.password\\s*[:=]'
+
+rg_commands:
+  stack: |
+    rg -n "application\\.(yml|yaml|properties)|DriverManager|BasicAWSCredentials|AwsBasicCredentials|SecretKeySpec|jjwt|hmacShaKeyFor" --glob '*.{java,yml,yaml,properties,xml}'
+  sinks: |
+    rg -n "SecretKeySpec|DriverManager\\.getConnection|setPassword|BasicAWSCredentials|AwsBasicCredentials|signWith|setSigningKey|hmacShaKeyFor|BEGIN PRIVATE KEY|spring\\.datasource\\.password" --glob '*.{java,yml,yaml,properties}'
+  secret_shapes: |
+    rg -n "AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|api[_-]?key\\s*=\\s*\"|password\\s*=\\s*\"" --glob '*.{java,yml,yaml,properties,pem,key}'
+  config_secrets: |
+    rg -n "(password|secret|api-key|client-secret|private-key|access-key)\\s*:" --glob '*.{yml,yaml,properties}'

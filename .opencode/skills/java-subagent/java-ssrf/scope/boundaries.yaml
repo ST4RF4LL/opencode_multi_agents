@@ -1,0 +1,34 @@
+in_scope:
+  - server_side_http_https_fetch_with_user_influenced_destination
+  - resttemplate_webclient_okhttp_apache_httpclient_urlconnection
+  - full_url_host_port_scheme_control
+  - path_confusion_prefix_escape_and_weak_startswith
+  - redirect_follow_without_revalidation
+  - protocol_smuggling_non_http_schemes_when_client_accepts
+  - proxy_style_fetch_endpoints
+  - cloud_metadata_reachable_when_destination_controlled
+
+out_of_scope:
+  - open_redirect_browser_only_without_server_side_fetch
+  - csrf_state_changing_cross_site_request
+  - pure_xss_reflected_or_stored
+  - xxe_external_entity_without_app_http_client_fetch
+  - command_injection
+  - jdbc_url_rce_without_http_fetch
+  - client_side_only_fetch_in_browser_javascript
+
+adjacent_skills:
+  - id: java-open-redirect
+    relation: browser Location/redirect response only; no server outbound request
+  - id: java-xxe
+    relation: XML parser entity resolution, not RestTemplate/OkHttp style fetch
+  - id: java-csrf
+    relation: forced authenticated browser request to app; not app-initiated outbound fetch
+
+boundary_notes:
+  - open_redirect_is_not_ssrf_unless_server_follows_or_fetches_the_url
+  - path_only_control_with_fixed_host_scheme_is_usually_not_full_ssrf
+  - startsWith_prefix_checks_are_not_host_constraints
+  - fixed_destination_id_mapping_is_not_ssrf
+  - DNS_rebinding_is_often_needs_info_statically
+  - cloud_metadata_proof_must_use_synthetic_or_local_mock_not_production_metadata

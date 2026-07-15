@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - production build includes ApiClient with literal API_KEY
+  - key is valid for target API (sample uses docs example only)
+request_context:
+  note: static demonstration preferred; do not call third-party APIs with discovered keys
+observed_result:
+  - source or decompiled class contains API_KEY literal
+  - outbound client attaches key to Authorization header
+reuse_policy:
+  - reference_only
+  - do_not_execute_with_live_credentials
+  - do_not_exfiltrate_full_secret_values

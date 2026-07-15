@@ -1,0 +1,66 @@
+l0_stack_detection:
+  - pattern: "org.springframework.web.bind.annotation|@RestController|@Controller|@ModelAttribute|@RequestBody"
+    implies: spring-mvc
+  - pattern: "com.fasterxml.jackson|ObjectMapper|@JsonIgnore|@JsonProperty"
+    implies: jackson
+  - pattern: "org.springframework.data.rest|@RepositoryRestResource"
+    implies: spring-data-rest
+  - pattern: "javax.persistence.Entity|jakarta.persistence.Entity|@Entity"
+    implies: jpa-entity
+  - pattern: "BeanUtils.copyProperties|org.apache.commons.beanutils"
+    implies: bean-copy
+
+l1_sink_keywords:
+  - "@ModelAttribute"
+  - "@RequestBody"
+  - "BeanUtils.copyProperties"
+  - "PropertyUtils.copyProperties"
+  - "readerForUpdating"
+  - "JsonMergePatch"
+  - "JsonPatch"
+  - "repository.save"
+  - ".save("
+  - "entityManager.merge"
+  - "@RepositoryRestResource"
+  - "setAllowedFields"
+  - "setDisallowedFields"
+  - "@InitBinder"
+
+sensitive_field_hints:
+  - "isAdmin"
+  - "setAdmin"
+  - "setRole"
+  - "getRole"
+  - "roles"
+  - "authorities"
+  - "permissions"
+  - "balance"
+  - "setBalance"
+  - "ownerId"
+  - "setOwner"
+  - "verified"
+  - "enabled"
+  - "locked"
+  - "passwordHash"
+  - "creditLimit"
+
+high_risk_binding_hints:
+  - "@RequestBody\\s+\\w*Entity"
+  - "@RequestBody\\s+User\\b"
+  - "@RequestBody\\s+Account\\b"
+  - "@ModelAttribute\\s+\\w*Entity"
+  - "@ModelAttribute\\s+User\\b"
+  - "copyProperties\\([^,]+,\\s*entity"
+  - "save\\(\\s*\\w*(user|account|entity)"
+
+rg_commands:
+  stack: |
+    rg -n "@RestController|@Controller|@ModelAttribute|@RequestBody|ObjectMapper|@RepositoryRestResource|@Entity" --glob '*.java'
+  binding: |
+    rg -n "@ModelAttribute|@RequestBody|BeanUtils\\.copyProperties|readerForUpdating|JsonMergePatch|JsonPatch" --glob '*.java'
+  sensitive_fields: |
+    rg -n "isAdmin|setAdmin|setRole|getRole|setBalance|ownerId|authorities|permissions" --glob '*.java'
+  controls: |
+    rg -n "setAllowedFields|@JsonIgnore|JsonProperty\\.Access\\.READ_ONLY|@JsonIgnoreProperties|@InitBinder" --glob '*.java'
+  persistence: |
+    rg -n "\\.save\\(|EntityManager\\.merge|saveAndFlush" --glob '*.java'

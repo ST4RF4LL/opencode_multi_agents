@@ -1,0 +1,168 @@
+rules:
+  - id: java-xxe-documentbuilder-default-parse
+    message: DocumentBuilderFactory used without secure features before parse of possible untrusted input
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $DB.parse($IN)
+          - pattern: |
+              $DB.parse($IN, ...)
+      - pattern-either:
+          - pattern-inside: |
+              DocumentBuilderFactory $F = DocumentBuilderFactory.newInstance();
+              ...
+              DocumentBuilder $DB = $F.newDocumentBuilder();
+              ...
+          - pattern-inside: |
+              $F = DocumentBuilderFactory.newInstance();
+              ...
+              $DB = $F.newDocumentBuilder();
+              ...
+      - pattern-not-inside: |
+          ...
+          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+          ...
+      - pattern-not-inside: |
+          ...
+          $F.setFeature($FEAT, false);
+          ...
+          $F.setFeature($FEAT2, false);
+          ...
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      confidence: high
+
+  - id: java-xxe-stax-missing-external-entities-false
+    message: XMLInputFactory creates reader without IS_SUPPORTING_EXTERNAL_ENTITIES set to false
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $F.createXMLStreamReader(...)
+          - pattern: |
+              $F.createXMLEventReader(...)
+      - pattern-either:
+          - pattern-inside: |
+              XMLInputFactory $F = XMLInputFactory.newInstance();
+              ...
+          - pattern-inside: |
+              XMLInputFactory $F = XMLInputFactory.newFactory();
+              ...
+          - pattern-inside: |
+              $F = XMLInputFactory.newInstance();
+              ...
+          - pattern-inside: |
+              $F = XMLInputFactory.newFactory();
+              ...
+      - pattern-not-inside: |
+          ...
+          $F.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+          ...
+      - pattern-not-inside: |
+          ...
+          $F.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
+          ...
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      subtype: sax-dom-stax-insecure-defaults
+      confidence: high
+
+  - id: java-xxe-transformerfactory-insecure
+    message: TransformerFactory used without ACCESS_EXTERNAL_* hardening
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $TF.newTransformer(...)
+          - pattern: |
+              $TF.newTemplates(...)
+          - pattern: |
+              $T.transform(...)
+      - pattern-either:
+          - pattern-inside: |
+              TransformerFactory $TF = TransformerFactory.newInstance();
+              ...
+          - pattern-inside: |
+              $TF = TransformerFactory.newInstance();
+              ...
+      - pattern-not-inside: |
+          ...
+          $TF.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+          ...
+      - pattern-not-inside: |
+          ...
+          $TF.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+          ...
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      subtype: transformer-factory-xslt
+      confidence: medium
+
+  - id: java-xxe-jaxb-unmarshal-stream
+    message: JAXB Unmarshaller.unmarshal may parse untrusted XML without hardened underlying parser
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $U.unmarshal((InputStream) $IN)
+      - pattern: |
+          $U.unmarshal((Reader) $IN)
+      - pattern: |
+          $U.unmarshal((java.io.File) $IN)
+      - pattern: |
+          $U.unmarshal($IN)
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      subtype: soap-unmarshaller-jaxb
+      confidence: medium
+      notes: L1 candidate; verify whether Stream/StAX source is hardened
+
+  - id: java-xxe-saxparser-default
+    message: SAXParserFactory/SAXParser parse without nearby secure setFeature
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $P.parse(...)
+      - pattern-either:
+          - pattern-inside: |
+              SAXParserFactory $F = SAXParserFactory.newInstance();
+              ...
+              SAXParser $P = $F.newSAXParser();
+              ...
+          - pattern-inside: |
+              $F = SAXParserFactory.newInstance();
+              ...
+              $P = $F.newSAXParser();
+              ...
+      - pattern-not-inside: |
+          ...
+          $F.setFeature(...);
+          ...
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      confidence: medium
+
+  - id: java-xxe-dom4j-saxreader
+    message: DOM4J SAXReader.read may resolve external entities by default
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $R.read(...)
+      - pattern: |
+          DocumentHelper.parseText(...)
+    metadata:
+      cwe: CWE-611
+      category: xxe
+      confidence: medium

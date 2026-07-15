@@ -1,0 +1,43 @@
+id: jackson
+name: Jackson databind
+detect:
+  imports:
+    - com.fasterxml.jackson.databind.ObjectMapper
+    - com.fasterxml.jackson.annotation.JsonTypeInfo
+    - com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator
+    - com.fasterxml.jackson.databind.ObjectReader
+  keywords:
+    - ObjectMapper
+    - enableDefaultTyping
+    - activateDefaultTyping
+    - JsonTypeInfo
+    - DefaultTyping
+    - PolymorphicTypeValidator
+    - readValue
+
+sources: inherit-global
+sinks:
+  - jackson-default-typing
+
+safe_patterns:
+  - readValue_to_closed_DTO_without_default_typing
+  - no_enableDefaultTyping_or_activateDefaultTyping
+  - JsonTypeInfo_use_NAME_with_fixed_subtypes_only
+  - PolymorphicTypeValidator_allowlist_when_typing_required
+
+unsafe_patterns:
+  - enableDefaultTyping
+  - activateDefaultTyping_with_Object_or_non_PTV
+  - JsonTypeInfo_use_Id_CLASS_or_MINIMAL_CLASS_on_untrusted_input
+  - readValue_to_Object_class_with_default_typing
+  - global_typing_on_shared_ObjectMapper_bean
+
+false_positive_guards:
+  - Jackson_default_DTO_mapping_without_polymorphic_typing_is_usually_safe
+  - presence_of_jackson_on_classpath_alone_is_not_a_finding
+  - @RequestBody MyDto without typing is not deserialization RCE by itself
+
+notes:
+  - Default typing is the primary Jackson deserial risk for untrusted JSON
+  - Prefer activateDefaultTyping with BasicPolymorphicTypeValidator allowlist if polymorphism needed
+  - Do not report standard Spring MVC DTO binding as CWE-502 without typing evidence

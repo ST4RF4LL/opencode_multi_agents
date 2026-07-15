@@ -1,0 +1,30 @@
+subtypes:
+  - id: alg-none
+    description: >
+      解析器接受或未拒绝 alg=none / 无签名 JWT，导致任意伪造 header/payload
+      即可被信任
+    cwe: [CWE-347, CWE-345]
+
+  - id: missing-signature-verify
+    description: >
+      仅 parse/decode 读取 claims，未调用 verify/parseClaimsJws/processToClaims
+      等验签路径，或 verify 结果被忽略
+    cwe: [CWE-347, CWE-287]
+
+  - id: weak-hardcoded-hmac-secret
+    description: >
+      HS256/HS384/HS512 使用源码硬编码、默认值、过短或可预测密钥
+      （如 "secret"、"changeme"、空串）
+    cwe: [CWE-798, CWE-327, CWE-347]
+
+  - id: algorithm-confusion-rs-hs
+    description: >
+      服务端以 HMAC 校验 token，密钥为 RSA 公钥字节或未锁定算法族，
+      攻击者可将 alg 改为 HS* 并用公钥作 HMAC 密钥伪造签名
+    cwe: [CWE-347, CWE-345]
+
+  - id: claims-not-validated
+    description: >
+      验签后仍缺失 exp/nbf 过期校验，或缺失 aud/iss 受众与发行方约束，
+      导致重放、跨服务 token 误用
+    cwe: [CWE-287, CWE-345]

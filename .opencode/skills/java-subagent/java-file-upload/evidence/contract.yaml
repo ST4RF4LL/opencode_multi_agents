@@ -1,0 +1,33 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_upload_entry
+    - attacker_controlled_upload_input
+    - credible_source_to_sink_path
+    - type_or_storage_policy_missing_weak_or_bypassable
+    - security_impact_surface_identified
+  one_of:
+    - dynamic_verification_success_with_fake_marker
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - storage_directory_and_url_mapping
+      - subtype_classification
+      - affected_component
+
+reject_when:
+  - no_external_upload_influence
+  - strong_allowlist_and_safe_storage_effective
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_a_multipart_api_match
+  - pure_path_traversal_without_type_policy_issue
+  - validation_requires_real_webshell_payload
+  - claim_based_only_on_client_side_checks_absence_without_server_store_path
+
+status_definitions:
+  Candidate: dangerous upload pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason
+  Handoff: pure path escape → java-path-traversal

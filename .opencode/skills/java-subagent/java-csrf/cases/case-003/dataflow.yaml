@@ -1,0 +1,11 @@
+source:
+  mechanism: browser_auto_session_cookie
+  attacker_controlled: query_param_id
+path:
+  - attacker_page_embeds_get_url_or_link
+  - ItemController.delete
+  - ItemRepository.deleteById
+sink:
+  method: ItemRepository.deleteById
+  effect: resource_deletion
+influence: get_based_state_change

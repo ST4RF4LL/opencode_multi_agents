@@ -1,0 +1,9 @@
+transferable_lessons:
+  - Webhook callback URLs are a common full-URL SSRF surface
+  - OkHttp followRedirects default/true enables redirect-bypass if initial URL is allowlisted weakly
+  - Parse HttpUrl and allowlist scheme+host; disable or revalidate redirects
+  - Cloud metadata impact depends on deployment; prove with mocks not production metadata
+non_transferable_details:
+  - original partner hostnames
+  - original callback payload
+  - original deployment cloud provider

@@ -1,0 +1,29 @@
+id: jdk-urlconnection
+name: JDK URL / HttpURLConnection
+detection:
+  imports:
+    - java.net.URL
+    - java.net.HttpURLConnection
+    - java.net.URLConnection
+    - java.net.http.HttpClient
+  classes:
+    - URL
+    - HttpURLConnection
+    - URLConnection
+    - HttpClient
+    - HttpRequest
+sinks:
+  - new URL(String) then openConnection/openStream/getContent
+  - HttpURLConnection.connect / getInputStream
+  - HttpRequest.Builder.uri + HttpClient.send
+sensitive_object: URL receiver or HttpRequest URI
+protocol_notes:
+  - URL may support file/jar/netdoc depending on handlers
+  - restrict schemes explicitly
+redirect_notes:
+  - HttpURLConnection follows redirects for same protocol by default in many JDKs
+  - setInstanceFollowRedirects(false) then revalidate
+strong_controls:
+  - scheme allowlist after URI parse
+  - host allowlist / resolved IP checks
+  - disable or revalidate redirects

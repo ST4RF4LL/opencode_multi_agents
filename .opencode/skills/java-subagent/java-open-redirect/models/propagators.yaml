@@ -1,0 +1,57 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"redirect:" + returnUrl'
+      - '"https://app.example.com" + path'
+      - 'base + userInput'
+      - '"/" + userPath'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("redirect:%s", userUrl)'
+      - 'String.format("%s%s", prefix, userInput)'
+      - 'MessageFormat.format("redirect:{0}", dest)'
+
+  - pattern: uri-url-builder
+    examples:
+      - 'new URL(userInput)'
+      - 'URI.create(userInput)'
+      - 'UriComponentsBuilder.fromUriString(input).build()'
+      - 'ServletUriComponentsBuilder.fromCurrentContextPath().path(userPath)'
+
+  - pattern: getter-setter
+    examples:
+      - setReturnUrl -> getReturnUrl
+      - setRedirectUrl -> getRedirectUrl
+      - setNext -> getNext
+      - setCallbackUrl -> getCallbackUrl
+
+  - pattern: builder
+    examples:
+      - ResponseEntity.status(FOUND).location(uri)
+      - ResponseEntity.status(302).header("Location", url)
+      - RedirectView constructed then returned
+      - HttpHeaders.setLocation(uri)
+
+  - pattern: collection
+    examples:
+      - map.put("returnUrl", input)
+      - map.get("returnUrl")
+      - session.setAttribute("postLoginUrl", input)
+
+  - pattern: dto-field
+    examples:
+      - LoginRequest.returnUrl
+      - AuthCallback.redirect
+      - NavigationCommand.target
+
+  - pattern: wrapper-method
+    examples:
+      - RedirectUtil.redirect(response, url)
+      - NavigationHelper.send(userUrl)
+      - LoginSuccessHandler.onSuccess(returnUrl)
+
+  - pattern: session-roundtrip
+    examples:
+      - store returnUrl in session then sendRedirect later
+      - OAuth state carrying return path

@@ -1,0 +1,11 @@
+source:
+  kind: string_literal
+  expression: '"AKIAIOSFODNN7EXAMPLE"'
+path:
+  - ApiClient.API_KEY
+  - ApiClient.callRemote
+sink:
+  method: HttpRequest header Authorization / X-Api-Key
+influence: credential_exposure_and_api_impersonation
+related_issues:
+  - cloud-access-key shape if used as AWS key

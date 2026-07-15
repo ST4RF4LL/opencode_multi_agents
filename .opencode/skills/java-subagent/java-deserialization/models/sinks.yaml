@@ -1,0 +1,137 @@
+sinks:
+  - id: objectinputstream-readobject
+    framework: java-native
+    method_full_name:
+      - ".*ObjectInputStream\\.readObject.*"
+      - ".*ObjectInputStream\\.readUnshared.*"
+      - ".*ObjectInput\\.readObject.*"
+    sensitive_object: receiver
+    sensitive_arguments: []
+    semantics: native-java-deserialization
+    confidence: high
+    notes: receiver stream must be traced to untrusted bytes
+
+  - id: xmldecoder-readobject
+    framework: java-native
+    method_full_name:
+      - ".*XMLDecoder\\.readObject.*"
+      - ".*XMLDecoder\\.<init>.*"
+    sensitive_object: receiver
+    sensitive_arguments: [1]
+    semantics: xml-object-deserialization
+    confidence: high
+    notes: XMLDecoder can invoke arbitrary methods during decode
+
+  - id: fastjson-parse-autotype
+    framework: fastjson
+    method_full_name:
+      - ".*com\\.alibaba\\.fastjson\\.JSON\\.parse.*"
+      - ".*com\\.alibaba\\.fastjson\\.JSON\\.parseObject.*"
+      - ".*com\\.alibaba\\.fastjson\\.JSON\\.parseArray.*"
+      - ".*com\\.alibaba\\.fastjson2\\.JSON\\.parse.*"
+      - ".*com\\.alibaba\\.fastjson2\\.JSON\\.parseObject.*"
+      - ".*JSONObject\\.parseObject.*"
+      - ".*JSONObject\\.parse.*"
+    sensitive_arguments: [1]
+    semantics: polymorphic-json-deserialization
+    confidence: high
+    notes: >
+      High risk when autoType enabled, Feature.SupportAutoType, or
+      ParserConfig.setAutoTypeSupport(true); @type in payload selects class
+
+  - id: jackson-default-typing
+    framework: jackson
+    method_full_name:
+      - ".*ObjectMapper\\.enableDefaultTyping.*"
+      - ".*ObjectMapper\\.activateDefaultTyping.*"
+      - ".*ObjectMapper\\.readValue.*"
+      - ".*ObjectMapper\\.readTree.*"
+      - ".*ObjectMapper\\.convertValue.*"
+    sensitive_arguments: [1]
+    semantics: polymorphic-json-deserialization
+    confidence: medium
+    notes: >
+      readValue alone is usually safe for closed DTOs; elevate when
+      enableDefaultTyping / activateDefaultTyping / attacker-influenced
+      @JsonTypeInfo(use=CLASS|MINIMAL_CLASS) present
+
+  - id: snakeyaml-load
+    framework: snakeyaml
+    method_full_name:
+      - ".*org\\.yaml\\.snakeyaml\\.Yaml\\.load.*"
+      - ".*org\\.yaml\\.snakeyaml\\.Yaml\\.loadAll.*"
+      - ".*org\\.yaml\\.snakeyaml\\.Yaml\\.loadAs.*"
+      - ".*org\\.yaml\\.snakeyaml\\.Yaml\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: yaml-object-deserialization
+    confidence: high
+    notes: new Yaml() default Constructor allows arbitrary tags/types
+
+  - id: xstream-fromxml
+    framework: xstream
+    method_full_name:
+      - ".*com\\.thoughtworks\\.xstream\\.XStream\\.fromXML.*"
+      - ".*com\\.thoughtworks\\.xstream\\.XStream\\.unmarshal.*"
+    sensitive_arguments: [1]
+    semantics: xml-object-deserialization
+    confidence: high
+    notes: unsafe without XStream security framework / allowTypes
+
+  - id: hessian-readobject
+    framework: hessian-kryo
+    method_full_name:
+      - ".*com\\.caucho\\.hessian\\.io\\.Hessian2Input\\.readObject.*"
+      - ".*com\\.caucho\\.hessian\\.io\\.HessianInput\\.readObject.*"
+      - ".*com\\.caucho\\.hessian\\.io\\.HessianInput\\.readReply.*"
+      - ".*Hessian2Input\\.readObject.*"
+      - ".*HessianInput\\.readObject.*"
+    sensitive_object: receiver
+    semantics: binary-rpc-deserialization
+    confidence: high
+
+  - id: kryo-readobject
+    framework: hessian-kryo
+    method_full_name:
+      - ".*com\\.esotericsoftware\\.kryo\\.Kryo\\.readObject.*"
+      - ".*com\\.esotericsoftware\\.kryo\\.Kryo\\.readClassAndObject.*"
+      - ".*com\\.esotericsoftware\\.kryo\\.io\\.Input\\.<init>.*"
+      - ".*Kryo\\.readObject.*"
+      - ".*Kryo\\.readClassAndObject.*"
+    sensitive_arguments: [1]
+    semantics: binary-deserialization
+    confidence: high
+
+  - id: jdk-serialization-redis
+    framework: redis
+    method_full_name:
+      - ".*JdkSerializationRedisSerializer\\.deserialize.*"
+      - ".*GenericJackson2JsonRedisSerializer\\.deserialize.*"
+      - ".*RedisSerializer\\.deserialize.*"
+    sensitive_arguments: [1]
+    semantics: redis-value-deserialization
+    confidence: high
+    notes: JdkSerializationRedisSerializer wraps ObjectInputStream
+
+  - id: spring-http-invoker
+    framework: spring-remoting
+    method_full_name:
+      - ".*HttpInvokerServiceExporter\\..*"
+      - ".*SimpleHttpInvokerServiceExporter\\..*"
+      - ".*RemoteInvocationSerializingExporter\\..*"
+      - ".*ObjectInputStream.*readObject.*"
+    sensitive_arguments: []
+    semantics: remoting-deserialization
+    confidence: high
+
+  - id: custom-deserialize-wrapper
+    framework: custom
+    method_full_name:
+      - ".*SerializeUtil\\.deserialize.*"
+      - ".*SerializationUtils\\.deserialize.*"
+      - ".*ObjectSerializer\\.deserialize.*"
+      - ".*Codec\\.decode.*"
+      - ".*Deserializer\\.deserialize.*"
+    sensitive_arguments: [1]
+    semantics: possible-deserial-wrapper
+    confidence: medium
+    notes: expand wrappers into real ObjectInputStream / library parse calls

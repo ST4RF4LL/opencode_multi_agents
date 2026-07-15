@@ -1,0 +1,60 @@
+questions:
+  - id: factory_instance_identity
+    ask: 安全 feature/property 是否设置在与 parse/unmarshal 相同的工厂实例上？
+    outcomes:
+      same_instance_before_parse: control_may_be_effective
+      different_instance: invalid_control
+      after_parser_created_incorrectly: likely_invalid
+
+  - id: feature_completeness
+    ask: 配置了哪些安全标志？
+    strong_set:
+      - disallow-doctype-decl true
+      - external-general-entities false
+      - external-parameter-entities false
+      - ACCESS_EXTERNAL_DTD empty
+      - StAX IS_SUPPORTING_EXTERNAL_ENTITIES false + SUPPORT_DTD false
+      - Transformer ACCESS_EXTERNAL_DTD and ACCESS_EXTERNAL_STYLESHEET empty
+    incomplete_examples:
+      - FEATURE_SECURE_PROCESSING only
+      - only general entities disabled
+      - EntityResolver null without feature flags
+    assessment: grade_as_strong_contextual_weak_or_invalid
+
+  - id: xml_input_origin
+    ask: XML 文档内容是否来自外部可控入口（body、上传、URL 拉取）？
+    outcomes:
+      untrusted: high_risk
+      constant_classpath: likely_safe
+      mixed_or_stored: second_order_or_conditional
+
+  - id: parser_family
+    ask: 使用的是 DOM / SAX / StAX / Transformer / JAXB / DOM4J / JDOM？
+    next: load_matching_framework_model_and_required_flags
+
+  - id: xinclude_and_expansion
+    ask: 是否启用 XInclude 或未限制实体展开？
+    if_yes:
+      - classify_xinclude_or_billion_laughs_subtype
+      - assess_impact_disclosure_vs_dos
+
+  - id: jaxb_underlying_parser
+    ask: Unmarshaller 是否通过已硬化的 XMLStreamReader/XMLReader 喂入？
+    accept:
+      - secure_XMLInputFactory_then_unmarshal_reader
+    reject_as_strong:
+      - unmarshal_raw_InputStream_with_default_parser
+
+  - id: xpath_confusion
+    ask: 是否把 XPath VariableResolver 误当成 XXE 防护？
+    assessment: invalid_as_xxe_control
+
+  - id: ssrf_confusion
+    ask: 是否仅有网络客户端而无 XML 实体解析向量？
+    assessment: out_of_scope_for_this_skill_use_java_ssrf
+
+control_grades:
+  strong: effective_blocks_external_entities_dtd_and_relevant_xinclude
+  contextual: effective_only_for_specific_parser_subtype_or_partial_vector
+  weak: bypassable_or_incomplete
+  invalid: does_not_mitigate

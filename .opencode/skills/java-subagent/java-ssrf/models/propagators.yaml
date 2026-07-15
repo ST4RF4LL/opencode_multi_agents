@@ -1,0 +1,59 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - '"http://" + host + "/api"'
+      - 'baseUrl + userPath'
+      - '"https://api.example.com/" + path'
+      - 'scheme + "://" + host + ":" + port + path'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("https://%s/v1/resource", host)'
+      - 'String.format("%s%s", base, userInput)'
+      - 'MessageFormat.format("http://{0}:{1}/", host, port)'
+
+  - pattern: uri-url-builder
+    examples:
+      - 'new URL(userInput)'
+      - 'new URL(base, relative)'
+      - 'URI.create(userInput)'
+      - 'UriComponentsBuilder.fromUriString(input).build()'
+      - 'UriComponentsBuilder.fromHttpUrl(base).path(userPath).build()'
+      - 'HttpUrl.parse(userInput)'
+
+  - pattern: getter-setter
+    examples:
+      - setUrl -> getUrl
+      - setTarget -> getTarget
+      - setEndpoint -> getEndpoint
+      - setCallbackUrl -> getCallbackUrl
+
+  - pattern: builder
+    examples:
+      - Request.Builder().url(x).build()
+      - HttpGet constructed then execute
+      - WebClient.RequestHeadersUriSpec.uri(x)
+
+  - pattern: collection
+    examples:
+      - map.put("url", input)
+      - map.get("url")
+      - headers.get("X-Callback-Url")
+
+  - pattern: dto-field
+    examples:
+      - ProxyRequest.url
+      - WebhookConfig.callbackUrl
+      - FetchCommand.host
+
+  - pattern: wrapper-method
+    examples:
+      - HttpUtil.fetch(url)
+      - RemoteClient.request(target)
+      - UrlFetcher.open(destination)
+      - ProxyService.fetchRemote(url)
+
+  - pattern: redirect-location
+    examples:
+      - response Location header followed by client
+      - recursive fetch of redirect target

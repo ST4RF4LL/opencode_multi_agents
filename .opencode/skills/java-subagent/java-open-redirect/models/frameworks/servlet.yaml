@@ -1,0 +1,29 @@
+id: servlet
+name: Java Servlet redirect sinks and sources
+detection:
+  imports:
+    - javax.servlet.http.HttpServletRequest
+    - javax.servlet.http.HttpServletResponse
+    - jakarta.servlet.http.HttpServletRequest
+    - jakarta.servlet.http.HttpServletResponse
+  classes:
+    - HttpServlet
+    - HttpServletRequest
+    - HttpServletResponse
+sources:
+  - HttpServletRequest.getParameter
+  - HttpServletRequest.getHeader
+  - HttpServletRequest.getQueryString
+sinks:
+  - HttpServletResponse.sendRedirect(String)
+  - HttpServletResponse.setHeader("Location", String)
+  - HttpServletResponse.addHeader("Location", String)
+sensitive_argument: redirect location string
+strong_controls:
+  - fixed destination map before sendRedirect
+  - parse host/scheme allowlist before Location set
+  - force relative path under application context
+notes:
+  - Primary entry for non-Spring servlet apps
+  - sendRedirect encodes URL; still open redirect if absolute external
+  - setStatus(302) + setHeader Location is equivalent sink pair

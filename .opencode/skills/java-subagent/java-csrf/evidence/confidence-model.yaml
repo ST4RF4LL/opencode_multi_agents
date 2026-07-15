@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - cookie_or_session_auth_confirmed
+      - state_change_confirmed
+      - csrf_control_missing_or_clearly_bypassable
+      - one_of_clear_static_semantics_or_lab_observable
+  medium:
+    requires:
+      - likely_cookie_auth
+      - likely_state_change
+      - csrf_config_gap_or_suspicious_pattern
+    missing_optional:
+      - lab_behavioral_confirmation
+  low:
+    requires:
+      - csrf_disable_or_mutating_mapping_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - password_change_or_fund_transfer
+    - get_based_state_change
+    - csrf_disable_on_session_form_login_chain
+    - samesite_none
+    - admin_privilege_mutation
+  decrease:
+    - possible_bearer_only_api
+    - partial_token_validation
+    - uncertain_reachability
+    - samesite_lax_without_get_mutation

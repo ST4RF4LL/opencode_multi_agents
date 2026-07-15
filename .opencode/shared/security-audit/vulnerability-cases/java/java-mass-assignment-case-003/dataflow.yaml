@@ -1,0 +1,22 @@
+source:
+  method: UserApi.update
+  parameter: body
+  annotation: RequestBody
+  type: UserEntity
+path:
+  - UserApi.update
+  - BeanUtils.copyProperties
+  - UserRepository.save
+sink:
+  method: UserRepository.save
+  argument: 1
+transfer:
+  method: BeanUtils.copyProperties
+  from: body
+  to: entity
+  ignore_list: none
+sensitive_fields:
+  - isAdmin
+  - role
+  - passwordHash
+influence: full_property_copy_request_to_entity

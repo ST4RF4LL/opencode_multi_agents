@@ -1,0 +1,56 @@
+id: spring-mvc
+name: Spring MVC binding
+detection:
+  imports:
+    - org.springframework.web.bind.annotation.ModelAttribute
+    - org.springframework.web.bind.annotation.RequestBody
+    - org.springframework.web.bind.annotation.RequestMapping
+    - org.springframework.web.bind.annotation.RestController
+    - org.springframework.web.bind.annotation.InitBinder
+    - org.springframework.stereotype.Controller
+  classes:
+    - RestController
+    - Controller
+    - ModelAttribute
+    - RequestBody
+    - InitBinder
+    - WebDataBinder
+  dependencies:
+    - spring-web
+    - spring-webmvc
+sources:
+  - "@ModelAttribute T" when T is entity or has sensitive fields
+  - "@RequestBody T" when T is entity or has sensitive fields
+  - unannotated command objects in @Controller methods
+sinks:
+  - binding result saved via repository / service
+  - bound fields used in authorization or balance updates
+controls:
+  strong:
+    - "@InitBinder void initBinder(WebDataBinder b) { b.setAllowedFields(...); }"
+    - dedicated DTO types not annotated as @Entity
+    - manual mapping of safe fields only
+  weak:
+    - frontend omits fields
+    - OpenAPI schema omits fields
+sensitive_field_hints:
+  - isAdmin
+  - admin
+  - role
+  - roles
+  - authorities
+  - permissions
+  - balance
+  - credit
+  - ownerId
+  - userId
+  - status
+  - verified
+  - enabled
+  - locked
+  - password
+  - passwordHash
+notes:
+  - Spring binds request params to JavaBean properties by name
+  - Nested paths like user.roles[0].name are bindable unless disallowed
+  - setAllowedFields is allowlist; setDisallowedFields alone is easy to miss

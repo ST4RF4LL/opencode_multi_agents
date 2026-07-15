@@ -1,0 +1,16 @@
+case_specific: true
+preconditions:
+  - JSON API authenticates via session cookie
+  - CSRF disabled or ignored for /api/**
+  - no mandatory X-CSRF-TOKEN / X-XSRF-TOKEN check
+request_context:
+  endpoint: POST /api/profile/email
+  content_type: application/json
+  parameter: body.email
+observed_result:
+  - profile email changed when session cookie sent without CSRF header
+validation_style: conceptual
+reuse_policy:
+  - reference_only
+  - do_not_ship_weaponized_browser_poc
+  - rederive_from_actual_cors_samesite_and_auth

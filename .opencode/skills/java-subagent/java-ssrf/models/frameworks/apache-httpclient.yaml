@@ -1,0 +1,29 @@
+id: apache-httpclient
+name: Apache HttpClient
+detection:
+  imports:
+    - org.apache.http.client.HttpClient
+    - org.apache.http.impl.client.CloseableHttpClient
+    - org.apache.http.client.methods.HttpGet
+    - org.apache.hc.client5.http.classic.HttpClient
+  classes:
+    - CloseableHttpClient
+    - HttpGet
+    - HttpPost
+    - RequestBuilder
+    - ClassicRequestBuilder
+  dependencies:
+    - httpclient
+    - httpclient5
+sinks:
+  - HttpClient.execute(HttpUriRequest)
+  - new HttpGet(String|URI)
+  - new HttpPost(String|URI)
+  - RequestBuilder.setUri / ClassicRequestBuilder.setUri
+sensitive_argument: request URI / constructor string
+redirect_notes:
+  - LaxRedirectStrategy / DefaultRedirectStrategy may follow cross-host redirects
+  - disable redirects or validate each hop
+strong_controls:
+  - allowlist before constructing HttpGet/HttpPost
+  - custom RedirectStrategy that revalidates target

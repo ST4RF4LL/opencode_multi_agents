@@ -1,0 +1,61 @@
+not_vulnerability:
+  - id: strong-dom-hardening
+    pattern: DocumentBuilderFactory with disallow-doctype-decl + external entities false + ACCESS_EXTERNAL_* empty before parse
+    reason: effective secure configuration on same factory instance
+
+  - id: strong-stax-hardening
+    pattern: XMLInputFactory IS_SUPPORTING_EXTERNAL_ENTITIES=false and SUPPORT_DTD=false before create*Reader
+    reason: StAX external entity resolution disabled
+
+  - id: strong-transformer-hardening
+    pattern: TransformerFactory FEATURE_SECURE_PROCESSING + ACCESS_EXTERNAL_DTD/STYLESHEET empty
+    reason: external access disabled for XSLT/XML transform
+
+  - id: trusted-classpath-xml-only
+    pattern: parse of constant classpath/resource XML with no external input influence
+    reason: no untrusted document content
+
+  - id: test-only-parser
+    pattern: XML parse helper only referenced from test sources
+    reason: not production reachable
+
+  - id: xpathi-only-misclass
+    pattern: XPath.compile/evaluate string concat without insecure XML parser config
+    reason: separate vulnerability class (CWE-643); owned by java-xpath-injection
+
+  - id: pure-ssrf-misclass
+    pattern: HTTP client to user URL without XML parse/entity resolution
+    reason: separate vulnerability class; owned by java-ssrf
+
+needs_deeper_review:
+  - id: default-document-builder
+    pattern: DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(untrusted)
+    reason: classic insecure default; high priority candidate
+
+  - id: stax-missing-flags
+    pattern: XMLInputFactory.newFactory() without IS_SUPPORTING_EXTERNAL_ENTITIES false
+    reason: common StAX XXE pattern
+
+  - id: feature-secure-processing-only
+    pattern: only FEATURE_SECURE_PROCESSING set
+    reason: often incomplete; verify JDK version and remaining vectors
+
+  - id: flags-on-wrong-instance
+    pattern: secure features set but parser obtained from different factory
+    reason: invalid control
+
+  - id: jaxb-raw-stream
+    pattern: Unmarshaller.unmarshal(InputStream) without hardened reader
+    reason: depends on underlying parser defaults
+
+  - id: wrapper-xml-util
+    pattern: XmlUtil.parse / XmlHelper.toDocument
+    reason: expand to real factory configuration and sink
+
+  - id: url-fetch-then-parse
+    pattern: fetch remote body then parse as XML
+    reason: may combine SSRF and XXE; classify primary vector carefully
+
+  - id: partial-entity-disable
+    pattern: only external-general-entities false
+    reason: parameter entity / alternate vector may remain

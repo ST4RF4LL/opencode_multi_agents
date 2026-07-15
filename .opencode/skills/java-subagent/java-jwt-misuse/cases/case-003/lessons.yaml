@@ -1,0 +1,9 @@
+transferable_lessons:
+  - signature verification alone is incomplete without exp (and often aud/iss)
+  - jjwt requireIssuer/requireAudience and explicit exp null checks matter
+  - Spring resource server needs issuer-uri and often explicit audience validator
+  - multi-service deployments without aud are token-confusion prone
+non_transferable_details:
+  - original secret material
+  - original claim role values
+  - original service names

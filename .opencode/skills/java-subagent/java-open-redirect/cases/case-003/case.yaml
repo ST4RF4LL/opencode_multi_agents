@@ -1,0 +1,27 @@
+id: case-003
+vulnerability_type: open-redirect
+subtype: protocol-relative
+source:
+  type: request-parameter
+  expression: request.getParameter("next")
+sink:
+  api: HttpServletResponse.setHeader Location
+  sensitive_argument: 2
+propagation:
+  - ContinueServlet.doGet
+  - weak startsWith("https://app.example.com")
+  - setHeader("Location", next)
+root_cause:
+  - weak_string_prefix_validation
+  - protocol_relative_and_suffix_host_bypass
+  - parsed_host_not_checked
+prerequisites:
+  - reachable_http_endpoint
+  - validation_uses_startswith_only
+observed_behavior:
+  - prefix_check_bypassed
+  - Location_header_points_to_external_host
+fix:
+  - parse_URI_and_allowlist_host
+  - or_force_relative_paths_rejecting_double_slash
+  - reject_empty_scheme_with_authority

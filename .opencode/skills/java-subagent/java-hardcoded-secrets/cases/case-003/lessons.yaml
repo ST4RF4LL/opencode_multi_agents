@@ -1,0 +1,9 @@
+transferable_lessons:
+  - SecretKeySpec from string literal is dual-relevant (secrets + weak-crypto hardcoded-key)
+  - JWT HS256 secrets in source enable trivial token forgery
+  - this skill owns secret material presence; weak-crypto owns algorithm/mode weakness
+  - prefer env/KMS and consider asymmetric JWT when verification is distributed
+non_transferable_details:
+  - original secret string
+  - original class name
+  - Base64 URL encoding choice

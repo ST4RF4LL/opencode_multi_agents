@@ -1,0 +1,17 @@
+case_specific: true
+preconditions:
+  - PUT /api/accounts accepts application/json body as Account
+  - balance and role have public setters without JsonIgnore/READ_ONLY
+  - caller can update own or target account
+request_context:
+  endpoint: PUT /api/accounts
+  content_type: application/json
+  body: |
+    {"id": 1, "displayName": "me", "balance": 999999.99, "role": "ADMIN"}
+observed_result:
+  - account balance or role updated beyond business rules
+  - privilege or financial integrity impact
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - use_lab_accounts_and_minimal_balance_delta

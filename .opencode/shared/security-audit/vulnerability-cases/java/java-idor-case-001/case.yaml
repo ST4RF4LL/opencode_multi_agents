@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: idor
+subtype: horizontal-idor
+source:
+  type: path-variable
+  expression: '@PathVariable Long id'
+sink:
+  api: OrderRepository.findById
+  sensitive_argument: 1
+propagation:
+  - OrderController.getOrder
+  - OrderService.getOrder
+  - OrderRepository.findById
+root_cause:
+  - object_id_from_path_fully_user_controlled
+  - no_ownership_compare_to_current_user
+  - authentication_only_gate
+prerequisites:
+  - authenticated_user
+  - predictable_or_known_order_ids
+observed_behavior:
+  - user_a_reads_user_b_order_by_id
+fix:
+  - findByIdAndUserId_with_security_context
+  - or_load_then_compare_owner_and_deny

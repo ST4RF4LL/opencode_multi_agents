@@ -1,0 +1,27 @@
+id: case-003
+vulnerability_type: unsafe-file-upload
+subtype: double-extension-bypass
+source:
+  type: multipart-original-filename
+  expression: file.getOriginalFilename()
+sink:
+  api: FileItem.write / Files after endsWith image ext check
+  sensitive_argument: storage_path
+propagation:
+  - ImportServlet.doPost
+  - UploadHelper.acceptImageName
+  - name.endsWith(.png|.jpg)
+  - store with full client name
+root_cause:
+  - endsWith_image_extension_allows_name_png_jsp_style_bypass
+  - content_extension_mismatch_not_checked
+  - no_final_extension_allowlist_on_basename
+prerequisites:
+  - reachable_upload_endpoint
+  - weak_endswith_extension_check
+observed_behavior:
+  - double_extension_or_mismatch_name_accepted
+fix:
+  - parse_single_final_extension_on_basename
+  - reject_compound_extensions
+  - allowlist_only_safe_types

@@ -1,0 +1,65 @@
+not_vulnerability:
+  - id: jackson-closed-dto-no-typing
+    pattern: ObjectMapper.readValue to concrete DTO without enableDefaultTyping/activateDefaultTyping
+    reason: closed type graph; polymorphic type id not attacker-controlled
+
+  - id: constant-internal-blob
+    pattern: readObject on bytes fully constant or from signed internal store with no external influence
+    reason: no attacker-controlled payload
+
+  - id: object-input-filter-allowlist
+    pattern: ObjectInputFilter / ValidatingObjectInputStream with narrow accept list before readObject
+    reason: effective type allowlisting
+
+  - id: snakeyaml-safe-constructor
+    pattern: new Yaml(new SafeConstructor()) or TagInspector allowlist on untrusted YAML
+    reason: arbitrary tags/types rejected
+
+  - id: xstream-allowtypes
+    pattern: XStream security framework + allowTypes for expected classes only
+    reason: arbitrary class reconstruction blocked
+
+  - id: fastjson-safemode
+    pattern: autoType disabled / safeMode with fixed target type
+    reason: @type cannot select arbitrary classes
+
+  - id: test-only-deserial
+    pattern: deserialization helper only referenced from test sources
+    reason: not production reachable
+
+  - id: gadget-lib-only
+    pattern: commons-collections / commons-beanutils / c3p0 on classpath without deserial path
+    reason: amplifier alone is not a finding
+
+  - id: pure-log4shell-jndi
+    pattern: JNDI lookup in log message without deserialization path
+    reason: out of scope; hand off to jndi skill
+
+needs_deeper_review:
+  - id: readobject-after-base64-param
+    pattern: Base64.decode(request param/cookie) -> ObjectInputStream
+    reason: classic native deserial entry
+
+  - id: fastjson-parseobject-object-class
+    pattern: JSON.parseObject(body, Object.class) or Map with autotype config
+    reason: type selection may be payload-driven
+
+  - id: jackson-global-mapper-typing
+    pattern: shared @Bean ObjectMapper with default typing
+    reason: all consumers inherit risk
+
+  - id: redis-jdk-serializer
+    pattern: JdkSerializationRedisSerializer on attacker-writable keys
+    reason: mq-redis-deserial subtype
+
+  - id: wrapper-util
+    pattern: SerializeUtil.deserialize / SerializationUtils.deserialize
+    reason: expand to real ObjectInputStream or library call
+
+  - id: partial-filter
+    pattern: package blacklist without allowlist
+    reason: weak; gadgets evolve
+
+  - id: expected-type-with-autotype-on
+    pattern: parseObject(json, Dto.class) while autoType still enabled
+    reason: type parameter may be overridden depending on version/config

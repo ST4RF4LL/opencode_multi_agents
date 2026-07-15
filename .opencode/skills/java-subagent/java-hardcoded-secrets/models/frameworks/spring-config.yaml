@@ -1,0 +1,63 @@
+id: spring-config
+name: Spring Configuration (yml/properties)
+detect:
+  files:
+    - application.yml
+    - application.yaml
+    - application.properties
+    - application-*.yml
+    - application-*.properties
+    - bootstrap.yml
+  imports:
+    - org.springframework.beans.factory.annotation.Value
+    - org.springframework.boot.context.properties.ConfigurationProperties
+    - org.springframework.core.env.Environment
+  keywords:
+    - spring.datasource.password
+    - spring.datasource.username
+    - spring.datasource.url
+    - client-secret
+    - jwt.secret
+    - api-key
+    - "@Value"
+
+sources: inherit-global
+sinks:
+  - config-property-binding
+  - datasource-set-password
+  - jwt-sign-secret
+
+high_risk_keys:
+  - password
+  - secret
+  - client-secret
+  - api-key
+  - apiKey
+  - access-key
+  - accessKey
+  - private-key
+  - privateKey
+  - signing-key
+  - signingKey
+  - jwt.secret
+  - spring.datasource.password
+  - spring.mail.password
+  - spring.redis.password
+  - spring.security.user.password
+
+safe_patterns:
+  - "${ENV_VAR}"
+  - "${ENV_VAR:}"  # empty default
+  - vault-backed_property_resolver
+  - spring_cloud_config_encrypted_values_with_key_outside_repo
+
+unsafe_patterns:
+  - plaintext_password_value_in_committed_yml
+  - hardcoded_jwt_secret_property
+  - jdbc_url_with_embedded_password
+  - client_secret_literal_in_oauth_config
+
+notes:
+  - profile-specific files (application-prod.yml) with secrets are still findings
+  - jasypt ENC(...) without key management still needs review
+  - empty or placeholder defaults with required env override may be contextual reject

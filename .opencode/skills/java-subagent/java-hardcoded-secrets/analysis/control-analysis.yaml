@@ -1,0 +1,68 @@
+questions:
+  - id: material_location
+    ask: 秘密材料出现在哪里？
+    high_risk:
+      - java_string_or_byte_literal
+      - committed_yml_properties_xml
+      - resources_pem_or_key_file
+      - docker_compose_env_with_real_secret_in_git
+    lower_risk:
+      - system_getenv_only
+      - vault_or_kms_sdk_only
+      - ci_secret_store_injection
+
+  - id: placeholder_check
+    ask: 值是否为占位符或文档示例？
+    accept_as_non_finding:
+      - CHANGE_ME
+      - your-api-key-here
+      - XXXXXXXX
+      - AKIAIOSFODNN7EXAMPLE
+      - wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      - password
+      - secret
+      - "<password>"
+      - "${...}" with no real default
+    still_risk_if:
+      - placeholder_used_as_unconditional_production_default
+      - example_key_paired_with_real_looking_second_secret
+
+  - id: secret_management
+    ask: 是否存在有效密钥管理？
+    accept:
+      - environment_variables_required_at_runtime
+      - HashiCorp_Vault_AWS_Secrets_Manager_Azure_KeyVault_GCP_SM
+      - KMS_envelope_encryption_with_no_raw_secret_in_repo
+      - instance_or_workload_identity_for_cloud
+    reject_as_strong:
+      - base64_or_xor_obfuscation_in_source
+      - hardcoded_default_when_env_missing
+      - secrets_in_git_history_still_active_defaults
+
+  - id: usage_binding
+    ask: 材料如何被使用？
+    high_risk:
+      - HTTP_Authorization_or_API_key_header
+      - JDBC_or_DataSource_authentication
+      - JWT_HMAC_signing
+      - AWS_static_credentials
+      - SecretKeySpec_or_KeyStore
+    needs_context:
+      - assigned_but_never_used
+      - only_logged_not_used  # may be adjacent skill
+
+  - id: scope_and_packaging
+    ask: 是否进入生产制品？
+    accept_reject:
+      - src_test_only_fake_fixtures
+      - docs_samples_not_built
+    high_risk:
+      - main_sources
+      - resources_in_jar
+      - application-prod.yml in repo
+
+control_grades:
+  strong: external_secret_store_no_plaintext_in_repo
+  contextual: placeholder_or_test_only_with_evidence
+  weak: obfuscation_or_insecure_default
+  invalid: plaintext_secret_in_source_or_config

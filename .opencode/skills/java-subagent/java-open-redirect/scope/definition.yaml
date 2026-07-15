@@ -1,0 +1,24 @@
+id: java-open-redirect
+name: Open Redirect / Unvalidated Redirects
+language: java
+cwe:
+  - CWE-601
+owasp:
+  - A01:2021-Broken Access Control
+dimension: D6
+objective:
+  detect: >
+    Attacker-controlled redirect destination data reaching browser redirect
+    responses without effective host, scheme, or same-site relative-path
+    restrictions.
+core_condition:
+  - external_input_exists
+  - redirect_destination_is_influenced
+  - browser_redirect_response_is_reachable
+  - effective_destination_control_is_missing
+not_in_scope:
+  - ssrf_server_side_fetch
+  - pure_xss
+  - csrf
+  - header_injection_without_redirect_semantics
+  - client_side_only_window_location_in_javascript

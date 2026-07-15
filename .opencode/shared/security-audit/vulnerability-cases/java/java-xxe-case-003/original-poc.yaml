@@ -1,0 +1,13 @@
+case_specific: true
+preconditions:
+  - endpoint accepts application/xml order body
+  - application uses vulnerable JaxbOrderService path
+request_context:
+  endpoint: POST /api/orders
+  parameter: raw XML body
+observed_result:
+  - body stream reaches Unmarshaller.unmarshal without hardened XMLInputFactory
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - no_weaponized_oob_kits

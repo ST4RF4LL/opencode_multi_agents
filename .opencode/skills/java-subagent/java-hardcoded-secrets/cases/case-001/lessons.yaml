@@ -1,0 +1,9 @@
+transferable_lessons:
+  - static final API_KEY/TOKEN constants are high-signal L1 candidates
+  - secret value shape (AKIA*, long random) increases confidence
+  - AKIAIOSFODNN7EXAMPLE is the AWS docs example — still flag pattern, triage placeholder vs real
+  - remediation is env/Vault injection plus rotation, not renaming the constant
+non_transferable_details:
+  - original endpoint path
+  - original constant name
+  - original example key string

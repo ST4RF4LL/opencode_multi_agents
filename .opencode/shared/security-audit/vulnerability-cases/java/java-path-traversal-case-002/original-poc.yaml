@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - application accepts ZIP upload or import and extracts to disk
+  - vulnerable ArchiveExtractService path is used
+  - authorized lab environment with isolated extract and marker directories
+request_context:
+  endpoint: /api/import/zip
+  parameter: archive file body
+observed_result:
+  - entry name with ../ writes lab marker outside extract root
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - lab_only_no_overwrite_of_system_or_app_binaries

@@ -1,0 +1,49 @@
+not_vulnerability:
+  - id: server-scoped-me-endpoint
+    pattern: endpoint uses only SecurityContext user id; no client foreign object id
+    reason: no attacker-controlled object reference
+
+  - id: find-by-id-and-user-id
+    pattern: findByIdAndUserId(id, currentUserId) with currentUserId from principal
+    reason: query enforces ownership
+
+  - id: postauthorize-owner
+    pattern: "@PostAuthorize binds returnObject owner to principal"
+    reason: object-level expression enforced
+
+  - id: intentional-public-catalog
+    pattern: public product/catalog listing by id with no sensitive ownership
+    reason: design may allow unscoped read
+
+  - id: test-only-repository
+    pattern: findById only referenced from tests
+    reason: not production reachable
+
+  - id: auth-bypass-misclass
+    pattern: login/session forge without object id
+    reason: separate authentication issue class
+
+needs_deeper_review:
+  - id: findbyid-return
+    pattern: repository.findById(pathId) returned to client
+    reason: horizontal-idor candidate
+
+  - id: deletebyid-no-owner
+    pattern: deleteById(pathId) without ownership
+    reason: missing-ownership-on-mutation
+
+  - id: client-tenant-param
+    pattern: tenantId from RequestParam/Body used in filter
+    reason: tenant-id-from-client
+
+  - id: authenticated-only
+    pattern: "@PreAuthorize(\"isAuthenticated()\")" then findById
+    reason: auth ≠ object authz
+
+  - id: sequential-id
+    pattern: Long path id with no ownership
+    reason: predictable-id-enumeration raises severity
+
+  - id: wrapper-service
+    pattern: orderService.get(id) wrapping findById
+    reason: expand to repository and check ownership in all layers

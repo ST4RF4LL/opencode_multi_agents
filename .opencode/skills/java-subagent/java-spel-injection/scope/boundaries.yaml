@@ -1,0 +1,26 @@
+in_scope:
+  - spel_expression_parser_parse_expression
+  - expression_get_value_set_value
+  - expression_parser_interface_implementations
+  - standard_evaluation_context_with_unsafe_root_or_variables
+  - simple_evaluation_context_misconfiguration_if_custom_accessors_expand_power
+  - dynamic_value_annotation_or_placeholder_expression_influenced_by_external_data
+  - template_parser_context_embedding_user_data
+  - spring_security_has_permission_spel_when_expression_text_is_dynamic
+  - optional_spring_cache_and_integration_spel_when_expression_is_user_influenced
+
+out_of_scope:
+  - sql_injection
+  - freemarker_velocity_thymeleaf_full_ssti_engines
+  - ognl_mvel_groovy_javascript_scriptengine
+  - pure_java_reflection_without_spel
+  - compile_time_constant_spel_in_annotations_with_no_external_influence
+  - pure_authorization_bugs_where_expression_text_is_constant
+
+boundary_notes:
+  - OGNL / MVEL / Groovy ScriptEngine belong to future java-expression-injection or separate skills
+  - FreeMarker / Velocity SSTI are out of scope; focus SpEL / Spring EL
+  - Thymeleaf preprocessing __${}__ is adjacent template EL — note as boundary, not primary sink family
+  - Spring Security hasPermission SpEL with constant expression text is often FP; require dynamic expression text
+  - SimpleEvaluationContext is a strong control signal but verify no dangerous custom MethodResolver/PropertyAccessor
+  - dangerous API hit alone is not a vulnerability

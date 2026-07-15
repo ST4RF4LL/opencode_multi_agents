@@ -1,0 +1,80 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+    notes: >
+      High-signal param names: url, returnUrl, return_url, next, continue,
+      redirect, redirectUrl, callback, goto, dest, target, rurl.
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+    notes: >
+      Referer is sometimes used as post-login return target and can be attacker-set.
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+      - ".*HttpServletRequest.*getRequestURL.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields such as returnUrl/redirectUrl require field-level taint tracking
+
+  - id: spring-model-attribute
+    framework: spring-mvc
+    method_full_name:
+      - ".*ModelAndView\\.<init>.*"
+      - ".*Model\\.addAttribute.*"
+    controlled_value: construction_or_attribute_value
+    confidence: low
+    notes: intermediate; only when attribute later used as redirect target
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: async/second-order entry for stored callback or return URLs
+
+  - id: config-or-db-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*ResultSet.*getString.*"
+      - ".*Document\\.get.*"
+    controlled_value: return
+    confidence: low
+    notes: only when previously stored attacker redirect URL is reused for 3xx response

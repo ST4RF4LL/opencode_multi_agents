@@ -1,0 +1,25 @@
+id: case-004
+vulnerability_type: unsafe-deserialization
+subtype: jackson-default-typing
+source:
+  type: request-body
+  expression: "@RequestBody String json"
+sink:
+  api: ObjectMapper.readValue
+  sensitive_argument: 1
+propagation:
+  - PolyController.read
+  - MapperConfig (enableDefaultTyping)
+root_cause:
+  - enableDefaultTyping_or_activateDefaultTyping
+  - untrusted_JSON_to_Object_or_polymorphic_root
+  - no_PolymorphicTypeValidator_allowlist
+prerequisites:
+  - reachable_http_endpoint
+  - shared_ObjectMapper_with_default_typing
+observed_behavior:
+  - polymorphic_type_id_in_json_selects_implementation_class
+fix:
+  - remove_default_typing
+  - use_closed_DTO_graphs
+  - if_polymorphism_required_use_activateDefaultTyping_with_PTV_allowlist

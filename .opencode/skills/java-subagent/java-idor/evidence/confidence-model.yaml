@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - clear_missing_ownership_or_tenant_control
+      - clear_cross_user_or_cross_tenant_impact
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_missing_object_authz
+      - plausible_impact
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_id_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - mutation_delete_or_update
+    - sequential_ids
+    - sensitive_financial_or_pii
+    - tenant_id_from_client
+    - confirmed_cross_user_read_or_write
+  decrease:
+    - uncertain_ownership_model
+    - possibly_public_resource
+    - partial_query_filter_unclear
+    - only_same_tenant_admin_ambiguity

@@ -1,0 +1,25 @@
+id: spring-integration-spel
+name: Spring Integration SpEL (optional)
+detection:
+  imports:
+    - org.springframework.integration.expression
+    - org.springframework.integration.handler.ExpressionEvaluatingMessageProcessor
+    - org.springframework.integration.config.FilterFactoryBean
+  classes:
+    - ExpressionEvaluatingMessageProcessor
+    - ExpressionEvaluatingSelector
+    - ExpressionEvaluatingRouter
+  config_hints:
+    - expression=
+    - expression-string
+    - spel
+sinks:
+  - ExpressionEvaluating* processors with expression from external input
+  - XML/Java DSL filter/router/transformer expression attributes set dynamically
+strong_controls:
+  - constant expressions only
+  - allowlisted expression map
+  - restricted EvaluationContext (SimpleEvaluationContext) for custom evaluators
+notes:
+  - Static integration flow SpEL is typically constant and out of scope
+  - Dynamic rules engines feeding SpEL strings are high risk

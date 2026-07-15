@@ -1,0 +1,35 @@
+id: spring-security
+name: Spring Security subject context and object-level authorization
+detection:
+  imports:
+    - org.springframework.security.core.context.SecurityContextHolder
+    - org.springframework.security.access.prepost.PreAuthorize
+    - org.springframework.security.access.prepost.PostAuthorize
+    - org.springframework.security.access.prepost.PreFilter
+    - org.springframework.security.access.prepost.PostFilter
+  classes:
+    - SecurityContextHolder
+    - Authentication
+    - PermissionEvaluator
+  annotations:
+    - PreAuthorize
+    - PostAuthorize
+    - Secured
+    - RolesAllowed
+trusted_subject_sources:
+  - SecurityContextHolder.getContext().getAuthentication()
+  - Authentication.getPrincipal() / getName()
+  - custom UserDetails implementing getId()
+object_level_controls:
+  - "@PreAuthorize(\"@authz.canAccessOrder(#id)\")"
+  - "@PostAuthorize(\"returnObject.ownerId == principal.id\")"
+  - PermissionEvaluator.hasPermission(auth, targetId, type, permission)
+  - ACL / Spring Security AuthorizationManager for methods
+insufficient_alone:
+  - isAuthenticated()
+  - hasRole('USER') without object binding
+  - http.authorizeHttpRequests authenticated only
+notes:
+  - Method security must bind to object id or returned entity
+  - Global role checks address vertical function access, not horizontal object access
+  - Compare client object id against principal-derived owner/tenant

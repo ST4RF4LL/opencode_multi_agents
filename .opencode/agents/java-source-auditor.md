@@ -61,9 +61,21 @@ When attack surface or sink greps hit a specific weakness, **progressive-load** 
 | LDAP filter/DN | `java-ldap-injection` | D1 |
 | XPath | `java-xpath-injection` | D1 |
 | Runtime.exec / ProcessBuilder | `java-command-injection` | D1 |
+| SpEL / Expression.getValue | `java-spel-injection` | D1 |
 | XSS / unescaped templates | `java-xss` | D1 |
-| Log forging / CRLF | `java-log-injection` | D8 |
+| XXE / insecure XML parsers | `java-xxe` | D1 |
+| JWT alg=none / missing verify | `java-jwt-misuse` | D2 |
+| CSRF / csrf().disable | `java-csrf` | D2 |
+| IDOR / BOLA / findById ownership | `java-idor` | D3 |
+| ObjectInputStream / Fastjson / Jackson typing | `java-deserialization` | D4 |
+| Path traversal / Zip Slip | `java-path-traversal` | D5 |
+| Unrestricted upload | `java-file-upload` | D5 |
+| SSRF / RestTemplate / WebClient URL | `java-ssrf` | D6 |
+| Open redirect / Location / redirect: | `java-open-redirect` | D6 |
 | Weak crypto / ECB / static IV | `java-weak-cryptography` | D7 |
+| Hardcoded secrets / keys in source-config | `java-hardcoded-secrets` | D8 |
+| Log forging / CRLF | `java-log-injection` | D8 |
+| Mass assignment / over-posting | `java-mass-assignment` | D9 |
 
 Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`, `cases/`, `validation/`, `evidence/`. Published Joern rules: `.opencode/shared/security-audit/joern-rules/java/<skill>-*.sc` via `joern_run_rule`. Casebase: `.opencode/shared/security-audit/vulnerability-cases/java/`. Skills auto-map via `collection.json`.
 
@@ -72,7 +84,7 @@ Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`,
 ### D1: Injection
 - **SQL**: Load `java-sql-injection`. MyBatis `${}` (dangerous) vs `#{}` (safe); JPA native vs JPQL; JDBC `Statement` vs `PreparedStatement`; `ORDER BY`/`LIMIT` need whitelist
 - **NoSQL**: Load `java-nosql-injection`. Operator injection (`$ne`/`$where`), `Document.parse` concat, raw filter maps
-- **SpEL**: `SpelExpressionParser.parseExpression()` with user input; `@Value("#{...}")` with external values
+- **SpEL**: Load `java-spel-injection`. `SpelExpressionParser.parseExpression()` with user input; `@Value("#{...}")` with external values; prefer `SimpleEvaluationContext`
 - **LDAP**: Load `java-ldap-injection`. `DirContext`/`LdapContext` filter/DN concatenation
 - **XPath**: Load `java-xpath-injection`. `XPath.compile`/`evaluate` string concat
 - **Command**: Load `java-command-injection`. `Runtime.exec()`, `ProcessBuilder` shell wrappers (`/bin/sh -c`)
@@ -80,20 +92,21 @@ Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`,
 - **Secondary injection**: Input→storage→retrieve→concatenate without parameterization
 
 ### D2: Authentication
-- **JWT**: `JWT.decode()` without `JWTVerifier.verify()` = **Critical (CVSS 9.1)**; check `algorithms` parameter — `"none"` = bypass
-- **Hardcoded secrets**: JWT signing keys, AES keys in `application.yml` / `.properties` / source code
+- **JWT**: Load `java-jwt-misuse`. `JWT.decode()` without `JWTVerifier.verify()` = **Critical (CVSS 9.1)**; check `algorithms` parameter — `"none"` = bypass; algorithm confusion RS→HS
+- **Hardcoded secrets**: Load `java-hardcoded-secrets`. JWT signing keys, AES keys, DB passwords in `application.yml` / `.properties` / source code
 - **Filter chain**: Auth filter placed before business logic? OPTIONS preflight exemption scope?
 - **Remember-me**: Shiro < 1.2.5 default AES key (kPH+bIxk5D2deZiIxcaaaA==); Spring Security persistent token
 - **Session**: Token generation randomness (`SecureRandom` vs `Random`); session fixation after login
 
 ### D3: Authorization
-- **IDOR**: `findById(id)` without user ownership check → compare with `findById(id, userId)` pattern
+- **IDOR**: Load `java-idor`. `findById(id)` without user ownership check → compare with `findById(id, userId)` pattern
 - **CRUD consistency**: Same resource — `create`/`read` have `@PreAuthorize` but `delete`/`update`/`export` do not
 - **Vertical privilege**: Admin endpoints with only frontend hiding, no `@RolesAllowed`/`@PreAuthorize`
 - **Batch operations**: Loop over IDs without per-item ownership verification
 - **Path bypass**: `/api/admin` vs `/api/admin/` vs `/api//admin` normalization gaps
 
 ### D4: Deserialization
+- Load `java-deserialization` for deep progressive analysis (models/rules/cases).
 - **Java serialization**: `ObjectInputStream.readObject()` from untrusted source + classpath gadget (commons-collections, commons-beanutils, c3p0)
 - **Fastjson**: `JSON.parse()`/`JSON.parseObject()` with `@type` autoType (versions < 1.2.83 have known bypasses)
 - **Jackson**: `enableDefaultTyping()` + polymorphic deserialization; `ObjectMapper.enableDefaultTyping()`
@@ -102,12 +115,13 @@ Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`,
 - **Hessian/Kryo**: Unsafe deserialization from external protocols
 
 ### D5: File Operations
-- **Upload**: Extension validation (only check last `.`? `file.jsp.jpg` bypass); MIME type; uploaded to web-accessible path?
-- **Path traversal**: `../` filtering (`....//` → after filter → `../`); `getOriginalFilename()` not sanitized
+- **Upload**: Load `java-file-upload`. Extension validation (only check last `.`? `file.jsp.jpg` bypass); MIME type; uploaded to web-accessible path?
+- **Path traversal**: Load `java-path-traversal`. `../` filtering (`....//` → after filter → `../`); `getOriginalFilename()` not sanitized; Zip Slip
 - **Zip Slip**: `ZipEntry.getName()` contains `../`; `extractall` without path validation
 - **Symlink**: `Files.isSymbolicLink()` checking; following symlinks to sensitive paths
 
-### D6: SSRF
+### D6: SSRF / Redirect
+- Load `java-ssrf` for destination-controlled HTTP clients; load `java-open-redirect` for browser redirects (`sendRedirect` / `Location` / `redirect:`).
 - **HTTP clients**: `RestTemplate`, `HttpURLConnection`, `OkHttp`, `WebClient` with user-controlled URLs
 - **URL validation bypass**: String prefix match (`http://evil.com@allowed.com`); IP filter missing `169.254.169.254` (cloud metadata), IPv6 `::1`, `0.0.0.0`
 - **Protocol restriction**: Missing `file://`, `gopher://`, `dict://` blocking
@@ -132,11 +146,12 @@ Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`,
 - **CORS**: `Access-Control-Allow-Origin: *` + `Allow-Credentials: true`
 - **Error handling**: Full stack traces in HTTP responses; `server.error.include-stacktrace=always`
 - **Debug mode**: `spring.jpa.show-sql=true`, `debug=true`, `logging.level.root=DEBUG` in production
-- **Plaintext secrets**: Passwords/API keys in `application.yml` / `application.properties`
+- **Plaintext secrets**: Load `java-hardcoded-secrets`. Passwords/API keys in `application.yml` / `application.properties`
 
 ### D9: Business Logic
-- **IDOR** (control-driven): Every `findById()` — check user/tenant ownership; CRUD endpoint permission consistency
-- **Mass Assignment**: `@ModelAttribute`/`@RequestBody` binding to entity with `role`/`isAdmin`/`status` fields without DTO isolation
+- **IDOR** (control-driven): Load `java-idor`. Every `findById()` — check user/tenant ownership; CRUD endpoint permission consistency
+- **Mass Assignment**: Load `java-mass-assignment`. `@ModelAttribute`/`@RequestBody` binding to entity with `role`/`isAdmin`/`status` fields without DTO isolation
+- **CSRF**: Load `java-csrf` when cookie-session state-changing endpoints lack tokens/SameSite/custom headers
 - **Race conditions**: Balance deduction without `@Lock`/`@Version`/`synchronized`; coupon/stock in concurrent requests
 - **State machine**: Order/workflow status transitions — verify pre-state before each transition; no step skipping
 - **Export/batch**: Export scope limited to current user/tenant? Parameter tampering to export all data?

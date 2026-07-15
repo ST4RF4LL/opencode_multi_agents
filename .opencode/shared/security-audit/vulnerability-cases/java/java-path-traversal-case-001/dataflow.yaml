@@ -1,0 +1,10 @@
+source:
+  method: HttpServletRequest.getParameter
+  parameter: filename
+path:
+  - FileDownloadService.openForDownload
+  - new File(baseDir, filename)
+sink:
+  method: FileInputStream.<init>
+  argument: 1
+influence: relative_path_segment_and_escape

@@ -1,0 +1,64 @@
+propagators:
+  - pattern: byte-array-to-stream
+    examples:
+      - new ByteArrayInputStream(bytes) -> new ObjectInputStream(bais)
+      - new ByteArrayInputStream(Base64.getDecoder().decode(s))
+      - IOUtils.toByteArray(request.getInputStream())
+
+  - pattern: base64-decode
+    examples:
+      - Base64.getDecoder().decode(param) -> ObjectInputStream
+      - DatatypeConverter.parseBase64Binary(cookie)
+
+  - pattern: string-to-parser
+    examples:
+      - JSON.parseObject(body)
+      - new Yaml().load(yamlString)
+      - xstream.fromXML(xmlString)
+      - objectMapper.readValue(json, Object.class)
+
+  - pattern: getter-setter
+    examples:
+      - setPayload -> getPayload
+      - setSerializedData -> getSerializedData
+      - setBodyBytes -> getBodyBytes
+
+  - pattern: builder
+    examples:
+      - Message.builder().body(bytes).build()
+      - DeserializeRequest.withData(x).build()
+
+  - pattern: collection
+    examples:
+      - map.put("data", input)
+      - map.get("data")
+      - list.add(bytes)
+
+  - pattern: dto-field
+    examples:
+      - ImportRequest.blob
+      - CacheEntry.serializedValue
+      - RpcEnvelope.payload
+
+  - pattern: wrapper-method
+    examples:
+      - SerializeUtil.deserialize(bytes)
+      - SerializationUtils.deserialize(data)
+      - Codec.decode(payload)
+      - RedisSerializer.deserialize(bytes)
+
+  - pattern: redis-mq-bridge
+    examples:
+      - redis.get(key) -> ObjectInputStream
+      - consumerRecord.value() -> Kryo.readClassAndObject
+      - jmsMessage.getObject()
+
+  - pattern: second-order-store
+    examples:
+      - save(blob) -> later load() -> readObject
+      - cache.put(key, serialized) -> cache.get -> deserialize
+
+  - pattern: multipart-to-bytes
+    examples:
+      - MultipartFile.getBytes() -> ObjectInputStream
+      - Part.getInputStream() -> XMLDecoder

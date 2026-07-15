@@ -1,0 +1,70 @@
+l0_stack_detection:
+  - pattern: "io.jsonwebtoken|Jwts\\.parser|parseClaimsJws|jjwt"
+    implies: jjwt
+  - pattern: "com.nimbusds.jwt|com.nimbusds.jose|SignedJWT|nimbus-jose"
+    implies: nimbus-jose
+  - pattern: "com.auth0.jwt|Algorithm\\.HMAC|JWT\\.decode|JWT\\.require"
+    implies: auth0-java-jwt
+  - pattern: "oauth2ResourceServer|NimbusJwtDecoder|JwtDecoders|spring.security.oauth2.resourceserver.jwt"
+    implies: spring-oauth2-resource-server
+
+l1_sink_keywords:
+  - "Jwts.parser"
+  - "Jwts.parserBuilder"
+  - "parseClaimsJws"
+  - "parseClaimsJwt"
+  - "parseSignedClaims"
+  - "parseUnsecuredClaims"
+  - "setSigningKey"
+  - "verifyWith"
+  - "SignedJWT.parse"
+  - "JWTParser.parse"
+  - "MACVerifier"
+  - "RSASSAVerifier"
+  - "DefaultJWTProcessor"
+  - "JWT.decode"
+  - "JWT.require"
+  - "Algorithm.HMAC256"
+  - "Algorithm.none"
+  - "JWTVerifier"
+  - "NimbusJwtDecoder"
+  - "JwtDecoder"
+  - "JwtDecoders"
+
+weak_jwt_literals:
+  - "none"
+  - "Algorithm.none"
+  - "SignatureAlgorithm.NONE"
+  - "parseClaimsJwt"
+  - "parseUnsecuredClaims"
+  - "JWT.decode"
+  - '"secret"'
+  - '"Secret"'
+  - '"changeme"'
+  - '"password"'
+  - '"jwt-secret"'
+  - "HS256"
+  - "HS384"
+  - "HS512"
+
+high_risk_hints:
+  - "JWT\\.decode\\("
+  - "parseClaimsJwt"
+  - "parseUnsecuredClaims"
+  - "Algorithm\\.none"
+  - "SignatureAlgorithm\\.NONE"
+  - 'setSigningKey\\(\\s*"'
+  - 'HMAC256\\(\\s*"'
+  - 'hmacShaKeyFor\\(\\s*"'
+  - "getPublicKey\\(\\)"
+  - "requireExpirationDate|withExpiresAt|setAllowedClockSkew"
+
+rg_commands:
+  stack: |
+    rg -n "io\\.jsonwebtoken|com\\.nimbusds\\.(jwt|jose)|com\\.auth0\\.jwt|NimbusJwtDecoder|oauth2ResourceServer" --glob '*.{java,yml,yaml,xml,properties}'
+  sinks: |
+    rg -n "Jwts\\.parser|parseClaimsJws|parseClaimsJwt|parseSignedClaims|parseUnsecuredClaims|SignedJWT\\.parse|JWT\\.decode|JWT\\.require|NimbusJwtDecoder|JwtDecoder\\.decode|setSigningKey|verifyWith|Algorithm\\.(HMAC|none|RSA)" --glob '*.java'
+  weak_patterns: |
+    rg -n 'JWT\\.decode|parseClaimsJwt|parseUnsecuredClaims|Algorithm\\.none|SignatureAlgorithm\\.NONE|HMAC256\\(\\s*"|setSigningKey\\(\\s*"|"(secret|changeme|password|jwt-secret)"' --glob '*.java'
+  claims: |
+    rg -n "getExpiration|getAudience|getIssuer|withIssuer|withAudience|requireExpiration|JwtClaimValidator|DefaultJWTClaimsVerifier" --glob '*.java'

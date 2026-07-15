@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - endpoint accepts multipart file parameter
+  - application uses vulnerable StorageService.storeAny
+  - lab environment only
+request_context:
+  endpoint: /api/upload
+  parameter: file
+  notes: >
+    Conceptual proof only - upload empty/benign file with FAKE marker body and
+    a conceptual dangerous extension (e.g. marker.jsp) to show acceptance.
+    Do NOT use real webshell payloads.
+observed_result:
+  - server stores file under webapp upload dir with client-chosen extension
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - never_use_real_webshell_payloads

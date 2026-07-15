@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - endpoint accepts expression parameter
+  - vulnerable path uses StandardEvaluationContext
+  - fixed path uses SimpleEvaluationContext plus allowlist
+request_context:
+  endpoint: /api/context-eval
+  parameter: expression
+observed_result:
+  - under StandardEvaluationContext, attacker-controlled expression text is evaluated with full capability surface
+  - under SimpleEvaluationContext with allowlisted constant expressions, arbitrary expression text is rejected
+  - abstract_impact: capability difference demonstrates sandbox vs full evaluation context
+payload_policy:
+  - no_weaponized_rce_expressions
+  - use_harmless_lab_markers_only_when_revalidating
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

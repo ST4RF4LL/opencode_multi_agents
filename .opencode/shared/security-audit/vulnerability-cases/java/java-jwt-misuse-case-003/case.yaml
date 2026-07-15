@@ -1,0 +1,23 @@
+id: case-003
+vulnerability_type: jwt-misuse
+subtype: claims-not-validated
+source:
+  type: jwt-token-header
+  expression: 'Bearer token via JwtDecoder'
+sink:
+  api: Jwt.getClaim / authentication principal
+  sensitive_argument: claims_without_exp_aud
+propagation:
+  - SecurityConfig.jwtDecoder
+  - ResourceController
+root_cause:
+  - signature_verified_but_exp_not_required
+  - no_audience_or_issuer_binding
+prerequisites:
+  - multi_client_or_long_lived_tokens
+observed_behavior:
+  - expired_or_cross_audience_tokens_accepted
+fix:
+  - require_exp_via_decoder_validators
+  - JwtClaimValidator_for_audience
+  - issuer_uri_or_explicit_issuer_validator

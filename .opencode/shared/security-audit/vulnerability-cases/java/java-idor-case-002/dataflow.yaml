@@ -1,0 +1,13 @@
+source:
+  method: UserController.deleteUser
+  parameter: id
+  annotation: PathVariable
+path:
+  - UserController.deleteUser
+  - UserRepository.deleteById
+sink:
+  method: UserRepository.deleteById
+  argument: 1
+influence: object_id_for_delete
+ownership_check: none
+role_check: none

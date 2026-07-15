@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: spel-injection
+subtype: spel-expression-parser-parse
+source:
+  type: request-parameter
+  expression: "@RequestParam String expression"
+sink:
+  api: SpelExpressionParser.parseExpression / Expression.getValue
+  sensitive_argument: 1
+propagation:
+  - SpelEvalController.evaluate
+  - SpelEvalService.run
+root_cause:
+  - user_expression_passed_to_parseExpression
+  - StandardEvaluationContext_with_full_capability
+  - no_simple_evaluation_context_or_allowlist
+prerequisites:
+  - reachable_http_endpoint
+  - spring-expression_on_classpath
+observed_behavior:
+  - attacker_controlled_expression_text_is_parsed_and_evaluated
+fix:
+  - use_SimpleEvaluationContext_with_restricted_accessors
+  - or_map_user_input_to_constant_expressions_only
+  - never_parse_raw_user_strings_as_SpEL

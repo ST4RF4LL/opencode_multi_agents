@@ -1,0 +1,150 @@
+rules:
+  - id: java-open-redirect-sendredirect-user
+    message: sendRedirect called with possible user-controlled URL
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $RESP.sendRedirect($URL)
+          - pattern: $RESP.sendRedirect($URL, ...)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $URL = $REQ.getHeader(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $U $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $T $M(..., String $URL, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-601
+      category: open-redirect
+      confidence: high
+
+  - id: java-open-redirect-location-header-user
+    message: Location header set with possible user-controlled value
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $RESP.setHeader("Location", $URL)
+          - pattern: $RESP.setHeader("location", $URL)
+          - pattern: $RESP.addHeader("Location", $URL)
+          - pattern: $RESP.addHeader("location", $URL)
+          - pattern: $HEADERS.setLocation($URL)
+          - pattern: $HEADERS.set("Location", $URL)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              $URL = $BODY.getReturnUrl();
+              ...
+    metadata:
+      cwe: CWE-601
+      category: open-redirect
+      subtype: header-location-injection
+      confidence: high
+
+  - id: java-open-redirect-spring-redirect-prefix
+    message: Spring redirect: prefix concatenated with possible user input
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              return "redirect:" + $URL;
+          - pattern: |
+              return "redirect:" + $REQ.getParameter(...);
+          - pattern: |
+              return String.format("redirect:%s", $URL);
+          - pattern: |
+              new ModelAndView("redirect:" + $URL)
+          - pattern: |
+              $MAV.setViewName("redirect:" + $URL);
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $T $M(..., String $URL, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-601
+      category: open-redirect
+      subtype: spring-redirect-prefix
+      confidence: high
+
+  - id: java-open-redirect-redirectview-user
+    message: RedirectView constructed with possible user-controlled URL
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              new RedirectView($URL)
+          - pattern: |
+              new RedirectView($URL, ...)
+          - pattern: |
+              $RV.setUrl($URL)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $T $M(..., String $URL, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-601
+      category: open-redirect
+      confidence: high
+
+  - id: java-open-redirect-responseentity-location
+    message: ResponseEntity 3xx location with possible user-controlled URI
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              ResponseEntity.status($STATUS).location($URL)
+          - pattern: |
+              ResponseEntity.status($STATUS).header("Location", $URL)
+          - pattern: |
+              $B.location($URL)
+          - pattern: |
+              $B.header("Location", $URL)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              $URL = URI.create($PARAM);
+              ...
+    metadata:
+      cwe: CWE-601
+      category: open-redirect
+      confidence: medium

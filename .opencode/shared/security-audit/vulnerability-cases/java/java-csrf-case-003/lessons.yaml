@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Safe HTTP methods must not mutate state; GET delete is classic CSRF
+  - SameSite=Lax does not stop top-level GET navigations with cookies
+  - Fix by using POST/DELETE plus CSRF token or equivalent binding
+non_transferable_details:
+  - original item id space
+  - original path prefix
+  - original ownership rules

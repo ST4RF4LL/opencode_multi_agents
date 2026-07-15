@@ -1,0 +1,55 @@
+positive:
+  P01_ModelAttributeUserAdmin.java:
+    expect: candidate_or_finding
+    subtype: spring-mvc-entity-binding
+    sensitive_fields: [isAdmin, role]
+    sink: repository.save
+  P02_RequestBodyAccountBalance.java:
+    expect: candidate_or_finding
+    subtype: jackson-requestbody-sensitive-fields
+    sensitive_fields: [balance, role]
+    sink: repository.save
+  P03_BeanUtilsCopyEntity.java:
+    expect: candidate_or_finding
+    subtype: entity-as-dto
+    transfer: BeanUtils.copyProperties
+    sensitive_fields: [isAdmin, role]
+  P04_ReaderForUpdatingPatch.java:
+    expect: candidate_or_finding
+    subtype: patch-without-allowlist
+    sink: readerForUpdating
+  P05_NestedRolesBinding.java:
+    expect: candidate_or_finding
+    subtype: nested-binding-privilege
+    sensitive_fields: [roles]
+
+negative:
+  N01_DedicatedDtoExplicitMap.java:
+    expect: rejected
+    reason: dedicated_dto_explicit_field_mapping
+  N02_JsonIgnoreSensitiveFields.java:
+    expect: rejected
+    reason: json_read_only_and_jsonignore_on_sensitive_setters
+  N03_InitBinderAllowlist.java:
+    expect: rejected
+    reason: initbinder_allowed_fields_complete
+  N04_BeanUtilsWithIgnoreList.java:
+    expect: rejected
+    reason: beanutils_ignore_list_covers_sensitive_fields
+  N05_NoSensitiveFieldsDto.java:
+    expect: rejected
+    reason: request_type_has_no_sensitive_fields
+
+regression:
+  R01_ModelAttributeIsAdmin.java:
+    expect: sink_candidate
+    subtype: spring-mvc-entity-binding
+    must_not_regress: false_negative_on_modelattribute_isadmin
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

@@ -1,0 +1,11 @@
+source:
+  kind: hmac_secret
+  expression: '"secret"'
+path:
+  - JwtService.verify / issue
+  - Algorithm.HMAC256(SECRET)
+sink:
+  method: Algorithm.HMAC256 / JWTVerifier.verify
+  influence: token_forgery_if_secret_known
+related_issues:
+  - claims_validation_may_also_be_missing

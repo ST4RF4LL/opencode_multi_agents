@@ -1,0 +1,25 @@
+id: java-spel-injection
+name: SpEL / Spring Expression Language Injection
+language: java
+dimension: D1
+cwe:
+  - CWE-917
+  - CWE-94
+objective:
+  detect: >
+    Attacker-controlled data reaching SpEL parse or evaluate operations
+    (or closely related Spring EL evaluation) such that expression text,
+    evaluation root, or evaluation context capabilities can be influenced
+    without SimpleEvaluationContext sandboxing or equivalent restrictions.
+core_condition:
+  - external_input_exists
+  - expression_string_or_evaluation_context_is_influenced
+  - spel_parse_or_evaluate_is_reachable
+  - effective_sandbox_or_allowlist_is_missing
+not_in_scope:
+  - sql_injection
+  - os_command_injection
+  - freemarker_velocity_ssti
+  - ognl_mvel_groovy_script_engine
+  - pure_authorization_flaws_without_expression_control
+  - compile_time_constant_spel_only

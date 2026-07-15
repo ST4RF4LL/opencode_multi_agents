@@ -1,0 +1,78 @@
+id: java-idor
+name: Java Insecure Direct Object Reference / Broken Object Level Authorization
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-639
+  - CWE-862
+  - CWE-284
+owasp:
+  - A01:2021-Broken Access Control
+dimension: D1
+maturity: 3
+description: >
+  Detect attacker-controlled object identifiers used to load, update, or delete
+  resources without effective ownership, tenant, or object-level authorization checks.
+  Authentication present does not imply object-level authorization.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-idor-sinks.yaml
+      - java-idor-patterns.yaml
+    codeql:
+      - java-idor.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - servlet
+  - spring-mvc
+  - spring-data
+  - spring-security

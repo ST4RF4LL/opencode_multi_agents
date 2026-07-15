@@ -1,0 +1,114 @@
+sinks:
+  - id: multipart-transfer-to
+    framework: spring-multipart
+    method_full_name:
+      - ".*MultipartFile\\.transferTo.*"
+      - ".*CommonsMultipartFile\\.transferTo.*"
+    sensitive_arguments: [1]
+    semantics: upload-store
+    confidence: high
+    notes: stores multipart body to File/Path; check destination and name policy
+
+  - id: servlet-part-write
+    framework: servlet-multipart
+    method_full_name:
+      - ".*Part\\.write.*"
+    sensitive_arguments: [1]
+    semantics: upload-store
+    confidence: high
+
+  - id: commons-fileitem-write
+    framework: commons-fileupload
+    method_full_name:
+      - ".*FileItem\\.write.*"
+      - ".*DiskFileItem\\.write.*"
+    sensitive_arguments: [1]
+    semantics: upload-store
+    confidence: high
+
+  - id: files-copy-upload
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Files\\.copy.*"
+      - ".*java\\.nio\\.file\\.Files\\.write.*"
+      - ".*java\\.nio\\.file\\.Files\\.writeString.*"
+      - ".*java\\.nio\\.file\\.Files\\.newOutputStream.*"
+    sensitive_arguments: [1, 2]
+    semantics: upload-store
+    confidence: high
+    notes: common after multipart.getInputStream(); destination path is sensitive
+
+  - id: file-output-stream-upload
+    framework: jdk-file
+    method_full_name:
+      - ".*java\\.io\\.FileOutputStream\\.<init>.*"
+      - ".*java\\.io\\.FileWriter\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: upload-store
+    confidence: high
+
+  - id: file-construct-upload-path
+    framework: jdk-file
+    method_full_name:
+      - ".*java\\.io\\.File\\.<init>.*"
+    sensitive_arguments: []
+    semantics: path-construction
+    confidence: medium
+    notes: new File(uploadDir, originalFilename) is construction; escalate when used by store
+
+  - id: path-resolve-upload
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Path\\.resolve.*"
+      - ".*java\\.nio\\.file\\.Paths\\.get.*"
+    sensitive_arguments: []
+    semantics: path-construction
+    confidence: medium
+
+  - id: webapp-resource-store
+    framework: servlet
+    method_full_name:
+      - ".*ServletContext\\.getRealPath.*"
+      - ".*ServletContext\\.getResource.*"
+    sensitive_arguments: [1]
+    semantics: webroot-path-resolution
+    confidence: high
+    notes: getRealPath("/uploads") + write is executable-in-webroot signal
+
+  - id: spring-resource-handler-publish
+    framework: spring-multipart
+    method_full_name:
+      - ".*ResourceHandlerRegistry\\.addResourceHandler.*"
+      - ".*addResourceLocations.*"
+    sensitive_arguments: []
+    semantics: web-publish-config
+    confidence: medium
+    notes: config that maps upload dir to URL path; contextual for web-accessible storage
+
+  - id: custom-upload-service
+    framework: custom
+    method_full_name:
+      - ".*UploadService\\..*"
+      - ".*FileUploadService\\..*"
+      - ".*StorageService\\.(store|save|upload).*"
+      - ".*FileStorage\\..*"
+      - ".*OssService\\.upload.*"
+      - ".*MinioClient\\.putObject.*"
+      - ".*AmazonS3\\.putObject.*"
+    sensitive_arguments: []
+    semantics: possible-upload-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real store + policy checks
+
+adjacent_not_sink:
+  - id: content-type-getter
+    method_full_name:
+      - ".*getContentType.*"
+    semantics: source-or-control-input
+    notes: getContentType is attacker-controlled input, not a sink
+  - id: filename-utils-get-extension
+    method_full_name:
+      - ".*FilenameUtils\\.getExtension.*"
+      - ".*FilenameUtils\\.getName.*"
+    semantics: partial-policy-helper
+    notes: extension extract alone is not validation

@@ -1,0 +1,39 @@
+# Prefer static semantics. Dynamic validation must be abstract and authorized only.
+steps:
+  - identify_jwt_library_and_subtype
+  - determine_token_entry_and_auth_usage
+  - determine_parse_vs_verify_path
+  - determine_key_and_algorithm_origin
+  - determine_claim_validation_coverage
+  - inspect_compensating_controls
+  - classify_static_semantics_strength
+  - if_needed_generate_target_specific_abstract_check
+  - preserve_evidence
+
+validation_modes:
+  static_preferred:
+    when:
+      - decode_without_verify_clear
+      - alg_none_or_unsigned_parse_clear
+      - hardcoded_hmac_secret_clear
+      - missing_exp_aud_iss_clear
+    action: satisfy Evidence Contract via complete static semantics
+
+  limited_abstract_dynamic:
+    when:
+      - need_to_confirm_decoder_rejects_unsigned_in_staging
+      - need_to_confirm_exp_enforced
+    action: authorized non-production environment only; abstract tokens with fake secrets
+
+observable_behaviors:
+  - unsigned_or_alg_none_token_accepted_for_protected_route
+  - expired_token_still_accepted
+  - token_with_wrong_audience_accepted
+  - algorithm_header_influence_on_verifier_selection
+  - config_shows_default_secret
+
+notes:
+  - never_forge_tokens_against_production
+  - never_use_real_customer_secrets
+  - prefer_code_and_config_evidence_over_weaponized_pocs
+  - abstract_pocs_use_fake_secrets_only

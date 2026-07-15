@@ -1,0 +1,77 @@
+id: java-ssrf
+name: Java Server-Side Request Forgery
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-918
+owasp:
+  - A10:2021-SSRF
+dimension: D6
+maturity: 3
+description: >
+  Detect attacker-controlled network destination data reaching server-side
+  HTTP/URL open operations without effective host, protocol, or port allowlisting.
+
+components:
+  scope:
+    - definition.yaml
+    - subtypes.yaml
+    - boundaries.yaml
+  models:
+    - sources.yaml
+    - sinks.yaml
+    - sanitizers.yaml
+    - propagators.yaml
+    - frameworks/
+  rules:
+    joern:
+      - locate-sinks.sc
+      - locate-sources.sc
+      - source-to-sink.sc
+      - trace-callers.sc
+      - detect-validation.sc
+    semgrep:
+      - java-ssrf-sinks.yaml
+      - java-ssrf-patterns.yaml
+    codeql:
+      - java-ssrf.ql
+    grep:
+      - keywords.yaml
+  analysis:
+    - candidate-triage.yaml
+    - control-analysis.yaml
+    - false-positive-patterns.yaml
+    - decision-tree.yaml
+  validation:
+    - playbook.yaml
+    - evidence-signals.yaml
+    - generation-constraints.yaml
+    - safety-boundaries.yaml
+  evidence:
+    - contract.yaml
+    - confidence-model.yaml
+    - finding-schema.yaml
+  cases:
+    - case-001
+    - case-002
+    - case-003
+  tests:
+    - positive/
+    - negative/
+    - regression/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - codeql
+  - llm
+
+frameworks_supported:
+  - servlet
+  - spring-resttemplate
+  - spring-webclient
+  - apache-httpclient
+  - okhttp
+  - jdk-urlconnection

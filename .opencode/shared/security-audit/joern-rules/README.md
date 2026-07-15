@@ -12,4 +12,4 @@ Rules should support defensive static analysis only.
 
 ## Java seed
 
-45 rules promoted from `vuln_skill_builder` deep packs into `java/`, adapted for `joern_run_rule` (`language=java`, `rule_id=<id>` without `.sc`).
+105 rules promoted from `vuln_skill_builder` deep packs into `java/`, adapted for `joern_run_rule` (`language=java`, `rule_id=<id>` without `.sc`).

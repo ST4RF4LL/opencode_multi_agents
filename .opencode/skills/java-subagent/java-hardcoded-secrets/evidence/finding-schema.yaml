@@ -1,0 +1,47 @@
+finding_id: HARDCODED-SECRET-001
+status: finding # finding | candidate | rejected
+vulnerability_type: hardcoded-secrets
+subtype: hardcoded-api-key # hardcoded-password | hardcoded-api-key | private-key-in-repo | db-url-with-password | cloud-access-key | jwt-secret-literal | properties-yml-plaintext
+confidence: high # high | medium | low
+cwe:
+  - CWE-798
+entry:
+  route: "N/A or service path"
+  method: ApiClient.authenticate
+  parameter: null
+source:
+  file: ApiClient.java
+  line: 12
+  expression: 'static final String API_KEY = "AKI***EXAMPLE"'
+  kind: string_literal # string_literal | byte_literal | config_plaintext | pem_resource | jdbc_url
+sink:
+  file: ApiClient.java
+  line: 28
+  expression: headers.put("Authorization", "Bearer " + API_KEY)
+  kind: http-auth-header
+dataflow:
+  - ApiClient.API_KEY constant
+  - ApiClient.authenticate
+controls:
+  observed: []
+  assessment:
+    - plaintext-secret-in-source
+    - missing-secret-manager
+validation:
+  status: static_only # verified | not_attempted | failed | static_only
+  observable: []
+evidence:
+  static:
+    - secret location (redacted)
+    - secret type / subtype
+    - usage binding
+    - reachability / packaging
+  dynamic: []
+security_impact:
+  - credential_exposure
+  # authentication_bypass | data_access | cloud_account_compromise | token_forgery
+limitations: []
+remediation_hint: move secrets to env/Vault/KMS; rotate exposed credentials; remove from git history
+rejection_reason: null
+redaction:
+  secret_value_in_report: redacted_or_truncated

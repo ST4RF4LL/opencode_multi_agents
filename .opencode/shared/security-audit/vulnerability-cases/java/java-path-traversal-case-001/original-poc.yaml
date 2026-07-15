@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - endpoint accepts filename query parameter
+  - application uses vulnerable FileDownloadService path
+  - lab fixture marker file exists outside baseDir for authorized testing only
+request_context:
+  endpoint: /api/download
+  parameter: filename
+observed_result:
+  - crafted filename with ../ escapes download root and returns lab marker content
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - lab_only_path_probes_no_destructive_system_delete

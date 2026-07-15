@@ -1,0 +1,23 @@
+id: case-001
+vulnerability_type: hardcoded-secrets
+subtype: hardcoded-api-key
+source:
+  type: string-literal-secret
+  expression: 'static final String API_KEY = "AKIAIOSFODNN7EXAMPLE"'
+sink:
+  api: Http headers Authorization / x-api-key
+  sensitive_argument: api_key_constant
+propagation:
+  - ApiClient.API_KEY
+  - ApiClient.callRemote
+root_cause:
+  - api_key_embedded_in_source
+  - no_secret_manager_or_env_injection
+prerequisites:
+  - client_code_ships_in_production_artifact
+observed_behavior:
+  - repository_or_bytecode_reveals_usable_api_key
+fix:
+  - load_api_key_from_env_or_secret_manager
+  - rotate_exposed_key
+  - remove_literal_from_git_history

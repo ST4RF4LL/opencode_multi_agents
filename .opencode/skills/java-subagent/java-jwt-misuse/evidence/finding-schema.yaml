@@ -1,0 +1,48 @@
+finding_id: JWT-001
+status: finding # finding | candidate | rejected
+vulnerability_type: jwt-misuse
+subtype: missing-signature-verify # alg-none | missing-signature-verify | weak-hardcoded-hmac-secret | algorithm-confusion-rs-hs | claims-not-validated
+confidence: high # high | medium | low
+cwe:
+  - CWE-347
+entry:
+  route: "POST /api/... or filter chain"
+  method: AuthFilter.doFilter
+  parameter: Authorization
+source:
+  file: AuthFilter.java
+  line: 40
+  expression: 'request.getHeader("Authorization")'
+  kind: jwt_token # jwt_token | hmac_secret | algorithm_config | claim_config
+sink:
+  file: JwtUtil.java
+  line: 55
+  expression: JWT.decode(token) # or parse / decoder
+  kind: auth0-java-jwt
+dataflow:
+  - AuthFilter.doFilter
+  - JwtUtil.parse
+  - SecurityContext set from claims
+controls:
+  observed: []
+  assessment:
+    - missing-signature-verify
+    - claims-trusted-without-integrity
+validation:
+  status: static_only # verified | not_attempted | failed | static_only
+  observable: []
+  note: abstract poc only; no production forgery
+evidence:
+  static:
+    - token entry location
+    - parse/decode without verify
+    - claims used for authz
+    - control analysis
+  dynamic: []
+security_impact:
+  - authenticity
+  - authentication_bypass
+  # integrity | authorization_bypass | token_replay
+limitations: []
+remediation_hint: verify signature with allowlisted algorithm and managed keys; require exp/aud/iss
+rejection_reason: null

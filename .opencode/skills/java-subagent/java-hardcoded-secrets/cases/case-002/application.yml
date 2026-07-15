@@ -1,0 +1,7 @@
+# Vulnerable sample config — password is fake placeholder text only
+spring:
+  datasource:
+    url: jdbc:mysql://db.example.invalid:3306/appdb
+    username: app_user
+    password: CHANGE_ME_NOT_REAL
+    driver-class-name: com.mysql.cj.jdbc.Driver

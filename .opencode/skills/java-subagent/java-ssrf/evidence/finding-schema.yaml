@@ -1,0 +1,44 @@
+finding_id: SSRF-001
+status: finding # finding | candidate | rejected
+vulnerability_type: ssrf
+subtype: full-url-control
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/proxy"
+  method: ProxyController.proxy
+  parameter: url
+source:
+  file: ProxyController.java
+  line: 42
+  expression: request.getParameter("url")
+sink:
+  file: HttpClientUtil.java
+  line: 91
+  expression: restTemplate.exchange(url, ...)
+dataflow:
+  - ProxyController.proxy
+  - ProxyService.fetch
+  - HttpClientUtil.request
+controls:
+  observed:
+    - startsWith("https://trusted.example/")
+  assessment:
+    - weak
+    - string-prefix-check
+    - parsed-host-not-validated
+validation:
+  status: verified # verified | not_attempted | failed
+  observable:
+    - controlled destination received request
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - controlled endpoint log
+limitations: []
+rejection_reason: null

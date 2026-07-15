@@ -1,0 +1,86 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields require field-level taint tracking
+
+  - id: external-config
+    framework: config
+    method_full_name:
+      - ".*Environment\\.getProperty.*"
+      - ".*Environment\\.getRequiredProperty.*"
+      - ".*@Value\\(\"\\$\\{.*\\}\"\\).*"
+    controlled_value: return_or_injected_value
+    confidence: medium
+    notes: >
+      Relevant when config values are attacker-influenced (user-uploaded config,
+      multi-tenant settings DB, remote config) and later used as SpEL expression text
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: async entry points may feed expression evaluators
+
+  - id: database-read-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*ResultSet.*getString.*"
+      - ".*ResultSet.*getObject.*"
+    controlled_value: return
+    confidence: low
+    notes: second-order when stored attacker expression is later parsed/evaluated
+
+  - id: file-or-upload-external
+    framework: io
+    method_full_name:
+      - ".*Files.*readString.*"
+      - ".*BufferedReader.*readLine.*"
+    controlled_value: return
+    confidence: low
+    notes: only when external untrusted content is later used as SpEL expression text

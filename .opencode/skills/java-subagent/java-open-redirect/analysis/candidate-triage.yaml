@@ -1,0 +1,36 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous redirect API or dynamic Location/redirect: pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach redirect destination argument
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_destination_analysis
+
+  L3_semantic_candidate:
+    meaning: redirect destination influenced and controls missing or bypassable
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - full_url_control
+  - post_login_returnUrl_flow
+  - oauth_callback_style_redirect
+  - weak_startswith_only
+  - protocol_relative_accepted
+  - phishing_sensitive_domain_context
+
+priority_reduce:
+  - test_code_only
+  - constant_redirect_target
+  - fixed_destination_map
+  - forced_relative_same_site_path
+  - dead_code
+  - admin_only_with_trusted_operator_input

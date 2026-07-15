@@ -1,0 +1,24 @@
+must_derive_from:
+  - actual_jwt_library_and_api
+  - actual_token_entry_point
+  - actual_key_and_algorithm_construction
+  - actual_claim_validation_or_lack_thereof
+  - actual_authz_decision_use
+  - actual_deployment_reachability
+
+must_include:
+  - subtype
+  - library_and_apis
+  - why_verification_or_claims_fail
+  - security_property_impacted
+  - static_locations
+  - success_condition_for_any_abstract_check
+  - fake_secrets_only_if_examples_needed
+
+must_not:
+  - produce_real_forged_tokens_for_production
+  - reuse_historical_tokens_or_live_secrets
+  - publish_extracted_signing_keys
+  - run_algorithm_confusion_against_live_systems_without_authorization
+  - claim_auth_bypass_without_code_or_authorized_evidence
+  - perform_account_takeover_or_lateral_movement

@@ -1,0 +1,28 @@
+id: java-jwt-misuse
+name: JWT/JOSE Misuse
+language: java
+cwe:
+  - CWE-347
+  - CWE-345
+  - CWE-287
+  - CWE-798
+  - CWE-327
+objective:
+  detect: >
+    JWT/JWS tokens accepted or trusted without effective cryptographic
+    integrity verification and/or without mandatory claim validation
+    (exp, nbf, aud, iss), including alg=none, missing verify, weak or
+    hardcoded HMAC secrets, and algorithm confusion (asymmetric to HMAC),
+    such that authentication or authorization decisions can be forged
+    or bypassed.
+core_condition:
+  - jwt_or_jose_parse_or_decode_is_present
+  - verification_or_claim_control_is_weak_or_missing
+  - usage_is_security_sensitive_authn_or_authz
+  - effective_strong_control_is_missing
+not_in_scope:
+  - pure_oauth_client_redirect_without_jwt_handling
+  - session_cookie_auth_without_jwt
+  - jwe_confidentiality_only_without_jws_integrity_issue
+  - theoretical_quantum_jwt_migration_without_current_misuse
+  - custom_mac_token_formats_unrelated_to_jose

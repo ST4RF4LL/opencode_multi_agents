@@ -1,0 +1,29 @@
+must_derive_from:
+  - actual_api_route
+  - actual_parameter_location
+  - actual_resource_load_or_mutation_logic
+  - actual_authentication_model
+  - actual_ownership_or_tenant_model
+  - actual_authorization_annotations_or_filters
+
+must_include:
+  - prerequisites
+  - baseline_request_as_legitimate_owner
+  - test_request_with_substituted_object_id
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+
+must_not:
+  - reuse_historical_payload_blindly
+  - assume_two_accounts_without_creating_lab_fixtures
+  - claim_success_based_only_on_generic_error
+  - perform_destructive_actions_on_production_or_third_party_data
+  - enumerate_large_id_ranges_outside_authorized_scope
+  - exfiltrate_real_pii_beyond_minimal_proof
+
+preferred_setup:
+  - authorized_lab_or_staging_with_two_test_users
+  - known_resource_owned_by_user_b
+  - minimal_field_comparison_for_proof
+  - non_destructive_read_first_then_controlled_mutation_if_needed

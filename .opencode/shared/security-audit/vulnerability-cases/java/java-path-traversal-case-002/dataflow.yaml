@@ -1,0 +1,10 @@
+source:
+  method: ZipEntry.getName
+  parameter: entry name from untrusted archive
+path:
+  - ArchiveExtractService.extract
+  - new File(destDir, entry.getName())
+sink:
+  method: FileOutputStream.<init>
+  argument: 1
+influence: zip_entry_relative_path_escape

@@ -1,0 +1,46 @@
+id: servlet-session
+name: Servlet session and cookie authentication
+detection:
+  imports:
+    - javax.servlet.http.HttpSession
+    - jakarta.servlet.http.HttpSession
+    - javax.servlet.http.Cookie
+    - jakarta.servlet.http.Cookie
+    - javax.servlet.http.HttpServletRequest
+    - jakarta.servlet.http.HttpServletRequest
+  classes:
+    - HttpSession
+    - Cookie
+    - HttpServlet
+  config_markers:
+    - JSESSIONID
+    - session-timeout
+    - Cookie.setMaxAge
+    - SameSite
+    - HttpOnly
+    - Secure
+
+session_sources:
+  - HttpServletRequest.getSession
+  - HttpSession.getAttribute
+  - request cookies carrying session id
+
+csrf_relevance:
+  - browser auto-sends session cookies on same-site and cross-site requests depending on SameSite
+  - state-changing servlets using session auth without token checks are CSRF candidates
+  - doGet performing mutations is high risk (img/src, link)
+
+cookie_flags:
+  reduce_csrf:
+    - SameSite=Strict
+    - SameSite=Lax with no GET mutations
+  increase_or_preserve_csrf:
+    - SameSite=None
+    - missing SameSite (browser-dependent legacy)
+  orthogonal:
+    - HttpOnly (mitigates XSS cookie theft, not CSRF)
+    - Secure (transport only)
+
+notes:
+  - Primary non-Spring path for classic session CSRF
+  - Pair session presence with doPost/doPut/doDelete or GET side effects

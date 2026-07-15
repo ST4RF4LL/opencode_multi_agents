@@ -1,0 +1,45 @@
+# JWT misuse: complete static semantics often sufficient. No production token forgery.
+finding_requirements:
+  mandatory:
+    - reachable_production_path
+    - jwt_parse_or_decode_or_key_binding_identified
+    - weakness_or_misconfiguration_identified
+    - security_sensitive_authn_or_authz_usage_established
+    - effective_strong_control_missing_or_bypassable
+  one_of:
+    - complete_static_semantics_with_clear_weakness
+    - authorized_abstract_behavioral_confirmation
+    - config_and_code_correlation_proving_weak_jwt_handling
+  context:
+    recommended:
+      - subtype_classification
+      - library_and_api
+      - key_and_algorithm_origin
+      - claims_validation_status
+      - affected_auth_decision
+      - remediation_direction
+
+reject_when:
+  - only_jwt_api_name_match_without_weak_config
+  - strong_verify_with_managed_key_and_claim_validation
+  - decode_only_for_non_trust_use_with_evidence
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_generic_jwt_presence
+  - relies_on_production_token_forgery_as_sole_proof
+
+status_definitions:
+  Candidate: weak JWT pattern found but usage, reachability, or controls incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason
+
+static_semantics_sufficient_examples:
+  - JWT.decode(token) then authorize from claims without verify
+  - Algorithm.none() or parseUnsecuredClaims trusted for auth
+  - Algorithm.HMAC256("secret") or setSigningKey("secret")
+  - HMAC verifier initialized with RSA public key encoded bytes
+  - verified path without any exp/aud/iss checks on multi-service API
+
+forbidden_evidence:
+  - real_forged_tokens_against_production
+  - live_secret_extraction_or_publication
+  - weaponized_algorithm_confusion_payloads_for_prod

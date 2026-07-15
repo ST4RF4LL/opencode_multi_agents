@@ -1,0 +1,19 @@
+id: servlet
+name: Java Servlet API sources
+detection:
+  imports:
+    - javax.servlet.http.HttpServletRequest
+    - jakarta.servlet.http.HttpServletRequest
+  classes:
+    - HttpServlet
+    - HttpServletRequest
+    - HttpServletResponse
+sources:
+  - HttpServletRequest.getParameter
+  - HttpServletRequest.getHeader
+  - HttpServletRequest.getQueryString
+  - HttpServletRequest.getPathInfo
+  - HttpServletRequest.getRequestURL
+notes:
+  - Primary entry for non-Spring servlet apps feeding URL builders
+  - sendRedirect is open-redirect adjacent, not SSRF sink

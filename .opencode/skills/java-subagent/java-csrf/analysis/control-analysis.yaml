@@ -1,0 +1,60 @@
+questions:
+  - id: auth_credential_type
+    ask: 认证凭证是 Session Cookie、认证 Cookie、Cookie JWT，还是仅 Authorization Bearer？
+    outcomes:
+      cookie_or_session: csrf_relevant
+      bearer_header_only: usually_not_csrf
+      mixed_cookie_and_bearer: review_cookie_path
+
+  - id: state_change_semantics
+    ask: 处理逻辑是否修改密码、资金、权限、资源、会话等服务端状态？
+    classify:
+      - password_or_credential_change
+      - financial_or_ownership_transfer
+      - delete_or_destroy
+      - privilege_or_role_change
+      - profile_or_email_change
+      - session_logout_or_fixation_adjacent
+
+  - id: csrf_token_presence
+    ask: 是否生成并服务端校验与会话绑定的 CSRF token？
+    strong_yes:
+      - CsrfFilter enabled
+      - token in session matched to request param/header
+      - CookieCsrfTokenRepository with server comparison
+    false_friends:
+      - client-only token check
+      - static token constant
+      - token field rendered but never validated
+
+  - id: custom_header_enforcement
+    ask: JSON API 是否强制非简单自定义头，且 CORS 不向不可信源放开 credentials？
+    accept:
+      - required X-CSRF-TOKEN / X-XSRF-TOKEN validated
+      - required custom header rejected when missing
+    reject_as_strong:
+      - header optional
+      - Access-Control-Allow-Origin reflects untrusted origin with credentials
+
+  - id: samesite_and_method
+    ask: Cookie SameSite 与 HTTP 方法组合是否足以阻止跨站触发？
+    notes:
+      - Strict helps most cross-site cases
+      - Lax still allows top-level GET mutations
+      - None preserves classic CSRF without other controls
+
+  - id: origin_referer
+    ask: 是否对 Origin/Referer 做允许列表校验，且缺失时拒绝变更请求？
+    assessment: contextual_defense_in_depth
+
+  - id: get_side_effects
+    ask: GET/HEAD 是否产生状态变更？
+    if_yes:
+      - subtype get-based-state-change
+      - control grade weak even with Lax
+
+control_grades:
+  strong: effective_blocks_cross_site_state_change
+  contextual: effective_only_for_specific_browser_method_scenarios
+  weak: bypassable
+  invalid: does_not_mitigate

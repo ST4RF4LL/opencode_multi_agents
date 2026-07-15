@@ -1,0 +1,28 @@
+id: jaxb
+name: JAXB Unmarshaller
+detection:
+  imports:
+    - javax.xml.bind.JAXBContext
+    - javax.xml.bind.Unmarshaller
+    - jakarta.xml.bind.JAXBContext
+    - jakarta.xml.bind.Unmarshaller
+  classes:
+    - JAXBContext
+    - Unmarshaller
+sinks:
+  - Unmarshaller.unmarshal(InputStream)
+  - Unmarshaller.unmarshal(Reader)
+  - Unmarshaller.unmarshal(File)
+  - Unmarshaller.unmarshal(Source)
+  - Unmarshaller.unmarshal(XMLStreamReader)
+  - Unmarshaller.unmarshal(XMLEventReader)
+  - Unmarshaller.unmarshal(Node)
+strong_controls:
+  - unmarshal from XMLStreamReader created by hardened XMLInputFactory
+  - unmarshal from SAXSource using hardened XMLReader
+  - setProperty / underlying parser FEATURE_SECURE_PROCESSING when available
+  - never pass raw untrusted InputStream without controlling the parser
+notes:
+  - JAXB security depends on the underlying SAX/StAX parser configuration
+  - Prefer createXMLStreamReader on a secure factory then unmarshal(reader)
+  - SOAP stacks often wrap JAXB; expand wrappers to real unmarshal call

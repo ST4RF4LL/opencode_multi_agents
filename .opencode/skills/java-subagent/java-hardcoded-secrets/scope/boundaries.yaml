@@ -1,0 +1,34 @@
+in_scope:
+  - hardcoded_passwords_and_api_keys_in_java_source
+  - private_keys_and_pem_blocks_in_repo
+  - jwt_hmac_signing_secrets_as_literals
+  - jdbc_and_datasource_credentials_in_code_or_config
+  - cloud_access_keys_and_static_sdk_credentials
+  - application_yml_properties_xml_plaintext_secrets
+  - SecretKeySpec_and_KeyStore_password_from_literals
+  - basic_auth_and_token_header_literals
+
+out_of_scope:
+  - weak_cipher_algorithm_or_mode_only  # java-weak-cryptography
+  - insecure_prng_for_tokens_without_embedded_secret  # java-weak-cryptography / insecure-random
+  - password_hashing_algorithm_choice_without_hardcoded_password
+  - runtime_secret_logging_only  # java-sensitive-data-logging
+  - pure_authorization_idor_without_credential_in_source
+  - secrets_only_in_external_vault_with_no_plaintext_in_repo
+
+adjacent_skills:
+  - id: java-weak-cryptography
+    relation: >
+      weak algorithms, static IVs, insecure random; hardcoded-key subtype
+      there is crypto-key-material misuse — this skill owns general secret
+      material (API keys, passwords, PEM, JWT, DB, cloud) in source/config
+  - id: java-sensitive-data-logging
+    relation: secrets printed at runtime; not necessarily hardcoded in repo
+
+boundary_notes:
+  - weak_algorithm_without_secret_literal_belongs_to_java-weak-cryptography
+  - SecretKeySpec_from_literal_is_in_scope_here_and_may_also_flag_weak-crypto_hardcoded-key
+  - obvious_placeholders_CHANGE_ME_your-key_xxx_are_not_findings_unless_used_as_production_default
+  - test_fixtures_with_fake_keys_may_be_rejected_if_not_packaged_to_production
+  - public_keys_and_certificates_alone_are_not_secrets
+  - never_report_or_exfiltrate_suspected_live_production_secrets_in_full

@@ -1,0 +1,13 @@
+source:
+  method: HttpServletRequest.getInputStream
+  parameter: body
+path:
+  - ImportController.importXml
+  - XmlImportService.parse
+sink:
+  method: DocumentBuilder.parse
+  argument: 1
+factory:
+  type: DocumentBuilderFactory
+  secure_features: none
+influence: full_xml_document_content

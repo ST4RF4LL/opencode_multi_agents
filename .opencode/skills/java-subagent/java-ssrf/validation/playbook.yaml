@@ -1,0 +1,36 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_network_destination_component
+  - inspect_input_transformations
+  - inspect_existing_validation
+  - identify_http_client_and_redirect_policy
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_control_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - full_url
+  - host_or_ip
+  - port
+  - scheme
+  - path_with_prefix_escape
+  - redirect_target
+  - proxy_forward_target
+
+observable_behaviors:
+  - controlled_collaborator_receives_server_request
+  - response_body_reflects_destination_content
+  - destination_specific_connection_error
+  - application_logs_show_outbound_url
+  - timing_difference_tied_to_internal_vs_external_host
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - do_not_attack_real_cloud_metadata_in_production
+  - prefer_synthetic_collaborator_or_local_mock_http_listener
+  - open_redirect_browser_only_is_out_of_scope

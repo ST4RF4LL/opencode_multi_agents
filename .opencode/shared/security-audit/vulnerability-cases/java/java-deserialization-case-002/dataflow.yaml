@@ -1,0 +1,13 @@
+source:
+  method: ApiController.parse
+  parameter: body
+  annotation: RequestBody
+path:
+  - ApiController.parse
+  - JSON.parseObject(body)
+sink:
+  method: JSON.parseObject
+  argument: 1
+influence: fastjson_atype_class_selection
+config:
+  - ParserConfig.setAutoTypeSupport(true)

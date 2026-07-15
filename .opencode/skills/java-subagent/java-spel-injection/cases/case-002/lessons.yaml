@@ -1,0 +1,9 @@
+transferable_lessons:
+  - TemplateParserContext with user concat into #{...} is a distinct SpEL injection subtype
+  - Keep template body constant; bind user values via setVariable
+  - String.format / + into template slots is equivalent to expression-text injection
+  - SimpleEvaluationContext further reduces capability when evaluation is required
+non_transferable_details:
+  - original route
+  - original template wording
+  - original payload

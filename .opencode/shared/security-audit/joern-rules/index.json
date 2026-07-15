@@ -42,6 +42,306 @@
       "source": "vuln_skill_builder"
     },
     {
+      "id": "java-csrf-detect-validation",
+      "language": "java",
+      "skill": "java-csrf",
+      "weakness": "csrf",
+      "dimension": "D2",
+      "path": "java/java-csrf-detect-validation.sc",
+      "metadata": "java/java-csrf-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-csrf-locate-sinks",
+      "language": "java",
+      "skill": "java-csrf",
+      "weakness": "csrf",
+      "dimension": "D2",
+      "path": "java/java-csrf-locate-sinks.sc",
+      "metadata": "java/java-csrf-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-csrf-locate-sources",
+      "language": "java",
+      "skill": "java-csrf",
+      "weakness": "csrf",
+      "dimension": "D2",
+      "path": "java/java-csrf-locate-sources.sc",
+      "metadata": "java/java-csrf-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-csrf-source-to-sink",
+      "language": "java",
+      "skill": "java-csrf",
+      "weakness": "csrf",
+      "dimension": "D2",
+      "path": "java/java-csrf-source-to-sink.sc",
+      "metadata": "java/java-csrf-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-csrf-trace-callers",
+      "language": "java",
+      "skill": "java-csrf",
+      "weakness": "csrf",
+      "dimension": "D2",
+      "path": "java/java-csrf-trace-callers.sc",
+      "metadata": "java/java-csrf-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-deserialization-detect-validation",
+      "language": "java",
+      "skill": "java-deserialization",
+      "weakness": "deserialization",
+      "dimension": "D4",
+      "path": "java/java-deserialization-detect-validation.sc",
+      "metadata": "java/java-deserialization-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-deserialization-locate-sinks",
+      "language": "java",
+      "skill": "java-deserialization",
+      "weakness": "deserialization",
+      "dimension": "D4",
+      "path": "java/java-deserialization-locate-sinks.sc",
+      "metadata": "java/java-deserialization-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-deserialization-locate-sources",
+      "language": "java",
+      "skill": "java-deserialization",
+      "weakness": "deserialization",
+      "dimension": "D4",
+      "path": "java/java-deserialization-locate-sources.sc",
+      "metadata": "java/java-deserialization-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-deserialization-source-to-sink",
+      "language": "java",
+      "skill": "java-deserialization",
+      "weakness": "deserialization",
+      "dimension": "D4",
+      "path": "java/java-deserialization-source-to-sink.sc",
+      "metadata": "java/java-deserialization-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-deserialization-trace-callers",
+      "language": "java",
+      "skill": "java-deserialization",
+      "weakness": "deserialization",
+      "dimension": "D4",
+      "path": "java/java-deserialization-trace-callers.sc",
+      "metadata": "java/java-deserialization-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-file-upload-detect-validation",
+      "language": "java",
+      "skill": "java-file-upload",
+      "weakness": "file-upload",
+      "dimension": "D5",
+      "path": "java/java-file-upload-detect-validation.sc",
+      "metadata": "java/java-file-upload-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-file-upload-locate-sinks",
+      "language": "java",
+      "skill": "java-file-upload",
+      "weakness": "file-upload",
+      "dimension": "D5",
+      "path": "java/java-file-upload-locate-sinks.sc",
+      "metadata": "java/java-file-upload-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-file-upload-locate-sources",
+      "language": "java",
+      "skill": "java-file-upload",
+      "weakness": "file-upload",
+      "dimension": "D5",
+      "path": "java/java-file-upload-locate-sources.sc",
+      "metadata": "java/java-file-upload-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-file-upload-source-to-sink",
+      "language": "java",
+      "skill": "java-file-upload",
+      "weakness": "file-upload",
+      "dimension": "D5",
+      "path": "java/java-file-upload-source-to-sink.sc",
+      "metadata": "java/java-file-upload-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-file-upload-trace-callers",
+      "language": "java",
+      "skill": "java-file-upload",
+      "weakness": "file-upload",
+      "dimension": "D5",
+      "path": "java/java-file-upload-trace-callers.sc",
+      "metadata": "java/java-file-upload-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-hardcoded-secrets-detect-validation",
+      "language": "java",
+      "skill": "java-hardcoded-secrets",
+      "weakness": "hardcoded-secrets",
+      "dimension": "D8",
+      "path": "java/java-hardcoded-secrets-detect-validation.sc",
+      "metadata": "java/java-hardcoded-secrets-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-hardcoded-secrets-locate-sinks",
+      "language": "java",
+      "skill": "java-hardcoded-secrets",
+      "weakness": "hardcoded-secrets",
+      "dimension": "D8",
+      "path": "java/java-hardcoded-secrets-locate-sinks.sc",
+      "metadata": "java/java-hardcoded-secrets-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-hardcoded-secrets-locate-sources",
+      "language": "java",
+      "skill": "java-hardcoded-secrets",
+      "weakness": "hardcoded-secrets",
+      "dimension": "D8",
+      "path": "java/java-hardcoded-secrets-locate-sources.sc",
+      "metadata": "java/java-hardcoded-secrets-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-hardcoded-secrets-source-to-sink",
+      "language": "java",
+      "skill": "java-hardcoded-secrets",
+      "weakness": "hardcoded-secrets",
+      "dimension": "D8",
+      "path": "java/java-hardcoded-secrets-source-to-sink.sc",
+      "metadata": "java/java-hardcoded-secrets-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-hardcoded-secrets-trace-callers",
+      "language": "java",
+      "skill": "java-hardcoded-secrets",
+      "weakness": "hardcoded-secrets",
+      "dimension": "D8",
+      "path": "java/java-hardcoded-secrets-trace-callers.sc",
+      "metadata": "java/java-hardcoded-secrets-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-idor-detect-validation",
+      "language": "java",
+      "skill": "java-idor",
+      "weakness": "idor",
+      "dimension": "D3",
+      "path": "java/java-idor-detect-validation.sc",
+      "metadata": "java/java-idor-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-idor-locate-sinks",
+      "language": "java",
+      "skill": "java-idor",
+      "weakness": "idor",
+      "dimension": "D3",
+      "path": "java/java-idor-locate-sinks.sc",
+      "metadata": "java/java-idor-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-idor-locate-sources",
+      "language": "java",
+      "skill": "java-idor",
+      "weakness": "idor",
+      "dimension": "D3",
+      "path": "java/java-idor-locate-sources.sc",
+      "metadata": "java/java-idor-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-idor-source-to-sink",
+      "language": "java",
+      "skill": "java-idor",
+      "weakness": "idor",
+      "dimension": "D3",
+      "path": "java/java-idor-source-to-sink.sc",
+      "metadata": "java/java-idor-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-idor-trace-callers",
+      "language": "java",
+      "skill": "java-idor",
+      "weakness": "idor",
+      "dimension": "D3",
+      "path": "java/java-idor-trace-callers.sc",
+      "metadata": "java/java-idor-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-jwt-misuse-detect-validation",
+      "language": "java",
+      "skill": "java-jwt-misuse",
+      "weakness": "jwt-misuse",
+      "dimension": "D2",
+      "path": "java/java-jwt-misuse-detect-validation.sc",
+      "metadata": "java/java-jwt-misuse-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-jwt-misuse-locate-sinks",
+      "language": "java",
+      "skill": "java-jwt-misuse",
+      "weakness": "jwt-misuse",
+      "dimension": "D2",
+      "path": "java/java-jwt-misuse-locate-sinks.sc",
+      "metadata": "java/java-jwt-misuse-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-jwt-misuse-locate-sources",
+      "language": "java",
+      "skill": "java-jwt-misuse",
+      "weakness": "jwt-misuse",
+      "dimension": "D2",
+      "path": "java/java-jwt-misuse-locate-sources.sc",
+      "metadata": "java/java-jwt-misuse-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-jwt-misuse-source-to-sink",
+      "language": "java",
+      "skill": "java-jwt-misuse",
+      "weakness": "jwt-misuse",
+      "dimension": "D2",
+      "path": "java/java-jwt-misuse-source-to-sink.sc",
+      "metadata": "java/java-jwt-misuse-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-jwt-misuse-trace-callers",
+      "language": "java",
+      "skill": "java-jwt-misuse",
+      "weakness": "jwt-misuse",
+      "dimension": "D2",
+      "path": "java/java-jwt-misuse-trace-callers.sc",
+      "metadata": "java/java-jwt-misuse-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
       "id": "java-ldap-injection-detect-validation",
       "language": "java",
       "skill": "java-ldap-injection",
@@ -142,6 +442,56 @@
       "source": "vuln_skill_builder"
     },
     {
+      "id": "java-mass-assignment-detect-validation",
+      "language": "java",
+      "skill": "java-mass-assignment",
+      "weakness": "mass-assignment",
+      "dimension": "D9",
+      "path": "java/java-mass-assignment-detect-validation.sc",
+      "metadata": "java/java-mass-assignment-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-mass-assignment-locate-sinks",
+      "language": "java",
+      "skill": "java-mass-assignment",
+      "weakness": "mass-assignment",
+      "dimension": "D9",
+      "path": "java/java-mass-assignment-locate-sinks.sc",
+      "metadata": "java/java-mass-assignment-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-mass-assignment-locate-sources",
+      "language": "java",
+      "skill": "java-mass-assignment",
+      "weakness": "mass-assignment",
+      "dimension": "D9",
+      "path": "java/java-mass-assignment-locate-sources.sc",
+      "metadata": "java/java-mass-assignment-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-mass-assignment-source-to-sink",
+      "language": "java",
+      "skill": "java-mass-assignment",
+      "weakness": "mass-assignment",
+      "dimension": "D9",
+      "path": "java/java-mass-assignment-source-to-sink.sc",
+      "metadata": "java/java-mass-assignment-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-mass-assignment-trace-callers",
+      "language": "java",
+      "skill": "java-mass-assignment",
+      "weakness": "mass-assignment",
+      "dimension": "D9",
+      "path": "java/java-mass-assignment-trace-callers.sc",
+      "metadata": "java/java-mass-assignment-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
       "id": "java-nosql-injection-detect-validation",
       "language": "java",
       "skill": "java-nosql-injection",
@@ -189,6 +539,156 @@
       "dimension": "D1",
       "path": "java/java-nosql-injection-trace-callers.sc",
       "metadata": "java/java-nosql-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-open-redirect-detect-validation",
+      "language": "java",
+      "skill": "java-open-redirect",
+      "weakness": "open-redirect",
+      "dimension": "D6",
+      "path": "java/java-open-redirect-detect-validation.sc",
+      "metadata": "java/java-open-redirect-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-open-redirect-locate-sinks",
+      "language": "java",
+      "skill": "java-open-redirect",
+      "weakness": "open-redirect",
+      "dimension": "D6",
+      "path": "java/java-open-redirect-locate-sinks.sc",
+      "metadata": "java/java-open-redirect-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-open-redirect-locate-sources",
+      "language": "java",
+      "skill": "java-open-redirect",
+      "weakness": "open-redirect",
+      "dimension": "D6",
+      "path": "java/java-open-redirect-locate-sources.sc",
+      "metadata": "java/java-open-redirect-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-open-redirect-source-to-sink",
+      "language": "java",
+      "skill": "java-open-redirect",
+      "weakness": "open-redirect",
+      "dimension": "D6",
+      "path": "java/java-open-redirect-source-to-sink.sc",
+      "metadata": "java/java-open-redirect-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-open-redirect-trace-callers",
+      "language": "java",
+      "skill": "java-open-redirect",
+      "weakness": "open-redirect",
+      "dimension": "D6",
+      "path": "java/java-open-redirect-trace-callers.sc",
+      "metadata": "java/java-open-redirect-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-path-traversal-detect-validation",
+      "language": "java",
+      "skill": "java-path-traversal",
+      "weakness": "path-traversal",
+      "dimension": "D5",
+      "path": "java/java-path-traversal-detect-validation.sc",
+      "metadata": "java/java-path-traversal-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-path-traversal-locate-sinks",
+      "language": "java",
+      "skill": "java-path-traversal",
+      "weakness": "path-traversal",
+      "dimension": "D5",
+      "path": "java/java-path-traversal-locate-sinks.sc",
+      "metadata": "java/java-path-traversal-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-path-traversal-locate-sources",
+      "language": "java",
+      "skill": "java-path-traversal",
+      "weakness": "path-traversal",
+      "dimension": "D5",
+      "path": "java/java-path-traversal-locate-sources.sc",
+      "metadata": "java/java-path-traversal-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-path-traversal-source-to-sink",
+      "language": "java",
+      "skill": "java-path-traversal",
+      "weakness": "path-traversal",
+      "dimension": "D5",
+      "path": "java/java-path-traversal-source-to-sink.sc",
+      "metadata": "java/java-path-traversal-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-path-traversal-trace-callers",
+      "language": "java",
+      "skill": "java-path-traversal",
+      "weakness": "path-traversal",
+      "dimension": "D5",
+      "path": "java/java-path-traversal-trace-callers.sc",
+      "metadata": "java/java-path-traversal-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-spel-injection-detect-validation",
+      "language": "java",
+      "skill": "java-spel-injection",
+      "weakness": "spel-injection",
+      "dimension": "D1",
+      "path": "java/java-spel-injection-detect-validation.sc",
+      "metadata": "java/java-spel-injection-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-spel-injection-locate-sinks",
+      "language": "java",
+      "skill": "java-spel-injection",
+      "weakness": "spel-injection",
+      "dimension": "D1",
+      "path": "java/java-spel-injection-locate-sinks.sc",
+      "metadata": "java/java-spel-injection-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-spel-injection-locate-sources",
+      "language": "java",
+      "skill": "java-spel-injection",
+      "weakness": "spel-injection",
+      "dimension": "D1",
+      "path": "java/java-spel-injection-locate-sources.sc",
+      "metadata": "java/java-spel-injection-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-spel-injection-source-to-sink",
+      "language": "java",
+      "skill": "java-spel-injection",
+      "weakness": "spel-injection",
+      "dimension": "D1",
+      "path": "java/java-spel-injection-source-to-sink.sc",
+      "metadata": "java/java-spel-injection-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-spel-injection-trace-callers",
+      "language": "java",
+      "skill": "java-spel-injection",
+      "weakness": "spel-injection",
+      "dimension": "D1",
+      "path": "java/java-spel-injection-trace-callers.sc",
+      "metadata": "java/java-spel-injection-trace-callers.md",
       "source": "vuln_skill_builder"
     },
     {
@@ -299,6 +799,56 @@
       "dimension": "D1",
       "path": "java/java-sql-injection-trace-callers.sc",
       "metadata": "java/java-sql-injection-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ssrf-detect-validation",
+      "language": "java",
+      "skill": "java-ssrf",
+      "weakness": "ssrf",
+      "dimension": "D6",
+      "path": "java/java-ssrf-detect-validation.sc",
+      "metadata": "java/java-ssrf-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ssrf-locate-sinks",
+      "language": "java",
+      "skill": "java-ssrf",
+      "weakness": "ssrf",
+      "dimension": "D6",
+      "path": "java/java-ssrf-locate-sinks.sc",
+      "metadata": "java/java-ssrf-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ssrf-locate-sources",
+      "language": "java",
+      "skill": "java-ssrf",
+      "weakness": "ssrf",
+      "dimension": "D6",
+      "path": "java/java-ssrf-locate-sources.sc",
+      "metadata": "java/java-ssrf-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ssrf-source-to-sink",
+      "language": "java",
+      "skill": "java-ssrf",
+      "weakness": "ssrf",
+      "dimension": "D6",
+      "path": "java/java-ssrf-source-to-sink.sc",
+      "metadata": "java/java-ssrf-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-ssrf-trace-callers",
+      "language": "java",
+      "skill": "java-ssrf",
+      "weakness": "ssrf",
+      "dimension": "D6",
+      "path": "java/java-ssrf-trace-callers.sc",
+      "metadata": "java/java-ssrf-trace-callers.md",
       "source": "vuln_skill_builder"
     },
     {
@@ -449,6 +999,56 @@
       "dimension": "D1",
       "path": "java/java-xss-trace-callers.sc",
       "metadata": "java/java-xss-trace-callers.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xxe-detect-validation",
+      "language": "java",
+      "skill": "java-xxe",
+      "weakness": "xxe",
+      "dimension": "D1",
+      "path": "java/java-xxe-detect-validation.sc",
+      "metadata": "java/java-xxe-detect-validation.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xxe-locate-sinks",
+      "language": "java",
+      "skill": "java-xxe",
+      "weakness": "xxe",
+      "dimension": "D1",
+      "path": "java/java-xxe-locate-sinks.sc",
+      "metadata": "java/java-xxe-locate-sinks.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xxe-locate-sources",
+      "language": "java",
+      "skill": "java-xxe",
+      "weakness": "xxe",
+      "dimension": "D1",
+      "path": "java/java-xxe-locate-sources.sc",
+      "metadata": "java/java-xxe-locate-sources.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xxe-source-to-sink",
+      "language": "java",
+      "skill": "java-xxe",
+      "weakness": "xxe",
+      "dimension": "D1",
+      "path": "java/java-xxe-source-to-sink.sc",
+      "metadata": "java/java-xxe-source-to-sink.md",
+      "source": "vuln_skill_builder"
+    },
+    {
+      "id": "java-xxe-trace-callers",
+      "language": "java",
+      "skill": "java-xxe",
+      "weakness": "xxe",
+      "dimension": "D1",
+      "path": "java/java-xxe-trace-callers.sc",
+      "metadata": "java/java-xxe-trace-callers.md",
       "source": "vuln_skill_builder"
     }
   ]

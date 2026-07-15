@@ -1,0 +1,60 @@
+positive:
+  P01_StaticApiKey.java:
+    expect: candidate_or_finding
+    subtype: hardcoded-api-key
+    sink: API_KEY constant / X-Api-Key header
+    notes: AKIAIOSFODNN7EXAMPLE is docs example but pattern must still be detected
+  P02_DatasourcePassword.java:
+    expect: candidate_or_finding
+    subtype: db-url-with-password
+    sink: DataSourceBuilder.password
+  P03_SecretKeySpecJwt.java:
+    expect: candidate_or_finding
+    subtype: jwt-secret-literal
+    sink: SecretKeySpec from string literal
+  P04_JdbcUrlPassword.java:
+    expect: candidate_or_finding
+    subtype: db-url-with-password
+    sink: DriverManager.getConnection password arg
+  P05_AwsStaticCredentials.java:
+    expect: candidate_or_finding
+    subtype: cloud-access-key
+    sink: AKIA + secret access key literals
+  application-secret.yml:
+    expect: candidate_or_finding
+    subtype: properties-yml-plaintext
+    sink: spring.datasource.password / app secrets
+
+negative:
+  N01_EnvApiKey.java:
+    expect: rejected
+    reason: api_key_from_env_no_literal
+  N02_PlaceholderOnly.java:
+    expect: rejected
+    reason: obvious_placeholder_not_bound_as_prod_secret
+  N03_PublicCertificate.java:
+    expect: rejected
+    reason: public_certificate_not_secret
+  N04_EnvDatasourcePassword.java:
+    expect: rejected
+    reason: password_from_env
+  N05_ManagedJwtSecret.java:
+    expect: rejected
+    reason: signing_key_from_env_injected_SecretKey
+  application-env.yml:
+    expect: rejected
+    reason: ${ENV} references only
+
+regression:
+  R01_StaticApiKey.java:
+    expect: sink_candidate
+    subtype: hardcoded-api-key
+    must_not_regress: false_negative_on_static_API_KEY
+
+metrics:
+  track:
+    - secret_candidate_recall
+    - subtype_classification_accuracy
+    - false_positive_rate
+    - finding_precision
+    - placeholder_rejection_rate

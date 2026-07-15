@@ -1,0 +1,24 @@
+id: case-001
+vulnerability_type: jwt-misuse
+subtype: missing-signature-verify
+source:
+  type: jwt-token-header
+  expression: 'request.getHeader("Authorization")'
+sink:
+  api: JWT.decode
+  sensitive_argument: token_string
+propagation:
+  - AuthFilter.doFilter
+  - JwtUtil.extractSubject
+  - SecurityContextHolder
+root_cause:
+  - decode_without_signature_verification
+  - claims_trusted_for_authorization
+prerequisites:
+  - protected_api_uses_subject_from_decoded_jwt
+observed_behavior:
+  - arbitrary_unsigned_token_payload_accepted_for_identity
+fix:
+  - use_JWT_require_Algorithm_build_verify
+  - fail_closed_on_JWTVerificationException
+  - require_exp_iss_aud

@@ -1,0 +1,69 @@
+l0_stack_detection:
+  - pattern: "javax.xml.parsers.DocumentBuilder|DocumentBuilderFactory"
+    implies: jdk-dom
+  - pattern: "javax.xml.parsers.SAXParser|SAXParserFactory"
+    implies: jdk-sax
+  - pattern: "javax.xml.stream.XMLInputFactory|XMLStreamReader"
+    implies: jdk-stax
+  - pattern: "javax.xml.transform.TransformerFactory|Transformer"
+    implies: transformer
+  - pattern: "javax.xml.bind.Unmarshaller|jakarta.xml.bind.Unmarshaller|JAXBContext"
+    implies: jaxb
+  - pattern: "org.springframework.oxm|Jaxb2Marshaller"
+    implies: spring-oxm
+  - pattern: "org.dom4j.io.SAXReader|org.jdom|SAXBuilder"
+    implies: dom4j-jdom
+  - pattern: "javax.xml.validation.SchemaFactory"
+    implies: schema-factory
+
+l1_sink_keywords:
+  - "DocumentBuilderFactory"
+  - "DocumentBuilder"
+  - ".parse("
+  - "SAXParserFactory"
+  - "SAXParser"
+  - "XMLInputFactory"
+  - "createXMLStreamReader"
+  - "createXMLEventReader"
+  - "TransformerFactory"
+  - "newTransformer"
+  - "Unmarshaller"
+  - ".unmarshal("
+  - "SchemaFactory"
+  - "SAXReader"
+  - "SAXBuilder"
+  - "XMLDecoder"
+  - "setFeature"
+  - "setProperty"
+  - "ACCESS_EXTERNAL"
+  - "FEATURE_SECURE_PROCESSING"
+  - "disallow-doctype-decl"
+  - "IS_SUPPORTING_EXTERNAL_ENTITIES"
+  - "SUPPORT_DTD"
+
+high_risk_insecure_hints:
+  - "DocumentBuilderFactory\\.newInstance\\(\\)"
+  - "XMLInputFactory\\.newFactory\\(\\)"
+  - "XMLInputFactory\\.newInstance\\(\\)"
+  - "TransformerFactory\\.newInstance\\(\\)"
+  - "setXIncludeAware\\(true\\)"
+
+secure_control_hints:
+  - "disallow-doctype-decl"
+  - "external-general-entities"
+  - "external-parameter-entities"
+  - "IS_SUPPORTING_EXTERNAL_ENTITIES"
+  - "SUPPORT_DTD"
+  - "ACCESS_EXTERNAL_DTD"
+  - "ACCESS_EXTERNAL_STYLESHEET"
+  - "FEATURE_SECURE_PROCESSING"
+
+rg_commands:
+  stack: |
+    rg -n "DocumentBuilderFactory|SAXParserFactory|XMLInputFactory|TransformerFactory|Unmarshaller|JAXBContext|SAXReader|SAXBuilder|SchemaFactory" --glob '*.java'
+  sinks: |
+    rg -n "\\.parse\\(|createXMLStreamReader|createXMLEventReader|\\.unmarshal\\(|newTransformer|newTemplates|\\.transform\\(|SAXReader|SAXBuilder" --glob '*.java'
+  controls: |
+    rg -n "disallow-doctype-decl|external-general-entities|external-parameter-entities|IS_SUPPORTING_EXTERNAL_ENTITIES|SUPPORT_DTD|ACCESS_EXTERNAL_|FEATURE_SECURE_PROCESSING|setXIncludeAware" --glob '*.java'
+  factories: |
+    rg -n "DocumentBuilderFactory\\.newInstance|XMLInputFactory\\.new(Instance|Factory)|TransformerFactory\\.newInstance|SAXParserFactory\\.newInstance" --glob '*.java'

@@ -1,0 +1,52 @@
+name: java-csrf-decision-tree
+steps:
+  - id: find_state_change_or_csrf_config
+    question: 是否发现状态变更端点（POST/PUT/PATCH/DELETE 或带副作用的 GET）或 CSRF 关闭配置？
+    no: stop_no_sink
+    yes: check_auth_mechanism
+
+  - id: check_auth_mechanism
+    question: 端点是否依赖浏览器可自动附带的凭证（Session Cookie / 认证 Cookie / Cookie 中的 JWT）？
+    no: reject_non_cookie_auth
+    yes: check_state_change
+
+  - id: check_state_change
+    question: 请求是否真实改变服务端状态（密码、转账、删除、权限、资料等）？
+    no: reject_read_only
+    yes: check_csrf_controls
+
+  - id: check_csrf_controls
+    question: 路径上是否存在有效 CSRF 防护（同步器令牌 / 双重提交 / 强制自定义头 / 有效 SameSite 策略）？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 防护是否 strong（会话绑定 token 服务端校验，或强制自定义头且 CORS 不放开带凭证，或 SameSite=Strict 且无 GET 变更）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: classify_subtype
+    question: 归类子类型 — missing-csrf-token / spring-csrf-disabled / cookie-json-api-no-custom-header / get-based-state-change / token-not-bound-to-session？
+    next: reachability
+
+  - id: reachability
+    question: 入口是否浏览器可达（非测试/死代码），受害者会话是否可在跨站场景下被使用？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract（含概念验证推导，非武器化 PoC）？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_non_cookie_auth: Rejected
+  reject_read_only: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

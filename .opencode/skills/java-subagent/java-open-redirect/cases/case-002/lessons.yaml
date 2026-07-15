@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Spring "redirect:" is a browser redirect sink, not a view template name alone
+  - Concatenating user input after redirect: is equivalent to sendRedirect(userInput)
+  - Safe relative-path checks must reject // protocol-relative forms
+non_transferable_details:
+  - original endpoint path
+  - original parameter name
+  - original payload strings

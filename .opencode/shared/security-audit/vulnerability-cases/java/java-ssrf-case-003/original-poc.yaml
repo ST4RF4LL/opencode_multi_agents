@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - /api/webhook/dispatch accepts JSON callbackUrl
+  - OkHttp follows redirects
+  - no host allowlist
+request_context:
+  endpoint: /api/webhook/dispatch
+  parameter: body.callbackUrl
+observed_result:
+  - server requested collaborator URL
+  - redirect chain could change final destination when enabled
+notes:
+  - cloud metadata risk is conceptual for internal deployments
+  - validation must use synthetic collaborator or local mock only
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - do_not_attack_real_169.254.169.254_in_production

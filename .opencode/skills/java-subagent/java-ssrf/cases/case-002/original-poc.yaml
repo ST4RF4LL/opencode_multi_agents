@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - /api/resource concatenates fixed base with user path
+  - only startsWith prefix check before RestTemplate call
+request_context:
+  endpoint: /api/resource
+  parameter: path
+observed_result:
+  - crafted path/host confusion caused request outside trusted host
+  - string prefix check still passed in vulnerable variant
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - do_not_use_against_production_metadata

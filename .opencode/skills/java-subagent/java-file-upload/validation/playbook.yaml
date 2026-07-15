@@ -1,0 +1,33 @@
+steps:
+  - identify_reachable_upload_entry
+  - determine_controlled_filename_content_type_body
+  - determine_type_policy_and_storage_path
+  - inspect_extension_and_mime_checks
+  - inspect_web_accessibility_of_storage
+  - identify_observable_behavior
+  - generate_target_specific_lab_probe_with_fake_marker
+  - execute_baseline_benign_upload
+  - execute_test_upload_conceptual_dangerous_extension_or_mismatch
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - unrestricted_extension_acceptance
+  - content_type_only_trust
+  - double_extension_or_content_mismatch
+  - webroot_or_static_storage
+  - svg_html_stored_and_served
+
+observable_behaviors:
+  - server_accepts_upload_with_conceptual_dangerous_extension
+  - stored_file_path_under_webapp_or_public_url
+  - content_type_image_star_allows_non_image_body_with_fake_marker
+  - double_extension_name_stored_or_mapped
+  - svg_or_html_returned_inline_with_script_capable_content_lab_only
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - NEVER use real webshell payloads
+  - use FAKE markers empty conceptual .jsp acceptance or benign polyglot markers only
+  - lab_only_authorized_environments

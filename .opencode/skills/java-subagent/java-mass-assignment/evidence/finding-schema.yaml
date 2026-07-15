@@ -1,0 +1,47 @@
+finding_id: MASS-ASSIGN-001
+status: finding # finding | candidate | rejected
+vulnerability_type: mass-assignment
+subtype: spring-mvc-entity-binding
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/users/profile"
+  method: UserController.updateProfile
+  parameter: user
+  binding: ModelAttribute # ModelAttribute | RequestBody | ObjectMapper | SpringDataRest | Patch
+source:
+  file: UserController.java
+  line: 42
+  expression: "@ModelAttribute UserEntity user"
+sink:
+  file: UserService.java
+  line: 88
+  expression: userRepository.save(user)
+sensitive_fields:
+  - isAdmin
+  - role
+dataflow:
+  - UserController.updateProfile
+  - UserService.update
+  - UserRepository.save
+controls:
+  observed: []
+  assessment:
+    - missing
+    - entity_bound_directly
+    - no_initbinder_allowlist
+validation:
+  status: verified # verified | not_attempted | failed
+  observable:
+    - isAdmin set true via request parameter and persisted
+evidence:
+  static:
+    - source location
+    - sink location
+    - bound type and sensitive fields
+    - control analysis
+  dynamic:
+    - baseline request
+    - overpost request
+    - before_after field diff
+limitations: []
+rejection_reason: null

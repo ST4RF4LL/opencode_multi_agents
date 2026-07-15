@@ -98,3 +98,8 @@ rg 'jackson-databind' pom.xml build.gradle
 - **+High**: Input from authenticated user + gadget library present + limited type filter bypassable
 - **+Medium**: Input from admin-only endpoint + gadget library present
 - **-Low**: No gadget libraries detected on classpath (verify thoroughly)
+
+## Progressive Deep Pack
+
+When sinks match ObjectInputStream / Fastjson autoType / Jackson default typing / SnakeYAML / XStream / Hessian / Kryo / XMLDecoder, progressive-load **`java-deserialization`** (full models, Joern rules, cases, validation, evidence).
+

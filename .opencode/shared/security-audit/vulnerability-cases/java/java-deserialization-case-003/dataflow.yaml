@@ -1,0 +1,12 @@
+source:
+  method: ConfigController.load
+  parameter: yaml
+  annotation: RequestBody
+path:
+  - ConfigController.load
+  - new Yaml()
+  - parser.load(yaml)
+sink:
+  method: Yaml.load
+  argument: 1
+influence: snakeyaml_tag_type_selection

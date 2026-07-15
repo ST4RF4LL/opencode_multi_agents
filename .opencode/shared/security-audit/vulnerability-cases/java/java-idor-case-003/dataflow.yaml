@@ -1,0 +1,14 @@
+source:
+  method: DocumentController.getDocument
+  parameter: tenantId
+  annotation: RequestParam
+path:
+  - DocumentController.getDocument
+  - DocumentRepository.findByTenantIdAndId
+sink:
+  method: DocumentRepository.findByTenantIdAndId
+  argument: tenantId (client-controlled)
+influence: tenant_scope_from_client
+object_id:
+  parameter: id
+  annotation: PathVariable

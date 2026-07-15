@@ -1,0 +1,30 @@
+subtypes:
+  - id: horizontal-idor
+    description: 同角色用户通过篡改对象 ID 访问其他用户的资源（水平越权）
+    typical_patterns:
+      - GET /orders/{id} without owner check
+      - findById(orderId) then return without comparing currentUser
+
+  - id: vertical-idor
+    description: 低权限用户通过对象 ID 访问/操作仅管理员或更高角色应访问的对象
+    typical_patterns:
+      - DELETE /users/{id} without self-or-admin check
+      - admin resource loaded by id for any authenticated user
+
+  - id: missing-ownership-on-mutation
+    description: 更新/删除操作使用请求中的 ID 且未校验资源归属
+    typical_patterns:
+      - repository.deleteById(id)
+      - save(entity) after load by client id without owner match
+
+  - id: tenant-id-from-client
+    description: 多租户场景下 tenantId 由客户端提供，破坏租户隔离
+    typical_patterns:
+      - @RequestParam Long tenantId used in query filter
+      - body.tenantId overrides server-derived tenant
+
+  - id: predictable-id-enumeration
+    description: 可预测的顺序 ID 结合缺失对象级校验导致可枚举他人资源
+    typical_patterns:
+      - sequential Long id in path
+      - UUID not required if authz missing; sequential raises exploitability

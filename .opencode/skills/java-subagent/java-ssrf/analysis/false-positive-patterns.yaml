@@ -1,0 +1,49 @@
+not_vulnerability:
+  - id: constant-url
+    pattern: RestTemplate/OkHttp/URL with fully constant destination string
+    reason: no external influence on network destination
+
+  - id: fixed-destination-mapping
+    pattern: user selects destination id mapped to constant URLs
+    reason: attacker cannot choose arbitrary host
+
+  - id: path-only-fixed-origin
+    pattern: scheme/host/port constant; user only supplies path/query via safe join
+    reason: not full SSRF (may still be separate issues)
+
+  - id: resolved-ip-allowlist-complete
+    pattern: parse + resolve + all IPs checked + redirects revalidated
+    reason: effective destination control when correctly implemented
+
+  - id: test-only-http-client
+    pattern: network client only referenced from test sources or mocks
+    reason: not production reachable
+
+  - id: open-redirect-misclass
+    pattern: sendRedirect / 3xx Location only without server-side fetch
+    reason: separate skill (java-open-redirect); out of scope
+
+needs_deeper_review:
+  - id: startswith-prefix
+    pattern: url.startsWith("https://trusted...")
+    reason: classic bypass surface; treat as weak control
+
+  - id: host-concat
+    pattern: "http://" + host
+    reason: host-control subtype
+
+  - id: resttemplate-param-url
+    pattern: getForObject(requestParam, ...)
+    reason: full-url-control candidate
+
+  - id: okhttp-follow-redirects
+    pattern: user URL + followRedirects true without revalidation
+    reason: redirect-bypass
+
+  - id: wrapper-util
+    pattern: custom HttpUtil.fetch(String)
+    reason: sink is indirection; expand to real client
+
+  - id: blacklist-metadata-only
+    pattern: block 169.254.169.254 string only
+    reason: incomplete; other internal ranges and DNS names remain

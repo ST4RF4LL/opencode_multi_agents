@@ -1,0 +1,64 @@
+positive:
+  P01_UnrestrictedExtensionWebapp.java:
+    expect: candidate_or_finding
+    subtype: unrestricted-extension
+    sink: transferTo / new File webapp
+  P02_MimeOnlyValidation.java:
+    expect: candidate_or_finding
+    subtype: mime-only-validation
+    sink: Files.copy after Content-Type image/*
+  P03_DoubleExtensionEndsWith.java:
+    expect: candidate_or_finding
+    subtype: double-extension-bypass
+    sink: FileItem.write after endsWith
+  P04_ServletPartWebroot.java:
+    expect: candidate_or_finding
+    subtype: executable-in-webroot
+    sink: Part.write via getRealPath
+  P05_SvgStoredAsImage.java:
+    expect: candidate_or_finding
+    subtype: svg-html-stored-content
+    sink: Files.copy svg to publicDir
+
+negative:
+  N01_ExtensionAllowlistUuid.java:
+    expect: rejected
+    reason: extension_allowlist_fail_closed_with_uuid_name
+  N02_ImageDecodeReencode.java:
+    expect: rejected
+    reason: image_decode_reencode_discards_original
+  N03_ConstantFixtureCopy.java:
+    expect: rejected
+    reason: constant_fixture_no_external_upload
+  N04_PrivateBucketAllowlist.java:
+    expect: rejected
+    reason: private_storage_with_extension_allowlist
+  N05_RejectCompoundExtension.java:
+    expect: rejected
+    reason: compound_extension_rejected_allowlist
+
+regression:
+  R01_UnrestrictedExtensionWebapp.java:
+    expect: sink_candidate
+    subtype: unrestricted-extension
+    must_not_regress: false_negative_on_transferTo_original_filename
+
+partial_control_notes:
+  content_type_only:
+    grade: weak
+    expect: not_strong_sanitizer
+    must_not: reject_as_safe_without_extension_or_magic_check
+  endsWith_image_ext:
+    grade: weak
+    expect: double_extension_review
+  FilenameUtils_getExtension_alone:
+    grade: partial
+    expect: not_strong_without_allowlist_and_safe_storage
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

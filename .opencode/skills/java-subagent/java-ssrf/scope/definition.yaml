@@ -1,0 +1,24 @@
+id: java-ssrf
+name: Server-Side Request Forgery
+language: java
+cwe:
+  - CWE-918
+owasp:
+  - A10:2021-SSRF
+dimension: D6
+objective:
+  detect: >
+    Attacker-controlled network destination data reaching server-side network
+    request operations without effective host, protocol, or port restrictions.
+core_condition:
+  - external_input_exists
+  - network_destination_is_influenced
+  - network_request_is_reachable
+  - effective_destination_control_is_missing
+not_in_scope:
+  - open_redirect_without_server_side_fetch
+  - csrf
+  - pure_xss
+  - command_injection
+  - xxe
+  - jdbc_url_rce_without_http_fetch

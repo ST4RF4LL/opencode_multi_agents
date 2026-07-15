@@ -1,0 +1,27 @@
+id: case-003
+vulnerability_type: ssrf
+subtype: full-url-control
+source:
+  type: request-body
+  expression: '@RequestBody WebhookRequest body'
+sink:
+  api: OkHttp Request.Builder.url / OkHttpClient.newCall
+  sensitive_argument: 1
+propagation:
+  - WebhookController.dispatch
+  - WebhookService.send
+  - Request.Builder.url
+root_cause:
+  - callback_url_fully_user_controlled
+  - okhttp_follow_redirects_enabled
+  - no_host_or_scheme_allowlist
+prerequisites:
+  - webhook_feature_enabled
+  - outbound_network_allowed
+observed_behavior:
+  - server_fetched_attacker_url
+  - redirects_may_reach_sensitive_internal_targets
+fix:
+  - allowlist_parsed_host_and_scheme
+  - disable_or_revalidate_redirects
+  - prefer_fixed_partner_endpoints

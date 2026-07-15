@@ -1,0 +1,24 @@
+id: case-001
+vulnerability_type: ssrf
+subtype: full-url-control
+source:
+  type: request-parameter
+  expression: '@RequestParam String url'
+sink:
+  api: RestTemplate.getForObject
+  sensitive_argument: 1
+propagation:
+  - ProxyController.proxy
+  - ProxyService.fetch
+root_cause:
+  - complete_url_is_user_controlled
+  - no_destination_allowlist
+  - resttemplate_follows_redirects_by_default_possible
+prerequisites:
+  - reachable_http_endpoint
+  - outbound_network_allowed
+observed_behavior:
+  - server_sent_request_to_controlled_destination
+fix:
+  - replace_user_url_with_destination_id
+  - map_destination_id_to_fixed_url

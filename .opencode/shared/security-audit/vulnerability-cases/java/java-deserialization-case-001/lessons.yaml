@@ -1,0 +1,8 @@
+transferable_lessons:
+  - ObjectInputStream itself is not the bug; untrusted stream origin without type filter is
+  - ObjectInputFilter / ValidatingObjectInputStream must run before readObject
+  - Gadget libraries amplify impact but dependency presence alone is not a finding
+non_transferable_details:
+  - original endpoint path
+  - original payload bytes
+  - specific gadget chain used in historical reports

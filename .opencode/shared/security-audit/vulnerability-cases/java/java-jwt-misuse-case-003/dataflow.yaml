@@ -1,0 +1,12 @@
+source:
+  kind: jwt_token
+  expression: token parameter / Authorization header
+path:
+  - TokenParser.parse
+  - parseClaimsJws (signature only)
+  - isAdmin reads role claim
+sink:
+  method: claims.get / authorization decision
+  influence: authorization_without_exp_aud_iss
+related_issues:
+  - may_coexist_with_hardcoded_hmac_key

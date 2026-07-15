@@ -1,0 +1,168 @@
+sinks:
+  - id: jdk-file-input-stream
+    framework: jdk-file
+    method_full_name:
+      - ".*java\\.io\\.FileInputStream\\.<init>.*"
+      - ".*java\\.io\\.FileReader\\.<init>.*"
+      - ".*java\\.io\\.RandomAccessFile\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: file-read
+    confidence: high
+    notes: path argument (File or String) is the sensitive destination
+
+  - id: jdk-file-output-stream
+    framework: jdk-file
+    method_full_name:
+      - ".*java\\.io\\.FileOutputStream\\.<init>.*"
+      - ".*java\\.io\\.FileWriter\\.<init>.*"
+      - ".*java\\.io\\.PrintWriter\\.<init>.*"
+    sensitive_arguments: [1]
+    semantics: file-write
+    confidence: high
+
+  - id: jdk-file-construct
+    framework: jdk-file
+    method_full_name:
+      - ".*java\\.io\\.File\\.<init>.*"
+    sensitive_arguments: []
+    semantics: path-construction
+    confidence: medium
+    notes: >
+      new File(parent, child) and new File(path) are path construction sinks when
+      child/path is user-controlled; escalate when used by subsequent I/O
+
+  - id: jdk-nio-paths-get
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Paths\\.get.*"
+      - ".*java\\.nio\\.file\\.Path\\.of.*"
+    sensitive_arguments: []
+    semantics: path-construction
+    confidence: medium
+
+  - id: jdk-nio-path-resolve
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Path\\.resolve.*"
+      - ".*java\\.nio\\.file\\.Path\\.resolveSibling.*"
+    sensitive_arguments: [1]
+    semantics: path-construction
+    confidence: high
+    notes: resolve(userInput) is classic base+relative join; still needs normalize+startsWith
+
+  - id: jdk-nio-files-read
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Files\\.readAllBytes.*"
+      - ".*java\\.nio\\.file\\.Files\\.readAllLines.*"
+      - ".*java\\.nio\\.file\\.Files\\.readString.*"
+      - ".*java\\.nio\\.file\\.Files\\.newInputStream.*"
+      - ".*java\\.nio\\.file\\.Files\\.newBufferedReader.*"
+      - ".*java\\.nio\\.file\\.Files\\.lines.*"
+      - ".*java\\.nio\\.file\\.Files\\.copy.*"
+      - ".*java\\.nio\\.file\\.Files\\.probeContentType.*"
+    sensitive_arguments: [1]
+    semantics: file-read
+    confidence: high
+
+  - id: jdk-nio-files-write
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Files\\.write.*"
+      - ".*java\\.nio\\.file\\.Files\\.writeString.*"
+      - ".*java\\.nio\\.file\\.Files\\.newOutputStream.*"
+      - ".*java\\.nio\\.file\\.Files\\.newBufferedWriter.*"
+      - ".*java\\.nio\\.file\\.Files\\.createFile.*"
+      - ".*java\\.nio\\.file\\.Files\\.createDirectories.*"
+      - ".*java\\.nio\\.file\\.Files\\.move.*"
+    sensitive_arguments: [1]
+    semantics: file-write
+    confidence: high
+
+  - id: jdk-nio-files-delete
+    framework: jdk-nio
+    method_full_name:
+      - ".*java\\.nio\\.file\\.Files\\.delete.*"
+      - ".*java\\.nio\\.file\\.Files\\.deleteIfExists.*"
+      - ".*java\\.io\\.File\\.delete.*"
+    sensitive_arguments: []
+    semantics: file-delete
+    confidence: high
+    notes: receiver Path/File is sensitive; do not use for destructive system-path probes
+
+  - id: zip-extract-write
+    framework: zip-extract
+    method_full_name:
+      - ".*ZipInputStream\\.getNextEntry.*"
+      - ".*ZipFile\\.getInputStream.*"
+      - ".*JarFile\\.getInputStream.*"
+    sensitive_arguments: []
+    semantics: archive-extract
+    confidence: high
+    notes: >
+      Zip Slip pattern is ZipEntry.getName() -> path join -> Files.copy/FileOutputStream.
+      Sink is the write using entry-derived path, not getNextEntry alone.
+
+  - id: servlet-get-resource
+    framework: servlet
+    method_full_name:
+      - ".*ServletContext\\.getResource.*"
+      - ".*ServletContext\\.getResourceAsStream.*"
+      - ".*ServletContext\\.getRealPath.*"
+      - ".*ClassLoader\\.getResource.*"
+      - ".*ClassLoader\\.getResourceAsStream.*"
+    sensitive_arguments: [1]
+    semantics: resource-path-access
+    confidence: medium
+
+  - id: spring-resource
+    framework: spring-resource
+    method_full_name:
+      - ".*UrlResource\\.<init>.*"
+      - ".*FileSystemResource\\.<init>.*"
+      - ".*PathResource\\.<init>.*"
+      - ".*ClassPathResource\\.<init>.*"
+      - ".*ResourceLoader\\.getResource.*"
+      - ".*ResourceUtils\\.getFile.*"
+    sensitive_arguments: [1]
+    semantics: resource-path-access
+    confidence: high
+
+  - id: apache-commons-io
+    framework: apache-commons-io
+    method_full_name:
+      - ".*FileUtils\\.readFileTo.*"
+      - ".*FileUtils\\.write.*"
+      - ".*FileUtils\\.copyFile.*"
+      - ".*FileUtils\\.delete.*"
+      - ".*FileUtils\\.openInputStream.*"
+      - ".*FileUtils\\.openOutputStream.*"
+      - ".*IOUtils\\.copy.*"
+    sensitive_arguments: []
+    semantics: file-io-wrapper
+    confidence: high
+
+  - id: custom-file-util
+    framework: custom
+    method_full_name:
+      - ".*FileUtil\\..*"
+      - ".*FileHelper\\..*"
+      - ".*PathUtil\\..*"
+      - ".*StorageService\\..*"
+      - ".*DownloadService\\..*"
+      - ".*UploadService\\..*"
+    sensitive_arguments: []
+    semantics: possible-file-path-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real File/NIO/Zip I/O sinks
+
+adjacent_not_sink:
+  - id: filename-utils-get-name
+    framework: apache-commons-io
+    method_full_name:
+      - ".*FilenameUtils\\.getName.*"
+      - ".*FilenameUtils\\.getBaseName.*"
+    semantics: partial-path-sanitizer
+    notes: >
+      FilenameUtils.getName alone is PARTIAL control, not a sink and not a strong sanitizer.
+      Still report path issues if basename is later joined without base-dir confinement when needed.

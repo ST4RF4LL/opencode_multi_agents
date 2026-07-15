@@ -1,0 +1,21 @@
+allowed:
+  - static_analysis_and_code_review_of_parser_configuration
+  - authorized_lab_or_staging_tests_with_benign_and_minimal_entity_fixtures
+  - conceptual_local_file_entity_demonstration_against_lab_fixture_only
+  - single_callback_to_preauthorized_lab_collaborator_when_explicitly_in_scope
+  - documenting_missing_secure_feature_flags_as_static_evidence
+
+forbidden:
+  - weaponized_oob_exfiltration_kits_or_public_payload_packs
+  - scanning_internal_networks_cloud_metadata_or_sibling_hosts
+  - production_secret_harvesting_beyond_minimal_authorized_proof
+  - destructive_dos_testing_that_risks_production_availability
+  - mass_entity_expansion_against_shared_production_systems
+  - lateral_movement_outside_agreed_scope
+  - reporting_xpath_injection_as_xxe_or_vice_versa_without_evidence
+
+reporting:
+  - document_blast_radius_assumptions
+  - classify_impact_as_file_read_ssrf_via_entity_or_dos
+  - prefer_static_factory_evidence_when_dynamic_tests_are_out_of_scope
+  - redaction_of_any_sensitive_file_content_in_reports

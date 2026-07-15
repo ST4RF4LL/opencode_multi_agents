@@ -1,0 +1,15 @@
+subtypes:
+  - id: classic-dotdot
+    description: 用户输入含 ../ 或 ..\\ 等相对路径穿越，拼接到基路径后读/写/删文件
+  - id: absolute-path-injection
+    description: 用户输入为绝对路径（/ 或 C:\ 开头），覆盖预期基目录
+  - id: zip-slip
+    description: ZipEntry.getName()（或类似归档条目名）含 ../，解压时写出基目录之外
+  - id: multipart-filename
+    description: multipart getOriginalFilename / 客户端文件名直接用于存储路径
+  - id: symlink-follow
+    description: 路径校验后仍跟随符号链接逃出基目录（CWE-59 相关，可选）
+  - id: double-encoding-bypass
+    description: 双重编码或 ....// 等过滤绕过，黑名单/单次 decode 失效
+  - id: download-path-param
+    description: 下载/预览接口用 filename/path 参数定位文件，未限制在可下载目录

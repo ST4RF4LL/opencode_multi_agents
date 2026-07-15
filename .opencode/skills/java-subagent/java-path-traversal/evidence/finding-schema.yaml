@@ -1,0 +1,41 @@
+finding_id: PATH-001
+status: finding # finding | candidate | rejected
+vulnerability_type: path-traversal
+subtype: classic-dotdot
+confidence: high # high | medium | low
+entry:
+  route: "GET /api/download"
+  method: DownloadController.download
+  parameter: filename
+source:
+  file: DownloadController.java
+  line: 42
+  expression: request.getParameter("filename")
+sink:
+  file: FileDownloadService.java
+  line: 88
+  expression: new FileInputStream(new File(baseDir, filename))
+dataflow:
+  - DownloadController.download
+  - FileDownloadService.open
+  - FileInputStream.<init>
+controls:
+  observed: []
+  assessment:
+    - missing-normalize-and-startswith
+    - user-path-joined-to-base
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - lab_marker_or_path_diff
+limitations: []
+rejection_reason: null

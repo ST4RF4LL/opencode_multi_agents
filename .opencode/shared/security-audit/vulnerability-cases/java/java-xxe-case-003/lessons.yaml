@@ -1,0 +1,10 @@
+transferable_lessons:
+  - JAXB Unmarshaller security depends on the underlying SAX/StAX parser
+  - Prefer createXMLStreamReader on a hardened XMLInputFactory then unmarshal(reader)
+  - Unmarshal(InputStream) with default settings is a common incomplete hardening pattern
+  - SOAP/Spring OXM paths often wrap the same issue
+  - TransformerFactory ACCESS_EXTERNAL_* is a related sibling pattern when XSLT is used
+non_transferable_details:
+  - original endpoint path
+  - original JAXB type names
+  - original payload strings

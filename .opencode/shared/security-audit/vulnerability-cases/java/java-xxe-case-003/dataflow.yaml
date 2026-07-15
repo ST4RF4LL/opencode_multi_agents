@@ -1,0 +1,13 @@
+source:
+  method: HttpServletRequest.getInputStream
+  parameter: body
+path:
+  - OrderController.submit
+  - JaxbOrderService.unmarshal
+sink:
+  method: Unmarshaller.unmarshal
+  argument: 1
+factory:
+  type: underlying-default-parser
+  secure_features: none
+influence: full_xml_document_content

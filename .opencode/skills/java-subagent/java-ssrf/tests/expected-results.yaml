@@ -1,0 +1,54 @@
+positive:
+  P01_RestTemplateUserUrl.java:
+    expect: candidate_or_finding
+    subtype: full-url-control
+    sink: RestTemplate.getForObject
+  P02_UrlOpenStream.java:
+    expect: candidate_or_finding
+    subtype: full-url-control
+    sink: URL.openStream
+  P03_HostConcat.java:
+    expect: candidate_or_finding
+    subtype: host-control
+    sink: RestTemplate.getForObject
+  P04_WeakStartsWith.java:
+    expect: candidate_or_finding
+    subtype: path-confusion
+    sink: RestTemplate.getForObject
+    control: weak-startswith
+  P05_OkHttpUserUrl.java:
+    expect: candidate_or_finding
+    subtype: full-url-control
+    sink: Request.Builder.url
+    notes: redirect-follow enabled
+
+negative:
+  N01_FixedDestinationMap.java:
+    expect: rejected
+    reason: fixed_destination_mapping
+  N02_HostAllowlistParsed.java:
+    expect: rejected
+    reason: parsed_host_and_scheme_allowlist
+  N03_ConstantUrl.java:
+    expect: rejected
+    reason: constant_url
+  N04_SchemeDenyNonHttp.java:
+    expect: rejected
+    reason: scheme_and_host_allowlist
+  N05_ResolvedIpAllowlist.java:
+    expect: rejected
+    reason: host_allowlist_with_resolved_ip_checks
+
+regression:
+  R01_RestTemplateParamUrl.java:
+    expect: sink_candidate
+    subtype: full-url-control
+    must_not_regress: false_negative_on_resttemplate_requestparam_url
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

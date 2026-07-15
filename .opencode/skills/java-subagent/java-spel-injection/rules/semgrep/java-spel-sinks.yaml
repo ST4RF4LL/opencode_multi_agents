@@ -1,0 +1,108 @@
+rules:
+  - id: java-spel-parse-expression-user
+    message: SpelExpressionParser.parseExpression may receive untrusted expression text
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $P.parseExpression($EXPR)
+          - pattern: $P.parseExpression($EXPR, $CTX)
+      - pattern-either:
+          - pattern-inside: |
+              $EXPR = $A + $B;
+              ...
+          - pattern-inside: |
+              $EXPR = String.format(...);
+              ...
+          - pattern-inside: |
+              $EXPR = new StringBuilder(...).append(...).toString();
+              ...
+          - pattern-inside: |
+              $EXPR += $B;
+              ...
+          - pattern-inside: |
+              String $EXPR = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $EXPR = $REQ.getParameter(...);
+              ...
+    metadata:
+      cwe: CWE-917
+      category: spel-injection
+      confidence: high
+
+  - id: java-spel-inline-parse-concat
+    message: parseExpression with inline string concatenation
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $P.parseExpression($A + $B)
+      - pattern: |
+          $P.parseExpression($A + $B, ...)
+      - pattern: |
+          $P.parseExpression(String.format(...))
+      - pattern: |
+          $P.parseExpression(String.format(...), ...)
+    metadata:
+      cwe: CWE-917
+      category: spel-injection
+      confidence: high
+
+  - id: java-spel-get-value-after-parse
+    message: Expression.getValue after parseExpression of non-constant input
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $E = $P.parseExpression($EXPR);
+              ...
+              $E.getValue(...);
+          - pattern: |
+              $E = $P.parseExpression($EXPR, ...);
+              ...
+              $E.getValue(...);
+          - pattern: |
+              $E = $P.parseExpression($EXPR);
+              ...
+              $E.setValue(...);
+      - pattern-either:
+          - pattern-inside: |
+              $EXPR = $A + $B;
+              ...
+          - pattern-inside: |
+              $EXPR = String.format(...);
+              ...
+          - pattern-inside: |
+              $EXPR = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              String $EXPR = $REQ.getParameter(...);
+              ...
+    metadata:
+      cwe: CWE-917
+      category: spel-injection
+      confidence: high
+
+  - id: java-spel-standard-context-with-parse
+    message: StandardEvaluationContext used with dynamically parsed SpEL (full capability surface)
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $C = new StandardEvaluationContext(...);
+              ...
+              $P.parseExpression($EXPR);
+          - pattern: |
+              StandardEvaluationContext $C = new StandardEvaluationContext(...);
+              ...
+              $E.getValue($C, ...);
+          - pattern: |
+              $E.getValue(new StandardEvaluationContext(...), ...);
+    metadata:
+      cwe: CWE-917
+      category: spel-injection
+      confidence: medium
+      notes: L1 candidate; confirm expression text or dangerous root is attacker-influenced

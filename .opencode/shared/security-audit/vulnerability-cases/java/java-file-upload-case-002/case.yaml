@@ -1,0 +1,27 @@
+id: case-002
+vulnerability_type: unsafe-file-upload
+subtype: mime-only-validation
+source:
+  type: multipart-content-type
+  expression: multipartFile.getContentType()
+sink:
+  api: Files.copy / store as-is after image/* check
+  sensitive_argument: storage_path
+propagation:
+  - AvatarController.upload
+  - AvatarService.saveIfImage
+  - getContentType startsWith image/
+  - Files.copy with original name
+root_cause:
+  - content_type_header_only_trusted
+  - no_extension_or_magic_byte_verification
+  - store_as_is_after_mime_check
+prerequisites:
+  - reachable_multipart_upload_endpoint
+  - client_can_set_Content-Type
+observed_behavior:
+  - non_image_body_with_image_content_type_accepted_and_stored
+fix:
+  - extension_allowlist_independent_of_content_type
+  - magic_byte_or_image_decode_reencode
+  - server_generated_name

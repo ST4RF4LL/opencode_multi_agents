@@ -1,0 +1,9 @@
+transferable_lessons:
+  - startsWith on a trusted URL prefix is not host validation
+  - suffix-host (trusted.example.evil.example) and userinfo (@) bypasses are classic
+  - Location header sinks are equivalent to sendRedirect for open-redirect impact
+  - Always parse URI and compare scheme + host (or force safe relative paths)
+non_transferable_details:
+  - original trusted prefix string
+  - original endpoint path
+  - original bypass payload strings

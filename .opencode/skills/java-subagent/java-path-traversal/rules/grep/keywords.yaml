@@ -1,0 +1,56 @@
+l0_stack_detection:
+  - pattern: "java.nio.file|Paths\\.get|Path\\.resolve|Files\\.(read|write|copy|delete)"
+    implies: jdk-nio
+  - pattern: "java\\.io\\.File|FileInputStream|FileOutputStream"
+    implies: jdk-file
+  - pattern: "ZipEntry|ZipInputStream|ZipFile|JarEntry|JarFile"
+    implies: zip-extract
+  - pattern: "MultipartFile|getOriginalFilename|getSubmittedFileName|commons.fileupload"
+    implies: servlet-multipart
+  - pattern: "UrlResource|FileSystemResource|PathResource|ResourceUtils"
+    implies: spring-resource
+  - pattern: "FilenameUtils|FileUtils"
+    implies: apache-commons-io
+
+l1_sink_keywords:
+  - "FileInputStream"
+  - "FileOutputStream"
+  - "new File("
+  - "Paths.get"
+  - "Path.of"
+  - ".resolve("
+  - "Files.read"
+  - "Files.write"
+  - "Files.delete"
+  - "Files.copy"
+  - "getCanonicalPath"
+  - "getOriginalFilename"
+  - "getSubmittedFileName"
+  - "ZipEntry"
+  - ".getName()"
+  - "FilenameUtils.getName"
+  - "FileUtils."
+  - "getRealPath"
+  - "FileSystemResource"
+  - "UrlResource"
+
+high_risk_path_hints:
+  - 'new File\\([^,]+,\\s*[^)]+\\)'
+  - '\\.resolve\\('
+  - 'getOriginalFilename\\(\\)'
+  - 'ZipEntry.*getName|getName\\(\\).*Zip'
+  - 'getParameter\\("(filename|file|path|name|fileName)"\\)'
+  - '\\.\\.\\/'
+  - '\\.\\.\\\\'
+
+rg_commands:
+  stack: |
+    rg -n "java\\.nio\\.file|FileInputStream|ZipEntry|getOriginalFilename|FileSystemResource|FilenameUtils" --glob '*.java'
+  sinks: |
+    rg -n "FileInputStream|FileOutputStream|new File\\(|Paths\\.get|\\.resolve\\(|Files\\.(read|write|delete|copy)|getCanonicalPath" --glob '*.java'
+  sources: |
+    rg -n "getParameter\\(\"(filename|file|path|name|fileName)\"\\)|getOriginalFilename|getSubmittedFileName|ZipEntry|\\.getName\\(\\)" --glob '*.java'
+  zip_slip: |
+    rg -n "ZipEntry|getNextEntry|getName\\(\\)" --glob '*.java' -A3 -B1
+  weak_controls: |
+    rg -n 'contains\("\.\."\)|replace\("\.\."|FilenameUtils\.getName|normalize\(\)' --glob '*.java'

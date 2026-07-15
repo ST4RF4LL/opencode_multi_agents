@@ -1,0 +1,42 @@
+id: jackson
+name: Jackson JSON binding
+detection:
+  imports:
+    - com.fasterxml.jackson.databind.ObjectMapper
+    - com.fasterxml.jackson.annotation.JsonIgnore
+    - com.fasterxml.jackson.annotation.JsonProperty
+    - com.fasterxml.jackson.annotation.JsonIgnoreProperties
+    - com.fasterxml.jackson.annotation.JsonSetter
+    - com.fasterxml.jackson.annotation.JsonView
+  classes:
+    - ObjectMapper
+    - ObjectReader
+    - JsonNode
+    - JsonPatch
+    - JsonMergePatch
+  dependencies:
+    - jackson-databind
+    - jackson-annotations
+sources:
+  - ObjectMapper.readValue into entity type
+  - Spring @RequestBody via MappingJackson2HttpMessageConverter
+  - readerForUpdating merge
+sinks:
+  - deserialized object with writable sensitive properties
+  - updateValue / readerForUpdating on managed entity
+controls:
+  strong:
+    - "@JsonIgnore on field and setter (or FAIL_ON_IGNORED_PROPERTIES careful config)"
+    - "@JsonProperty(access = JsonProperty.Access.READ_ONLY)"
+    - "@JsonSetter(nulls = ...) combined with no public setter for sensitive fields"
+    - dedicated immutable request records without sensitive fields
+  contextual:
+    - "@JsonIgnoreProperties({\"role\",\"admin\"})"
+    - JsonView write views excluding sensitive fields
+  weak:
+    - "@JsonIgnore only on getter"
+    - "@Transient (JPA) without Jackson ignore"
+notes:
+  - Default typing / polymorphic type ids are separate unsafe-deserialization risks
+  - Mass assignment assumes expected type; attacker controls property values not type gadgets
+  - Visibility: public fields and setters are writable by default

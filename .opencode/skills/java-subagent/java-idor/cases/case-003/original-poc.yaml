@@ -1,0 +1,16 @@
+case_specific: true
+preconditions:
+  - multi-tenant app with documents scoped by tenantId
+  - GET /documents/{id}?tenantId= accepts client tenant
+  - user in tenant A can authenticate
+request_context:
+  endpoint: GET /documents/{id}
+  parameters:
+    - id
+    - tenantId
+observed_result:
+  - tenant A user supplied tenant B id and retrieved tenant B document
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - lab_tenants_only

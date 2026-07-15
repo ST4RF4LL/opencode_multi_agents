@@ -1,0 +1,48 @@
+finding_id: CSRF-001
+status: finding # finding | candidate | rejected
+vulnerability_type: csrf
+subtype: spring-csrf-disabled
+confidence: high # high | medium | low
+entry:
+  route: "POST /account/password"
+  method: AccountController.changePassword
+  content_type: application/x-www-form-urlencoded
+auth:
+  mechanism: session_cookie
+  cookie_hints:
+    - JSESSIONID
+  samesite: null
+source:
+  file: SecurityConfig.java
+  line: 28
+  expression: http.csrf().disable()
+sink:
+  file: AccountController.java
+  line: 44
+  expression: userService.updatePassword(newPassword)
+dataflow:
+  - browser_auto_session_cookie
+  - SecurityFilterChain (csrf disabled)
+  - AccountController.changePassword
+  - UserService.updatePassword
+controls:
+  observed:
+    - csrf().disable()
+  assessment:
+    - invalid
+    - spring-csrf-disabled
+    - no_synchronizer_token
+validation:
+  status: conceptual # conceptual | lab_verified | not_attempted | failed
+  observable:
+    - state-changing endpoint accepts cookie-authenticated request without CSRF token
+evidence:
+  static:
+    - csrf disable location
+    - mutating handler location
+    - session/cookie auth evidence
+    - control analysis
+  dynamic:
+    - conceptual request shape only
+limitations: []
+rejection_reason: null

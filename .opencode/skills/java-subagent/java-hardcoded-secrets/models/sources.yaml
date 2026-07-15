@@ -1,0 +1,72 @@
+# For secrets: "sources" = locations where secret material is introduced into the program.
+sources:
+  - id: string-literal-secret
+    framework: jdk
+    patterns:
+      - string literals assigned to password/secret/apiKey/token/privateKey fields
+      - static final constants with secret-shaped values
+    controlled_value: secret_literal
+    confidence: high
+    notes: primary source of hardcoded secrets in Java
+
+  - id: byte-array-literal-key
+    framework: jca-jce
+    patterns:
+      - byte[] / char[] initializers used as key or password material
+      - "secret".getBytes(...) feeding SecretKeySpec / PBEKeySpec
+    controlled_value: key_bytes
+    confidence: high
+
+  - id: config-plaintext-property
+    framework: spring-config
+    patterns:
+      - application*.yml/properties password, secret, api-key, client-secret
+      - spring.datasource.password
+      - spring.security.oauth2.*client-secret
+      - jwt.secret / signing-key properties
+    controlled_value: config_value
+    confidence: high
+
+  - id: jdbc-url-embedded-credentials
+    framework: jdbc
+    patterns:
+      - jdbc: URL with user/password query or user:pass@host form
+      - DriverManager.getConnection(url, user, password) with literals
+    controlled_value: connection_credentials
+    confidence: high
+
+  - id: pem-private-key-resource
+    framework: resources
+    patterns:
+      - -----BEGIN.*PRIVATE KEY-----
+      - .pem / .key files under resources or repo root
+    controlled_value: private_key_pem
+    confidence: high
+
+  - id: cloud-key-literal
+    framework: aws-sdk
+    patterns:
+      - AKIA* access key id literals
+      - secret access key string literals
+      - service account JSON with private_key field in repo
+    controlled_value: cloud_credentials
+    confidence: high
+
+  - id: env-or-secret-manager
+    framework: secrets
+    method_full_name:
+      - ".*System\\.getenv.*"
+      - ".*System\\.getProperty.*"
+      - ".*Environment\\.getProperty.*"
+    controlled_value: external_secret
+    confidence: low
+    notes: not a vulnerability by itself; track if fallback default is a real secret
+
+  - id: placeholder-or-example
+    framework: docs
+    patterns:
+      - CHANGE_ME, your-api-key, XXXX, <password>, TODO_SECRET
+      - AWS example key AKIAIOSFODNN7EXAMPLE
+    controlled_value: non_secret_placeholder
+    confidence: low
+    notes: usually reject unless used as production default without override

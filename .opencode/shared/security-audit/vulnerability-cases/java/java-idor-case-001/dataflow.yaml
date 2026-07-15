@@ -1,0 +1,12 @@
+source:
+  method: OrderController.getOrder
+  parameter: id
+  annotation: PathVariable
+path:
+  - OrderController.getOrder
+  - OrderRepository.findById
+sink:
+  method: OrderRepository.findById
+  argument: 1
+influence: object_id_for_read
+ownership_check: none

@@ -1,0 +1,27 @@
+id: case-003
+vulnerability_type: path-traversal
+subtype: multipart-filename
+source:
+  type: multipart-original-filename
+  expression: multipartFile.getOriginalFilename()
+sink:
+  api: Files.copy / new File(uploadDir, originalFilename)
+  sensitive_argument: storage_path
+propagation:
+  - UploadController.upload
+  - StorageService.store
+  - MultipartFile.getOriginalFilename
+  - uploadDir.resolve(originalFilename)
+  - Files.copy
+root_cause:
+  - client_controlled_original_filename_used_as_storage_path
+  - no_server_generated_name_or_base_confinement
+prerequisites:
+  - reachable_multipart_upload_endpoint
+  - filesystem_storage_enabled
+observed_behavior:
+  - crafted_original_filename_stores_outside_upload_root
+fix:
+  - use_server_generated_storage_name
+  - optional_sanitize_display_name_separately
+  - confine_final_path_under_upload_root

@@ -1,0 +1,16 @@
+case_specific: true
+preconditions:
+  - HS256 with hardcoded secret "secret"
+  - verifier accepts tokens signed with that secret
+request_context:
+  note: >
+    ABSTRACT ONLY — fake secret for documentation.
+    Do not brute-force or forge against production.
+    Conceptually, knowledge of the embedded secret allows minting
+    HS256 tokens the verifier accepts.
+observed_result:
+  - forged_token_with_known_fake_secret_would_verify_in_lab
+reuse_policy:
+  - reference_only
+  - fake_secrets_only
+  - do_not_execute_on_production

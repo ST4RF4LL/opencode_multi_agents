@@ -1,0 +1,37 @@
+id: spring-expression
+name: Spring Expression Language (spring-expression)
+detection:
+  imports:
+    - org.springframework.expression.ExpressionParser
+    - org.springframework.expression.Expression
+    - org.springframework.expression.spel.standard.SpelExpressionParser
+    - org.springframework.expression.spel.support.StandardEvaluationContext
+    - org.springframework.expression.spel.support.SimpleEvaluationContext
+    - org.springframework.expression.common.TemplateParserContext
+    - org.springframework.expression.ParserContext
+  classes:
+    - SpelExpressionParser
+    - StandardEvaluationContext
+    - SimpleEvaluationContext
+    - TemplateParserContext
+  artifacts:
+    - spring-expression
+sinks:
+  - ExpressionParser.parseExpression(String)
+  - ExpressionParser.parseExpression(String, ParserContext)
+  - SpelExpressionParser.parseExpression(...)
+  - Expression.getValue(...)
+  - Expression.setValue(...)
+strong_controls:
+  - SimpleEvaluationContext.forReadOnlyDataBinding()
+  - SimpleEvaluationContext.forReadWriteDataBinding() with restricted types
+  - expression allowlist / constant expression templates
+  - never pass user input as expression string
+weak_or_invalid:
+  - StandardEvaluationContext without capability restrictions
+  - blacklisting T( or Runtime only
+  - TemplateParserContext with user-controlled template body
+notes:
+  - Prefer binding user data as variables with constant expression text
+  - StandardEvaluationContext enables T(...), constructors, method invocation by default
+  - SimpleEvaluationContext is strong only without dangerous custom accessors

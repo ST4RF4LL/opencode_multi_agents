@@ -1,0 +1,44 @@
+l0_stack_detection:
+  - pattern: "org.springframework.expression|SpelExpressionParser"
+    implies: spring-expression
+  - pattern: "StandardEvaluationContext|SimpleEvaluationContext"
+    implies: spring-expression
+  - pattern: "TemplateParserContext|ParserContext"
+    implies: spring-expression
+  - pattern: "org.springframework.beans.factory.annotation.Value"
+    implies: spring-context-value
+  - pattern: "Cacheable|CacheEvict|CachePut"
+    implies: spring-cache-spel
+  - pattern: "ExpressionEvaluating|spring-integration"
+    implies: spring-integration-spel
+
+l1_sink_keywords:
+  - "SpelExpressionParser"
+  - "parseExpression"
+  - "ExpressionParser"
+  - ".getValue("
+  - ".setValue("
+  - "StandardEvaluationContext"
+  - "SimpleEvaluationContext"
+  - "TemplateParserContext"
+  - "EvaluationContext"
+  - "@Value(\"#{"
+  - "StringBuilder"
+  - "String.format"
+
+high_risk_concat_hints:
+  - '"#\\{.*"\\s*\\+'
+  - 'append\\("#\\{'
+  - 'String\\.format\\("#\\{'
+  - 'parseExpression\\([^)]*\\+'
+  - 'parseExpression\\(\\s*String\\.format'
+
+rg_commands:
+  stack: |
+    rg -n "SpelExpressionParser|org\\.springframework\\.expression|StandardEvaluationContext|SimpleEvaluationContext|TemplateParserContext" --glob '*.java'
+  sinks: |
+    rg -n "parseExpression|SpelExpressionParser|\\.getValue\\(|\\.setValue\\(|StandardEvaluationContext|TemplateParserContext" --glob '*.java'
+  concat: |
+    rg -n 'parseExpression\([^)]*\+|String\.format\("#\{|append\("#\{|"#\{.*"\s*\+' --glob '*.java'
+  controls: |
+    rg -n "SimpleEvaluationContext|forReadOnlyDataBinding|forReadWriteDataBinding" --glob '*.java'

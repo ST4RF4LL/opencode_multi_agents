@@ -1,0 +1,20 @@
+allowed:
+  - static_analysis_and_code_review_evidence
+  - conceptual_validation_plans_derived_from_target_code
+  - authorized_staging_or_lab_non_destructive_checks
+  - documentation_of_missing_csrf_controls_and_state_change_paths
+
+forbidden:
+  - weaponized_csrf_html_or_js_exploit_delivery
+  - real_attacks_against_production_users
+  - phishing_pages_or_social_engineering
+  - mass_account_takeover_attempts
+  - destructive_fund_transfers_or_mass_deletes_outside_lab
+  - sharing_live_session_tokens_in_reports_beyond_minimal_redacted_proof
+
+reporting:
+  - emphasize_missing_control_and_state_impact
+  - keep_validation_conceptual_unless_lab_authorized
+  - redact_session_identifiers
+  - document_browser_and_samesite_assumptions
+  - never_include_copy_paste_exploit_kits

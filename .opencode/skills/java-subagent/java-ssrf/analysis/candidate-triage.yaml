@@ -1,0 +1,35 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous HTTP/URL client API or dynamic destination pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input can reach network destination argument or URL receiver
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_destination_analysis
+
+  L3_semantic_candidate:
+    meaning: destination component influenced and controls missing or bypassable
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - full_url_control
+  - proxy_or_webhook_feature
+  - cloud_metadata_reachable_in_deployment
+  - redirects_followed_without_revalidation
+  - internal_network_egress_available
+
+priority_reduce:
+  - test_code_only
+  - constant_url
+  - fixed_destination_map
+  - path_only_with_fixed_origin
+  - dead_code
+  - mock_http_client_only

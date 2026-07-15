@@ -1,0 +1,33 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter
+  - determine_spel_influence_surface
+  - inspect_input_transformations
+  - inspect_evaluation_context_and_allowlists
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_request
+  - execute_test_request
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - full_expression_text
+  - template_hash_fragment
+  - evaluation_root_object
+  - evaluation_context_variables
+  - method_or_property_access_path_in_expression
+  - cache_or_integration_spel_attribute
+
+observable_behaviors:
+  - spel_parse_error_message_difference
+  - evaluation_result_difference_from_benign_property_access
+  - unexpected_side_effect_in_lab_only_marker
+  - auth_or_filter_decision_flip_tied_to_expression
+  - application_logs_show_attacker_controlled_expression
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - use_only_safe_expression_markers_in_lab_never_weaponized_rce_payloads
+  - prefer_harmless_property_access_or_literal_markers_to_prove_evaluation

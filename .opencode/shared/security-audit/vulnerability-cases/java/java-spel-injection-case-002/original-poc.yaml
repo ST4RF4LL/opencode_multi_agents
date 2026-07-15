@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - greet endpoint accepts name parameter
+  - template is built by concatenating name into #{...}
+  - TemplateParserContext is used for parseExpression
+request_context:
+  endpoint: /api/greet
+  parameter: name
+observed_result:
+  - crafted name alters embedded SpEL fragment semantics
+  - impact: expression structure inside template slots becomes attacker-influenced
+  - abstract_impact: may evaluate unintended expressions within the template context
+payload_policy:
+  - no_weaponized_rce_expressions
+  - use_harmless_lab_markers_only_when_revalidating
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target

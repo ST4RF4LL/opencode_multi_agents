@@ -1,0 +1,14 @@
+source:
+  method: SpelEvalController.evaluate
+  parameter: expression
+  annotation: RequestParam
+path:
+  - SpelEvalController.evaluate
+  - SpelEvalService.run
+sink:
+  method: SpelExpressionParser.parseExpression
+  argument: 1
+evaluation:
+  method: Expression.getValue
+  context: StandardEvaluationContext
+influence: full_expression_text

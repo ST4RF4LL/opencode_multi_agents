@@ -1,0 +1,79 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: high
+    notes: >
+      X-Forwarded-Host / custom destination headers often feed URL builders.
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getQueryString.*"
+      - ".*HttpServletRequest.*getRequestURL.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields such as url/host/target require field-level taint tracking
+
+  - id: uri-components
+    framework: spring
+    method_full_name:
+      - ".*UriComponentsBuilder\\.fromUriString.*"
+      - ".*UriComponentsBuilder\\.fromHttpUrl.*"
+      - ".*URI\\.create.*"
+      - ".*new URL\\(.*"
+    controlled_value: construction_argument
+    confidence: medium
+    notes: intermediate construction; treat as propagator when input already tainted
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: async/second-order entry points for webhook or callback URLs
+
+  - id: config-or-db-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*ResultSet.*getString.*"
+      - ".*Document\\.get.*"
+    controlled_value: return
+    confidence: low
+    notes: only when previously stored attacker URL/host is reused for outbound fetch

@@ -1,0 +1,25 @@
+id: case-002
+vulnerability_type: idor
+subtype: missing-ownership-on-mutation
+source:
+  type: path-variable
+  expression: '@PathVariable Long id'
+sink:
+  api: UserRepository.deleteById
+  sensitive_argument: 1
+propagation:
+  - UserController.deleteUser
+  - UserRepository.deleteById
+root_cause:
+  - delete_uses_client_object_id
+  - no_self_or_admin_check
+  - vertical_and_horizontal_delete_possible
+prerequisites:
+  - authenticated_user
+  - known_or_enumerable_user_ids
+observed_behavior:
+  - low_privilege_user_deletes_another_user_account
+fix:
+  - require_admin_role_for_arbitrary_user_delete
+  - or_restrict_to_self_delete_with_principal_id
+  - never_deleteById_on_raw_path_id_without_authz

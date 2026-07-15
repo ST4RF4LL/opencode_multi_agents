@@ -1,0 +1,9 @@
+transferable_lessons:
+  - StandardEvaluationContext vs SimpleEvaluationContext is a core control dimension for SpEL
+  - SimpleEvaluationContext is strong only without dangerous custom accessors/resolvers
+  - Pair sandbox with expression allowlist when user selects among operations
+  - Do not treat SimpleEvaluationContext as auto-safe without reviewing custom capability expansion
+non_transferable_details:
+  - original endpoint
+  - original field names
+  - original payloads

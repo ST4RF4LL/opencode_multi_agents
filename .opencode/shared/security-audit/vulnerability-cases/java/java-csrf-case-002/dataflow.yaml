@@ -1,0 +1,12 @@
+source:
+  mechanism: browser_auto_session_cookie
+  attacker_controlled: JSON body.email
+path:
+  - cross_site_or_cross_origin_credentialed_request
+  - ApiSecurityConfig csrf disabled
+  - ProfileController.update
+  - ProfileService.updateEmail
+sink:
+  method: ProfileService.updateEmail
+  effect: profile_email_state_change
+influence: cookie_authenticated_json_mutation

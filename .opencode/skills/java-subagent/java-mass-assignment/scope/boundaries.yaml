@@ -1,0 +1,32 @@
+in_scope:
+  - spring_mvc_modelattribute_or_form_binding_to_entity
+  - jackson_requestbody_deserialization_to_entity_with_sensitive_fields
+  - domain_entity_or_jpa_entity_used_as_request_dto
+  - nested_object_binding_that_overwrites_privilege_or_ownership
+  - patch_merge_or_beanutils_copy_without_field_allowlist
+  - spring_data_rest_exposed_entity_writable_fields
+  - sensitive_fields_role_admin_balance_owner_status_verified
+
+out_of_scope:
+  - pure_idor_accessing_another_users_resource_without_field_binding
+  - sql_injection_or_orm_injection
+  - xss_or_template_injection
+  - csrf_token_missing_without_over_posting
+  - client_side_only_form_hiding_without_server_binding
+  - intentional_admin_only_endpoints_that_require_admin_and_only_admin_can_set_role
+
+adjacent_skills:
+  - id: java-idor
+    relation: object-level access control; may co-occur when ownerId is mass-assigned
+  - id: java-missing-authorization
+    relation: function-level authz; mass assignment is field-level write control
+  - id: java-unsafe-deserialization
+    relation: gadget/RCE deserialization; mass assignment is property binding of expected types
+
+boundary_notes:
+  - hidden_form_fields_alone_are_not_vulnerabilities_without_server_binding
+  - entity_with_sensitive_fields_is_not_finding_until_writable_via_entry
+  - dto_with_only_safe_fields_is_not_mass_assignment
+  - jsonignore_on_setter_or_jsonproperty_read_only_can_be_strong_control
+  - initbinder_allowedfields_is_strong_when_complete
+  - beanutils_copyproperties_without_ignore_is_common_transfer_sink

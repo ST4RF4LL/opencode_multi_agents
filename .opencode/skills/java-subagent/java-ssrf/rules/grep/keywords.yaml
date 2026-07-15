@@ -1,0 +1,54 @@
+l0_stack_detection:
+  - pattern: "org.springframework.web.client.RestTemplate|RestTemplate"
+    implies: spring-resttemplate
+  - pattern: "org.springframework.web.reactive.function.client.WebClient|WebClient.create"
+    implies: spring-webclient
+  - pattern: "okhttp3.OkHttpClient|okhttp3.Request"
+    implies: okhttp
+  - pattern: "org.apache.http.client|org.apache.hc.client5|CloseableHttpClient|HttpGet"
+    implies: apache-httpclient
+  - pattern: "java.net.URL|HttpURLConnection|java.net.http.HttpClient"
+    implies: jdk-urlconnection
+  - pattern: "javax.servlet|jakarta.servlet|HttpServletRequest"
+    implies: servlet
+
+l1_sink_keywords:
+  - "RestTemplate"
+  - "getForObject"
+  - "getForEntity"
+  - "exchange("
+  - "WebClient"
+  - ".uri("
+  - "OkHttpClient"
+  - "Request.Builder"
+  - ".url("
+  - "HttpGet"
+  - "HttpPost"
+  - "CloseableHttpClient"
+  - "openConnection"
+  - "openStream"
+  - "HttpURLConnection"
+  - "HttpRequest.newBuilder"
+  - "URI.create"
+  - "new URL("
+
+high_risk_destination_hints:
+  - "getParameter\\(\\\"url"
+  - "getParameter\\(\\\"uri"
+  - "getParameter\\(\\\"target"
+  - "getParameter\\(\\\"host"
+  - "getParameter\\(\\\"callback"
+  - "RequestParam.*url"
+  - "startsWith\\(\\\"https?://"
+  - "169\\.254\\.169\\.254"
+  - "metadata\\.google\\.internal"
+
+rg_commands:
+  stack: |
+    rg -n "RestTemplate|WebClient|OkHttpClient|CloseableHttpClient|HttpURLConnection|java\\.net\\.URL|HttpClient" --glob '*.java'
+  sinks: |
+    rg -n "openConnection|openStream|getForObject|getForEntity|\\.exchange\\(|Request\\.Builder|\\.url\\(|new HttpGet|new HttpPost|\\.uri\\(" --glob '*.java'
+  weak_validation: |
+    rg -n "startsWith\\(|contains\\(\"169\\.254|contains\\(\"localhost" --glob '*.java'
+  metadata: |
+    rg -n "169\\.254\\.169\\.254|metadata\\.google\\.internal|100\\.100\\.100\\.200" --glob '*.java'

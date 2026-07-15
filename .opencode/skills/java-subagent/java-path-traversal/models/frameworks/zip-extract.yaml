@@ -1,0 +1,33 @@
+id: zip-extract
+name: Zip / Jar / Archive extract (Zip Slip)
+detection:
+  imports:
+    - java.util.zip.ZipEntry
+    - java.util.zip.ZipInputStream
+    - java.util.zip.ZipFile
+    - java.util.jar.JarEntry
+    - java.util.jar.JarFile
+    - org.apache.commons.compress.archivers
+  classes:
+    - ZipEntry
+    - ZipInputStream
+    - ZipFile
+    - JarEntry
+    - ArchiveEntry
+sources:
+  - ZipEntry.getName()
+  - JarEntry.getName()
+  - ArchiveEntry.getName()
+sinks:
+  - new File(destDir, entry.getName())
+  - destDir.resolve(entry.getName())
+  - Files.copy(zis, targetPath)
+  - FileOutputStream(targetFile)
+strong_controls:
+  - resolve entry name under destDir
+  - normalize and require startsWith(destDir absolute)
+  - reject absolute entry names and ".." segments
+notes:
+  - Entry name is attacker-controlled when archive is untrusted
+  - Classic Zip Slip: ../../../etc/passwd style entry names
+  - getNextEntry alone is not the write sink; track entry name to write path

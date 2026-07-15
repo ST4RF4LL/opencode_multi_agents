@@ -1,0 +1,25 @@
+strong_signals:
+  - string_literal_assigned_to_password_apiKey_secret_token_privateKey
+  - SecretKeySpec_or_Keys_hmacShaKeyFor_from_string_or_byte_literal
+  - application_yml_properties_password_or_client_secret_plaintext
+  - jdbc_url_or_DriverManager_with_literal_password
+  - BEGIN_PRIVATE_KEY_pem_in_repo
+  - BasicAWSCredentials_or_AwsBasicCredentials_with_literals
+  - jwt_signWith_or_setSigningKey_with_literal
+
+medium_signals:
+  - sensitive_config_key_with_non_placeholder_value
+  - base64_constant_decoded_to_key_material
+  - default_fallback_secret_when_env_missing
+  - docker_compose_or_k8s_manifest_with_plaintext_secret_in_git
+
+weak_signals:
+  - variable_named_password_or_secret_without_literal
+  - empty_password_property
+  - public_key_or_certificate_block
+  - comments_mentioning_credentials
+
+interpretation:
+  strong: supports Finding when usage and reachability are clear
+  medium: supports Candidate; may upgrade with binding/path
+  weak: insufficient alone

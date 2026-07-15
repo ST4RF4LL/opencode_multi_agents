@@ -1,0 +1,24 @@
+in_scope:
+  - file_read_write_delete_move_with_user_path_segments
+  - path_construction_via_File_Paths_resolve
+  - zip_jar_tar_extract_using_entry_name
+  - multipart_original_filename_used_as_storage_path
+  - servlet_context_getResource_getRealPath_with_user_path
+  - spring_resource_urlresource_with_user_path
+  - partial_sanitizers_and_filter_bypasses
+  - symlink_follow_after_path_check_when_relevant
+
+out_of_scope:
+  - file_upload_extension_mime_size_policy_without_path_escape
+  - ssrf_via_file_url_or_network_fetch
+  - command_injection_via_path_arguments_as_primary_issue
+  - pure_idor_on_object_ids_without_filesystem_path
+  - pure_authorization_without_path_control
+
+boundary_notes:
+  - File upload policy (extension/MIME/storage) without path escape → future java-file-upload; may note as adjacent
+  - SSRF via file:// → java-ssrf
+  - Command injection with path args → only if path used as command (out of primary scope)
+  - FilenameUtils.getName alone is PARTIAL; still need base-dir confinement for resolve results
+  - Dangerous file API hit alone is not a vulnerability
+  - normalize without startsWith(baseDir) is incomplete

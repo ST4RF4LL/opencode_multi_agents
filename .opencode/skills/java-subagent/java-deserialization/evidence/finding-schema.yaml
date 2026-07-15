@@ -1,0 +1,42 @@
+finding_id: DESER-001
+status: finding # finding | candidate | rejected
+vulnerability_type: unsafe-deserialization
+subtype: java-native-serialization
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/import"
+  method: ImportController.importData
+  parameter: body
+source:
+  file: ImportController.java
+  line: 42
+  expression: "request.getInputStream()"
+sink:
+  file: DeserializeUtil.java
+  line: 88
+  expression: "objectInputStream.readObject()"
+dataflow:
+  - ImportController.importData
+  - ImportService.load
+  - DeserializeUtil.deserialize
+controls:
+  observed: []
+  assessment:
+    - missing-object-input-filter
+    - untrusted-bytes-to-ois
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+    - gadget amplifiers (context only)
+  dynamic:
+    - request_or_message
+    - response_or_log
+    - safe_type_probe_diff
+limitations: []
+rejection_reason: null

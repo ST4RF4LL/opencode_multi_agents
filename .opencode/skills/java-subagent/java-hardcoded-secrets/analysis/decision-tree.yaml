@@ -1,0 +1,76 @@
+name: java-hardcoded-secrets-decision-tree
+steps:
+  - id: find_secret_candidate
+    question: 是否发现密钥形态字面量、PEM 私钥、配置明文 password/secret、或 SecretKeySpec/凭证 API 绑定？
+    no: stop_no_candidate
+    yes: classify_subtype
+
+  - id: classify_subtype
+    question: 属于哪种子类型？hardcoded-password / hardcoded-api-key / private-key-in-repo / db-url-with-password / cloud-access-key / jwt-secret-literal / properties-yml-plaintext
+    next: check_placeholder
+
+  - id: check_placeholder
+    question: 值是否为明显占位符/文档示例（CHANGE_ME、your-api-key、AKIAIOSFODNN7EXAMPLE、***）？
+    yes_and_not_production_default: reject_placeholder
+    no_or_used_as_prod_default: check_secret_shape
+
+  - id: check_secret_shape
+    question: 是否具备可识别秘密形态或明确敏感绑定（密码字段、API key 常量、PEM、JDBC 凭证、JWT 签名密钥）？
+    no: reject_not_secret
+    yes: check_usage
+
+  - id: check_usage
+    question: 是否用于认证、加密/签名、DB 连接、云 API 或其它安全敏感用途？
+    no: reject_non_security_use
+    yes: check_controls
+
+  - id: check_controls
+    question: 是否存在有效密钥管理（env/Vault/KMS）且源码/配置无明文可用秘密？
+    strong: reject_managed_secrets
+    weak_or_missing: check_reachability
+    obfuscation_only: high_risk_candidate
+
+  - id: check_reachability
+    question: 是否生产可达或会打入生产制品（非仅测试/文档/死代码）？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract（静态语义清晰或已验证绑定）？
+    yes: emit_finding
+    no: emit_candidate
+
+subtype_rules:
+  hardcoded-password:
+    auto_high_when:
+      - password_string_literal_bound_to_auth_or_db
+      - keystore_password_literal
+  hardcoded-api-key:
+    auto_high_when:
+      - static_final_api_key_or_token_literal_used_in_requests
+  private-key-in-repo:
+    auto_high_when:
+      - PEM_PRIVATE_KEY_block_in_source_or_resources
+  db-url-with-password:
+    auto_high_when:
+      - jdbc_url_or_datasource_password_plaintext
+  cloud-access-key:
+    auto_high_when:
+      - AKIA_or_static_aws_credentials_not_docs_example_or_docs_example_used_as_live
+  jwt-secret-literal:
+    auto_high_when:
+      - HS256_signing_key_from_string_literal
+  properties-yml-plaintext:
+    auto_high_when:
+      - committed_yml_properties_password_or_secret_not_placeholder
+
+outcomes:
+  stop_no_candidate: Rejected
+  reject_placeholder: Rejected
+  reject_not_secret: Rejected
+  reject_non_security_use: Rejected
+  reject_managed_secrets: Rejected
+  reject_unreachable: Rejected
+  high_risk_candidate: Candidate_or_Finding
+  emit_finding: Finding
+  emit_candidate: Candidate

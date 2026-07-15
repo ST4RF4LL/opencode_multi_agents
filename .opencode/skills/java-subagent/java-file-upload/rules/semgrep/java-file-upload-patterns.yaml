@@ -1,0 +1,125 @@
+rules:
+  - id: java-file-upload-mime-only-validation
+    message: Upload accepted based on Content-Type only (client-controlled)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($F.getContentType().startsWith("image/")) { ... }
+          - pattern: |
+              if ($F.getContentType().equals($CT)) { ... }
+          - pattern: |
+              if ($P.getContentType().startsWith("image/")) { ... }
+          - pattern: |
+              if ($ITEM.getContentType().startsWith("image/")) { ... }
+      - pattern-either:
+          - pattern-inside: |
+              ...
+              $F.transferTo(...);
+              ...
+          - pattern-inside: |
+              ...
+              Files.copy(...);
+              ...
+          - pattern-inside: |
+              ...
+              $P.write(...);
+              ...
+          - pattern-inside: |
+              ...
+              $ITEM.write(...);
+              ...
+          - pattern-inside: |
+              ...
+              new FileOutputStream(...);
+              ...
+    metadata:
+      cwe: CWE-434
+      subtype: mime-only-validation
+      confidence: high
+
+  - id: java-file-upload-weak-extension-endswith
+    message: Weak extension check via endsWith may allow double-extension bypass
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $N.endsWith(".png")
+      - pattern: |
+          $N.endsWith(".jpg")
+      - pattern: |
+          $N.endsWith(".jpeg")
+      - pattern: |
+          $N.endsWith(".gif")
+      - pattern: |
+          $N.endsWith(".pdf")
+    metadata:
+      cwe: CWE-434
+      subtype: double-extension-bypass
+      confidence: medium
+      notes: endsWith alone is weak if name can be file.png.jsp or case variants
+
+  - id: java-file-upload-blacklist-jsp-only
+    message: Blacklist of specific dangerous extensions is weak control
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          if ($N.endsWith(".jsp")) { ... }
+      - pattern: |
+          if ($N.contains(".jsp")) { ... }
+      - pattern: |
+          $N.endsWith(".jsp") || $N.endsWith(".jspx")
+    metadata:
+      cwe: CWE-434
+      category: weak-sanitizer
+      confidence: low
+
+  - id: java-file-upload-svg-html-as-image
+    message: SVG/HTML content type or extension treated as uploadable image/content
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $X.equals("image/svg+xml")
+      - pattern: |
+          $X.equals("text/html")
+      - pattern: |
+          $N.endsWith(".svg")
+      - pattern: |
+          $N.endsWith(".html")
+      - pattern: |
+          $N.endsWith(".htm")
+    metadata:
+      cwe: CWE-434
+      subtype: svg-html-stored-content
+      confidence: medium
+
+  - id: java-file-upload-no-check-hint
+    message: MultipartFile parameter used in method without nearby type validation keywords
+    severity: INFO
+    languages: [java]
+    patterns:
+      - pattern: |
+          $R $M(..., MultipartFile $F, ...) {
+            ...
+            $F.transferTo(...);
+            ...
+          }
+      - pattern-not: |
+          $R $M(..., MultipartFile $F, ...) {
+            ...
+            $F.getContentType()
+            ...
+          }
+      - pattern-not: |
+          $R $M(..., MultipartFile $F, ...) {
+            ...
+            FilenameUtils.getExtension(...)
+            ...
+          }
+    metadata:
+      cwe: CWE-434
+      subtype: unrestricted-extension
+      confidence: low

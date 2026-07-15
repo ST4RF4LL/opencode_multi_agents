@@ -1,0 +1,9 @@
+transferable_lessons:
+  - endsWith(".png") is weak; compound extensions and content mismatch remain
+  - parse single final extension on basename; reject multi-dot compound names when policy requires
+  - content/extension mismatch needs magic-byte or decode checks
+  - FileItem.getName may include client path segments; always basename
+non_transferable_details:
+  - original endpoint path
+  - original extension list
+  - original bypass filename strings

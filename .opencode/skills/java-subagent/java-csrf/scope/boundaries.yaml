@@ -1,0 +1,36 @@
+in_scope:
+  - cookie_or_session_authenticated_state_changing_endpoints
+  - spring_security_csrf_disabled_or_bypassed
+  - form_post_without_csrf_token
+  - cookie_session_json_apis_without_csrf_header_or_token
+  - get_based_mutations
+  - csrf_token_present_but_not_bound_or_not_validated
+  - double_submit_cookie_missing_or_broken
+  - samesite_none_or_absent_with_cookie_auth_mutations
+
+out_of_scope:
+  - bearer_token_only_apis_no_cookie_session
+  - pure_xss_reflected_or_stored
+  - ssrf_server_side_fetch
+  - open_redirect_browser_only
+  - cors_misconfiguration_without_csrf_preconditions
+  - clickjacking_ui_redress_alone
+  - csrf_on_safe_read_only_endpoints_without_state_change
+
+adjacent_skills:
+  - id: java-ssrf
+    relation: app-initiated outbound fetch; not browser cross-site state change
+  - id: java-open-redirect
+    relation: browser Location only; may chain with CSRF but is separate class
+  - id: java-missing-authorization
+    relation: IDOR/authz failures; CSRF is cross-site with victim credentials
+  - id: java-session-fixation
+    relation: session lifecycle; may interact with CSRF token binding
+
+boundary_notes:
+  - csrf_requires_auto_credentials_and_state_change
+  - jwt_in_authorization_header_only_is_usually_not_csrf
+  - jwt_in_cookie_is_csrf_relevant
+  - samesite_lax_mitigates_many_cross_site_posts_but_not_all_top_level_get_mutations
+  - cors_does_not_replace_csrf_for_simple_cookie_requests
+  - validation_is_conceptual_only_no_weaponized_poc

@@ -1,0 +1,43 @@
+subtypes:
+  - id: full-url-redirect
+    description: 攻击者控制完整绝对 URL（scheme + host + path），直接作为重定向目标
+    typical_sinks:
+      - HttpServletResponse.sendRedirect
+      - response.setHeader("Location", ...)
+      - RedirectView
+    typical_params:
+      - url
+      - returnUrl
+      - next
+      - continue
+      - redirect
+      - callback
+
+  - id: protocol-relative
+    description: 协议相对 URL（//evil.example/path）绕过仅检查 http/https 前缀或缺少 scheme 强制的校验
+    typical_patterns:
+      - "//evil.example"
+      - startsWith("/") missing second-slash check
+      - scheme empty after URI parse still accepted
+
+  - id: path-relative-bypass
+    description: 路径相对或伪相对形式绕过“必须以 / 开头”等弱校验（如 /\evil.example、//evil.example、\evil.example）
+    typical_patterns:
+      - startsWith("/") without rejecting //
+      - "\\" + host confusion on some browsers
+      - missing host parse after relative-looking input
+
+  - id: spring-redirect-prefix
+    description: Spring MVC "redirect:" + 用户输入，或 RedirectView(userUrl) 导致外部跳转
+    typical_sinks:
+      - return "redirect:" + userInput
+      - new RedirectView(userInput)
+      - RedirectAttributes with external target
+
+  - id: header-location-injection
+    description: 通过 setHeader/addHeader 写入 Location，或 CRLF 注入额外头影响跳转
+    typical_sinks:
+      - setHeader("Location", userInput)
+      - addHeader("Location", userInput)
+      - ResponseEntity.status(302).header("Location", userInput)
+    notes: CRLF may also enable response splitting; focus here is redirect destination control

@@ -1,0 +1,10 @@
+transferable_lessons:
+  - getOriginalFilename / getSubmittedFileName are fully client-controlled sources
+  - resolve(uploadDir, originalFilename) without confinement is multipart path traversal
+  - strong fix is server-generated storage names; keep original name as metadata only
+  - FilenameUtils.getName alone remains PARTIAL if final path is not confined
+non_transferable_details:
+  - original upload endpoint
+  - original upload directory
+  - original form field names
+  - specific lab marker paths

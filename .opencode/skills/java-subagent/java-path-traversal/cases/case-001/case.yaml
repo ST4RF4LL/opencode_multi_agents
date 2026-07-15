@@ -1,0 +1,25 @@
+id: case-001
+vulnerability_type: path-traversal
+subtype: classic-dotdot
+source:
+  type: request-parameter
+  expression: request.getParameter("filename")
+sink:
+  api: FileInputStream / new File(base, child)
+  sensitive_argument: 1
+propagation:
+  - DownloadController.download
+  - FileDownloadService.openForDownload
+  - new File(baseDir, filename)
+  - FileInputStream
+root_cause:
+  - filename_parameter_joined_to_base_without_normalize
+  - no_startswith_basedir_check
+prerequisites:
+  - reachable_http_download_endpoint
+  - readable_files_under_or_outside_base_depending_on_os
+observed_behavior:
+  - attacker_can_read_files_outside_intended_download_directory
+fix:
+  - resolve_under_base_then_normalize
+  - reject_if_not_startsWith_baseDir_absolute

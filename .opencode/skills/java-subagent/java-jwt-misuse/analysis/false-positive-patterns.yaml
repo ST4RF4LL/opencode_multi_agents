@@ -1,0 +1,53 @@
+not_vulnerability:
+  - id: jjwt-parse-signed-with-managed-key
+    pattern: parseClaimsJws / parseSignedClaims with verifyWith managed key and exp check
+    reason: strong JWS verification path
+
+  - id: auth0-require-verify
+    pattern: JWT.require(Algorithm).withIssuer().withAudience().build().verify(token)
+    reason: full verifier with claims constraints
+
+  - id: nimbus-processor-configured
+    pattern: DefaultJWTProcessor with JWSKeySelector and DefaultJWTClaimsVerifier
+    reason: process() enforces signature and claims
+
+  - id: spring-issuer-jwks
+    pattern: JwtDecoders.fromIssuerLocation / NimbusJwtDecoder.withJwkSetUri RS256
+    reason: standard resource server baseline
+
+  - id: decode-logging-only
+    pattern: JWT.decode or parse only for logging/metrics; auth uses separate verified path
+    reason: non-trust use with evidence
+
+  - id: test-only-jwt-util
+    pattern: weak JWT handling only under src/test or samples never shipped
+    reason: not production reachable
+
+needs_deeper_review:
+  - id: custom-jwt-filter
+    pattern: OncePerRequestFilter manually parsing JWT
+    reason: easy to skip verify or claims; expand full method
+
+  - id: setSigningKey-string
+    pattern: setSigningKey(String) or HMAC256(config.getSecret())
+    reason: check if secret is default/hardcoded/short
+
+  - id: spring-custom-decoder-bean
+    pattern: @Bean JwtDecoder custom implementation
+    reason: may disable validation or use weak secret
+
+  - id: manual-exp-check
+    pattern: claims.getExpiration() compared manually
+    reason: verify null handling and timezone/leeway
+
+  - id: algorithm-from-header
+    pattern: header.getAlgorithm() selects verifier
+    reason: algorithm confusion risk unless allowlisted
+
+  - id: multi-tenant-iss
+    pattern: dynamic issuer resolution
+    reason: ensure each issuer still has JWKS and aud binding
+
+  - id: jwe-then-jws
+    pattern: nested JOSE
+    reason: confirm both layers validated; skill focuses on JWS integrity

@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - two lab users A and B each own at least one order
+  - GET /orders/{id} requires authentication only
+  - no ownership filter on findById
+request_context:
+  endpoint: GET /orders/{id}
+  parameter: id
+observed_result:
+  - user A with valid session retrieved user B order payload by substituting id
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - lab_or_authorized_accounts_only

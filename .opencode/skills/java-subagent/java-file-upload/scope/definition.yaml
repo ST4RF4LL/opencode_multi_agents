@@ -1,0 +1,24 @@
+id: java-file-upload
+name: Unsafe File Upload / Unrestricted File Upload
+language: java
+cwe:
+  - CWE-434
+  - CWE-79
+dimension: D5
+objective:
+  detect: >
+    Attacker-controlled uploaded files accepted without effective type/extension
+    allowlisting (or equivalent policy), including Content-Type-only trust,
+    double-extension bypass, and storage of dangerous types under web-accessible
+    or executable locations.
+core_condition:
+  - external_upload_input_exists
+  - file_content_or_filename_or_content_type_is_influenced
+  - storage_or_publish_operation_is_reachable
+  - effective_upload_type_policy_or_safe_storage_is_missing
+not_in_scope:
+  - pure_path_traversal_via_filename_without_type_policy_issue
+  - zip_slip_archive_extract_escape
+  - ssrf_via_file_url_fetch
+  - pure_authorization_on_upload_endpoint_without_type_risk
+  - antivirus_or_malware_scanning_as_primary_issue

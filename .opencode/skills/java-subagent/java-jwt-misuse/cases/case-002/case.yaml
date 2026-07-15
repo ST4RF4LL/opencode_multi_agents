@@ -1,0 +1,23 @@
+id: case-002
+vulnerability_type: jwt-misuse
+subtype: weak-hardcoded-hmac-secret
+source:
+  type: hmac-secret-hardcoded
+  expression: 'Algorithm.HMAC256("secret")'
+sink:
+  api: JWTVerifier.verify
+  sensitive_argument: hmac_key
+propagation:
+  - JwtService.createVerifier
+  - AuthController.login / protected handlers
+root_cause:
+  - hmac_secret_hardcoded_in_source
+  - secret_is_trivial_dictionary_word
+prerequisites:
+  - HS256_tokens_used_for_api_auth
+observed_behavior:
+  - anyone_knowing_or_guessing_secret_can_forge_valid_tokens
+fix:
+  - load_secret_from_secret_manager
+  - prefer_RS256_with_JWKS
+  - rotate_compromised_secrets

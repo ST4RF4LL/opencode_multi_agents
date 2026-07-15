@@ -1,0 +1,37 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: binding entry, entity type as request param, or bulk copy/save pattern found
+    not_a_finding: true
+    next: expand_type_sensitivity_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external fields can write onto object that reaches save/copy/authz use
+    not_a_finding_until: sensitive_field_and_control_checked
+    next: sanitizer_and_field_analysis
+
+  L3_semantic_candidate:
+    meaning: sensitive property writable and controls missing or bypassable
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_or_low_privilege_entry
+  - binds_jpa_entity_directly
+  - isAdmin_or_role_writable
+  - balance_or_credit_writable
+  - nested_roles_collection_bindable
+  - beanutils_full_copy_request_to_entity
+  - patch_merge_without_allowlist
+  - spring_data_rest_exported_entity
+
+priority_reduce:
+  - test_code_only
+  - dedicated_dto_without_sensitive_fields
+  - json_read_only_or_jsonignore_on_sensitive_setters
+  - initbinder_complete_allowlist
+  - dead_code
+  - admin_only_endpoint_setting_admin_fields_by_design

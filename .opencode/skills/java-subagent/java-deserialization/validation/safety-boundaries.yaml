@@ -1,0 +1,20 @@
+allowed:
+  - static_semantic_analysis_and_dataflow_evidence
+  - safe_type_probes_using_non_weaponized_markers
+  - configuration_review_of_autoType_default_typing_filters
+  - use_of_staging_or_authorized_test_environments
+  - documenting_gadget_amplifiers_as_impact_context_only
+
+forbidden:
+  - ysoserial_or_equivalent_gadget_payload_generation
+  - weaponized_exploit_chains_for_RCE
+  - reverse_shells_or_command_execution_payloads
+  - mass_exploitation_across_hosts
+  - credential_theft_or_lateral_movement_outside_scope
+  - pure_log4shell_jndi_exploitation_under_this_skill
+
+reporting:
+  - document_blast_radius_assumptions
+  - prefer_static_paths_logs_and_safe_marker_differentials
+  - never_attach_weaponized_payload_bytes_to_findings
+  - original_poc_must_remain_abstract_or_safe_markers_only

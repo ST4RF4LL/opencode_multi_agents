@@ -1,0 +1,35 @@
+steps:
+  - identify_reachable_entry
+  - determine_controlled_parameter_or_byte_source
+  - determine_deserializer_and_subtype
+  - inspect_input_transformations
+  - inspect_type_filter_and_safe_mode_controls
+  - assess_gadget_amplifiers_on_classpath
+  - identify_observable_behavior
+  - generate_target_specific_safe_probe
+  - execute_baseline_request
+  - execute_safe_type_probe
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - native_object_graph_reconstruction
+  - fastjson_atype_class_selection
+  - jackson_polymorphic_type_id
+  - snakeyaml_tag_type_selection
+  - xstream_type_alias_selection
+  - hessian_kryo_binary_type_stream
+  - mq_redis_serialized_value
+
+observable_behaviors:
+  - type_resolution_error_naming_attacker_chosen_class
+  - differential_error_between_benign_and_unknown_type_marker
+  - application_log_showing_class_load_or_filter_reject
+  - response_difference_proving_payload_reached_deserializer
+  - static_path_proving_untrusted_bytes_to_readObject_or_parse
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - validation_is_static_semantic_plus_safe_type_probes_only
+  - do_not_use_ysoserial_or_weaponized_gadget_chains
+  - gadget_library_presence_supports_impact_context_not_proof_alone

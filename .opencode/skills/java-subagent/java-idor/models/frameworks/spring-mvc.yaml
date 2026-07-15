@@ -1,0 +1,42 @@
+id: spring-mvc
+name: Spring MVC request mapping and object id binding
+detection:
+  imports:
+    - org.springframework.web.bind.annotation.PathVariable
+    - org.springframework.web.bind.annotation.RequestParam
+    - org.springframework.web.bind.annotation.RequestBody
+    - org.springframework.web.bind.annotation.RestController
+    - org.springframework.web.bind.annotation.GetMapping
+    - org.springframework.web.bind.annotation.DeleteMapping
+    - org.springframework.web.bind.annotation.PutMapping
+    - org.springframework.web.bind.annotation.PatchMapping
+  classes:
+    - RestController
+    - Controller
+    - ResponseEntity
+  annotations:
+    - PathVariable
+    - RequestParam
+    - RequestBody
+    - ModelAttribute
+    - GetMapping
+    - PostMapping
+    - PutMapping
+    - PatchMapping
+    - DeleteMapping
+sources:
+  - "@PathVariable id/orderId/userId/..."
+  - "@RequestParam id/tenantId/..."
+  - "@RequestBody DTO.id / DTO.tenantId"
+high_risk_routes:
+  - "GET /{resource}/{id}"
+  - "PUT /{resource}/{id}"
+  - "PATCH /{resource}/{id}"
+  - "DELETE /{resource}/{id}"
+strong_controls:
+  - load with ownership query before return
+  - PreAuthorize with object permission
+  - never trust client tenantId
+notes:
+  - REST resource controllers are primary IDOR surface
+  - Map HTTP method to impact (GET=read, PUT/PATCH/DELETE=mutation)

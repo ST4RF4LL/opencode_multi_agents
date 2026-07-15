@@ -1,0 +1,9 @@
+transferable_lessons:
+  - application.yml/properties password keys are first-class secret sources
+  - Spring auto-config means no Java literal is required for a finding
+  - profile files (application-prod.yml) with secrets remain high risk if committed
+  - ${ENV} references without plaintext defaults are usually not findings
+non_transferable_details:
+  - original host and database name
+  - original username
+  - original placeholder password string

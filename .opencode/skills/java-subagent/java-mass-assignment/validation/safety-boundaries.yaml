@@ -1,0 +1,19 @@
+allowed:
+  - use_authorized_staging_or_lab_environments
+  - test_accounts_owned_by_assessment
+  - minimal_overpost_of_non_destructive_fields_when_possible
+  - conceptual_discussion_of_privilege_escalation_impact
+
+forbidden:
+  - unauthorized_privilege_escalation_on_production_shared_tenants
+  - large_financial_manipulation_beyond_minimal_proof
+  - mass_account_modification_or_account_takeover_campaigns
+  - credential_theft_or_password_overwrite_beyond_scoped_proof
+  - lateral_movement_outside_agreed_scope
+  - destructive_deletion_of_production_data
+
+reporting:
+  - document_required_role_and_blast_radius
+  - prefer_before_after_field_diffs_over_full_entity_dumps
+  - redact_pii_and_secrets_from_evidence
+  - never_include_weaponized_multi_step_takeover_scripts_as_generic_poc

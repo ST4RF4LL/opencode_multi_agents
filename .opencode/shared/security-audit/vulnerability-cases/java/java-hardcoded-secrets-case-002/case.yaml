@@ -1,0 +1,23 @@
+id: case-002
+vulnerability_type: hardcoded-secrets
+subtype: properties-yml-plaintext
+source:
+  type: config-plaintext-property
+  expression: 'spring.datasource.password: CHANGE_ME_NOT_REAL'
+sink:
+  api: DataSource / JDBC connection pool
+  sensitive_argument: password
+propagation:
+  - application.yml
+  - Spring Boot DataSource auto-config
+root_cause:
+  - database_password_committed_in_plaintext_config
+  - no_external_secret_store
+prerequisites:
+  - application.yml packaged or deployed with app
+observed_behavior:
+  - anyone with repo or config artifact obtains DB password
+fix:
+  - externalize_password_to_env_or_secret_manager
+  - use_spring_datasource_password_from_env
+  - rotate_database_credentials

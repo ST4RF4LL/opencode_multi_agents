@@ -1,0 +1,58 @@
+name: java-idor-decision-tree
+steps:
+  - id: find_resource_sink
+    question: 是否发现按对象 ID 加载/更新/删除资源的 Sink（findById/deleteById/Mapper/DAO 等）？
+    no: stop_no_sink
+    yes: check_id_origin
+
+  - id: check_id_origin
+    question: 资源键是否完全由服务端安全上下文产生（如仅用 currentUserId，无客户端对象 ID）？
+    yes: reject_server_scoped_only
+    no: check_external_dataflow
+
+  - id: check_external_dataflow
+    question: 是否存在外部可控 object id（PathVariable/RequestParam/Body 字段）到资源访问的数据流？
+    no: candidate_needs_modeling
+    yes: classify_access
+
+  - id: classify_access
+    question: 操作是读、更新还是删除？是否跨用户、跨租户或跨角色？
+    next: check_object_authz
+
+  - id: check_object_authz
+    question: 路径上是否存在对象级授权（ownership 比较 / 查询绑定 owner / tenant 上下文 / PreAuthorize 对象权限）？
+    none: high_risk_candidate
+    present: evaluate_control_strength
+
+  - id: evaluate_control_strength
+    question: 约束是否 strong（owner/tenant 来自 SecurityContext，失败拒绝）？
+    strong: reject_effective_control
+    weak_or_invalid: high_risk_candidate
+    contextual: conditional_candidate
+
+  - id: exclude_public_resource
+    question: 资源是否被设计为全局公开且无敏感归属边界？
+    yes: reject_intentional_public
+    no: reachability
+
+  - id: reachability
+    question: 入口是否可达（非测试/死代码），攻击者是否可认证并替换 object id？
+    no: reject_unreachable
+    yes: evidence_gate
+
+  - id: evidence_gate
+    question: 是否满足 Evidence Contract？
+    yes: emit_finding
+    no: emit_candidate
+
+outcomes:
+  stop_no_sink: Rejected
+  reject_server_scoped_only: Rejected
+  reject_effective_control: Rejected
+  reject_unreachable: Rejected
+  reject_intentional_public: Rejected
+  candidate_needs_modeling: Candidate
+  high_risk_candidate: Candidate_or_Finding
+  conditional_candidate: Candidate
+  emit_finding: Finding
+  emit_candidate: Candidate

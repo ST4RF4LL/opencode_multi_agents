@@ -1,0 +1,14 @@
+source:
+  method: PolyController.read
+  parameter: json
+  annotation: RequestBody
+path:
+  - PolyController.<init> enableDefaultTyping
+  - PolyController.read
+  - mapper.readValue(json, Object.class)
+sink:
+  method: ObjectMapper.readValue
+  argument: 1
+influence: jackson_polymorphic_type_id
+config:
+  - ObjectMapper.enableDefaultTyping

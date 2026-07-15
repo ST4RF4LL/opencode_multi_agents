@@ -1,0 +1,34 @@
+steps:
+  - identify_reachable_entry
+  - determine_authentication_and_roles
+  - determine_controlled_object_id_parameter
+  - determine_resource_type_and_ownership_model
+  - inspect_load_or_mutation_path
+  - inspect_existing_object_authz
+  - identify_observable_behavior
+  - generate_target_specific_test
+  - execute_baseline_as_owner
+  - execute_cross_user_or_cross_tenant_test
+  - compare_results
+  - preserve_evidence
+
+influence_surfaces:
+  - path_variable_id
+  - query_param_id
+  - body_field_id
+  - client_tenant_id
+  - header_resource_key
+
+observable_behaviors:
+  - user_a_reads_user_b_resource_body
+  - user_a_deletes_or_updates_user_b_resource
+  - tenant_a_accesses_tenant_b_data
+  - low_privilege_accesses_admin_only_object
+  - deterministic_200_with_foreign_object_content
+
+notes:
+  - derive_tests_from_actual_route_and_code_path
+  - do_not_blindly_reuse_historical_payloads
+  - use_only_lab_or_authorized_accounts
+  - prefer_two_test_users_and_known_owned_resources
+  - never_mutate_production_third_party_data

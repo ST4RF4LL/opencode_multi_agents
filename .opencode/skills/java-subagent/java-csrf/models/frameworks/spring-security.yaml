@@ -1,0 +1,49 @@
+id: spring-security
+name: Spring Security CSRF configuration
+detection:
+  imports:
+    - org.springframework.security.config.annotation.web.builders.HttpSecurity
+    - org.springframework.security.web.SecurityFilterChain
+    - org.springframework.security.web.csrf.CsrfFilter
+    - org.springframework.security.web.csrf.CsrfToken
+    - org.springframework.security.config.annotation.web.configurers.CsrfConfigurer
+  classes:
+    - SecurityFilterChain
+    - HttpSecurity
+    - CsrfFilter
+    - CsrfTokenRepository
+    - CookieCsrfTokenRepository
+  dependencies:
+    - spring-security-web
+    - spring-security-config
+  config_markers:
+    - csrf().disable()
+    - http.csrf().disable()
+    - csrfTokenRepository
+    - CookieCsrfTokenRepository.withHttpOnlyFalse
+    - ignoringRequestMatchers
+    - requireCsrfProtectionMatcher
+
+csrf_controls:
+  strong:
+    - default CsrfFilter enabled for session-based form login
+    - CsrfToken validated on POST/PUT/PATCH/DELETE
+    - CookieCsrfTokenRepository with SPA header pattern and validation
+  weak_or_dangerous:
+    - csrf().disable()
+    - ignoringRequestMatchers for all /api/**
+    - CSRF only on MVC forms while JSON APIs use cookie session
+  notes:
+    - Spring Security enables CSRF by default for session auth; disable is high-signal
+    - Stateless JWT filter chains without cookies often disable CSRF legitimately
+    - Confirm authentication mechanism before treating disable as finding
+
+auth_mechanisms:
+  csrf_relevant:
+    - form login + session cookie
+    - remember-me cookie
+    - JWT stored in cookie
+  usually_not_csrf:
+    - Authorization Bearer only
+    - API key header only
+    - mTLS without browser cookie session

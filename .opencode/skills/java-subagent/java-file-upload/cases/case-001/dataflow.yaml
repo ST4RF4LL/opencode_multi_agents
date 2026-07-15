@@ -1,0 +1,10 @@
+source:
+  method: MultipartFile.getOriginalFilename
+  parameter: file
+path:
+  - StorageService.storeAny
+  - new File(webappUploadDir, original)
+sink:
+  method: MultipartFile.transferTo
+  argument: 1
+influence: unrestricted_extension_and_webapp_storage

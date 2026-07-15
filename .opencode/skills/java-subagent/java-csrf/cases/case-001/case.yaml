@@ -1,0 +1,26 @@
+id: case-001
+vulnerability_type: csrf
+subtype: spring-csrf-disabled
+source:
+  type: browser-session-cookie
+  expression: JSESSIONID auto-attached by browser
+sink:
+  api: UserService.updatePassword via POST form
+  sensitive_argument: newPassword
+propagation:
+  - SecurityConfig.securityFilterChain csrf().disable()
+  - AccountController.changePassword
+  - UserService.updatePassword
+root_cause:
+  - spring_security_csrf_disabled
+  - form_login_session_cookie_auth
+  - state_changing_password_endpoint_without_token
+prerequisites:
+  - victim_authenticated_session_cookie
+  - reachable_password_change_endpoint
+observed_behavior:
+  - cross_site_form_post_can_change_password_with_victim_cookie
+fix:
+  - remove_csrf_disable
+  - enable_default_csrf_filter
+  - require_session_bound_csrf_token_on_password_change

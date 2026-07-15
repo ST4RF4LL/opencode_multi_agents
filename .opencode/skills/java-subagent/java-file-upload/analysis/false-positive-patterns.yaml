@@ -1,0 +1,53 @@
+not_vulnerability:
+  - id: strong-extension-allowlist-private-store
+    pattern: fail-closed extension allowlist + server-generated name + non-webroot storage
+    reason: effective upload type policy and safe storage
+
+  - id: image-reencode-pipeline
+    pattern: decode image and reencode to fixed format discarding original bytes
+    reason: original dangerous content not preserved
+
+  - id: private-bucket-signed-url
+    pattern: private object storage with allowlist and no public ACL
+    reason: no unrestricted public executable storage
+
+  - id: test-only-upload
+    pattern: upload helpers only in test sources
+    reason: not production reachable
+
+  - id: constant-fixture-copy
+    pattern: copy of classpath fixture with constant name
+    reason: no attacker-controlled upload
+
+  - id: pure-path-only-escape
+    pattern: type policy sound but filename has ../
+    reason: handoff to java-path-traversal; not primary CWE-434 finding here
+
+needs_deeper_review:
+  - id: content-type-only
+    pattern: if (getContentType().startsWith("image/")) store as-is
+    reason: mime-only-validation subtype
+
+  - id: no-extension-check
+    pattern: transferTo / Files.copy with original filename, no type check
+    reason: unrestricted-extension subtype
+
+  - id: webroot-upload-dir
+    pattern: store under getRealPath or src/main/webapp or static/
+    reason: executable-in-webroot subtype
+
+  - id: double-extension
+    pattern: endsWith(".jpg") but accepts name.jpg.jsp or similar
+    reason: double-extension-bypass
+
+  - id: svg-allowed-as-image
+    pattern: allow .svg or image/svg+xml and serve inline
+    reason: svg-html-stored-content
+
+  - id: blacklist-jsp-only
+    pattern: reject only .jsp
+    reason: weak; other handlers and bypasses remain
+
+  - id: wrapper-upload-service
+    pattern: UploadService.save(MultipartFile)
+    reason: expand to real store and policy

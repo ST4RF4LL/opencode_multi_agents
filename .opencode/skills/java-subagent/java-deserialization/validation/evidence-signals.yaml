@@ -1,0 +1,23 @@
+strong_signals:
+  - complete_static_dataflow_untrusted_bytes_to_readObject_or_parse
+  - type_probe_shows_attacker_influenced_type_resolution_or_filter_bypass
+  - config_proves_autotype_or_default_typing_enabled_with_untrusted_parse
+  - application_logs_confirm_class_load_from_payload_type_id
+  - differential_behavior_proves_payload_reached_deserializer_semantics
+
+medium_signals:
+  - deserializer_error_tied_to_malformed_type_marker
+  - stable_difference_between_valid_dto_and_unknown_type_marker
+  - missing_ObjectInputFilter_with_clear_external_byte_source
+  - new_Yaml_default_ctor_on_request_body
+
+weak_signals:
+  - presence_of_ObjectInputStream_api_only
+  - gadget_library_on_classpath_only
+  - generic_500_without_deserial_semantics
+  - jackson_readValue_without_typing_evidence
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

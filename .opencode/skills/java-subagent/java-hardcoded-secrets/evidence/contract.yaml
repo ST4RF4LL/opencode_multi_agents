@@ -1,0 +1,46 @@
+# Adapted for secrets: complete static semantics often sufficient.
+finding_requirements:
+  mandatory:
+    - secret_material_location_identified
+    - secret_shape_or_sensitive_binding_established
+    - security_sensitive_usage_or_credential_role_established
+    - effective_secret_management_missing_or_bypassable
+    - production_reachability_or_artifact_inclusion
+  one_of:
+    - complete_static_semantics_with_clear_hardcoded_secret
+    - config_and_code_correlation_proving_plaintext_secret_in_use
+    - dynamic_or_behavioral_confirmation_without_exfiltrating_live_secrets
+  context:
+    recommended:
+      - subtype_classification
+      - secret_type
+      - binding_api_or_config_key
+      - affected_component
+      - blast_radius_hint
+      - remediation_direction
+      - redaction_applied_in_report
+
+reject_when:
+  - only_variable_name_match_without_secret_value
+  - obvious_placeholder_or_docs_example_not_prod_default
+  - public_key_or_certificate_only
+  - secret_only_from_env_vault_kms_with_no_plaintext
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_generic_password_keyword
+
+status_definitions:
+  Candidate: secret-like pattern found but shape, usage, or reachability incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason
+
+static_semantics_sufficient_examples:
+  - static final String API_KEY = "AKIAIOSFODNN7EXAMPLE" used in live client (note example vs real)
+  - application.yml spring.datasource.password: plaintext
+  - new SecretKeySpec("CHANGE_ME_NOT_REAL".getBytes(), "AES") on JWT/AES path
+  - BasicAWSCredentials("AKIA...", "secret...")
+  - -----BEGIN PRIVATE KEY----- block in resources
+
+reporting_constraints:
+  - redact_or_truncate_suspected_live_secrets_in_findings
+  - prefer_location_and_type_over_full_secret_value
+  - never_exfiltrate_or_reuse_discovered_credentials

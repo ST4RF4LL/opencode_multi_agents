@@ -1,0 +1,30 @@
+id: servlet-multipart
+name: Servlet / Spring multipart filename sources
+detection:
+  imports:
+    - javax.servlet.http.Part
+    - jakarta.servlet.http.Part
+    - org.springframework.web.multipart.MultipartFile
+    - org.apache.commons.fileupload.FileItem
+  classes:
+    - Part
+    - MultipartFile
+    - CommonsMultipartFile
+    - FileItem
+sources:
+  - Part.getSubmittedFileName()
+  - MultipartFile.getOriginalFilename()
+  - FileItem.getName()
+sinks:
+  - new File(uploadDir, originalFilename)
+  - Files.copy(multipart.getInputStream(), uploadPath.resolve(originalFilename))
+  - transferTo(File) when File path includes original name
+strong_controls:
+  - generate server-side UUID/random storage name
+  - FilenameUtils.getName only as PARTIAL strip; still confine under baseDir
+  - reject path separators and absolute names
+  - store only under fixed upload root with normalize + startsWith
+notes:
+  - getOriginalFilename is fully client-controlled
+  - Content-Disposition filename* may include path segments
+  - extension/MIME policy alone does not stop path escape

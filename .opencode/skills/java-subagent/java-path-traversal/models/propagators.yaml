@@ -1,0 +1,65 @@
+propagators:
+  - pattern: string-concatenation
+    examples:
+      - 'baseDir + "/" + filename'
+      - 'uploadRoot + File.separator + originalName'
+      - 'new StringBuilder(base).append("/").append(userPath).toString()'
+
+  - pattern: string-format
+    examples:
+      - 'String.format("%s/%s", baseDir, name)'
+      - 'MessageFormat.format("{0}/{1}", root, path)'
+
+  - pattern: file-parent-child
+    examples:
+      - 'new File(baseDir, userInput)'
+      - 'new File(parentFile, entryName)'
+
+  - pattern: path-resolve
+    examples:
+      - 'basePath.resolve(userInput)'
+      - 'Paths.get(baseDir, userSegments...)'
+      - 'Path.of(base).resolve(filename)'
+
+  - pattern: zip-entry-to-path
+    examples:
+      - 'new File(destDir, zipEntry.getName())'
+      - 'destDir.resolve(entry.getName())'
+      - 'Paths.get(outputDir, entry.getName())'
+
+  - pattern: multipart-filename-to-path
+    examples:
+      - 'new File(uploadDir, multipartFile.getOriginalFilename())'
+      - 'uploadPath.resolve(part.getSubmittedFileName())'
+
+  - pattern: getter-setter
+    examples:
+      - setFilename -> getFilename
+      - setPath -> getPath
+      - setRelativePath -> getRelativePath
+
+  - pattern: builder
+    examples:
+      - StorageRequest.builder().path(x).build()
+      - DownloadSpec.withFile(name)
+
+  - pattern: collection
+    examples:
+      - map.put("filename", input)
+      - params.get("path")
+
+  - pattern: dto-field
+    examples:
+      - DownloadRequest.filename
+      - UploadRequest.relativePath
+      - ExtractJob.entryName
+
+  - pattern: wrapper-method
+    examples:
+      - FileUtil.read(path)
+      - StorageService.load(name)
+      - DownloadHelper.open(fileId)
+
+  - pattern: second-order-store
+    examples:
+      - save(userFilename) -> later load() -> open FileInputStream

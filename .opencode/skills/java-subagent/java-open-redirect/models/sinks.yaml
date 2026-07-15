@@ -1,0 +1,90 @@
+sinks:
+  - id: servlet-send-redirect
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletResponse\\.sendRedirect.*"
+      - ".*ServletResponse\\.sendRedirect.*"
+    sensitive_arguments: [1]
+    semantics: browser-redirect
+    confidence: high
+    notes: first argument is redirect location string; absolute external URL is high risk
+
+  - id: servlet-location-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletResponse\\.setHeader.*"
+      - ".*HttpServletResponse\\.addHeader.*"
+      - ".*HttpServletResponse\\.setStatus.*"
+    sensitive_arguments: [2]
+    semantics: browser-redirect
+    confidence: high
+    notes: >
+      Only when header name is Location (case-insensitive) and status is 3xx,
+      or setHeader("Location", value) alone. Track argument 1 for header name.
+
+  - id: spring-redirect-prefix
+    framework: spring-mvc
+    method_full_name:
+      - ".*Controller.*return.*"
+    pattern_hints:
+      - '"redirect:" + userInput'
+      - '"redirect:" + request.getParameter(...)'
+    sensitive_object: return_value_string
+    semantics: browser-redirect
+    confidence: high
+    notes: Spring interprets views starting with redirect: as HTTP redirect
+
+  - id: spring-redirect-view
+    framework: spring-mvc
+    method_full_name:
+      - ".*RedirectView\\.<init>.*"
+      - ".*RedirectView\\.setUrl.*"
+      - ".*org\\.springframework\\.web\\.servlet\\.view\\.RedirectView.*"
+    sensitive_arguments: [1]
+    semantics: browser-redirect
+    confidence: high
+
+  - id: spring-response-entity-redirect
+    framework: spring-mvc
+    method_full_name:
+      - ".*ResponseEntity\\.status.*"
+      - ".*ResponseEntity\\.BodyBuilder\\.header.*"
+      - ".*ResponseEntity\\.BodyBuilder\\.location.*"
+      - ".*HttpHeaders\\.setLocation.*"
+      - ".*HttpHeaders\\.set\\(.*Location.*"
+    sensitive_arguments: [1]
+    semantics: browser-redirect
+    confidence: high
+    notes: ResponseEntity.status(HttpStatus.FOUND).location(URI) or header Location
+
+  - id: spring-model-and-view-redirect
+    framework: spring-mvc
+    method_full_name:
+      - ".*ModelAndView\\.<init>.*"
+      - ".*ModelAndView\\.setViewName.*"
+    sensitive_arguments: [1]
+    semantics: browser-redirect
+    confidence: medium
+    notes: view name starting with redirect: carries destination after prefix
+
+  - id: custom-redirect-util
+    framework: custom
+    method_full_name:
+      - ".*RedirectUtil\\..*"
+      - ".*UrlRedirector\\..*"
+      - ".*NavigationHelper\\..*redirect.*"
+      - ".*LoginSuccessHandler\\..*"
+    sensitive_arguments: []
+    semantics: possible-redirect-wrapper
+    confidence: medium
+    notes: wrappers require expansion into real sendRedirect/Location/RedirectView sinks
+
+adjacent_not_sink:
+  - id: server-side-http-fetch
+    framework: various
+    method_full_name:
+      - ".*RestTemplate\\..*"
+      - ".*URL\\.openConnection.*"
+      - ".*OkHttpClient\\.newCall.*"
+    semantics: outbound-http-request
+    notes: SSRF class; only open-redirect if same URL is also returned as browser redirect

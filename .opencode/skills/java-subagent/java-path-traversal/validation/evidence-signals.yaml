@@ -1,0 +1,23 @@
+strong_signals:
+  - response_contains_content_of_lab_marker_file_outside_base
+  - zip_extract_writes_lab_marker_outside_extract_root
+  - application_logs_confirm_resolved_path_outside_base
+  - deterministic_file_content_disclosure_tied_to_path_param
+  - multipart_stored_file_lands_outside_upload_root
+
+medium_signals:
+  - stable_response_difference_when_dotdot_or_absolute_path_used
+  - path_error_discloses_canonical_location_outside_base
+  - extract_or_download_succeeds_for_traversal_style_name_in_lab
+  - content_length_matches_known_lab_file
+
+weak_signals:
+  - generic_500_without_path_semantics
+  - presence_of_file_api_only
+  - single_dotdot_causes_error_without_confirming_escape
+  - blacklist_message_without_successful_escape_proof
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

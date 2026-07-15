@@ -1,0 +1,49 @@
+not_vulnerability:
+  - id: constant-redirect
+    pattern: sendRedirect / redirect: / Location with fully constant destination
+    reason: no external influence on redirect destination
+
+  - id: fixed-destination-mapping
+    pattern: user selects destination id mapped to constant URLs
+    reason: attacker cannot choose arbitrary host
+
+  - id: forced-relative-same-site
+    pattern: only relative paths accepted; // and schemes rejected; joined to app origin
+    reason: not open redirect to external host
+
+  - id: parsed-host-allowlist-complete
+    pattern: parse + scheme allowlist + host exact/suffix allowlist
+    reason: effective destination control when correctly implemented
+
+  - id: test-only-redirect
+    pattern: redirect APIs only referenced from test sources
+    reason: not production reachable
+
+  - id: ssrf-misclass
+    pattern: RestTemplate/OkHttp/URL.open* server fetch only without browser redirect
+    reason: separate skill (java-ssrf); out of scope
+
+needs_deeper_review:
+  - id: startswith-prefix
+    pattern: url.startsWith("https://trusted...")
+    reason: classic bypass surface; treat as weak control
+
+  - id: starts-with-slash
+    pattern: url.startsWith("/") before sendRedirect
+    reason: protocol-relative //evil.example bypass
+
+  - id: sendredirect-param
+    pattern: sendRedirect(request.getParameter(...))
+    reason: full-url-redirect candidate
+
+  - id: spring-redirect-concat
+    pattern: return "redirect:" + param
+    reason: spring-redirect-prefix subtype
+
+  - id: location-header-user
+    pattern: setHeader("Location", userInput)
+    reason: header-location-injection / full-url-redirect
+
+  - id: wrapper-util
+    pattern: custom RedirectUtil.redirect(response, String)
+    reason: sink is indirection; expand to real redirect API

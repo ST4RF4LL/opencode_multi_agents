@@ -1,0 +1,36 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - deserialization_or_polymorphic_reconstruction_is_influenced
+    - effective_type_allowlist_or_safe_mode_missing_or_bypassable
+  one_of:
+    - dynamic_safe_probe_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - deserializer_library_and_version_if_known
+      - gadget_amplifiers_on_classpath
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - sink_input_is_constant_or_trusted_internal_only
+  - jackson_closed_dto_without_polymorphic_typing
+  - effective_ObjectInputFilter_or_ValidatingObjectInputStream
+  - effective_SafeConstructor_or_TagInspector
+  - effective_XStream_security_allowTypes
+  - fastjson_safeMode_autotype_disabled_with_fixed_type
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_a_dangerous_api_match
+  - evidence_is_only_gadget_library_on_classpath
+  - pure_jndi_log_lookup_without_deserial_path
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

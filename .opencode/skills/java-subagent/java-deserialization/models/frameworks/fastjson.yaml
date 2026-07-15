@@ -1,0 +1,53 @@
+id: fastjson
+name: Alibaba Fastjson / Fastjson2
+detect:
+  imports:
+    - com.alibaba.fastjson.JSON
+    - com.alibaba.fastjson.JSONObject
+    - com.alibaba.fastjson.parser.ParserConfig
+    - com.alibaba.fastjson.parser.Feature
+    - com.alibaba.fastjson2.JSON
+    - com.alibaba.fastjson2.JSONReader
+  keywords:
+    - com.alibaba.fastjson
+    - JSON.parseObject
+    - JSON.parse
+    - ParserConfig
+    - autoType
+    - SupportAutoType
+    - "@type"
+    - setAutoTypeSupport
+    - safeMode
+
+sources: inherit-global
+sinks:
+  - fastjson-parse-autotype
+
+safe_patterns:
+  - autoType_disabled_and_safeMode_on
+  - parseObject_with_fixed_Class_and_no_autotype
+  - Feature_SupportAutoType_not_enabled
+  - expected_DTO_type_only_without_polymorphic_type_id
+
+unsafe_patterns:
+  - ParserConfig_getGlobalInstance_setAutoTypeSupport_true
+  - JSON_parse_with_Feature_SupportAutoType
+  - parseObject_to_Object_or_Map_with_autotype_possible
+  - untrusted_JSON_containing_at_type_honored
+  - known_autotype_bypass_versions_without_upgrade
+
+config_signals:
+  high_risk:
+    - setAutoTypeSupport(true)
+    - Feature.SupportAutoType
+    - autoTypeSupport
+  mitigations:
+    - safeMode
+    - setSafeMode(true)
+    - deny list / accept list type handlers (version-specific)
+
+notes:
+  - Dominant pattern is @type driven class loading when autoType is on or bypassable
+  - parseObject(json, MyDto.class) is safer only if autoType cannot override type
+  - Fastjson1 and Fastjson2 differ; check version and config
+  - Gadget libraries amplify impact but are not required for Candidate elevation alone

@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Fastjson risk is dominated by autoType / type id class selection, not parse alone
+  - setAutoTypeSupport(true) near untrusted parse is a high-confidence config signal
+  - Fixed DTO parseObject is safer only when autoType cannot override the type
+non_transferable_details:
+  - original endpoint path
+  - original @type class names from historical reports
+  - version-specific bypass strings

@@ -1,0 +1,58 @@
+questions:
+  - id: binding_target
+    ask: 绑定目标类型是领域实体、JPA Entity，还是专用请求 DTO？
+    outcomes:
+      jpa_or_domain_entity: high_risk
+      shared_type_with_sensitive_fields: high_risk
+      dedicated_safe_dto: likely_safe_if_no_full_copy_after
+
+  - id: sensitive_properties
+    ask: 哪些属性具备安全影响？
+    classify:
+      - privilege: isAdmin, role, roles, authorities, permissions
+      - financial: balance, credit, price, discount
+      - ownership: ownerId, userId, tenantId, orgId
+      - status: verified, enabled, locked, status, approved
+      - credential: password, passwordHash, apiKey
+
+  - id: writability
+    ask: 这些属性是否可通过 setter/字段/嵌套路径/PATCH 从请求写入？
+    false_friends:
+      - frontend omits field
+      - OpenAPI schema omits field
+      - JPA @Transient without Jackson ignore
+
+  - id: field_controls
+    ask: 是否存在有效字段控制？
+    strong_yes:
+      - dedicated DTO + explicit mapping
+      - "@JsonProperty(access=READ_ONLY) or @JsonIgnore on setter/field"
+      - InitBinder setAllowedFields complete allowlist
+      - PATCH path allowlist
+    weak:
+      - setDisallowedFields incomplete denylist
+      - BeanUtils ignore list missing sensitive names
+      - "@JsonIgnore only on getter"
+
+  - id: transfer_layer
+    ask: 请求对象到实体是否经全量拷贝？
+    high_risk:
+      - BeanUtils.copyProperties(request, entity)
+      - ModelMapper.map(body, Entity.class) including sensitive fields
+      - readerForUpdating(entity).readValue(json)
+    safer:
+      - manual setters for safe fields only
+      - MapStruct mapping that ignores role/admin
+
+  - id: impact
+    ask: 写入后是否影响授权、持久化状态或资金？
+    accept:
+      - repository.save
+      - security context derived from entity.role
+      - balance used in transfer/ledger
+
+control_grades:
+  strong: sensitive_fields_not_writable_from_entry
+  contextual: effective_only_for_some_entries_or_roles
+  weak: bypassable_or_incomplete
+  invalid: does_not_mitigate

@@ -1,0 +1,49 @@
+propagators:
+  - pattern: token-header-to-parser
+    examples:
+      - request.getHeader("Authorization") -> strip Bearer -> parser.parse
+      - cookie value -> JwtDecoder.decode
+
+  - pattern: token-param-to-parser
+    examples:
+      - @RequestParam("token") -> JWT.decode
+      - body.accessToken -> verify
+
+  - pattern: key-literal-to-signer-verifier
+    examples:
+      - String secret = "secret"; Algorithm.HMAC256(secret)
+      - setSigningKey("secret".getBytes())
+      - Keys.hmacShaKeyFor(HARDCODED.getBytes())
+
+  - pattern: public-key-to-hmac
+    examples:
+      - publicKey.getEncoded() -> HMAC256
+      - setSigningKey(rsaPublicKey) on HS path
+
+  - pattern: parse-to-claims-to-authz
+    examples:
+      - parse -> getBody/getPayload -> getSubject -> SecurityContext
+      - JWTClaimsSet.getStringClaim("role") -> authorize
+      - Jwt.getClaim("scope") -> hasAuthority
+
+  - pattern: getter-setter
+    examples:
+      - setToken -> getToken
+      - JwtConfig.setSecret -> getSecret
+
+  - pattern: builder
+    examples:
+      - Jwts.parserBuilder().setSigningKey(k).build().parseClaimsJws(t)
+      - JWT.require(algo).withIssuer(iss).build().verify(t)
+      - DefaultJWTProcessor.setJWSKeySelector(...).process(t, ctx)
+
+  - pattern: wrapper-method
+    examples:
+      - JwtUtil.parse(token)
+      - TokenService.validate(jwt)
+      - AuthFilter.extractUser(token)
+
+  - pattern: config-to-runtime
+    examples:
+      - application.yml jwt.secret -> @Value -> HMAC256
+      - issuer-uri -> JwtDecoders.fromIssuerLocation

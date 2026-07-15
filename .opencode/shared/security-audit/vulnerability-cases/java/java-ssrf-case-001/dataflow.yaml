@@ -1,0 +1,10 @@
+source:
+  method: ProxyController.proxy
+  parameter: url
+  annotation: RequestParam
+path:
+  - ProxyController.proxy
+sink:
+  method: RestTemplate.getForObject
+  argument: 1
+influence: full_url

@@ -1,0 +1,9 @@
+transferable_lessons:
+  - HMAC256("secret") and similar literals are high-confidence findings
+  - setSigningKey / Keys.hmacShaKeyFor with string constants same class of bug
+  - prefer asymmetric JWT with JWKS for multi-service systems
+  - secret managers still need length/entropy checks
+non_transferable_details:
+  - original secret string value
+  - original class names
+  - original issuer hostnames

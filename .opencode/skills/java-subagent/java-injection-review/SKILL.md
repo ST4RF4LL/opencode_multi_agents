@@ -31,6 +31,8 @@ When sinks or frameworks match, load the deep vuln skill and its progressive ass
 | `DirContext` / LDAP filter / DN | `java-ldap-injection` |
 | `XPath.compile` / `evaluate` | `java-xpath-injection` |
 | `Runtime.exec` / `ProcessBuilder` / Commons Exec | `java-command-injection` |
+| SpEL / `parseExpression` / `StandardEvaluationContext` | `java-spel-injection` |
+| XXE / `DocumentBuilderFactory` / insecure XML features | `java-xxe` |
 
 Also consult shared casebase and FP patterns under `.opencode/shared/security-audit/` for transferable lessons.
 

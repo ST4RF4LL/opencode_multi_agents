@@ -1,0 +1,15 @@
+source:
+  method: UserController.updateProfile
+  parameter: user
+  annotation: ModelAttribute
+  type: UserEntity
+path:
+  - UserController.updateProfile
+  - UserRepository.save
+sink:
+  method: UserRepository.save
+  argument: 1
+sensitive_fields:
+  - isAdmin
+  - role
+influence: request_parameter_to_entity_property

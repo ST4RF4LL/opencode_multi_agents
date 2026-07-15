@@ -1,0 +1,9 @@
+transferable_lessons:
+  - JWT.decode is parse-only; never sufficient for authentication
+  - claims used after decode without verify is CWE-347
+  - remediation requires Algorithm-bound JWTVerifier.verify and fail-closed errors
+  - also require exp/iss/aud when fixing decode-only paths
+non_transferable_details:
+  - original filter class names
+  - original claim names
+  - original route paths

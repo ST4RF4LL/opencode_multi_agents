@@ -1,0 +1,30 @@
+id: jdk-dom
+name: JDK DocumentBuilder / DocumentBuilderFactory
+detection:
+  imports:
+    - javax.xml.parsers.DocumentBuilder
+    - javax.xml.parsers.DocumentBuilderFactory
+    - jakarta.xml.parsers.DocumentBuilder
+    - jakarta.xml.parsers.DocumentBuilderFactory
+  classes:
+    - DocumentBuilderFactory
+    - DocumentBuilder
+sinks:
+  - DocumentBuilder.parse(InputStream)
+  - DocumentBuilder.parse(File)
+  - DocumentBuilder.parse(InputSource)
+  - DocumentBuilder.parse(String uri)
+  - DocumentBuilder.parse(InputStream, String systemId)
+strong_controls:
+  - setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+  - setFeature("http://xml.org/sax/features/external-general-entities", false)
+  - setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+  - setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+  - setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+  - setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+  - setXIncludeAware(false)
+  - setExpandEntityReferences(false)
+notes:
+  - Default DocumentBuilderFactory is historically insecure for untrusted XML
+  - Features must be set on the factory before newDocumentBuilder()
+  - Catch ParserConfigurationException when features are unsupported

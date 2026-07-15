@@ -1,0 +1,26 @@
+id: case-003
+vulnerability_type: mass-assignment
+subtype: entity-as-dto
+source:
+  type: request-body
+  expression: '@RequestBody UserEntity body'
+sink:
+  api: BeanUtils.copyProperties + UserRepository.save
+  sensitive_argument: entity
+propagation:
+  - UserApi.update
+  - BeanUtils.copyProperties(body, entity)
+  - userRepository.save(entity)
+root_cause:
+  - entity_type_used_as_request_dto
+  - beanutils_full_copy_transfers_sensitive_fields
+  - no_ignore_list_for_isAdmin_role
+prerequisites:
+  - authenticated_user
+  - update_endpoint_loads_entity_then_copies_from_body
+observed_behavior:
+  - isAdmin_or_role_copied_from_request_to_managed_entity
+fix:
+  - dedicated_dto
+  - BeanUtils.copyProperties_with_ignore_isAdmin_role_password
+  - explicit_safe_field_setters_only

@@ -1,0 +1,10 @@
+transferable_lessons:
+  - DocumentBuilderFactory.newInstance() defaults are historically insecure for untrusted XML
+  - Secure features must be set on the same factory before newDocumentBuilder()
+  - disallow-doctype-decl + disable external entities + ACCESS_EXTERNAL_* empty is the strong DOM pattern
+  - Request body InputStream to parse is a high-frequency Java web XXE path
+  - XPath VariableResolver does not remediate this path
+non_transferable_details:
+  - original endpoint path
+  - original element names
+  - original payload strings

@@ -1,0 +1,82 @@
+sources:
+  - id: spring-model-attribute
+    framework: spring-mvc
+    annotation:
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: high
+    notes: >
+      Request parameters bind to bean properties by name (isAdmin, role, balance).
+      Also applies to unannotated form objects in classic Spring MVC controllers.
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+    controlled_value: object_fields
+    confidence: high
+    notes: Jackson (default) deserializes JSON properties onto object setters/fields
+
+  - id: spring-request-part
+    framework: spring-mvc
+    annotation:
+      - RequestPart
+    controlled_value: object_fields
+    confidence: medium
+    notes: multipart JSON parts may bind to entities
+
+  - id: spring-request-param-map
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+    controlled_value: map_or_multi_value
+    confidence: medium
+    notes: Map/MultiValueMap of parameters later applied via reflection or setters
+
+  - id: servlet-parameter-map
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+    controlled_value: return
+    confidence: medium
+    notes: parameters later set on entity via BeanUtils, PropertyEditor, or manual setters
+
+  - id: jackson-object-mapper
+    framework: jackson
+    method_full_name:
+      - ".*ObjectMapper\\.readValue.*"
+      - ".*ObjectMapper\\.readerFor.*\\.readValue.*"
+      - ".*ObjectReader\\.readValue.*"
+      - ".*JsonMapper\\.readValue.*"
+    controlled_value: deserialization_result
+    confidence: high
+    notes: when target type is domain entity with sensitive writable properties
+
+  - id: spring-data-rest-body
+    framework: spring-data-rest
+    annotation:
+      - RepositoryRestResource
+    controlled_value: entity_fields_via_http
+    confidence: high
+    notes: POST/PUT/PATCH on exported repositories bind body to entity fields
+
+  - id: json-patch-document
+    framework: jackson
+    method_full_name:
+      - ".*JsonPatch\\.apply.*"
+      - ".*JsonMergePatch\\.apply.*"
+      - ".*com\\.github\\.fge\\.jsonpatch\\..*"
+    controlled_value: patch_operations
+    confidence: high
+    notes: PATCH ops can set arbitrary paths unless allowlisted
+
+  - id: message-queue-payload
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+    notes: second-order binding when payload is deserialized into entity and saved

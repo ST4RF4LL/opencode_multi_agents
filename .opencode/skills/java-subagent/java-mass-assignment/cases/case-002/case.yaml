@@ -1,0 +1,28 @@
+id: case-002
+vulnerability_type: mass-assignment
+subtype: jackson-requestbody-sensitive-fields
+source:
+  type: request-body
+  expression: '@RequestBody Account account'
+sink:
+  api: AccountRepository.save
+  sensitive_argument: 1
+propagation:
+  - AccountController.update
+  - AccountService.save
+  - accountRepository.save
+root_cause:
+  - jackson_deserializes_json_onto_entity
+  - balance_and_role_writable
+  - no_jsonignore_or_read_only
+  - entity_used_as_request_dto
+prerequisites:
+  - authenticated_account_owner_or_user_can_call_update
+  - application_json_accepted
+observed_behavior:
+  - attacker_sets_balance_or_role_via_json_body
+  - unauthorized_financial_or_privilege_state_persisted
+fix:
+  - AccountUpdateRequest_dto_without_balance_role
+  - JsonProperty_READ_ONLY_or_JsonIgnore_on_sensitive_fields
+  - server_side_balance_updates_only_via_ledger_service

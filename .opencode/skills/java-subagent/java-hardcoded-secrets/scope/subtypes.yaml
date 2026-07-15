@@ -1,0 +1,64 @@
+subtypes:
+  - id: hardcoded-password
+    description: >
+      密码/口令以字符串字面量或配置明文出现（用户密码、服务账户、
+      BasicAuth、KeyStore 密码等）
+    cwe: [CWE-259, CWE-798]
+
+  - id: hardcoded-api-key
+    description: >
+      API key / token / bearer 硬编码在源码常量或资源中
+    cwe: [CWE-798]
+    indicators:
+      - static final API_KEY
+      - Authorization header with literal token
+      - x-api-key literal
+
+  - id: private-key-in-repo
+    description: >
+      PEM/DER 私钥、PKCS8、SSH 私钥写入仓库或可部署资源
+    cwe: [CWE-321, CWE-798]
+    indicators:
+      - "-----BEGIN PRIVATE KEY-----"
+      - "-----BEGIN RSA PRIVATE KEY-----"
+      - "-----BEGIN EC PRIVATE KEY-----"
+      - "-----BEGIN OPENSSH PRIVATE KEY-----"
+
+  - id: db-url-with-password
+    description: >
+      JDBC URL 或 datasource 配置内嵌用户名密码
+    cwe: [CWE-798, CWE-259]
+    indicators:
+      - jdbc:.*password=
+      - spring.datasource.password
+      - DataSource setPassword with literal
+
+  - id: cloud-access-key
+    description: >
+      云厂商访问密钥硬编码（如 AWS AKIA*、secret access key、
+      Azure client secret、GCP service account key JSON）
+    cwe: [CWE-798]
+    indicators:
+      - AKIA[0-9A-Z]{16}
+      - aws_secret_access_key
+      - BasicAWSCredentials / StaticCredentialsProvider with literals
+
+  - id: jwt-secret-literal
+    description: >
+      JWT/HMAC 签名密钥、issuer secret 以字面量配置
+    cwe: [CWE-321, CWE-798]
+    indicators:
+      - jjwt signWith secret string
+      - spring.security.oauth2 jwt secret
+      - HS256 key from string literal
+
+  - id: properties-yml-plaintext
+    description: >
+      application.yml / .properties / XML 中以明文存放 password、
+      secret、api-key、private-key 等
+    cwe: [CWE-798, CWE-259]
+    indicators:
+      - password:
+      - secret:
+      - api-key:
+      - client-secret:

@@ -1,0 +1,13 @@
+source:
+  method: WebhookController.dispatch
+  parameter: body.callbackUrl
+  annotation: RequestBody
+path:
+  - WebhookController.dispatch
+  - Request.Builder.url
+  - OkHttpClient.newCall
+sink:
+  method: OkHttpClient.newCall / Request.Builder.url
+  argument: url
+influence: full_url
+redirect_policy: followRedirects_true

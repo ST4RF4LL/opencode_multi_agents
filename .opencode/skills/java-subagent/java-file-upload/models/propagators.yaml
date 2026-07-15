@@ -1,0 +1,66 @@
+propagators:
+  - pattern: multipart-to-path
+    examples:
+      - 'new File(uploadDir, multipartFile.getOriginalFilename())'
+      - 'uploadPath.resolve(file.getOriginalFilename())'
+      - 'part.write(uploadDir + "/" + part.getSubmittedFileName())'
+
+  - pattern: content-type-branch
+    examples:
+      - 'if (file.getContentType().startsWith("image/")) store(file)'
+      - 'String ct = item.getContentType(); save(item.get())'
+
+  - pattern: extension-extract
+    examples:
+      - 'FilenameUtils.getExtension(original)'
+      - 'name.substring(name.lastIndexOf('.')+1)'
+      - 'Paths.get(original).getFileName().toString()'
+
+  - pattern: string-concatenation
+    examples:
+      - 'webappRoot + "/uploads/" + originalName'
+      - 'realPath + File.separator + filename'
+
+  - pattern: transfer-to-file
+    examples:
+      - 'multipartFile.transferTo(destFile)'
+      - 'fileItem.write(destFile)'
+
+  - pattern: stream-copy
+    examples:
+      - 'Files.copy(multipart.getInputStream(), target)'
+      - 'IOUtils.copy(part.getInputStream(), new FileOutputStream(target))'
+
+  - pattern: getter-setter
+    examples:
+      - setFilename -> getFilename
+      - setOriginalName -> getOriginalName
+      - setContentType -> getContentType
+      - setStoragePath -> getStoragePath
+
+  - pattern: builder
+    examples:
+      - UploadRequest.builder().filename(x).contentType(y).build()
+      - StorageObject.withName(name).withBytes(data)
+
+  - pattern: dto-field
+    examples:
+      - UploadForm.file
+      - AvatarRequest.image
+      - ImportJob.filename
+      - AttachmentDTO.contentType
+
+  - pattern: collection
+    examples:
+      - map.put("filename", original)
+      - files.forEach(f -> store(f))
+
+  - pattern: wrapper-method
+    examples:
+      - UploadService.save(MultipartFile)
+      - StorageService.store(name, InputStream)
+      - FileHelper.writeUpload(path, bytes)
+
+  - pattern: second-order-serve
+    examples:
+      - store(upload) -> later serve as static resource or getResourceAsStream

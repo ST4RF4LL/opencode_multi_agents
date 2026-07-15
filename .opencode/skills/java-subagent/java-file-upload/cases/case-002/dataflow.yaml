@@ -1,0 +1,11 @@
+source:
+  method: MultipartFile.getContentType / getOriginalFilename / getInputStream
+  parameter: file
+path:
+  - AvatarService.saveIfImage
+  - contentType.startsWith("image/")
+  - uploadDir.resolve(original)
+sink:
+  method: Files.copy
+  argument: target_path
+influence: mime_only_validation_store_as_is

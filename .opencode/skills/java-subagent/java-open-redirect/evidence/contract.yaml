@@ -1,0 +1,34 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - credible_source_to_sink_path
+    - sensitive_redirect_destination_is_influenced
+    - effective_control_is_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - deployment_preconditions
+      - redirect_mechanism
+      - affected_component
+      - subtype_classification
+
+reject_when:
+  - sink_argument_is_constant
+  - user_input_only_selects_from_fixed_destination_map
+  - input_does_not_influence_redirect_destination
+  - path_is_test_only_or_dead_code
+  - validation_is_effective_and_complete
+  - evidence_is_only_a_dangerous_api_match
+  - evidence_is_only_ssrf_server_side_fetch
+  - relative_path_only_with_forced_same_site_without_bypass
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

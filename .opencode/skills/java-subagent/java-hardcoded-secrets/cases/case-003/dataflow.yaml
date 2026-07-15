@@ -1,0 +1,12 @@
+source:
+  kind: string_literal
+  expression: '"jwt-secret-CHANGE_ME_NOT_REAL"'
+path:
+  - JwtService.SECRET
+  - SecretKeySpec constructor
+  - Mac.init / sign
+sink:
+  method: SecretKeySpec / Mac.doFinal
+influence: token_forgery_if_jwt_auth_depends_on_hmac_secret
+related_issues:
+  - overlaps java-weak-cryptography hardcoded-key subtype for crypto key material

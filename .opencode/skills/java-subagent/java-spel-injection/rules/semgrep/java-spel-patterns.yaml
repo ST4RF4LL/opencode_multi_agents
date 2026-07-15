@@ -1,0 +1,78 @@
+rules:
+  - id: java-spel-template-embed
+    message: User-influenced data may be embedded into SpEL template #{...} fragment
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "#{" + $USER + "}"
+      - pattern: |
+          "#{#" + $USER + "}"
+      - pattern: |
+          String.format("#{%s}", $USER)
+      - pattern: |
+          String.format("#{ %s }", $USER)
+      - pattern: |
+          new StringBuilder().append("#{").append($USER).append("}")
+      - pattern: |
+          $P.parseExpression($T, new TemplateParserContext())
+    metadata:
+      cwe: CWE-917
+      subtype: template-parser-context
+      confidence: high
+
+  - id: java-spel-blacklist-weak-control
+    message: Weak SpEL blacklist (T( or Runtime) is bypassable; not a strong sandbox
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $E.contains("T(")
+      - pattern: |
+          $E.contains("Runtime")
+      - pattern: |
+          $E.replace("T(", ...)
+      - pattern: |
+          $E.matches(".*T\\(.*")
+    metadata:
+      cwe: CWE-917
+      category: spel-injection
+      confidence: low
+      notes: control_grade=weak; do not treat as effective sanitizer alone
+
+  - id: java-spel-simple-context-hint
+    message: SimpleEvaluationContext present — treat as strong control signal, verify no dangerous custom accessors
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          SimpleEvaluationContext.forReadOnlyDataBinding()
+      - pattern: |
+          SimpleEvaluationContext.forReadWriteDataBinding()
+      - pattern: |
+          SimpleEvaluationContext.forReadOnlyDataBinding().build()
+      - pattern: |
+          SimpleEvaluationContext.forReadWriteDataBinding().build()
+      - pattern: |
+          new SimpleEvaluationContext(...)
+    metadata:
+      cwe: CWE-917
+      category: spel-injection
+      confidence: low
+      notes: L3 control signal; SimpleEvaluationContext is not auto-safe with custom MethodResolver/PropertyAccessor
+
+  - id: java-spel-cache-key-concat
+    message: Possible dynamic SpEL fragment for Spring Cache key/condition
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          @Cacheable(key = $A + $B)
+      - pattern: |
+          @Cacheable(condition = $A + $B)
+      - pattern: |
+          @CacheEvict(key = $A + $B)
+    metadata:
+      cwe: CWE-917
+      subtype: cache-abstraction-spel
+      confidence: medium

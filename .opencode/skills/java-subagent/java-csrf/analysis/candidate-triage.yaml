@@ -1,0 +1,35 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: state-changing endpoint or csrf().disable / CSRF ignore matcher found
+    not_a_finding: true
+    next: confirm_cookie_session_auth_and_side_effects
+
+  L2_auth_and_mutation_candidate:
+    meaning: cookie/session auth pairs with real state mutation
+    not_a_finding_until: csrf_controls_evaluated
+    next: sanitizer_and_browser_precondition_analysis
+
+  L3_semantic_candidate:
+    meaning: CSRF control missing, weak, or bypassable for browser cross-site requests
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe, non-cookie-auth, or non-reachable
+
+priority_boost:
+  - spring_csrf_disabled_with_form_or_session_login
+  - password_change_transfer_delete_endpoints
+  - get_based_state_change
+  - cookie_json_api_without_csrf_header
+  - samesite_none_or_missing_with_cookie_auth
+  - high_privilege_admin_mutations
+
+priority_reduce:
+  - bearer_token_only_no_cookie
+  - read_only_endpoints
+  - csrf_token_session_bound_and_validated
+  - test_code_only
+  - dead_code
+  - samesite_strict_and_no_get_mutations

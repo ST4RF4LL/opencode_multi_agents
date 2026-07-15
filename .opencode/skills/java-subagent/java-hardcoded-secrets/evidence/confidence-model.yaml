@@ -1,0 +1,32 @@
+levels:
+  high:
+    requires:
+      - clear_secret_material_in_source_or_config
+      - sensitive_usage_or_credential_role
+      - production_reachability_or_artifact_inclusion
+      - missing_secret_management
+  medium:
+    requires:
+      - secret_shaped_or_sensitive_key_present
+      - likely_security_use
+      - controls_absent_or_suspicious
+    missing_optional:
+      - full_call_chain
+      - packaging_proof
+  low:
+    requires:
+      - keyword_or_pattern_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - private_key_pem
+    - cloud_access_key
+    - production_profile_config
+    - jwt_signing_secret
+    - db_password_in_repo
+  decrease:
+    - possible_placeholder
+    - test_scope_uncertainty
+    - public_material_ambiguity
+    - env_default_empty

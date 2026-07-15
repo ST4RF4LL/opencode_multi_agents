@@ -1,0 +1,27 @@
+id: spring-resttemplate
+name: Spring RestTemplate
+detection:
+  imports:
+    - org.springframework.web.client.RestTemplate
+    - org.springframework.http.RequestEntity
+  classes:
+    - RestTemplate
+    - RequestEntity
+    - ResponseEntity
+  dependencies:
+    - spring-web
+sinks:
+  - RestTemplate.exchange(String|URI, ...)
+  - RestTemplate.getForObject(String|URI, ...)
+  - RestTemplate.getForEntity(String|URI, ...)
+  - RestTemplate.postForObject(String|URI, ...)
+  - RestTemplate.postForEntity(String|URI, ...)
+  - RestTemplate.execute(...)
+sensitive_argument: first url/uri argument
+redirect_notes:
+  - SimpleClientHttpRequestFactory and HttpComponentsClientHttpRequestFactory redirect behavior differs
+  - Default may follow redirects depending on underlying client
+strong_controls:
+  - fixed destination map before RestTemplate call
+  - parse host/scheme allowlist before exchange
+  - disable redirects or revalidate Location

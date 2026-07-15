@@ -1,0 +1,30 @@
+id: spring-resource
+name: Spring Resource and ResourceUtils path access
+detection:
+  imports:
+    - org.springframework.core.io.Resource
+    - org.springframework.core.io.UrlResource
+    - org.springframework.core.io.FileSystemResource
+    - org.springframework.core.io.PathResource
+    - org.springframework.core.io.ClassPathResource
+    - org.springframework.util.ResourceUtils
+  classes:
+    - UrlResource
+    - FileSystemResource
+    - PathResource
+    - ResourceLoader
+    - ResourceUtils
+sinks:
+  - new UrlResource(userPathOrUrl)
+  - new FileSystemResource(userPath)
+  - new PathResource(userPath)
+  - resourceLoader.getResource(userLocation)
+  - ResourceUtils.getFile(userLocation)
+strong_controls:
+  - map resource ids to constant locations under baseDir
+  - for file: locations, normalize + startsWith base after resolution
+  - avoid concatenating user path into file: or classpath: locations
+notes:
+  - ClassPathResource with user path can still leak classpath resources
+  - UrlResource may also imply SSRF for non-file schemes (out of primary scope)
+  - focus this skill on filesystem path escape under file: / FileSystemResource

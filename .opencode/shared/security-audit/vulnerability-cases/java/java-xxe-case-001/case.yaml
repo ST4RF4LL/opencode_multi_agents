@@ -1,0 +1,29 @@
+id: case-001
+vulnerability_type: xxe
+subtype: sax-dom-stax-insecure-defaults
+source:
+  type: request-body
+  expression: request.getInputStream()
+sink:
+  api: DocumentBuilder.parse
+  sensitive_argument: 1
+propagation:
+  - ImportController.importXml
+  - XmlImportService.parse
+  - DocumentBuilderFactory.newInstance / newDocumentBuilder / parse
+root_cause:
+  - documentbuilderfactory_default_configuration
+  - no_disallow_doctype_decl
+  - no_external_entity_features_disabled
+  - untrusted_request_body_parsed_as_xml
+prerequisites:
+  - reachable_http_endpoint_accepting_xml_body
+  - application_uses_vulnerable_XmlImportService_path
+observed_behavior:
+  - external_entities_resolved_when_present_in_request_xml
+  - possible_local_file_disclosure_or_ssrf_via_entity_in_lab
+fix:
+  - set_disallow_doctype_decl_true
+  - disable_external_general_and_parameter_entities
+  - set_access_external_dtd_and_schema_empty
+  - set_xinclude_aware_false

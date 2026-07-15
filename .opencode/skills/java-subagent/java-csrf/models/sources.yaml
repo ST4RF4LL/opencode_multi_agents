@@ -1,0 +1,61 @@
+sources:
+  - id: browser-cookie-session
+    framework: servlet-session
+    method_full_name:
+      - ".*HttpServletRequest\\.getSession.*"
+      - ".*HttpSession\\.getAttribute.*"
+      - ".*RequestContextHolder\\.currentRequestAttributes.*"
+    controlled_value: automatic_browser_credential
+    confidence: high
+    notes: >
+      CSRF source is not attacker string taint; it is the browser auto-sending
+      session cookies on cross-site requests to a mutable endpoint.
+
+  - id: spring-security-context
+    framework: spring-security
+    method_full_name:
+      - ".*SecurityContextHolder\\.getContext.*"
+      - ".*Authentication\\.getPrincipal.*"
+      - ".*SecurityContext\\.getAuthentication.*"
+    controlled_value: authenticated_principal_from_session
+    confidence: high
+
+  - id: cookie-value
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest\\.getCookies.*"
+      - ".*Cookie\\.getValue.*"
+    annotation:
+      - CookieValue
+    controlled_value: cookie_present_for_auth
+    confidence: high
+    notes: session id or auth cookie enables CSRF when used for auth
+
+  - id: form-or-json-body-params
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - RequestBody
+      - ModelAttribute
+      - PathVariable
+    controlled_value: attacker_chosen_action_parameters
+    confidence: high
+    notes: >
+      Cross-site page supplies action parameters; credentials come from cookies.
+
+  - id: query-string-get-mutation
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest\\.getParameter.*"
+      - ".*HttpServletRequest\\.getQueryString.*"
+    controlled_value: attacker_chosen_query
+    confidence: high
+    notes: relevant for get-based-state-change subtype
+
+  - id: origin-referer-absent
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest\\.getHeader.*"
+    controlled_value: missing_or_forgeable_origin_context
+    confidence: medium
+    notes: absence of Origin/Referer checks is a control gap, not a classic taint source

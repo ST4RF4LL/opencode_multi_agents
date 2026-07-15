@@ -1,0 +1,34 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_input
+    - binding_or_deserialization_to_sensitive_type
+    - sensitive_property_is_writable_from_input
+    - effective_field_control_is_missing_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - sensitive_fields_list
+      - bound_type_name
+      - persistence_or_impact_path
+      - subtype_classification
+      - affected_component
+
+reject_when:
+  - bound_type_is_safe_dto_without_sensitive_fields
+  - sensitive_fields_are_not_writable_json_or_binder
+  - path_is_test_only_or_dead_code
+  - validation_is_effective_and_complete
+  - evidence_is_only_entity_field_or_annotation_match
+  - only_admin_by_design_endpoint_with_no_lower_privilege_entry
+  - no_impact_path_to_persistence_authz_or_financial_state_and_no_other_impact
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

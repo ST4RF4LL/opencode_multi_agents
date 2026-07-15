@@ -1,0 +1,44 @@
+finding_id: UPLOAD-001
+status: finding # finding | candidate | rejected | handoff
+vulnerability_type: unsafe-file-upload
+subtype: unrestricted-extension
+confidence: high # high | medium | low
+entry:
+  route: "POST /api/upload"
+  method: UploadController.upload
+  parameter: file
+source:
+  file: UploadController.java
+  line: 40
+  expression: multipartFile.getOriginalFilename()
+sink:
+  file: StorageService.java
+  line: 55
+  expression: file.transferTo(new File(webappUploadDir, original))
+dataflow:
+  - UploadController.upload
+  - StorageService.store
+  - MultipartFile.transferTo
+controls:
+  observed: []
+  assessment:
+    - no-extension-allowlist
+    - original-filename-used
+    - webroot-storage
+validation:
+  status: verified # verified | not_attempted | failed
+  observable: []
+  notes: FAKE marker / conceptual extension only; no webshell payload
+evidence:
+  static:
+    - source location
+    - sink location
+    - propagation path
+    - control analysis
+  dynamic:
+    - request
+    - response
+    - stored_path_or_url
+    - fake_marker_proof
+limitations: []
+rejection_reason: null

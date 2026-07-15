@@ -1,0 +1,88 @@
+sources:
+  - id: servlet-parameter
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getParameter.*"
+      - ".*HttpServletRequest.*getParameterValues.*"
+      - ".*HttpServletRequest.*getParameterMap.*"
+    controlled_value: return
+    confidence: high
+    notes: common for filename, path, file, download parameters
+
+  - id: servlet-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getHeader.*"
+      - ".*HttpServletRequest.*getHeaders.*"
+    controlled_value: return
+    confidence: medium
+    notes: Content-Disposition filename or custom path headers
+
+  - id: servlet-path
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest.*getPathInfo.*"
+      - ".*HttpServletRequest.*getRequestURI.*"
+      - ".*HttpServletRequest.*getServletPath.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+      - CookieValue
+      - MatrixVariable
+    controlled_value: annotated_parameter
+    confidence: high
+
+  - id: spring-request-body
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+      - ModelAttribute
+    controlled_value: object_fields
+    confidence: medium
+    notes: object fields (filename, path, relativePath) require field-level taint
+
+  - id: multipart-filename
+    framework: servlet-multipart
+    method_full_name:
+      - ".*Part\\.getSubmittedFileName.*"
+      - ".*MultipartFile\\.getOriginalFilename.*"
+      - ".*FileItem\\.getName.*"
+      - ".*CommonsMultipartFile\\.getOriginalFilename.*"
+    controlled_value: return
+    confidence: high
+    notes: client-controlled original filename; primary for multipart-filename subtype
+
+  - id: zip-entry-name
+    framework: zip-extract
+    method_full_name:
+      - ".*ZipEntry\\.getName.*"
+      - ".*JarEntry\\.getName.*"
+      - ".*ArchiveEntry\\.getName.*"
+      - ".*TarArchiveEntry\\.getName.*"
+    controlled_value: return
+    confidence: high
+    notes: entry name is attacker-controlled when archive is untrusted; Zip Slip source
+
+  - id: message-queue
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+      - ".*ConsumerRecord.*value.*"
+    controlled_value: return
+    confidence: medium
+
+  - id: database-read-untrusted
+    framework: persistence
+    method_full_name:
+      - ".*ResultSet.*getString.*"
+      - ".*ResultSet.*getObject.*"
+    controlled_value: return
+    confidence: low
+    notes: second-order when stored attacker path is later used for file I/O

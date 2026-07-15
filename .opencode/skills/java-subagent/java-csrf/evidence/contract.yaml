@@ -1,0 +1,34 @@
+finding_requirements:
+  mandatory:
+    - reachable_browser_entry
+    - browser_auto_credential_mechanism
+    - state_changing_action
+    - effective_csrf_control_is_missing_or_bypassable
+    - credible_cross_site_trigger_conditions
+  one_of:
+    - complete_static_config_and_handler_semantics
+    - conceptual_validation_with_clear_observable
+    - authorized_lab_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - cookie_names_and_samesite
+      - http_method_and_content_type
+      - csrf_config_location
+      - subtype_classification
+      - affected_component
+      - privilege_impact
+
+reject_when:
+  - auth_is_bearer_header_only_without_cookie_session
+  - endpoint_is_read_only_without_state_change
+  - csrf_token_is_session_bound_and_validated
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_csrf_disable_string_match
+  - evidence_is_only_cors_misconfiguration
+  - samesite_strict_and_no_get_mutation_with_no_other_bypass
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

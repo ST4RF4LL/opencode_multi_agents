@@ -1,0 +1,39 @@
+id: spring-multipart
+name: Spring MultipartFile upload
+detection:
+  imports:
+    - org.springframework.web.multipart.MultipartFile
+    - org.springframework.web.multipart.MultipartHttpServletRequest
+    - org.springframework.web.multipart.commons.CommonsMultipartFile
+    - org.springframework.web.multipart.support.StandardMultipartHttpServletRequest
+  classes:
+    - MultipartFile
+    - CommonsMultipartFile
+    - MultipartResolver
+  annotations:
+    - RequestPart
+    - RequestParam
+  config_hints:
+    - spring.servlet.multipart
+    - MultipartConfigElement
+    - CommonsMultipartResolver
+sources:
+  - MultipartFile.getOriginalFilename()
+  - MultipartFile.getContentType()
+  - MultipartFile.getBytes() / getInputStream()
+  - @RequestPart MultipartFile parameter
+sinks:
+  - MultipartFile.transferTo(File|Path)
+  - Files.copy(file.getInputStream(), path.resolve(original))
+  - resource handler mapping upload dir to URL
+strong_controls:
+  - allowlist extension + magic-byte verify
+  - UUID storage name under non-public directory
+  - download via controller with fixed Content-Type
+  - block or sanitize SVG/HTML
+weak_controls:
+  - if (file.getContentType().startsWith("image/")) transferTo(...)
+  - endsWith(".jpg") without double-extension handling
+notes:
+  - transferTo with client original name under webapp is high signal
+  - Spring ContentDisposition parsing still yields client filename

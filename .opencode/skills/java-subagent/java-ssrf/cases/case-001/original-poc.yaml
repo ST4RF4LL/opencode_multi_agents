@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - /api/proxy accepts url query parameter
+  - RestTemplate fetches user-supplied URL
+  - outbound network allowed in environment
+request_context:
+  endpoint: /api/proxy
+  parameter: url
+observed_result:
+  - server issued HTTP request to attacker-controlled collaborator
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - do_not_target_production_cloud_metadata

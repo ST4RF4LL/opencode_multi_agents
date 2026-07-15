@@ -1,0 +1,95 @@
+rules:
+  - id: java-mass-assignment-sensitive-setters
+    message: Domain type exposes privilege/financial setters commonly abused in mass assignment
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          public void setAdmin(...) { ... }
+      - pattern: |
+          public void setRole(...) { ... }
+      - pattern: |
+          public void setRoles(...) { ... }
+      - pattern: |
+          public void setBalance(...) { ... }
+      - pattern: |
+          public void setOwnerId(...) { ... }
+      - pattern: |
+          public void setAuthorities(...) { ... }
+      - pattern: |
+          public void setVerified(...) { ... }
+    metadata:
+      cwe: CWE-915
+      category: mass-assignment
+      confidence: low
+      notes: L1 context; not a finding without binding path
+
+  - id: java-mass-assignment-entity-class
+    message: JPA Entity type present; check whether it is used as request DTO
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          @Entity
+          public class $T { ... }
+      - pattern: |
+          @Entity
+          class $T { ... }
+    metadata:
+      cwe: CWE-915
+      subtype: entity-as-dto
+      confidence: low
+
+  - id: java-mass-assignment-jsonignore-missing-hint
+    message: Sensitive field without @JsonIgnore / READ_ONLY nearby (review binding)
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              private boolean isAdmin;
+          - pattern: |
+              private Boolean admin;
+          - pattern: |
+              private String role;
+          - pattern: |
+              private BigDecimal balance;
+      - pattern-not-inside: |
+          @JsonIgnore
+          ...
+          $F;
+      - pattern-not-inside: |
+          @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+          ...
+          $F;
+    metadata:
+      cwe: CWE-915
+      confidence: low
+      notes: heuristic only; confirm HTTP binding path
+
+  - id: java-mass-assignment-nested-roles
+    message: Nested roles/authorities collection may be bindable from JSON
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          private List<$ROLE> roles;
+      - pattern: |
+          private Set<$ROLE> roles;
+      - pattern: |
+          private Collection<$A> authorities;
+    metadata:
+      cwe: CWE-915
+      subtype: nested-binding-privilege
+      confidence: medium
+
+  - id: java-mass-assignment-initbinder-disallowed-only
+    message: setDisallowedFields alone is weaker than setAllowedFields allowlist
+    severity: INFO
+    languages: [java]
+    pattern: |
+      $B.setDisallowedFields(...)
+    metadata:
+      cwe: CWE-915
+      confidence: low
+      notes: incomplete denylist is a weak control pattern

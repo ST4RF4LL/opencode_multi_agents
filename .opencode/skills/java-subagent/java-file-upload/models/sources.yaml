@@ -1,0 +1,83 @@
+sources:
+  - id: spring-multipart-file
+    framework: spring-multipart
+    method_full_name:
+      - ".*MultipartFile\\.getOriginalFilename.*"
+      - ".*MultipartFile\\.getContentType.*"
+      - ".*MultipartFile\\.getBytes.*"
+      - ".*MultipartFile\\.getInputStream.*"
+      - ".*MultipartFile\\.getName.*"
+    annotation:
+      - RequestPart
+      - RequestParam
+    controlled_value: return_or_annotated_parameter
+    confidence: high
+    notes: primary upload source; filename, content type, and body all attacker-influenced
+
+  - id: servlet-part
+    framework: servlet-multipart
+    method_full_name:
+      - ".*Part\\.getSubmittedFileName.*"
+      - ".*Part\\.getContentType.*"
+      - ".*Part\\.getInputStream.*"
+      - ".*Part\\.write.*"
+      - ".*HttpServletRequest\\.getPart.*"
+      - ".*HttpServletRequest\\.getParts.*"
+    controlled_value: return
+    confidence: high
+
+  - id: commons-fileitem
+    framework: commons-fileupload
+    method_full_name:
+      - ".*FileItem\\.getName.*"
+      - ".*FileItem\\.getContentType.*"
+      - ".*FileItem\\.getInputStream.*"
+      - ".*FileItem\\.get.*"
+      - ".*FileItem\\.write.*"
+      - ".*ServletFileUpload\\.parseRequest.*"
+      - ".*DiskFileItemFactory\\..*"
+    controlled_value: return
+    confidence: high
+
+  - id: servlet-parameter-filename
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest\\.getParameter.*"
+    controlled_value: return
+    confidence: medium
+    notes: secondary when filename provided as form field separate from multipart body
+
+  - id: spring-request-param
+    framework: spring-mvc
+    annotation:
+      - RequestParam
+      - PathVariable
+      - RequestHeader
+    controlled_value: annotated_parameter
+    confidence: medium
+    notes: path prefix, contentType override, or storage key from request
+
+  - id: content-disposition-header
+    framework: servlet
+    method_full_name:
+      - ".*HttpServletRequest\\.getHeader.*"
+    controlled_value: return
+    confidence: medium
+    notes: Content-Disposition filename / filename* is client-controlled
+
+  - id: message-queue-upload
+    framework: messaging
+    method_full_name:
+      - ".*Message.*getBody.*"
+      - ".*Message.*getPayload.*"
+    controlled_value: return
+    confidence: medium
+    notes: async import of untrusted file blobs
+
+  - id: base64-body-upload
+    framework: spring-mvc
+    annotation:
+      - RequestBody
+    controlled_value: object_fields
+    confidence: medium
+    notes: JSON/base64 file upload APIs; fields filename, contentType, data

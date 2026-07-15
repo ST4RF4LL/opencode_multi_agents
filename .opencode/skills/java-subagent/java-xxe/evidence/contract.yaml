@@ -1,0 +1,34 @@
+finding_requirements:
+  mandatory:
+    - reachable_external_entry
+    - attacker_controlled_xml_input
+    - credible_source_to_sink_path
+    - xml_parser_or_unmarshaller_processes_untrusted_document
+    - effective_secure_parser_configuration_missing_incomplete_or_bypassable
+  one_of:
+    - dynamic_verification_success
+    - complete_static_dataflow_with_clear_insecure_factory_semantics
+    - reproducible_behavioral_evidence
+  context:
+    recommended:
+      - authentication_requirement
+      - required_role
+      - parser_family_and_factory
+      - observed_or_missing_secure_features
+      - impact_classification
+      - subtype_classification
+      - affected_component
+
+reject_when:
+  - xml_is_constant_classpath_only_with_no_external_influence
+  - strong_secure_features_applied_on_same_factory_before_parse
+  - input_does_not_reach_xml_parse_or_unmarshal
+  - path_is_test_only_or_dead_code
+  - evidence_is_only_a_dangerous_api_match
+  - evidence_is_only_xpath_structure_control_without_parser_misconfiguration
+  - evidence_is_only_generic_ssrf_without_xml_entity_vector
+
+status_definitions:
+  Candidate: dangerous pattern found but critical evidence incomplete
+  Finding: Evidence Contract satisfied; formal report allowed
+  Rejected: confirmed not a vulnerability with recorded reason

@@ -1,0 +1,57 @@
+l0_stack_detection:
+  - pattern: "org.springframework.security|SecurityFilterChain|HttpSecurity|WebSecurityConfigurerAdapter"
+    implies: spring-security
+  - pattern: "org.springframework.web.bind.annotation|@RestController|@Controller|@PostMapping"
+    implies: spring-mvc
+  - pattern: "javax.servlet.http.HttpSession|jakarta.servlet.http.HttpSession|JSESSIONID"
+    implies: servlet-session
+  - pattern: "CsrfFilter|CsrfToken|CookieCsrfTokenRepository|csrf\\(\\)"
+    implies: spring-security-csrf
+
+l1_sink_keywords:
+  - "csrf().disable"
+  - "csrf().disable()"
+  - "http.csrf().disable"
+  - ".csrf(csrf -> csrf.disable"
+  - "ignoringRequestMatchers"
+  - "@PostMapping"
+  - "@PutMapping"
+  - "@DeleteMapping"
+  - "@PatchMapping"
+  - "changePassword"
+  - "updatePassword"
+  - "deleteAccount"
+  - "transfer"
+  - "HttpSession"
+  - "getSession("
+  - "SameSite"
+  - "JSESSIONID"
+  - "_csrf"
+  - "X-CSRF-TOKEN"
+  - "X-XSRF-TOKEN"
+
+high_risk_csrf_hints:
+  - "csrf\\(\\)\\.disable"
+  - "csrf\\(AbstractHttpConfigurer::disable\\)"
+  - "@GetMapping.*delete|delete.*@GetMapping"
+  - "GetMapping\\(\\\"/.*delete"
+  - "RequestMethod\\.GET"
+  - "application/json"
+  - "CookieCsrfTokenRepository"
+  - "SameSite=None"
+  - "setAttribute\\(\\\"user"
+  - "updatePassword|changePassword|transferFunds"
+
+rg_commands:
+  stack: |
+    rg -n "SecurityFilterChain|HttpSecurity|HttpSession|@RestController|@PostMapping|CsrfFilter" --glob '*.java'
+  csrf_disable: |
+    rg -n "csrf\\(\\)\\.disable|csrf\\(.*disable|AbstractHttpConfigurer::disable" --glob '*.{java,kt}'
+  mutations: |
+    rg -n "@PostMapping|@PutMapping|@DeleteMapping|@PatchMapping|changePassword|updatePassword|deleteAccount|transfer" --glob '*.java'
+  get_mutations: |
+    rg -n "@GetMapping.*(delete|remove|update|logout|transfer)|doGet\\(" --glob '*.java'
+  session_cookie: |
+    rg -n "getSession\\(|JSESSIONID|SameSite|CookieValue|HttpOnly" --glob '*.{java,yml,yaml,properties}'
+  token_controls: |
+    rg -n "_csrf|X-CSRF-TOKEN|X-XSRF-TOKEN|CsrfToken|CookieCsrfTokenRepository|requireCsrfProtectionMatcher" --glob '*.java'

@@ -1,0 +1,37 @@
+levels:
+  high:
+    requires:
+      - clear_source_to_sink_path
+      - untrusted_xml_document_content
+      - missing_or_invalid_secure_features_on_same_factory
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - source_to_sink_path
+      - likely_untrusted_xml
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - sink_and_possible_input_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated
+    - file_upload_or_public_soap
+    - default_factory_no_features
+    - confirmed_file_disclosure
+    - confirmed_ssrf_via_entity
+  decrease:
+    - partial_secure_flags
+    - uncertain_factory_instance_identity
+    - uncertain_reachability
+    - dos_only_without_external_entity
+    - xpath_noise_without_parser_misconfiguration
+
+impact_confidence:
+  classic_file_read: requires disclosure_or_clear_entity_file_semantics
+  ssrf_via_entity: requires listener_or_clear_network_entity_semantics
+  billion_laughs_dos: requires expansion_semantics_and_missing_limits

@@ -1,0 +1,78 @@
+sanitizers:
+  strong:
+    - id: simple-evaluation-context-restricted
+      condition:
+        - uses_SimpleEvaluationContext
+        - no_custom_MethodResolver_expanding_to_arbitrary_methods
+        - no_custom_PropertyAccessor_exposing_dangerous_types
+        - type_locator_disabled_or_restricted
+        - expression_cannot_invoke_T_or_new_or_Runtime
+      notes: >
+        SimpleEvaluationContext forbids type references (T(...)), constructors,
+        and most reflective power by default. Strong only if not re-expanded
+        with dangerous custom accessors/resolvers.
+
+    - id: expression-allowlist
+      condition:
+        - user_input_mapped_to_predefined_expression_constants
+        - mapped_values_are_constants
+        - reject_or_default_on_unknown
+        - no_string_concat_of_raw_user_input_into_expression
+
+    - id: constant-only-expression
+      condition:
+        - expression_string_is_compile_time_constant
+        - user_input_only_as_root_object_or_variable_value_not_expression_text
+        - evaluation_context_does_not_expose_dangerous_methods_on_root
+      notes: >
+        Binding user data as EvaluationContext variables while expression text
+        remains constant is safe for injection of expression structure.
+        Still review root object method surface if StandardEvaluationContext.
+
+  contextual:
+    - id: typed-scalar-root-only
+      condition:
+        - expression_is_constant
+        - root_is_simple_dto_without_dangerous_methods
+        - SimpleEvaluationContext_or_restricted_accessors
+      notes: reduces RCE surface; may still allow data disclosure via property access
+
+    - id: read-only-simple-context
+      condition:
+        - SimpleEvaluationContext_forReadOnlyDataBinding_or_equivalent
+        - no_setValue_paths
+        - no_custom_write_accessors
+
+  weak:
+    - id: blacklist-t-or-runtime
+      pattern:
+        - contains("T(")
+        - contains("Runtime")
+        - contains("ProcessBuilder")
+        - contains("getClass")
+        - replace("T(", "")
+      notes: incomplete; alternate SpEL constructs and encoding bypasses exist
+
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without allowlist of full expressions
+      notes: insufficient if expression structure or method calls still possible
+
+    - id: client-side-expression-validation-only
+      pattern:
+        - frontend validation only
+      notes: not enforced server-side
+
+  invalid:
+    - id: standard-evaluation-context-as-defense
+      notes: StandardEvaluationContext enables full SpEL power; not a sandbox
+    - id: parse-then-blacklist
+      notes: blacklisting after parseExpression still evaluates dangerous forms if filter incomplete
+    - id: string-concat-into-template
+      notes: embedding user input into "#{...}" or parseExpression via + / format is the vuln pattern
+    - id: constant-value-annotation-misread
+      notes: treating all @Value as injection is wrong; constant compile-time EL is not user SpEL injection
+    - id: html-encode-as-spel-defense
+    - id: simple-context-with-dangerous-custom-accessors
+      notes: SimpleEvaluationContext is not auto-safe if custom resolvers re-enable type/method power

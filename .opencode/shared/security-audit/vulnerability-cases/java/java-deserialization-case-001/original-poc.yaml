@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - POST /api/import accepts raw body bytes
+  - body passed to ObjectInputStream without type filter
+request_context:
+  endpoint: /api/import
+  parameter: body
+observed_result:
+  - untrusted_bytes_reach_readObject
+  - no_ObjectInputFilter_applied
+  - impact_abstract_arbitrary_object_graph_reconstruction
+safe_markers_only:
+  - describe_type_resolution_or_filter_absence
+  - do_not_embed_gadget_chain_bytes
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - forbidden_ysoserial_or_weaponized_payloads

@@ -1,0 +1,62 @@
+questions:
+  - id: path_origin
+    ask: 路径是常量、固定映射，还是包含外部输入 / ZipEntry 名 / 原始上传文件名？
+    outcomes:
+      constant_or_fixed_map: likely_safe
+      user_in_path_segment: high_risk
+      zip_entry_name: zip_slip_risk
+      multipart_original_filename: multipart_risk
+
+  - id: normalize_and_base_confinement
+    ask: 是否在 resolve 后 normalize，并用 startsWith(baseDir 绝对路径) 做基目录约束？
+    strong_yes:
+      - Path target = base.resolve(user).normalize(); if (!target.startsWith(base)) reject
+      - File canonical under baseCanonical prefix check with fail-closed
+      - Zip extract entry resolved under destDir with same check
+    false_friends:
+      - only contains("..") blacklist
+      - FilenameUtils.getName alone without base check on final path
+      - startsWith without normalize
+      - normalize without startsWith
+      - getCanonicalPath without comparing to base
+
+  - id: absolute_path_handling
+    ask: 是否拒绝绝对路径（/ 或盘符）？
+    accept:
+      - reject_isAbsolute_before_resolve
+      - Paths.get(user) never used alone when user may be absolute
+    reject_as_strong:
+      - new File(userAbsolute) with no base join
+
+  - id: zip_entry_handling
+    ask: 归档条目名如何处理？
+    accept:
+      - resolve under dest + normalize + startsWith(dest)
+      - reject absolute and .. segments
+    reject_as_strong:
+      - new File(dest, entry.getName()) without check
+      - Files.copy(zis, dest.resolve(entry.getName())) without check
+
+  - id: multipart_filename_handling
+    ask: 上传原始文件名如何处理？
+    accept:
+      - server_generated_storage_name
+      - basename allowlist under fixed upload root
+    reject_as_strong:
+      - transferTo(new File(dir, getOriginalFilename()))
+      - trust client Content-Disposition path segments
+
+  - id: encoding_and_filter_order
+    ask: 过滤与解码顺序是否允许绕过？
+    assessment: weak_or_invalid_if_filter_before_decode_or_single_pass_only
+
+  - id: symlink_policy
+    ask: 校验后是否可能跟随符号链接逃出基目录？
+    assessment: contextual_cwe_59_when_toRealPath_or_link_follow_after_check
+
+control_grades:
+  strong: effective_blocks_path_escape
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  partial: filenameutils_getname_or_similar_incomplete
+  invalid: does_not_mitigate

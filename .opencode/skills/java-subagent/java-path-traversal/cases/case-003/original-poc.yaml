@@ -1,0 +1,14 @@
+case_specific: true
+preconditions:
+  - multipart upload endpoint stores files using getOriginalFilename
+  - vulnerable StorageService path is used
+  - authorized lab with isolated upload root and marker parent
+request_context:
+  endpoint: /api/upload
+  parameter: multipart file field (filename in Content-Disposition)
+observed_result:
+  - original filename with ../ stores content outside upload root
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - lab_only_no_destructive_system_paths

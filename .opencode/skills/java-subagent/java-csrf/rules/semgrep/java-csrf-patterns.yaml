@@ -1,0 +1,89 @@
+rules:
+  - id: java-csrf-samesite-none
+    message: Session/auth cookie configured with SameSite=None (CSRF surface depends on other controls)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $C.sameSite("None")
+      - pattern: |
+          $C.sameSite(SameSite.NONE)
+      - pattern: |
+          ResponseCookie.from(...).sameSite("None")
+      - pattern: |
+          "SameSite=None"
+    metadata:
+      cwe: CWE-352
+      subtype: missing-csrf-token
+      confidence: medium
+
+  - id: java-csrf-static-token
+    message: Possible static or hardcoded CSRF token (not session-bound)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          private static final String CSRF_TOKEN = "...";
+      - pattern: |
+          final String csrfToken = "csrf";
+      - pattern: |
+          final String csrfToken = "token";
+      - pattern: |
+          "X-CSRF-TOKEN"
+    metadata:
+      cwe: CWE-352
+      subtype: token-not-bound-to-session
+      confidence: low
+      notes: L1 hint; confirm token generation and server-side binding
+
+  - id: java-csrf-session-set-without-token-check
+    message: Session-authenticated state write pattern near mutable handler
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $REQ.getSession(...).setAttribute(...)
+      - pattern: |
+          $SESSION.setAttribute($K, $V)
+      - pattern: |
+          SecurityContextHolder.getContext().getAuthentication()
+    metadata:
+      cwe: CWE-352
+      confidence: low
+      notes: context only; pair with mutation endpoint and missing CSRF control
+
+  - id: java-csrf-ignoring-request-matchers
+    message: CSRF protection ignored for request matchers (review API cookie session)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $C.ignoringRequestMatchers(...)
+      - pattern: |
+          $C.ignoringAntMatchers(...)
+      - pattern: |
+          csrf().ignoringRequestMatchers(...)
+    metadata:
+      cwe: CWE-352
+      subtype: spring-csrf-disabled
+      confidence: medium
+
+  - id: java-csrf-getmapping-sensitive-path
+    message: GET endpoint path suggests state change (delete/logout/transfer)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          @GetMapping("/delete...")
+      - pattern: |
+          @GetMapping("/.../delete")
+      - pattern: |
+          @GetMapping("/logout...")
+      - pattern: |
+          @GetMapping("/transfer...")
+      - pattern: |
+          @GetMapping(path = "/delete...")
+    metadata:
+      cwe: CWE-352
+      subtype: get-based-state-change
+      confidence: medium

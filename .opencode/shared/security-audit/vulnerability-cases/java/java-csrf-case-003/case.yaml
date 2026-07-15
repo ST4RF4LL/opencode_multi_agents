@@ -1,0 +1,25 @@
+id: case-003
+vulnerability_type: csrf
+subtype: get-based-state-change
+source:
+  type: browser-session-cookie
+  expression: session cookie on GET with side effects
+sink:
+  api: ItemRepository.deleteById via GET
+  sensitive_argument: id
+propagation:
+  - ItemController.delete
+  - @GetMapping /items/delete
+  - itemRepository.deleteById
+root_cause:
+  - state_changing_get
+  - cookie_session_auth
+  - can_be_triggered_by_img_or_link
+prerequisites:
+  - victim_authenticated
+  - known_or_guessable_resource_id
+observed_behavior:
+  - resource_deleted_when_victim_browser_loads_attacker_controlled_url
+fix:
+  - change_to_POST_or_DELETE_with_csrf_token
+  - never_perform_mutations_on_safe_methods

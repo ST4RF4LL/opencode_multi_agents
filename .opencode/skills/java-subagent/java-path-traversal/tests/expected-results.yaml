@@ -1,0 +1,58 @@
+positive:
+  P01_FileJoinDownload.java:
+    expect: candidate_or_finding
+    subtype: classic-dotdot
+    sink: FileInputStream / new File
+  P02_PathResolveRead.java:
+    expect: candidate_or_finding
+    subtype: classic-dotdot
+    sink: Path.resolve / Files.readAllBytes
+  P03_ZipSlipExtract.java:
+    expect: candidate_or_finding
+    subtype: zip-slip
+    sink: FileOutputStream from ZipEntry.getName
+  P04_MultipartOriginalFilename.java:
+    expect: candidate_or_finding
+    subtype: multipart-filename
+    sink: Files.copy with getOriginalFilename
+  P05_StringConcatPath.java:
+    expect: candidate_or_finding
+    subtype: classic-dotdot
+    sink: FileInputStream string path concat
+
+negative:
+  N01_NormalizeStartsWith.java:
+    expect: rejected
+    reason: normalize_and_startswith_basedir
+  N02_BasenameAllowlist.java:
+    expect: rejected
+    reason: basename_allowlist_only_storage
+  N03_ConstantPath.java:
+    expect: rejected
+    reason: constant_path_no_external_input
+  N04_FixedPathIdMap.java:
+    expect: rejected
+    reason: fixed_id_to_path_map
+  N05_ZipEntryConfined.java:
+    expect: rejected
+    reason: zip_entry_normalize_startswith
+
+regression:
+  R01_FileJoinDownload.java:
+    expect: sink_candidate
+    subtype: classic-dotdot
+    must_not_regress: false_negative_on_file_parent_child_join
+
+partial_control_notes:
+  FilenameUtils.getName_alone:
+    grade: partial
+    expect: not_strong_sanitizer
+    must_not: reject_as_safe_without_basedir_confinement
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

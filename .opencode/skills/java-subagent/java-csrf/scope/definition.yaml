@@ -1,0 +1,25 @@
+id: java-csrf
+name: Cross-Site Request Forgery
+language: java
+cwe:
+  - CWE-352
+owasp:
+  - A01:2021-Broken Access Control
+dimension: D6
+objective:
+  detect: >
+    State-changing application actions reachable via browser-initiated
+    cross-site requests that automatically include credentials (session
+    cookies), without effective CSRF binding or equivalent defenses.
+core_condition:
+  - state_changing_endpoint_exists
+  - browser_auto_credential_mechanism_present
+  - cross_site_request_can_trigger_action
+  - effective_csrf_control_is_missing_or_bypassable
+not_in_scope:
+  - pure_xss
+  - ssrf
+  - open_redirect_without_state_change
+  - cors_misconfiguration_alone_without_cookie_auth_state_change
+  - clickjacking_without_csrf
+  - jwt_bearer_header_only_apis_without_cookie_session

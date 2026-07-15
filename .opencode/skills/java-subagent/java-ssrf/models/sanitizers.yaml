@@ -1,0 +1,83 @@
+sanitizers:
+  strong:
+    - id: fixed-destination-mapping
+      condition:
+        - user_input_only_selects_predefined_destination
+        - mapped_destinations_are_constants
+        - reject_or_default_on_unknown
+      notes: destination id -> constant URL map is preferred fix
+
+    - id: resolved-ip-allowlist
+      condition:
+        - scheme_is_allowlisted
+        - hostname_is_parsed_then_resolved
+        - all_resolved_ips_are_checked_against_allowlist_or_denylist
+        - private_link_local_metadata_ranges_blocked_when_required
+        - redirects_are_disabled_or_revalidated
+      notes: TOCTOU/DNS rebinding still possible without connect-time recheck
+
+    - id: scheme-and-host-allowlist-parsed
+      condition:
+        - URL_or_URI_parsed_before_check
+        - scheme_exact_allowlist_http_https_only_or_stricter
+        - host_exact_or_suffix_boundary_enforced
+        - userinfo_and_at_sign_confusion_handled
+        - redirects_revalidated_or_disabled
+
+  contextual:
+    - id: host-allowlist-exact
+      condition:
+        - parsed_hostname_compared
+        - exact_match_or_safe_suffix_with_dot_boundary
+        - redirect_behavior_is_known
+      notes: weaker if redirects follow unchecked or DNS not rechecked
+
+    - id: scheme-allowlist-only
+      condition:
+        - scheme_restricted_to_http_https
+        - host_still_user_controlled
+      notes: blocks protocol smuggling but not internal host SSRF
+
+    - id: path-only-with-fixed-origin
+      condition:
+        - scheme_and_host_and_port_are_constants
+        - user_input_only_appended_as_path_or_query_after_safe_join
+      notes: usually not full SSRF; still review path traversal to internal routes
+
+  weak:
+    - id: startswith-prefix
+      pattern:
+        - startsWith
+        - regionMatches
+      notes: bypassable via https://trusted.example.evil.com, @, #, encoded dots, //
+
+    - id: blacklist-host-or-ip
+      pattern:
+        - contains("169.254")
+        - contains("localhost")
+        - replace
+        - regex_blacklist
+      notes: incomplete; alternate representations and DNS names bypass
+
+    - id: contains-trusted-domain
+      pattern:
+        - contains("trusted.example")
+      notes: substring match is not host validation
+
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without parse
+      notes: insufficient for URL structure control
+
+  invalid:
+    - id: validate-before-decode
+      notes: validating then decoding/normalizing changes destination
+    - id: validate-before-redirect
+      notes: initial URL ok but redirect target not rechecked
+    - id: string-prefix-url-validation
+      notes: startsWith on raw string without parse-host
+    - id: html-encode-as-ssrf-defense
+    - id: client-side-only-url-check
+    - id: open-redirect-filter-as-ssrf-defense
+      notes: blocking browser redirects does not constrain server-side fetch

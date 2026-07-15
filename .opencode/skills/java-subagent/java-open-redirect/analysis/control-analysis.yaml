@@ -1,0 +1,55 @@
+questions:
+  - id: destination_origin
+    ask: 重定向目标是常量、固定映射，还是包含外部输入？
+    outcomes:
+      constant_or_fixed_map: likely_safe
+      user_in_full_url: high_risk
+      user_protocol_relative: protocol_relative_risk
+      user_path_with_weak_slash_check: path_relative_bypass_risk
+      user_in_path_only_forced_same_site: usually_not_open_redirect
+
+  - id: influenced_component
+    ask: 攻击者影响的是完整 URL、protocol-relative、path-relative 还是 Spring redirect: 后缀？
+    classify:
+      - full-url-redirect
+      - protocol-relative
+      - path-relative-bypass
+      - spring-redirect-prefix
+      - header-location-injection
+
+  - id: parse_before_check
+    ask: 校验是否在 URL/URI 解析之后基于 scheme/host 进行？
+    strong_yes:
+      - URI.create then getScheme/getHost checks
+      - only relative paths with rejection of // and schemes
+    false_friends:
+      - startsWith("https://trusted.example/")
+      - startsWith("/")
+      - contains("trusted.example")
+      - blacklist javascript: only
+
+  - id: protocol_relative
+    ask: 是否接受或未拒绝 //host 形式？
+    if_accepted:
+      - protocol-relative subtype
+      - control grade weak or invalid
+
+  - id: relative_path_enforcement
+    ask: 是否强制同站相对路径并拒绝 authority？
+    accept:
+      - starts with single / but not //
+      - no scheme
+      - no userinfo
+      - joined under app context
+    reject_as_strong:
+      - startsWith("/") alone without // rejection
+
+  - id: encoding_and_confusion
+    ask: 是否处理 @ userinfo、反斜杠、双重编码、CRLF 注入 Location？
+    assessment: weak_if_raw_string_prefix_only
+
+control_grades:
+  strong: effective_blocks_external_redirect
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable
+  invalid: does_not_mitigate

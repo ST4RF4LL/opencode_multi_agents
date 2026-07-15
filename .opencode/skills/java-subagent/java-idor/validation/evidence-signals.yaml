@@ -1,0 +1,22 @@
+strong_signals:
+  - authenticated_user_retrieves_another_users_resource_content
+  - authenticated_user_mutates_or_deletes_another_users_resource
+  - tenant_boundary_broken_with_client_tenant_id_or_foreign_object_id
+  - response_body_matches_victim_owned_record_fields
+
+medium_signals:
+  - deterministic_200_for_foreign_id_vs_404_for_random_id
+  - same_status_and_structure_for_owner_and_non_owner_ids
+  - update_affects_row_count_for_foreign_id
+  - logs_show_load_by_client_id_without_owner_filter
+
+weak_signals:
+  - generic_403_or_401_without_object_context
+  - findById_api_presence_only
+  - sequential_id_without_access_proof
+  - ui_hides_resource_but_api_untested
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

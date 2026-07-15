@@ -1,0 +1,22 @@
+id: spring-cache-spel
+name: Spring Cache abstraction SpEL (optional)
+detection:
+  imports:
+    - org.springframework.cache.annotation.Cacheable
+    - org.springframework.cache.annotation.CacheEvict
+    - org.springframework.cache.annotation.CachePut
+    - org.springframework.cache.interceptor.CacheOperationExpressionEvaluator
+  annotations:
+    - Cacheable
+    - CacheEvict
+    - CachePut
+    - Caching
+sinks:
+  - key / condition / unless SpEL attributes built from concatenated user input
+  - programmatic CacheOperation with dynamic SpEL strings
+strong_controls:
+  - constant SpEL in annotations with only method args as #p0 / #root variables
+  - no runtime string concat into cache SpEL attributes
+notes:
+  - Normal @Cacheable(key = "#id") with constant expression text is safe
+  - Only flag when expression string is dynamically composed from untrusted data

@@ -1,0 +1,36 @@
+propagators:
+  - pattern: session-to-principal
+    examples:
+      - JSESSIONID cookie -> HttpSession -> SecurityContext
+      - remember-me cookie -> Authentication
+      - auth cookie JWT -> filter chain principal
+
+  - pattern: request-to-handler
+    examples:
+      - browser POST form fields -> @RequestParam / @ModelAttribute
+      - browser JSON body -> @RequestBody DTO
+      - query string on GET mutation -> @RequestParam
+
+  - pattern: handler-to-service
+    examples:
+      - Controller.changePassword -> UserService.updatePassword
+      - AccountController.delete -> AccountRepository.delete
+      - TransferController.transfer -> LedgerService.post
+
+  - pattern: config-to-filter-chain
+    examples:
+      - SecurityFilterChain bean csrf().disable()
+      - WebSecurityConfigurerAdapter configure(HttpSecurity)
+      - CsrfFilter removed or ignored for API matcher
+
+  - pattern: cookie-flags
+    examples:
+      - ResponseCookie.from(...).sameSite("None")
+      - server.servlet.session.cookie.same-site
+      - Set-Cookie without SameSite
+
+  - pattern: token-field-without-binding
+    examples:
+      - hidden _csrf field not validated server-side
+      - X-CSRF-TOKEN header ignored by filter chain
+      - static CSRF_TOKEN constant in code

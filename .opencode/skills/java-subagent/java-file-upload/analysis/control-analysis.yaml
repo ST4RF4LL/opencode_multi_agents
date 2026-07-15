@@ -1,0 +1,62 @@
+questions:
+  - id: upload_origin
+    ask: 上传内容、原始文件名、Content-Type 是否来自外部 multipart/请求体？
+    outcomes:
+      constant_fixture_only: likely_safe
+      user_multipart: high_risk_surface
+      base64_body: high_risk_surface
+
+  - id: type_policy
+    ask: 服务端如何约束文件类型？
+    strong_yes:
+      - explicit_extension_allowlist_fail_closed
+      - magic_byte_sniff_matches_allowlist
+      - image_decode_and_reencode_discarding_original
+    false_friends:
+      - Content-Type header startsWith image/ only
+      - blacklist few extensions
+      - client-side accept attribute
+      - endsWith .png without double-extension logic
+
+  - id: extension_parsing
+    ask: 扩展名如何解析？
+    accept:
+      - basename_only_case_insensitive
+      - reject_empty_multi_and_dangerous_compound_extensions
+    reject_as_strong:
+      - lastIndexOf without double-extension policy
+      - trust full client path as name
+
+  - id: storage_location
+    ask: 最终文件写在何处？
+    high_risk:
+      - servlet_context_getRealPath
+      - webapp_static_public_resources
+      - spring_resource_handler_public_mapping
+    lower_risk:
+      - private_data_dir_outside_docroot
+      - private_object_storage
+
+  - id: storage_naming
+    ask: 存储文件名是否服务端生成？
+    accept:
+      - UUID_or_random_plus_safe_extension_from_policy
+    reject_as_strong_alone:
+      - original_filename_as_storage_name
+      - rename_without_type_policy_when_served_as_content
+
+  - id: content_serving
+    ask: 上传后如何对外提供？
+    assessment: >
+      static mapping of upload dir, inline Content-Disposition for SVG/HTML,
+      or script engine mapping elevates impact
+
+  - id: path_escape_adjacent
+    ask: 文件名是否同时存在 ../ 路径逃逸？
+    assessment: handoff_or_dual_report_with_java_path_traversal
+
+control_grades:
+  strong: effective_blocks_dangerous_type_and_unsafe_publish
+  contextual: effective_only_for_specific_subtype
+  weak: bypassable_mime_or_blacklist
+  invalid: does_not_mitigate

@@ -1,0 +1,22 @@
+strong_signals:
+  - persisted_entity_contains_attacker_supplied_privilege_or_balance
+  - low_privilege_session_gains_admin_after_overpost
+  - response_echoes_updated_sensitive_field_from_request
+  - database_diff_confirms_unauthorized_field_write
+
+medium_signals:
+  - deterministic_difference_between_baseline_and_overpost_payload
+  - server_accepts_unexpected_sensitive_json_properties_without_error
+  - logs_show_bound_object_with_sensitive_values_from_request
+  - jackson_or_binder_debug_shows_property_set
+
+weak_signals:
+  - entity_class_has_isAdmin_field_only
+  - presence_of_RequestBody_annotation_only
+  - generic_400_or_500_without_field_write_proof
+  - openapi_lists_field_without_runtime_binding_proof
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

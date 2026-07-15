@@ -1,0 +1,89 @@
+sanitizers:
+  strong:
+    - id: fixed-destination-mapping
+      condition:
+        - user_input_only_selects_predefined_destination
+        - mapped_destinations_are_constants
+        - reject_or_default_on_unknown
+      notes: destination id -> constant relative or absolute URL map is preferred fix
+
+    - id: parsed-host-scheme-allowlist
+      condition:
+        - URL_or_URI_parsed_before_check
+        - scheme_exact_allowlist_http_https_only_or_stricter
+        - host_exact_or_suffix_boundary_enforced
+        - userinfo_and_at_sign_confusion_handled
+        - protocol_relative_rejected_or_normalized
+        - reject_when_host_null_for_absolute_urls
+      notes: absolute external redirects only when host is on allowlist
+
+    - id: force-relative-same-site-path
+      condition:
+        - only_relative_paths_accepted
+        - rejects_scheme_and_authority
+        - rejects_protocol_relative_double_slash
+        - joins_to_application_context_path_safely
+      notes: strongest practical pattern for post-login return URLs
+
+  contextual:
+    - id: host-allowlist-exact
+      condition:
+        - parsed_hostname_compared
+        - exact_match_or_safe_suffix_with_dot_boundary
+      notes: weaker if protocol-relative or raw-string checks mixed in
+
+    - id: scheme-allowlist-only
+      condition:
+        - scheme_restricted_to_http_https
+        - host_still_user_controlled
+      notes: blocks javascript: and data: but not external phishing hosts
+
+    - id: same-origin-referer-bound
+      condition:
+        - redirect_only_to_parsed_same_host_as_application
+        - host_taken_from_server_config_not_user_header
+      notes: do not trust Host/X-Forwarded-Host alone without proxy trust model
+
+  weak:
+    - id: startswith-prefix
+      pattern:
+        - startsWith
+        - regionMatches
+      notes: >
+        bypassable via https://trusted.example.evil.com, //evil.example,
+        https://trusted.example@evil.example, encoded forms
+
+    - id: contains-trusted-domain
+      pattern:
+        - contains("trusted.example")
+        - contains("example.com")
+      notes: substring match is not host validation
+
+    - id: blacklist-schemes-only
+      pattern:
+        - contains("javascript:")
+        - contains("data:")
+        - replace
+      notes: incomplete; external https destinations still open redirect
+
+    - id: starts-with-slash-only
+      pattern:
+        - startsWith("/")
+      notes: bypassed by //evil.example and some \/ forms
+
+    - id: length-or-charset-only
+      pattern:
+        - length check
+        - alphanumeric-only without parse
+      notes: insufficient for URL structure control
+
+  invalid:
+    - id: validate-before-decode
+      notes: validating then decoding/normalizing changes destination
+    - id: string-prefix-url-validation
+      notes: startsWith on raw string without parse-host
+    - id: html-encode-as-redirect-defense
+      notes: encoding does not constrain browser Location navigation
+    - id: client-side-only-url-check
+    - id: ssrf-allowlist-misapplied
+      notes: server-side fetch allowlist does not automatically protect browser redirects

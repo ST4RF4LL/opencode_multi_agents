@@ -1,0 +1,8 @@
+transferable_lessons:
+  - Cookie-session JSON APIs are a common CSRF blind spot when only form CSRF was considered
+  - application/json alone is not a CSRF control
+  - SPA patterns should use CookieCsrfTokenRepository + header token validation or avoid cookie auth
+non_transferable_details:
+  - original API path
+  - original DTO field names
+  - original CORS policy details

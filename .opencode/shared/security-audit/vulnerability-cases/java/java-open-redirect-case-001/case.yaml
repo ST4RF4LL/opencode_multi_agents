@@ -1,0 +1,23 @@
+id: case-001
+vulnerability_type: open-redirect
+subtype: full-url-redirect
+source:
+  type: request-parameter
+  expression: request.getParameter("url")
+sink:
+  api: HttpServletResponse.sendRedirect
+  sensitive_argument: 1
+propagation:
+  - RedirectServlet.doGet
+  - response.sendRedirect
+root_cause:
+  - complete_url_is_user_controlled
+  - no_destination_allowlist
+  - absolute_external_url_accepted
+prerequisites:
+  - reachable_http_endpoint
+observed_behavior:
+  - browser_redirected_to_attacker_controlled_url
+fix:
+  - replace_user_url_with_destination_id
+  - map_destination_id_to_fixed_relative_or_allowlisted_url

@@ -1,0 +1,12 @@
+case_specific: true
+preconditions:
+  - application.yml committed and loaded at runtime
+  - password value is real in target (sample uses CHANGE_ME_NOT_REAL only)
+request_context:
+  note: static config review; do not connect to production DB with found passwords
+observed_result:
+  - plaintext password present under spring.datasource.password
+  - DataSource authenticates using that value
+reuse_policy:
+  - reference_only
+  - do_not_use_discovered_db_credentials

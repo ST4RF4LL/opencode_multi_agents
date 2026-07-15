@@ -1,0 +1,52 @@
+positive:
+  P01_ParseExpressionUser.java:
+    expect: candidate_or_finding
+    subtype: spel-expression-parser-parse
+    sink: SpelExpressionParser.parseExpression
+  P02_ParseExpressionConcat.java:
+    expect: candidate_or_finding
+    subtype: spel-expression-parser-parse
+    sink: parseExpression
+  P03_TemplateHashConcat.java:
+    expect: candidate_or_finding
+    subtype: template-parser-context
+    sink: parseExpression+TemplateParserContext
+  P04_StandardContextGetValue.java:
+    expect: candidate_or_finding
+    subtype: evaluation-context-standard-vs-simple
+    sink: parseExpression+getValue
+  P05_StringFormatSpel.java:
+    expect: candidate_or_finding
+    subtype: spel-expression-parser-parse
+    sink: parseExpression
+
+negative:
+  N01_SimpleEvaluationContext.java:
+    expect: rejected
+    reason: simple_evaluation_context_constant_expression
+  N02_ConstantExpression.java:
+    expect: rejected
+    reason: no_external_input_in_expression
+  N03_ExpressionAllowlist.java:
+    expect: rejected
+    reason: expression_allowlist
+  N04_VariableBindingOnly.java:
+    expect: rejected
+    reason: constant_template_with_variable_binding
+  N05_ConstantValueAnnotation.java:
+    expect: rejected
+    reason: constant_value_annotation_not_injection
+
+regression:
+  R01_ParseExpressionUser.java:
+    expect: sink_candidate
+    subtype: spel-expression-parser-parse
+    must_not_regress: false_negative_on_parseExpression_user_string
+
+metrics:
+  track:
+    - sink_candidate_recall
+    - dataflow_hit_rate
+    - false_positive_rate
+    - finding_precision
+    - unmodeled_framework_count

@@ -1,0 +1,8 @@
+transferable_lessons:
+  - URL prefix checks are not host constraints
+  - Path concat onto a base URL can enable host escape depending on parser and separators
+  - Fix by constructing URI with fixed scheme/host and validating parsed components
+non_transferable_details:
+  - original base domain
+  - original bypass string
+  - original endpoint path

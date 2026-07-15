@@ -1,0 +1,25 @@
+in_scope:
+  - multipart_upload_without_extension_allowlist
+  - content_type_only_trust_then_store_as_is
+  - double_extension_and_content_mismatch_bypass
+  - storage_under_webapp_static_public_webroot
+  - dangerous_type_acceptance_conceptual_jsp_war_class
+  - svg_html_xml_stored_and_served_as_content
+  - server_side_rename_missing_when_type_policy_also_missing
+  - commons_fileupload_spring_multipart_servlet_part
+
+out_of_scope:
+  - pure_dotdot_path_escape_without_upload_type_policy
+  - zip_slip_entry_name_escape_on_extract
+  - ssrf_or_file_url_fetch
+  - command_injection_via_uploaded_filename_as_primary
+  - malware_av_engine_coverage_as_primary
+  - webshell_payload_generation_or_execution
+
+boundary_notes:
+  - Pure ../ path escape on filename → java-path-traversal; this skill = upload policy + dangerous types + web-accessible storage
+  - If both path escape and unrestricted type: report both; path issues primary under java-path-traversal, type under this skill
+  - FilenameUtils.getName alone does not fix type policy
+  - Random UUID rename without type allowlist still risks if content served with wrong Content-Type or executable mapping
+  - Dangerous API / transferTo hit alone is not a vulnerability
+  - NEVER include real webshell payloads; use FAKE markers and conceptual extension acceptance only

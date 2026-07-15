@@ -1,0 +1,95 @@
+rules:
+  - id: java-open-redirect-weak-startswith
+    message: Weak startsWith prefix check on redirect URL (bypassable; not host validation)
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $URL.startsWith("http://")
+      - pattern: |
+          $URL.startsWith("https://")
+      - pattern: |
+          $URL.startsWith($PREFIX)
+      - pattern: |
+          if ($URL.startsWith(...)) {
+            ...
+            $RESP.sendRedirect($URL);
+            ...
+          }
+      - pattern: |
+          if ($URL.startsWith(...)) {
+            ...
+            return "redirect:" + $URL;
+            ...
+          }
+    metadata:
+      cwe: CWE-601
+      subtype: full-url-redirect
+      confidence: medium
+      notes: L1/L3 hint; not a finding without dataflow to redirect sink
+
+  - id: java-open-redirect-slash-only-check
+    message: startsWith("/") only does not block protocol-relative //host redirects
+    severity: WARNING
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          if ($URL.startsWith("/")) {
+            ...
+            $RESP.sendRedirect($URL);
+            ...
+          }
+      - pattern: |
+          if ($URL.startsWith("/")) {
+            ...
+            return "redirect:" + $URL;
+            ...
+          }
+      - pattern: |
+          $OK = $URL.startsWith("/");
+    metadata:
+      cwe: CWE-601
+      subtype: protocol-relative
+      confidence: medium
+
+  - id: java-open-redirect-param-name-hint
+    message: High-signal redirect parameter name near redirect API
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          $REQ.getParameter("returnUrl")
+      - pattern: |
+          $REQ.getParameter("return_url")
+      - pattern: |
+          $REQ.getParameter("next")
+      - pattern: |
+          $REQ.getParameter("continue")
+      - pattern: |
+          $REQ.getParameter("redirect")
+      - pattern: |
+          $REQ.getParameter("redirectUrl")
+      - pattern: |
+          $REQ.getParameter("callback")
+      - pattern: |
+          $REQ.getParameter("goto")
+      - pattern: |
+          $REQ.getParameter("url")
+    metadata:
+      cwe: CWE-601
+      confidence: low
+      notes: L0/L1 context; elevate when flows to sendRedirect/Location/redirect:
+
+  - id: java-open-redirect-protocol-relative-literal-hint
+    message: Protocol-relative URL pattern may indicate redirect bypass research
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          "//" + $HOST
+      - pattern: |
+          $URL.startsWith("//")
+    metadata:
+      cwe: CWE-601
+      subtype: protocol-relative
+      confidence: low

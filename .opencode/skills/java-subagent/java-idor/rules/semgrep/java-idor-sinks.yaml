@@ -1,0 +1,113 @@
+rules:
+  - id: java-idor-findbyid-pathvariable
+    message: Resource loaded by PathVariable id without nearby ownership check (IDOR candidate)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $REPO.findById($ID)
+          - pattern: $REPO.findById($ID, ...)
+          - pattern: $REPO.getOne($ID)
+          - pattern: $REPO.getById($ID)
+          - pattern: $REPO.getReferenceById($ID)
+          - pattern: $EM.find($T, $ID)
+      - pattern-either:
+          - pattern-inside: |
+              public $RET $M(..., @PathVariable $IT $ID, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $RET $M(..., @PathVariable("$X") $IT $ID, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $RET $M(..., @RequestParam $IT $ID, ...) {
+                ...
+              }
+      - pattern-not-inside: |
+          ...
+          $REPO.findByIdAndUserId(...);
+          ...
+      - pattern-not-inside: |
+          ...
+          $REPO.findByIdAndOwnerId(...);
+          ...
+    metadata:
+      cwe: CWE-639
+      category: idor
+      confidence: high
+
+  - id: java-idor-deletebyid-pathvariable
+    message: Resource deleted by client-supplied id without ownership check
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $REPO.deleteById($ID)
+          - pattern: $REPO.delete($ENT)
+          - pattern: $EM.remove($ENT)
+      - pattern-either:
+          - pattern-inside: |
+              public $RET $M(..., @PathVariable $IT $ID, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $RET $M(..., @PathVariable("$X") $IT $ID, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $RET $M(..., @RequestParam $IT $ID, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-639
+      category: idor
+      subtype: missing-ownership-on-mutation
+      confidence: high
+
+  - id: java-idor-mybatis-primary-key
+    message: MyBatis select/delete/update by primary key from request id (IDOR candidate)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $MAPPER.selectByPrimaryKey($ID)
+          - pattern: $MAPPER.selectById($ID)
+          - pattern: $MAPPER.deleteByPrimaryKey($ID)
+          - pattern: $MAPPER.updateByPrimaryKey($ENT)
+      - pattern-either:
+          - pattern-inside: |
+              public $RET $M(..., @PathVariable $IT $ID, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $RET $M(..., @RequestParam $IT $ID, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-639
+      category: idor
+      confidence: high
+
+  - id: java-idor-servlet-param-find
+    message: Servlet parameter used as resource key for lookup
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $ID = $REQ.getParameter("id");
+              ...
+              $REPO.findById($ID);
+          - pattern: |
+              $ID = $REQ.getParameter("orderId");
+              ...
+              $REPO.findById($ID);
+          - pattern: |
+              $ID = $REQ.getParameter("userId");
+              ...
+              $REPO.findById($ID);
+    metadata:
+      cwe: CWE-639
+      category: idor
+      confidence: medium

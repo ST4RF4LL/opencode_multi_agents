@@ -1,0 +1,22 @@
+strong_signals:
+  - controlled_destination_received_server_request
+  - server_response_contains_controlled_destination_content
+  - application_logs_confirm_outbound_request_to_controlled_host
+  - synthetic_collaborator_interaction_matched_to_request
+
+medium_signals:
+  - deterministic_response_difference_by_destination
+  - destination_specific_connection_error_or_timeout
+  - controlled_redirect_is_followed_by_server_client
+  - internal_host_vs_external_host_behavioral_split
+
+weak_signals:
+  - generic_500_error
+  - timeout_without_destination_evidence
+  - presence_of_network_client_api_only
+  - startsWith_or_blacklist_code_without_dataflow_proof
+
+interpretation:
+  strong: supports Finding when static path is clear
+  medium: supports Candidate; may upgrade with more evidence
+  weak: insufficient alone

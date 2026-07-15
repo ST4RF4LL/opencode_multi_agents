@@ -1,0 +1,30 @@
+must_derive_from:
+  - actual_api_route
+  - actual_http_method
+  - actual_authentication_cookie_or_session_mechanism
+  - actual_state_change_logic
+  - actual_csrf_configuration_or_absence
+  - actual_cookie_samesite_and_cors_context
+
+must_include:
+  - prerequisites
+  - baseline_same_site_authenticated_request_description
+  - conceptual_cross_site_request_shape
+  - expected_observable
+  - success_condition
+  - failure_interpretation
+  - explicit_note_conceptual_only
+
+must_not:
+  - reuse_historical_html_poc_blindly
+  - generate_weaponized_exploit_pages
+  - claim_success_based_only_on_csrf_disable_string_match
+  - perform_destructive_actions_on_production
+  - phish_or_social_engineer_real_users
+  - bypass_authorization_scope_of_engagement
+
+preferred_validation_style:
+  - static_code_proof_of_missing_control
+  - authorized_lab_or_staging_only
+  - conceptual_request_diff_baseline_vs_missing_token
+  - log_or_db_state_observation_in_lab

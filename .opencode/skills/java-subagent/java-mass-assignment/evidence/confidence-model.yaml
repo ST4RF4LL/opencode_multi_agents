@@ -1,0 +1,31 @@
+levels:
+  high:
+    requires:
+      - clear_binding_entry_and_type
+      - clear_sensitive_writable_fields
+      - missing_or_weak_controls
+      - one_of_strong_dynamic_or_unambiguous_static_semantics
+  medium:
+    requires:
+      - binding_to_entity_or_sensitive_type
+      - likely_writable_sensitive_fields
+      - controls_absent_or_suspicious
+    missing_optional:
+      - dynamic_verification
+  low:
+    requires:
+      - entity_or_RequestBody_adjacency
+    notes: usually Candidate only
+
+modifiers:
+  increase:
+    - unauthenticated_or_self_service_profile_update
+    - isAdmin_or_role_field_writable
+    - balance_writable
+    - direct_repository_save_of_request_body
+    - confirmed_db_or_authz_impact
+  decrease:
+    - partial_jsonignore
+    - uncertain_reachability
+    - admin_only_endpoint
+    - dto_name_but_unverified_field_set

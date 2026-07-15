@@ -1,0 +1,133 @@
+rules:
+  - id: java-ssrf-resttemplate-user-url
+    message: RestTemplate called with possible user-controlled URL
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $R.exchange($URL, ...)
+          - pattern: $R.getForObject($URL, ...)
+          - pattern: $R.getForEntity($URL, ...)
+          - pattern: $R.postForObject($URL, ...)
+          - pattern: $R.postForEntity($URL, ...)
+          - pattern: $R.execute($URL, ...)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $URL = $REQ.getHeader(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $U $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              public $T $M(..., @RequestBody $B $BODY, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-918
+      category: ssrf
+      confidence: high
+
+  - id: java-ssrf-url-open-user-input
+    message: URL openConnection/openStream with possible user-controlled destination
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              (new URL($URL)).openConnection()
+          - pattern: |
+              (new URL($URL)).openStream()
+          - pattern: |
+              $U.openConnection()
+          - pattern: |
+              $U.openStream()
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              $U = new URL($REQ.getParameter(...));
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-918
+      category: ssrf
+      confidence: high
+
+  - id: java-ssrf-okhttp-user-url
+    message: OkHttp Request.Builder.url with possible user-controlled URL
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              new Request.Builder().url($URL)
+          - pattern: |
+              $B.url($URL)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+          - pattern-inside: |
+              $URL = $BODY.getUrl();
+              ...
+    metadata:
+      cwe: CWE-918
+      category: ssrf
+      confidence: high
+
+  - id: java-ssrf-webclient-user-uri
+    message: WebClient uri with possible user-controlled destination
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $W.get().uri($URL, ...)
+          - pattern: |
+              $W.post().uri($URL, ...)
+          - pattern: |
+              $W.method($M).uri($URL, ...)
+          - pattern: |
+              WebClient.create($URL)
+      - pattern-either:
+          - pattern-inside: |
+              $URL = $REQ.getParameter(...);
+              ...
+          - pattern-inside: |
+              public $T $M(..., @RequestParam $S $URL, ...) {
+                ...
+              }
+    metadata:
+      cwe: CWE-918
+      category: ssrf
+      confidence: high
+
+  - id: java-ssrf-apache-httpget-user-url
+    message: Apache HttpGet/HttpPost constructed with possible user-controlled URL
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - pattern: |
+          new HttpGet($URL)
+      - pattern: |
+          new HttpPost($URL)
+      - pattern: |
+          RequestBuilder.get($URL)
+      - pattern: |
+          RequestBuilder.post($URL)
+    metadata:
+      cwe: CWE-918
+      category: ssrf
+      confidence: medium

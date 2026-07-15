@@ -1,0 +1,36 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: dangerous file path API, Zip extract join, or multipart filename storage pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external input / ZipEntry.getName / getOriginalFilename can reach path construction or file I/O
+    not_a_finding_until: control_and_reachability_checked
+    next: sanitizer_and_path_confinement_analysis
+
+  L3_semantic_candidate:
+    meaning: normalize+baseDir confinement missing or bypassable; attacker influences path segments outside intended root
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable
+
+priority_boost:
+  - unauthenticated_entry
+  - download_or_preview_by_filename
+  - zip_extract_of_untrusted_archive
+  - multipart_storage_using_original_filename
+  - write_or_delete_outside_base
+  - sensitive_system_path_readable
+  - second_order_with_stored_path
+
+priority_reduce:
+  - test_code_only
+  - constant_path
+  - fixed_id_to_path_map
+  - dead_code
+  - local_dev_tooling
+  - filenameutils_getname_with_full_normalize_startswith

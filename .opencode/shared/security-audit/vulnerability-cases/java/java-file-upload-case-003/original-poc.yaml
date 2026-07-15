@@ -1,0 +1,18 @@
+case_specific: true
+preconditions:
+  - endpoint uses endsWith image extension checks
+  - lab environment only
+request_context:
+  endpoint: /api/import
+  parameter: file
+  notes: >
+    Demonstrate policy gap with benign FAKE_MARKER file named to exercise
+    double-extension or content/extension mismatch (e.g. marker.png with
+    wrong body, or compound name rejected/accepted per weak logic).
+    No webshell payloads.
+observed_result:
+  - weak endsWith policy accepts bypass-style names or mismatched content
+reuse_policy:
+  - reference_only
+  - do_not_execute_without_rederiving_from_current_target
+  - never_use_real_webshell_payloads

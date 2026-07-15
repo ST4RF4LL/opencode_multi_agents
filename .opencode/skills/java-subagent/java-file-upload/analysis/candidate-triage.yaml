@@ -1,0 +1,35 @@
+triage_levels:
+  L1_sink_candidate:
+    meaning: multipart store / transferTo / upload write pattern found
+    not_a_finding: true
+    next: expand_call_chain_and_dataflow
+
+  L2_dataflow_candidate:
+    meaning: external upload filename/content/content-type can reach storage operation
+    not_a_finding_until: type_policy_and_storage_location_checked
+    next: sanitizer_and_policy_analysis
+
+  L3_semantic_candidate:
+    meaning: type policy missing/weak or storage web-accessible for dangerous types
+    next: entry_reachability_and_evidence
+
+  finding:
+    meaning: Evidence Contract satisfied
+  rejected:
+    meaning: proven safe or non-reachable or pure path-only (handoff)
+
+priority_boost:
+  - unauthenticated_upload
+  - store_under_webapp_or_static_or_public
+  - content_type_only_check
+  - accepts_conceptual_jsp_jspx_war_or_html_svg
+  - double_extension_handling_absent
+  - original_filename_used_as_storage_name
+  - no_extension_check_at_all
+
+priority_reduce:
+  - test_code_only
+  - private_object_storage_with_strong_allowlist
+  - server_generated_name_and_image_reencode
+  - dead_code
+  - pure_path_escape_without_type_issue

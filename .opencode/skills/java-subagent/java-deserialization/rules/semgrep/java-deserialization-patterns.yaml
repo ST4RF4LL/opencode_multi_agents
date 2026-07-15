@@ -1,0 +1,168 @@
+rules:
+  - id: java-deser-request-bytes-to-ois
+    message: Request/body bytes likely flow into ObjectInputStream (native deserialization pattern)
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $BYTES = $REQ.getInputStream();
+              ...
+              new ObjectInputStream($BYTES)
+          - pattern: |
+              $BYTES = $REQ.getInputStream();
+              ...
+              new ObjectInputStream(...)
+          - pattern: |
+              $B = $DECODER.decode($PARAM);
+              ...
+              new ObjectInputStream(new ByteArrayInputStream($B))
+          - pattern: |
+              $B = Base64.getDecoder().decode($PARAM);
+              ...
+              new ObjectInputStream(new ByteArrayInputStream($B))
+          - pattern: |
+              new ObjectInputStream(new ByteArrayInputStream($BYTES))
+    metadata:
+      cwe: CWE-502
+      subtype: java-native-serialization
+      confidence: high
+
+  - id: java-deser-cookie-base64-ois
+    message: Cookie or parameter base64 blob decoded into ObjectInputStream
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $V = $COOKIE.getValue();
+              ...
+              $B = Base64.getDecoder().decode($V);
+              ...
+              new ObjectInputStream(new ByteArrayInputStream($B))
+          - pattern: |
+              $V = $REQ.getParameter(...);
+              ...
+              $B = Base64.getDecoder().decode($V);
+              ...
+              .readObject()
+    metadata:
+      cwe: CWE-502
+      subtype: java-native-serialization
+      confidence: high
+
+  - id: java-deser-fastjson-atype-payload-path
+    message: Fastjson parse of request body with autoType configuration nearby
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $CFG.setAutoTypeSupport(true);
+              ...
+              JSON.parseObject($BODY)
+          - pattern: |
+              $CFG.setAutoTypeSupport(true);
+              ...
+              JSON.parse($BODY)
+          - pattern: |
+              JSON.parseObject($BODY, Feature.SupportAutoType)
+          - pattern: |
+              JSON.parseObject($BODY, Object.class)
+    metadata:
+      cwe: CWE-502
+      subtype: fastjson-autotype
+      confidence: high
+
+  - id: java-deser-snakeyaml-default-ctor
+    message: new Yaml() default constructor used to load untrusted input
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Yaml $Y = new Yaml();
+              ...
+              $Y.load($X)
+          - pattern: |
+              new Yaml().load($X)
+          - pattern: |
+              Yaml $Y = new Yaml();
+              ...
+              $Y.loadAs($X, ...)
+    metadata:
+      cwe: CWE-502
+      subtype: snakeyaml-unsafe-constructor
+      confidence: high
+
+  - id: java-deser-jackson-typing-then-read
+    message: ObjectMapper with default typing used for untrusted readValue
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $M.enableDefaultTyping(...);
+              ...
+              $M.readValue($JSON, ...)
+          - pattern: |
+              $M.activateDefaultTyping(...);
+              ...
+              $M.readValue($JSON, ...)
+          - pattern: |
+              $M.enableDefaultTyping();
+              ...
+              $M.readValue($JSON, Object.class)
+    metadata:
+      cwe: CWE-502
+      subtype: jackson-default-typing
+      confidence: high
+
+  - id: java-deser-xstream-raw
+    message: XStream constructed and fromXML without visible security setup
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern: |
+          XStream $XS = new XStream();
+          ...
+          $XS.fromXML($X)
+      - pattern-not: |
+          XStream $XS = new XStream();
+          ...
+          $XS.allowTypes(...);
+          ...
+          $XS.fromXML($X)
+      - pattern-not: |
+          XStream $XS = new XStream();
+          ...
+          XStream.setupDefaultSecurity($XS);
+          ...
+          $XS.fromXML($X)
+    metadata:
+      cwe: CWE-502
+      subtype: xstream-unprotected
+      confidence: medium
+
+  - id: java-deser-mq-redis-bytes
+    message: Message/Redis bytes deserialized via native or library APIs
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $V = $RECORD.value();
+              ...
+              new ObjectInputStream(new ByteArrayInputStream($V))
+          - pattern: |
+              $V = $JEDIS.get(...);
+              ...
+              SerializationUtils.deserialize($V)
+          - pattern: |
+              $P = $MSG.getPayload();
+              ...
+              (Kryo $K).readClassAndObject(...)
+    metadata:
+      cwe: CWE-502
+      subtype: mq-redis-deserial
+      confidence: medium

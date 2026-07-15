@@ -1,0 +1,49 @@
+l0_stack_detection:
+  - pattern: "org.springframework.web.bind.annotation|@RestController|@PathVariable|@RequestMapping"
+    implies: spring-mvc
+  - pattern: "org.springframework.data.jpa.repository|JpaRepository|CrudRepository"
+    implies: spring-data
+  - pattern: "org.springframework.security|SecurityContextHolder|@PreAuthorize|@PostAuthorize"
+    implies: spring-security
+  - pattern: "javax.servlet|jakarta.servlet|HttpServletRequest"
+    implies: servlet
+  - pattern: "org.apache.ibatis|selectByPrimaryKey|@Mapper"
+    implies: mybatis
+
+l1_sink_keywords:
+  - "findById"
+  - "getOne("
+  - "getById("
+  - "getReferenceById"
+  - "deleteById"
+  - "selectByPrimaryKey"
+  - "deleteByPrimaryKey"
+  - "updateByPrimaryKey"
+  - "EntityManager.find"
+  - "entityManager.find"
+  - ".save("
+  - ".delete("
+  - ".remove("
+
+high_risk_object_id_hints:
+  - "@PathVariable"
+  - "@RequestParam.*id"
+  - "getParameter\\(\\\"id"
+  - "getParameter\\(\\\"orderId"
+  - "getParameter\\(\\\"userId"
+  - "getParameter\\(\\\"tenantId"
+  - "tenantId"
+  - "deleteById"
+  - "findById\\("
+
+rg_commands:
+  stack: |
+    rg -n "JpaRepository|CrudRepository|@PathVariable|SecurityContextHolder|@PreAuthorize|HttpServletRequest|selectByPrimaryKey" --glob '*.java'
+  sinks: |
+    rg -n "findById\\(|deleteById\\(|getReferenceById\\(|getById\\(|selectByPrimaryKey\\(|deleteByPrimaryKey\\(|EntityManager\\.find" --glob '*.java'
+  weak_controls: |
+    rg -n "isAuthenticated\\(|@PreAuthorize\\(\"isAuthenticated|if \\(.*!= null\\).*return" --glob '*.java'
+  ownership_hints: |
+    rg -n "findByIdAndUserId|findByIdAndOwner|getUserId\\(\\)\\.equals|SecurityContextHolder|TenantContext|@PostAuthorize" --glob '*.java'
+  tenant: |
+    rg -n "tenantId|getTenantId|TenantContext|@RequestParam.*tenant" --glob '*.java'
