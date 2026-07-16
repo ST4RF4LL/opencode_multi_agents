@@ -34,6 +34,7 @@ async function main() {
   const artifactPolicy = await json(join(manifestDir, "artifact-policy.json"));
   const config = await json(join(OPENCODE, "opencode.json"));
   const catalog = await json(join(OPENCODE, "shared/security-audit/catalogs/application-ai-vulnerability-catalog.json"));
+  const orchestratorText = await readFile(join(OPENCODE, "agents/security-audit-orchestrator.md"), "utf8");
 
   const roleAgents = Object.keys(roles.agents).sort();
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
@@ -43,6 +44,7 @@ async function main() {
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
+  assert(/^permission:\s*allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
 
   const collectionDirs = (await readdir(join(OPENCODE, "skills"), { withFileTypes: true }))
     .filter(entry => entry.isDirectory())

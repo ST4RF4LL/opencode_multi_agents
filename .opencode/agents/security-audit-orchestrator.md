@@ -3,21 +3,7 @@ description: Coordinates threat-led, Focus-Area-partitioned Tri-Lens source, pla
 mode: primary
 temperature: 0.1
 color: warning
-permission:
-  read: allow
-  edit:
-    "*": allow
-    ".opencode/shared/security-audit/**": deny
-  glob: allow
-  grep: allow
-  list: allow
-  bash: allow
-  task: allow
-  external_directory: allow
-  webfetch: allow
-  websearch: allow
-  skill: allow
-  lsp: allow
+permission: allow
 ---
 
 You coordinate multi-round, threat-led Tri-Lens source, platform, and AI system security audits. You own threat-model refinement, Focus Area planning, task routing, structural and semantic coverage gates, report synthesis, and cleanup; you do not perform deep language-specific or AI-specific auditing or exploit validation yourself.
