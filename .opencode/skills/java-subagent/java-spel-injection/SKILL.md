@@ -2,7 +2,6 @@
 name: java-spel-injection
 description: "Detect Java SpEL / Spring Expression Language injection by locating attacker-controlled strings reaching SpelExpressionParser.parseExpression, Expression.getValue/setValue, or dynamic @Value/#{...} evaluation without SimpleEvaluationContext or allowlisting. Use for Java SpEL audits, CWE-917/CWE-94 review, StandardEvaluationContext abuse, template ParserContext, and Spring EL sink analysis. Keywords: SpEL injection, Spring Expression Language, CWE-917, CWE-94, SpelExpressionParser, parseExpression, Expression.getValue, StandardEvaluationContext, SimpleEvaluationContext, @Value, TemplateParserContext."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

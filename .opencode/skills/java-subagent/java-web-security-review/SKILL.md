@@ -2,7 +2,6 @@
 name: java-web-security-review
 description: Review Java web applications for authentication, authorization, Spring Security, SSRF, file handling, and framework configuration issues.
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent
@@ -41,4 +40,3 @@ Tie each issue to an entrypoint and exact framework configuration path. Verify t
 | Hardcoded secrets in yml/properties/source | `java-hardcoded-secrets` |
 | XSS / templates | `java-xss` |
 | Log forging | `java-log-injection` |
-

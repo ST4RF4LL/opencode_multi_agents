@@ -84,13 +84,16 @@ When improving a SKILL.md:
 3. **Add "easy-to-miss" scenarios** — edge cases that auditors commonly overlook
 4. **Add false-positive notes** — patterns that look dangerous but are safe in specific contexts
 5. **Keep it actionable** — every pattern should be grep-able; every rule should produce a yes/no decision
-6. **Tag with dimension** — prefix with `## D{N}` to match D1-D10 coverage matrix
+6. **Tag with semantic origin** — record `threat_id`, `focus_area_id`, `dimension: D{N}`, `lens: sink-driven|control-driven|config-driven`, and `discovery_track` when known; use `cross-lens` only for correlation logic that genuinely spans lenses
 
 ## Vulnerability Case Template
 
 ```markdown
 # <Case Title>
 **Dimension**: D<N>
+**Lens**: sink-driven | control-driven | config-driven | cross-lens
+**Discovery Track**: coverage | blind | seeded-variant | system-chain
+**Threat/Focus**: <threat ids> | <focus area ids>
 **Language**: <language>
 **Severity**: Critical | High | Medium | Low
 **Pattern**: <grep-able code pattern>
@@ -105,6 +108,9 @@ When improving a SKILL.md:
 ```markdown
 # <Case Title>
 **Dimension**: D<N>
+**Lens**: sink-driven | control-driven | config-driven | cross-lens
+**Discovery Track**: coverage | blind | seeded-variant | system-chain
+**Threat/Focus**: <threat ids> | <focus area ids>
 **Why Flagged**: <patterns that triggered the false alarm>
 **Why Safe**: <analysis of why it's not exploitable in this context>
 **Exclusion Rule**: <how to distinguish this false positive from real vulnerabilities>
@@ -127,16 +133,16 @@ When improving a SKILL.md:
 **Assets changed**: <list of modified files>
 
 ### Skill Updates
-| Skill | Change | Dimension |
-|-------|--------|-----------|
+| Skill | Change | Dimension | Lens |
+|-------|--------|-----------|------|
 
 ### Rule Updates
-| Rule File | Change | Dimension |
-|-----------|--------|-----------|
+| Rule File | Change | Dimension | Lens |
+|-----------|--------|-----------|------|
 
 ### Case Updates
-| Case File | Type (vuln/fp) | Dimension |
-|-----------|----------------|-----------|
+| Case File | Type (vuln/fp) | Dimension | Lens |
+|-----------|----------------|-----------|------|
 
 ### Promoted from tmp
 | File | Destination | Reason |

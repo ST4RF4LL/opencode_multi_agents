@@ -1,0 +1,7 @@
+{
+  "name": "attack-chain-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "security-attack-chain-hunter",
+  "description": "Skill collection for system-level cross-Focus-Area attack-chain discovery and semantic coverage accounting.",
+  "skills": ["system-attack-chain-hunting"]
+}

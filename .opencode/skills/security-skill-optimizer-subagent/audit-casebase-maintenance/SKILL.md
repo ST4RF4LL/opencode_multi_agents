@@ -1,8 +1,7 @@
 ---
 name: audit-casebase-maintenance
-description: Maintain confirmed vulnerability cases and false-positive cases used to improve future source security audits.
+description: Maintain dimension-and-lens-tagged vulnerability and false-positive cases used to improve future Tri-Lens source and platform security audits.
 license: MIT
-compatibility: opencode
 metadata:
   role: security-skill-optimizer
   phase: casebase-maintenance
@@ -17,8 +16,9 @@ Use this skill when validation results should become reusable audit knowledge.
 Add a confirmed or likely case when it captures a reusable pattern:
 
 - Language and framework.
+- Dimension and originating lens.
 - Weakness class.
-- Source, sink, and guard conditions.
+- Sink, control, config, mitigating, and guard evidence facets that apply.
 - Why validation confirmed or nearly confirmed it.
 - What future audits should check.
 - Fix guidance and how to validate the fix.
@@ -28,6 +28,7 @@ Add a confirmed or likely case when it captures a reusable pattern:
 Add a false-positive case when it prevents recurring noise:
 
 - Original suspicion.
+- Dimension and originating lens.
 - Rejecting evidence.
 - Guard, sanitizer, framework behavior, or unreachable condition.
 - Rule or skill refinement needed.

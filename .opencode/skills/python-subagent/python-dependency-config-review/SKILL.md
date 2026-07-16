@@ -2,7 +2,6 @@
 name: python-dependency-config-review
 description: Review Python dependencies, configuration loading, secrets handling, logging, and deployment defaults for security weaknesses.
 license: MIT
-compatibility: opencode
 metadata:
   role: python-source-auditor
   collection: python-subagent

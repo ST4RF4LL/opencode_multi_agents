@@ -2,7 +2,6 @@
 name: java-command-injection
 description: "Detect Java OS command injection by locating attacker-controlled input reaching Runtime.exec/ProcessBuilder/Commons Exec without effective argument separation or allowlisting. Use for Java CMDI audits, CWE-78 review, Runtime.exec concat, ProcessBuilder shell wrappers, and OS command construction analysis. Keywords: command injection, CMDi, CWE-78, Runtime.exec, ProcessBuilder, /bin/sh -c, Apache Commons Exec, OS command, shell metacharacter."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

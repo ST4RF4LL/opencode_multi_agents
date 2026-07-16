@@ -2,7 +2,6 @@
 name: java-xxe
 description: "Detect Java XXE (CWE-611) by locating untrusted XML input reaching XML parsers without secure feature flags (external entities, DTD, XInclude disabled). Use for DocumentBuilderFactory, SAXParserFactory, XMLInputFactory, TransformerFactory, SchemaFactory, JAXB Unmarshaller audits. Keywords: XXE, CWE-611, CWE-827, CWE-776, external entity, disallow-doctype-decl, FEATURE_SECURE_PROCESSING, ACCESS_EXTERNAL_DTD, billion laughs, XInclude, StAX, SAX, DOM."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

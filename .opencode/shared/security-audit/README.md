@@ -6,6 +6,8 @@ Only `security-skill-optimizer` should normally modify these assets during the v
 
 ## Directories
 
+- `catalogs/`: versioned coverage catalogs. `application-ai-vulnerability-catalog.json` maps application, platform, and AI-system risks to D1-D10, authoritative baselines, applicable domains, and all three lens questions.
+  - AI-agent controls incorporate the OWASP AI Agent Security Cheat Sheet, including exact-action approval integrity, multi-agent message security, AI-console configuration safety, and adversarial release gates.
 - `joern-rules/`: Joern rules, rule metadata, and rule inventory.
   - Layout: `joern-rules/<language>/<rule-id>.sc` + `<rule-id>.md`, inventory in `index.json`.
   - Java seed: 45 rules promoted from `java-subagent` deep packs (`java-*-locate-sinks`, `source-to-sink`, derived SQLi patterns, …). Run via `joern_run_rule` with `language=java`.
@@ -32,7 +34,11 @@ Deep packs live under `.opencode/skills/java-subagent/` and share assets here:
 
 ## Feedback Flow
 
-1. Source auditors produce candidate findings.
-2. `vulnerability-validator` classifies them as `confirmed`, `likely`, `needs-info`, or `false-positive`.
-3. `security-audit-orchestrator` sends useful learning signals to `security-skill-optimizer`.
-4. `security-skill-optimizer` updates skills, Joern rules, vulnerability cases, and false-positive cases.
+1. `security-intel-collector` freezes the recursive file scope, builds complete function manifests, and produces entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories.
+2. `security-threat-modeler` bootstraps and optionally owner-refines durable threats, closes entry-point threat decisions, generalizes authorized history, and partitions primary base/AI assignments into sealed Focus Areas.
+3. Source, platform, and AI auditors run Focus Area `coverage` sessions under each Tri-Lens strategy plus checklist-light `blind` and history/case-seeded `seeded-variant` discovery where required.
+4. `security-attack-chain-hunter` performs a new system-level pass across every Focus Area, trust boundary, and asset.
+5. `security-evidence-correlator` preserves structural/semantic accounting, merges cross-track evidence, deduplicates candidates, and canonicalizes supplied attack chains.
+6. `vulnerability-validator` classifies canonical findings as `confirmed`, `likely`, `needs-info`, or `false-positive`.
+7. `security-audit-orchestrator` sends useful learning signals to `security-skill-optimizer`, which updates skills, rules, and cases with threat/Focus/dimension/lens/track tags.
+8. `security-audit-orchestrator` runs both deterministic verifiers; only two `complete: true` artifacts authorize complete structural-and-semantic accounting statements.

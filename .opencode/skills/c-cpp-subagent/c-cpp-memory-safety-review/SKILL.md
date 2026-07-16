@@ -2,7 +2,6 @@
 name: c-cpp-memory-safety-review
 description: Review C/C++ code for memory safety including buffer overflow, use-after-free, double free, integer overflow, format string, and stack safety.
 license: MIT
-compatibility: opencode
 metadata:
   role: c-cpp-source-auditor
   collection: c-cpp-subagent

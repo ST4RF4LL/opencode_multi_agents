@@ -1,0 +1,7 @@
+{
+  "name": "web-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "web-source-auditor",
+  "description": "Skill collection for browser JavaScript/TypeScript, JSP, HTML, and template security auditing.",
+  "skills": ["web-source-security-review"]
+}

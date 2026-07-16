@@ -2,7 +2,6 @@
 name: java-ssrf
 description: "Detect Java Server-Side Request Forgery (SSRF) by locating attacker-controlled network destination data reaching server-side HTTP/URL open operations without effective host/protocol/port allowlisting. Use for Java SSRF audits, CWE-918 review, RestTemplate/WebClient/OkHttp/HttpClient/URLConnection destination control, cloud metadata access, and redirect-bypass analysis. Keywords: SSRF, CWE-918, A10:2021, RestTemplate, WebClient, OkHttp, Apache HttpClient, URL.openConnection, HttpURLConnection, 169.254.169.254, open redirect vs SSRF, host allowlist, protocol smuggling."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

@@ -31,6 +31,29 @@ const REPORTS_SARIF_DIR = join(WORKSPACE_ROOT, "reports", "sarif");
 
 const JOERN_TIMEOUT_MS  = 180_000; // 3 min per joern subprocess
 
+const JOERN_LANGUAGE_ALIASES = new Map([
+  ["c", "c"],
+  ["cpp", "c"],
+  ["c++", "c"],
+  ["java", "java"],
+  ["jvm", "java"],
+  ["kotlin", "kotlin"],
+  ["python", "python"],
+  ["py", "python"],
+  ["javascript", "javascript"],
+  ["js", "javascript"],
+  ["typescript", "javascript"],
+  ["ts", "javascript"],
+  ["php", "php"],
+  ["ruby", "rubysrc"],
+  ["go", "golang"],
+  ["golang", "golang"],
+  ["rust", "rust"],
+  ["csharp", "csharp"],
+  ["c#", "csharp"],
+  ["swift", "swiftsrc"],
+]);
+
 // ── Helpers ─────────────────────────────────────────────────
 const require_ = createRequire(import.meta.url);
 
@@ -53,6 +76,12 @@ function resolveWorkspacePath(relPath) {
     throw new Error(`Path escapes workspace: ${relPath}`);
   }
   return abs;
+}
+
+function normalizeJoernLanguage(language) {
+  const normalized = JOERN_LANGUAGE_ALIASES.get(String(language).trim().toLowerCase());
+  if (!normalized) throw new Error(`Unsupported Joern language alias: ${language}`);
+  return normalized;
 }
 
 /** Ensure a session directory exists under tmp/joern/ */
@@ -178,20 +207,32 @@ server.registerTool("joern_list_rules", {
 
 // ── Tool: joern_create_cpg ──────────────────────────────────
 server.registerTool("joern_create_cpg", {
-  description: "Create a Code Property Graph for source under a workspace-relative path. Stores CPG in tmp/joern/<session_id>/cpg.bin. Supported languages: c,cpp,java,jvm,python,js,php,ruby,go,rust,csharp,swift,kotlin.",
+  description: "Create a Code Property Graph for source under a workspace-relative path. Stores CPG in tmp/joern/<session_id>/cpg.bin. Normalizes aliases such as cpp→c, jvm→java, js/ts→javascript, go→golang, ruby→rubysrc, and verifies that Joern actually produced a non-empty CPG.",
   inputSchema: { session_id: z.string(), source_path: z.string(), language: z.string() },
 }, async ({ session_id, source_path, language }) => {
   const dir = await sessionDir(session_id);
   const absSrc = resolveWorkspacePath(source_path);
   const cpgFile = join(dir, "cpg.bin");
+  const frontendLanguage = normalizeJoernLanguage(language);
 
-  await execCommand(JOERN_PARSE_BIN, [
+  const sourceInfo = await stat(absSrc);
+  if (!sourceInfo.isDirectory() && !sourceInfo.isFile()) throw new Error(`Unsupported source path type: ${source_path}`);
+  await rm(cpgFile, { recursive: true, force: true });
+
+  const result = await execCommand(JOERN_PARSE_BIN, [
     absSrc,
     "-o", cpgFile,
-    "--language", language,
+    "--language", frontendLanguage,
   ]);
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  let cpgInfo;
+  try { cpgInfo = await stat(cpgFile); } catch { cpgInfo = null; }
+  if (!cpgInfo?.isFile() || cpgInfo.size === 0 || /(?:NoSuchElementException|Exception in thread|java\.[\w.]+Exception|Error while creating CPG)/.test(combinedOutput)) {
+    await rm(cpgFile, { recursive: true, force: true });
+    throw new Error(`Joern reported success but did not produce a valid CPG for language ${frontendLanguage}\n${combinedOutput}`);
+  }
   return {
-    content: [{ type: "text", text: JSON.stringify({ status: "created", cpg: cpgFile, session_id, language }, null, 2) }],
+    content: [{ type: "text", text: JSON.stringify({ status: "created", cpg: cpgFile, cpg_bytes: cpgInfo.size, session_id, requested_language: language, frontend_language: frontendLanguage }, null, 2) }],
   };
 });
 

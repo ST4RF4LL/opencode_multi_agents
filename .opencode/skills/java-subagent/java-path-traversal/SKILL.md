@@ -2,7 +2,6 @@
 name: java-path-traversal
 description: "Detect Java path traversal / Zip Slip / unsafe file path use when attacker-controlled path segments reach file read/write/delete/extract without normalize + base-dir confinement. Use for CWE-22 audits, ZipEntry.getName extract loops, multipart getOriginalFilename, download-by-filename, Paths.get/resolve, and File I/O. Keywords: path traversal, Zip Slip, CWE-22, directory traversal, ../, ZipEntry, getOriginalFilename, Path.normalize, startsWith baseDir, FileInputStream."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

@@ -2,7 +2,6 @@
 name: python-deserialization-review
 description: Review Python deserialization for pickle, YAML, jsonpickle, and other unsafe object reconstruction risks.
 license: MIT
-compatibility: opencode
 metadata:
   role: python-source-auditor
   collection: python-subagent

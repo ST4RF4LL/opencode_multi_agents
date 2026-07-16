@@ -2,7 +2,6 @@
 name: java-file-upload
 description: "Detect Java unsafe file upload (CWE-434) when attacker-controlled files are accepted without effective type/extension allowlisting, Content-Type-only trust, double-extension bypass, or storage of dangerous types under web-accessible paths. Use for unrestricted upload, executable-in-webroot, MIME-only validation, SVG/HTML stored content, servlet/Spring/Commons multipart. Keywords: file upload, CWE-434, unrestricted upload, getOriginalFilename, Content-Type, double extension, webroot, MultipartFile, transferTo, .jsp acceptance, MIME validation, SVG XSS stored."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

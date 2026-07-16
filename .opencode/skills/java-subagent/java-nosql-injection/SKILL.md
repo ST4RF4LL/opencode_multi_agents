@@ -2,7 +2,6 @@
 name: java-nosql-injection
 description: "Detect Java NoSQL injection by locating attacker-controlled input reaching MongoDB/Spring Data MongoDB query construction without effective API query builders or operator sanitization. Use for Java NoSQL audits, CWE-943 review, MongoDB Document.parse/BasicDBObject/$where injection, JSON operator injection ($gt/$ne/$where), Filters.eq misuse, Spring Data MongoDB @Query SpEL/concat, and Redis EVAL script fragment injection when relevant. Keywords: NoSQL injection, MongoDB injection, CWE-943, Document.parse, BasicDBObject, $where, $gt, $ne, operator injection, Filters.eq, Bson, Spring Data MongoDB, @Query, JSON query injection."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

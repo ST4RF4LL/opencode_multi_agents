@@ -2,7 +2,6 @@
 name: java-hardcoded-secrets
 description: "Detect hardcoded secrets in Java and config (API keys, passwords, private keys, JWT secrets, DB credentials, cloud access keys) under CWE-798/259/321. Use for secret scanning, credential-in-source audits, application.yml/properties plaintext passwords, SecretKeySpec literals, AKIA* keys, PEM private keys in repo, JWT signing secrets, JDBC URLs with embedded passwords. Boundary: weak algorithms → java-weak-cryptography; this skill = secret material in source/config. Keywords: hardcoded secret, CWE-798, CWE-259, CWE-321, API key, password literal, private key, JWT secret, datasource password, AWS access key, SecretKeySpec, application.yml."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

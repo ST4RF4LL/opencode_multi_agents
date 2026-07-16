@@ -4,6 +4,7 @@
   "owner_agent": "java-source-auditor",
   "description": "Skill collection directory for the Java/JVM source-audit subagent. Skills live under .opencode/skills/java-subagent/<skill-name>/SKILL.md.",
   "skills": [
+    "java-web-comprehensive-review",
     "java-deserialization-review",
     "java-injection-review",
     "java-web-security-review",
@@ -31,6 +32,7 @@
   "notes": {
     "deep_vuln_skills_source": "vuln_skill_builder/skills/java-*",
     "thin_review": [
+      "java-web-comprehensive-review",
       "java-deserialization-review",
       "java-injection-review",
       "java-web-security-review"

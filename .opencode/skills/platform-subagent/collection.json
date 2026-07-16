@@ -1,0 +1,7 @@
+{
+  "name": "platform-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "platform-security-auditor",
+  "description": "Skill collection for language-neutral platform, build, dependency, CI/CD, container, orchestration, gateway, and IaC security auditing.",
+  "skills": ["platform-security-review"]
+}

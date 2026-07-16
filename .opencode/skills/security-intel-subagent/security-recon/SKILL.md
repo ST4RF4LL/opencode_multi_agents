@@ -1,8 +1,7 @@
 ---
 name: security-recon
-description: Five-layer attack surface reconnaissance for source security audits.
+description: Evidence-backed reconnaissance for Tri-Lens security audits. Use to build the attack-surface map plus entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories before source, platform, or AI overlay auditors run.
 license: MIT
-compatibility: opencode
 metadata:
   role: security-intel-collector
   collection: security-intel-subagent
@@ -10,89 +9,126 @@ metadata:
 
 # Security Reconnaissance
 
-Use this skill for Phase 1 reconnaissance. Build the attack surface map and endpoint-permission matrix.
+Build normalized discovery inputs for all three audit lenses. Discover broadly but distinguish confirmed evidence, candidates, unknowns, and gaps.
 
-## Five-Layer Attack Surface Derivation
+## Workflow
 
-### T1: Architecture Pattern
-```
-Grep for: microservice/, serverless/, Dockerfile, docker-compose, k8s, terraform
-Question: Where are trust boundaries? Inter-service auth? Gateway/API patterns?
+1. Build the recursive filesystem scope manifest with `audit-coverage-accounting`; use its recorded exclusions as the scope boundary.
+2. Build a complete AST/CPG function manifest for every parser tag in scope. Do not use regex as a function universe.
+3. Derive the five-layer attack surface: architecture, business, framework/language, deployment, and functions.
+4. Build all five inventories below, including an empty-but-explained AI surface inventory when no AI use is found.
+5. Map inventory items to D1-D10 without assigning exclusive lens ownership.
+6. Record discovery queries, inspected files, unsupported areas, and secrets redaction.
+
+## Entry-Point Inventory
+
+Search framework-appropriate sources for:
+
+- HTTP routes and controllers.
+- RPC/GraphQL handlers.
+- CLI commands and environment/config inputs.
+- Message/event consumers and scheduled jobs.
+- Upload/import/parsing handlers.
+- Webhooks, callbacks, redirects, and plugin interfaces.
+
+Record exposure, auth context, attacker-controlled fields, trust boundaries, and downstream component.
+
+## Sink Inventory
+
+Include anchors beyond classic injection sinks:
+
+- SQL/NoSQL, command, expression, template, LDAP/XPath, response and log outputs.
+- Deserialization/parsing, file read/write/upload/extract/execute, network clients and redirects.
+- Token/password/session, crypto/key/TLS, and secret-consuming operations.
+- State-changing, financial, approval, export, batch, and tenant-sensitive operations.
+- Dependency/plugin APIs and build/CI execution steps.
+
+Record category, location, candidate entry points, visible guards, and reachability confidence.
+
+## Sensitive-Operation Inventory
+
+Inventory operations requiring security controls, including cases where missing code cannot be found by grep:
+
+- Authentication lifecycle: login, refresh, logout, recovery, enrollment, MFA.
+- Resource CRUD grouped by resource type.
+- Role/admin/tenant operations and ownership-sensitive access.
+- Payment, balance, stock, coupon, approval, state transition, export, and batch actions.
+- Key/secret management, deployments, releases, artifact publication, and dependency changes.
+
+Record expected control classes and observed local, middleware, inherited, gateway, or platform controls.
+
+## Config-Surface Inventory
+
+Inspect precedence-aware configuration surfaces:
+
+- Application settings and environment overrides.
+- Authentication, authorization, parser, ORM, template, crypto, TLS, CORS, logging, and error settings.
+- Dependency manifests, lockfiles, plugins, repositories, vendored code, and submodules.
+- Build scripts, Docker/Compose, Kubernetes/Helm, CI/CD, proxies/gateways, service mesh, and IaC.
+
+Record observed values only when safe, the likely effective precedence, consuming component, baseline target, and uncertainty. Redact secrets.
+
+## AI-Surface Inventory
+
+Search the complete scope, dependencies, configuration, network clients, data stores, build artifacts, and runtime interfaces for:
+
+- hosted and local model providers, endpoints, gateways, model IDs, fallbacks, and credentials
+- system/developer/user prompts, templates, context builders, multimodal inputs, output parsers, guardrails, and moderation
+- agents, planners, routers, tools, plugins, MCP servers/clients, inter-agent protocols, delegated identities, and approval paths
+- RAG ingestion, chunking, embeddings, vector stores, retrieval/reranking, document connectors, citations, and tenant filters
+- memory, conversation stores, checkpoints, summaries, caches, long-term profiles, and cross-session state
+- action-risk maps, previews, approval stores/tokens, step-up flows, execution-policy services, replay/idempotency controls, interrupt and rollback paths
+- agent registries, trust levels, inter-agent transports and message types, signing/freshness checks, shared state, delegation chains, and circuit breakers
+- training/fine-tuning datasets and jobs, model/adaptor/tokenizer artifacts, loaders, registries, evaluation suites, and promotion gates
+- adversarial abuse-case suites, regression fixtures, CI/CD gates, validation evidence, token/cost/time limits, tracing and redaction, abuse monitoring, versioning, rollout, drift, rollback, and retirement
+- AI consoles and configuration assistants that consume untrusted repository, issue, document, web, email, or API content before changing prompts, tools, models, policies, or safety settings
+
+For each item record `kind`, provider or implementation, location, related file/function IDs, producer and consumer, attacker influence, trust boundary, identity and tenant context, data classification, configured controls, deployment uncertainty, and confidence.
+
+If no item is found, do not omit the file. Record the dependency/config/API and full-scope searches used as negative evidence, keep any runtime uncertainty in `gaps`, and leave final AI applicability to the full-scope AI auditor.
+
+## Applicability Matrix
+
+For D1-D10, use only `applicable`, `not-applicable`, or `unknown` and attach evidence. `not-applicable` requires both functional absence and scoped search evidence. Do not convert applicability into audit completion.
+
+## Inventory Schema
+
+Each JSON file must contain:
+
+```json
+{
+  "schema_version": 1,
+  "audit_id": "audit-id",
+  "scope": ["path"],
+  "items": [
+    {
+      "id": "stable-id",
+      "kind": "entry|sink|operation|config|ai-surface",
+      "language": "java|web|python|c-cpp|platform|ai",
+      "location": "file:line",
+      "dimensions": ["D1"],
+      "evidence": "what was observed",
+      "discovery_method": "query or inspection",
+      "confidence": "confirmed|candidate|unknown"
+    }
+  ],
+  "gaps": [],
+  "tool_inputs": []
+}
 ```
 
-### T2: Business Domain
-```
-Grep for: payment, order, user, admin, transaction, balance, transfer
-Question: Financial? Healthcare? SaaS multi-tenant? Domain-specific logic flaws?
-```
+Write the five inventory files—`entry-points.json`, `sinks.json`, `sensitive-operations.json`, `config-surfaces.json`, and `ai-surfaces.json`—plus `recon-summary.json` beneath `tmp/<audit_id>/recon/`. Every file must include `audit_id`, `scope_digest`, `items`, `gaps`, and discovery inputs.
 
-### T3: Framework & Language
-```
-Detect languages: rg '\.java$|\.py$|\.go$|\.php$|\.js$|\.ts$|\.rb$|\.cs$|\.rs$'
-Detect frameworks: rg -l 'SpringBoot|Django|Flask|FastAPI|Express|Gin|Rails|ASP\.NET'
-```
+Write `scope-manifest.json` and all function manifests beneath `tmp/<audit_id>/recon/coverage/`. Bind every inventory and routing record to the same `scope_digest`.
 
-### T4: Deployment Environment
-```
-Grep for: Dockerfile, docker-compose.yml, k8s/, helm/, terraform/, .github/workflows/
-Check for: EXPOSE ports, ENV secrets, mounted volumes, network_mode: host
-```
+## Completion Checklist
 
-### T5: Function Discovery
-```
-Grep entry points:
-  rg '@(GetMapping|PostMapping|RequestMapping)'     # Spring
-  rg 'def \w+\(request'                              # Django/Flask
-  rg 'app\.(get|post|put|delete|patch)\('            # Flask/FastAPI
-  rg 'router\.(get|post)\('                          # Express
-  rg '@app\.route\('                                 # Flask
-  rg '@Scheduled|@EventListener|@KafkaListener'      # Background jobs
-  rg 'def main|if __name__'                          # CLI entry
-```
-
-## Endpoint-Permission Matrix Construction
-
-Build this table for D3/D9 control-driven audit:
-
-```markdown
-| Endpoint | Method | Auth? | Permission Check | Resource Ownership | Notes |
-|----------|--------|-------|-------------------|--------------------|-------|
-```
-
-Key checks per endpoint:
-1. Is authentication required? (annotation/filter/middleware)
-2. Is there a permission/role check? (`@PreAuthorize`, `@RequiresPermissions`, `@login_required`)
-3. Is resource ownership verified? (`findById(id, userId)` vs `findById(id)`)
-4. Are all CRUD operations on the same resource uniformly protected?
-
-## Dependency Risk Scan
-```
-Check manifests: pom.xml, build.gradle, requirements.txt, Pipfile, pyproject.toml, CMakeLists.txt, go.mod, Cargo.toml
-Known dangerous dependencies:
-  - Java: fastjson, log4j-core, shiro-core, snakeyaml, commons-collections, jackson-databind, h2
-  - Python: PyYAML<6.0, Jinja2<2.11.3, Django<4.2, paramiko<2.10.1, celery (pickle), numpy<1.22
-  - C/C++: OpenSSL<1.1.1, zlib versions, libcurl versions
-```
-
-## Configuration Scan
-```
-rg 'DEBUG\s*=\s*True'                              # Django debug
-rg 'app\.debug\s*=\s*True|FLASK_DEBUG'             # Flask debug
-rg 'ALLOWED_HOSTS\s*=\s*\[.*\*'                    # Wildcard hosts
-rg 'CORS_ORIGIN_ALLOW_ALL'                          # Open CORS
-rg 'spring\.security|actuator'                      # Spring security config
-rg 'management\.endpoints\.web\.exposure'           # Actuator exposure
-rg 'SECRET_KEY\s*=|secretKey\s*=|apiKey\s*='       # Secrets in code/config
-rg 'password\s*=|passwd\s*='                       # Plain passwords
-```
-
-## Output Checklist
-
-Deliver all of:
-- [ ] Five-layer attack surface map (T1-T5)
-- [ ] Language audit routing table with file counts and frameworks
-- [ ] Endpoint-permission matrix (at least routes with auth annotations sampled)
-- [ ] Dependency risk summary (known dangerous versions)
-- [ ] Configuration findings (secrets, debug modes, exposure)
-- [ ] High-interest files list mapped to D1-D10 dimensions
-- [ ] D1-D10 dimension activation matrix (which dims are relevant)
+- [ ] Five-layer attack surface contains evidence and trust boundaries.
+- [ ] Recursive scope has no unreadable/unassigned item and records every exclusion.
+- [ ] Every function-bearing file occurs in exactly one complete AST/CPG manifest.
+- [ ] Language/platform routing covers every in-scope artifact type.
+- [ ] All five inventories exist, including an evidence-backed AI inventory or explicit negative evidence.
+- [ ] CRUD and business operations are grouped for consistency checks.
+- [ ] Configuration precedence and environment uncertainty are recorded.
+- [ ] D1-D10 applicability has evidence.
+- [ ] Discovery gaps and unsupported languages/tools are explicit.

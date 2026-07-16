@@ -2,7 +2,6 @@
 name: java-idor
 description: "Detect Java Insecure Direct Object Reference (IDOR) / Broken Object Level Authorization (BOLA) by locating object identifiers from requests used to load, update, or delete resources without ownership, tenant, or role checks. Use for Java IDOR/BOLA audits, CWE-639/CWE-862/CWE-284 review, Spring MVC path variables and request params as resource keys, Spring Data findById/delete without ownership filter, multi-tenant tenantId from client, horizontal/vertical privilege on object IDs, and missing authorization on mutations. Keywords: IDOR, BOLA, CWE-639, CWE-862, CWE-284, A01:2021, object-level authorization, ownership check, tenant isolation, findById, PathVariable id, horizontal privilege, vertical privilege, mass assignment of tenant."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent
