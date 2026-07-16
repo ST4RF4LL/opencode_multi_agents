@@ -18,6 +18,12 @@ function sameSet(left, right) {
   return left.length === right.length && new Set(left).size === left.length && left.every(value => right.includes(value));
 }
 
+function containsAction(value, action) {
+  if (value === action) return true;
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value).some(child => containsAction(child, action));
+}
+
 async function json(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }
@@ -45,6 +51,13 @@ async function main() {
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
   assert(/^permission:\s*allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
+  assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
+  assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");
+  for (const agentFile of agentFiles) {
+    const agentText = await readFile(join(OPENCODE, "agents", `${agentFile}.md`), "utf8");
+    const frontmatter = /^---\s*$([\s\S]*?)^---\s*$/m.exec(agentText)?.[1] ?? "";
+    assert(!/:\s*ask\s*$/m.test(frontmatter), `${agentFile} permissions must not request user confirmation`);
+  }
 
   const collectionDirs = (await readdir(join(OPENCODE, "skills"), { withFileTypes: true }))
     .filter(entry => entry.isDirectory())

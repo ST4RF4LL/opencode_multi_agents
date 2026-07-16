@@ -30,7 +30,7 @@ permission:
   skill:
     "*": allow
   bash:
-    "*": ask
+    "*": allow
     "pwd": allow
     "ls": allow
     "ls *": allow
