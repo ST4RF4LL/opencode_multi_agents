@@ -1,6 +1,6 @@
 ---
 name: audit-artifact-management
-description: Manage threat-led Focus Area Tri-Lens artifacts, including sealed threat/Focus manifests, coverage and discovery JSON, system attack-chain reports, SARIF, correlation, dual coverage verification, and scoped tmp cleanup/promotion rules.
+description: Manage threat-led Focus Area Tri-Lens artifacts, including sealed threat/Focus manifests, coverage and discovery JSON, system attack-chain reports, SARIF, correlation, dual coverage verification, durable reports/ deliverables, and manual-only tmp retention/promotion rules.
 license: MIT
 metadata:
   role: shared
@@ -15,6 +15,9 @@ Use this skill whenever an audit agent creates temporary files, tool reports, st
 
 Use `.opencode/agent-manifest/artifact-policy.json` as the source of truth.
 
+All durable deliverables go under workspace-root `reports/` only. Never write final reports under `tmp/` or inside audited application/test source trees outside `reports/`.
+
+- Final human-readable audit report: `reports/final/security-audit-report.<audit-id>.md`
 - Static-analysis report: `reports/sarif/<agent-name>.<agent-session-id>.sarif`
 - Vulnerability-mining report: `reports/vulnerability-mining/<agent-name>.<agent-session-id>.audit-report.json`
 - Blind/seeded discovery report: `reports/vulnerability-mining/<agent-name>.<agent-session-id>.discovery.json`
@@ -66,20 +69,23 @@ One vulnerability-mining agent session produces one JSON file. At minimum includ
 
 ## Recon Inventories
 
-Store `entry-points.json`, `sinks.json`, `sensitive-operations.json`, `config-surfaces.json`, `ai-surfaces.json`, and `recon-summary.json` under `tmp/<audit-id>/recon/`. Store sealed `threat-model.json` and `focus-areas.json` beside them. Store the frozen scope and complete function manifests under `tmp/<audit-id>/recon/coverage/`. These are intermediate planning inputs and may be cleaned only after correlation, verification, and final reporting consume them.
+Store `entry-points.json`, `sinks.json`, `sensitive-operations.json`, `config-surfaces.json`, `ai-surfaces.json`, and `recon-summary.json` under `tmp/<audit-id>/recon/`. Store sealed `threat-model.json` and `focus-areas.json` beside them. Store the frozen scope and complete function manifests under `tmp/<audit-id>/recon/coverage/`. These are intermediate planning inputs. Snapshot durable copies into `reports/coverage/<audit-id>/inputs/` before final verification. Do not treat `tmp/` as the only copy of anything that must survive review.
 
 ## Discovery and Attack Chains
 
-Blind and seeded-variant sessions write `*.discovery.json` and cannot close accounting coverage. The system attack-chain hunter writes one durable report per round and accounts for every Focus Area, trust boundary, and asset.
+Blind and seeded-variant sessions write `*.discovery.json` under `reports/vulnerability-mining/` and cannot close accounting coverage. The system attack-chain hunter writes one durable report per round under `reports/attack-chains/` and accounts for every Focus Area, trust boundary, and asset.
 
 ## Correlation Reports
 
-One audit round produces one correlation JSON. Include consumed/rejected artifacts, normalized structural and semantic coverage cells, discovery artifacts, dimension summaries, canonical findings, duplicate mappings, contradictions, residual gaps, canonicalized attack-chain candidates, and follow-up packets.
+One audit round produces one correlation JSON under `reports/correlation/`. Include consumed/rejected artifacts, normalized structural and semantic coverage cells, discovery artifacts, dimension summaries, canonical findings, duplicate mappings, contradictions, residual gaps, canonicalized attack-chain candidates, and follow-up packets.
 
 ## Coverage Verification
 
 After the last correlation/gap round, the orchestrator snapshots the validated scope, function manifests, catalog, sealed threat model, and sealed Focus Areas under `reports/coverage/<audit-id>/inputs/`. Run both structural and semantic verifiers. Preserve the snapshot index and both final artifacts; do not copy a failed artifact into a report that claims completion.
 
-## Cleanup and Promotion
+## Retention and Promotion (No Auto tmp Cleanup)
 
-The orchestrator cleans only the current `tmp/<audit-id>/` directory at task end after it has consumed recon/session/correlation reports and after `security-skill-optimizer` has promoted reusable scripts, rules, or cases. Do not store durable audit knowledge only in `tmp/`.
+- Write the final human-readable report only to `reports/final/security-audit-report.<audit-id>.md`.
+- Agents must **not** automatically delete `tmp/` or `tmp/<audit_id>/`. Cleanup is manual-only after a human confirms durable `reports/**` deliverables are retained.
+- `security-skill-optimizer` must still promote reusable scripts, rules, or cases out of `tmp/` into `.opencode/skills/` or `.opencode/shared/security-audit/`.
+- Do not store durable audit knowledge only in `tmp/`.

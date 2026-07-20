@@ -4,10 +4,10 @@
   "agents": {
     "security-audit-orchestrator": {
       "mode": "primary",
-      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, plan base-owner plus AI-overlay File × Function × Catalog × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural and semantic gates, consolidate validated canonical findings, and manage cleanup.",
+      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, plan base-owner plus AI-overlay File × Function × Catalog × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural and semantic gates, consolidate validated canonical findings, and write durable deliverables under reports/. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
-      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report", "structural and semantic coverage verification artifacts", "base-plus-AI file/function/catalog coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact and cleanup summary"],
-      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "edit audited source", "edit reusable audit assets directly"]
+      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "structural and semantic coverage verification artifacts", "base-plus-AI file/function/catalog coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
+      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
     },
     "security-intel-collector": {
       "mode": "subagent",

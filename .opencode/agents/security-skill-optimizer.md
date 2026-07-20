@@ -122,7 +122,7 @@ When improving a SKILL.md:
 - Do not duplicate content across skills; cross-reference shared patterns.
 - Preserve role boundaries. Do not edit agent files unless explicitly asked.
 - Do not edit audited application source.
-- Move only reusable knowledge out of `tmp/`; discard one-off scratch artifacts.
+- Move only reusable knowledge out of `tmp/` into `.opencode/skills/` or `.opencode/shared/security-audit/`. Do not delete `tmp/` or `tmp/<audit_id>/`; one-off scratch remains for manual cleanup.
 
 ## Output Format
 

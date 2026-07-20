@@ -58,10 +58,13 @@ Shared audit assets live under `.opencode/shared/security-audit/` and are readab
 
 Only `security-skill-optimizer` should modify these assets during normal audit feedback loops.
 
-## Temporary artifacts
+## Temporary artifacts and durable reports
 
 All temporary files belong under root `tmp/`, not under `.opencode/shared/`.
 
+All durable audit deliverables belong under workspace-root `reports/` only. Never write final reports under `tmp/` or inside audited application/test source trees outside `reports/`.
+
+- Final human-readable audit report: `reports/final/security-audit-report.<audit-id>.md`
 - Static-analysis reports use SARIF 2.1.0 at `reports/sarif/<agent-name>.<agent-session-id>.sarif`.
 - Vulnerability-mining reports use JSON at `reports/vulnerability-mining/<agent-name>.<agent-session-id>.audit-report.json`.
 - Blind/seeded discovery reports use JSON at `reports/vulnerability-mining/<agent-name>.<agent-session-id>.discovery.json`.
@@ -71,4 +74,4 @@ All temporary files belong under root `tmp/`, not under `.opencode/shared/`.
 - Final semantic verification uses JSON at `reports/coverage/semantic-coverage-verification.<audit-id>.json`.
 - Recon inventories and scratch data use `tmp/<audit-id>/`.
 
-The orchestrator cleans only the task subdirectories under `tmp/` at task end, preserving `tmp/.gitkeep` and `tmp/README.md`. Reusable scripts, rules, cases, or skill improvements must be promoted by `security-skill-optimizer` before cleanup.
+Agents must **not** automatically delete `tmp/` or `tmp/<audit_id>/`. Temporary workspace cleanup is manual-only after a human confirms durable `reports/**` deliverables are retained. Reusable scripts, rules, cases, or skill improvements must still be promoted by `security-skill-optimizer` out of `tmp/` into `.opencode/skills/` or `.opencode/shared/security-audit/`.

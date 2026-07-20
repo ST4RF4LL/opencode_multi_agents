@@ -92,10 +92,11 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 
 ## Temporary artifacts and reports
 
-审计报告输出到项目根目录的 `reports/`，临时产物存放在 `tmp/` 下按任务模块名称分目录管理。`tmp/` 被 `.gitignore` 忽略，只保留 `tmp/.gitkeep` 和 `tmp/README.md`。
+所有**持久交付件**输出到工作区根目录的 `reports/`（不是 `tmp/`，也不是被审计应用/测试源码树内部）。临时产物存放在 `tmp/` 下按 `audit_id` 分目录管理。`tmp/` 与 `reports/**` 被 `.gitignore` 忽略；`tmp/` 只保留 `tmp/.gitkeep` 和 `tmp/README.md` 作为目录占位。
 
 约定路径：
 
+- 最终可读审计报告：`reports/final/security-audit-report.<audit-id>.md`
 - 静态分析报告（SARIF 2.1.0）：`reports/sarif/<agent-name>.<agent-session-id>.sarif`
 - 漏洞挖掘结果（JSON）：`reports/vulnerability-mining/<agent-name>.<agent-session-id>.audit-report.json`
 - Blind/Seeded 发现结果：`reports/vulnerability-mining/<agent-name>.<agent-session-id>.discovery.json`
@@ -103,14 +104,14 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - 关联结果（JSON）：`reports/correlation/security-evidence-correlator.<audit-id>.r<round>.json`
 - 覆盖验收结果（JSON）：`reports/coverage/coverage-verification.<audit-id>.json`
 - 语义覆盖验收结果：`reports/coverage/semantic-coverage-verification.<audit-id>.json`
-- 可复核覆盖输入快照：`reports/coverage/<audit-id>/inputs/{snapshot-index,scope-manifest,functions-*,application-ai-vulnerability-catalog,threat-model,focus-areas}.json`
+- 可复核覆盖输入快照：`reports/coverage/<audit_id>/inputs/{snapshot-index,scope-manifest,functions-*,application-ai-vulnerability-catalog,threat-model,focus-areas}.json`
 - 侦察/威胁清单：`tmp/<audit-id>/recon/{entry-points,sinks,sensitive-operations,config-surfaces,ai-surfaces,recon-summary,threat-model,focus-areas}.json`
 - 冻结范围和函数全集：`tmp/<audit-id>/recon/coverage/{scope-manifest,functions-*}.json`
 - 临时文件、脚本、规则：`tmp/<audit-id>/`
 
 一个 agent session 对应一个 SARIF；一个漏洞挖掘 session 对应一个 JSON。多个静态分析工具在同一 session 内运行时，应合并到同一个 SARIF 的多个 `runs`。
 
-Orchestrator 在任务结束前会读取并汇总 `reports/` 下的报告，然后仅清理 `tmp/` 下的任务子目录（保留 `.gitkeep` 和 `README.md`）。有复用价值的脚本、规则、案例，必须先由 `security-skill-optimizer` 提升到 `.opencode/skills/` 或 `.opencode/shared/security-audit/`。
+Orchestrator 在任务结束前会读取并汇总 `reports/` 下的报告，把最终 Markdown 写到 `reports/final/`，**不会自动删除 `tmp/`**。`tmp/<audit-id>/` 的清理改为人工处理。有复用价值的脚本、规则、案例，必须先由 `security-skill-optimizer` 提升到 `.opencode/skills/` 或 `.opencode/shared/security-audit/`。
 
 ## Usage
 
