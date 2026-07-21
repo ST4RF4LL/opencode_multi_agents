@@ -157,4 +157,4 @@ Use the session format from `secure-code-review-common` and include:
 - Hardcoded AES key/IV = **High**
 - Custom crypto implementation = **High**
 
-Report only evidence-backed candidates. If runtime/input-dependent, recommend sending to `vulnerability-validator`.
+Report only evidence-backed candidates. Mark runtime/input-dependent uncertainty in the finding so it is included in the sealed final report; do not invoke `vulnerability-validator` per finding.

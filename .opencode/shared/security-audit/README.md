@@ -39,6 +39,6 @@ Deep packs live under `.opencode/skills/java-subagent/` and share assets here:
 3. Source, platform, and AI auditors run Focus Area `coverage` sessions under each Tri-Lens strategy plus checklist-light `blind` and history/case-seeded `seeded-variant` discovery where required.
 4. `security-attack-chain-hunter` performs a new system-level pass across every Focus Area, trust boundary, and asset.
 5. `security-evidence-correlator` preserves structural/semantic accounting, merges cross-track evidence, deduplicates candidates, and canonicalizes supplied attack chains.
-6. `vulnerability-validator` classifies canonical findings as `confirmed`, `likely`, `needs-info`, or `false-positive`.
-7. `security-audit-orchestrator` sends useful learning signals to `security-skill-optimizer`, which updates skills, rules, and cases with threat/Focus/dimension/lens/track tags.
-8. `security-audit-orchestrator` runs both deterministic verifiers; only two `complete: true` artifacts authorize complete structural-and-semantic accounting statements.
+6. `security-audit-orchestrator` runs both deterministic verifiers and writes the complete final report; only two `complete: true` artifacts authorize complete structural-and-semantic accounting statements.
+7. `vulnerability-validator` submits that sealed report once to vuln-judger with `engine=opencode`, monitors the Affirmative/Negative/Moderator run, and writes digest-bound review companions.
+8. `security-audit-orchestrator` sends completed review learning signals to `security-skill-optimizer`, which updates skills, rules, and cases with threat/Focus/dimension/lens/track tags. Incomplete reviews cannot promote candidates as confirmed cases.

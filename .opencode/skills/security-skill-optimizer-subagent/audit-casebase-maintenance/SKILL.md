@@ -9,23 +9,23 @@ metadata:
 
 # Audit Casebase Maintenance
 
-Use this skill when validation results should become reusable audit knowledge.
+Use this skill when a completed final-report-bound vuln-judger review should become reusable audit knowledge.
 
 ## Vulnerability Cases
 
-Add a confirmed or likely case when it captures a reusable pattern:
+Add a vulnerability case only for a `TRUE_POSITIVE` result when it captures a reusable pattern:
 
 - Language and framework.
 - Dimension and originating lens.
 - Weakness class.
 - Sink, control, config, mitigating, and guard evidence facets that apply.
-- Why validation confirmed or nearly confirmed it.
+- Why the three-party review adjudicated it as `TRUE_POSITIVE`.
 - What future audits should check.
 - Fix guidance and how to validate the fix.
 
 ## False-Positive Cases
 
-Add a false-positive case when it prevents recurring noise:
+Add a false-positive case for a `FALSE_POSITIVE` result when it prevents recurring noise:
 
 - Original suspicion.
 - Dimension and originating lens.

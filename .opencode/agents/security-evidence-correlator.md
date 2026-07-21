@@ -51,7 +51,7 @@ Load `tri-lens-evidence-correlation`, `secure-code-review-common`, `audit-covera
 - Every `coverage` audit report and every required `blind`/`seeded-variant` discovery JSON for the current `audit_id` and round.
 - `security-attack-chain-hunter` report for the round.
 - SARIF references emitted by those sessions.
-- Previous correlation report, validation decisions, and gap packets when present.
+- Previous correlation report and gap packets when present. Independent review does not run until the final comprehensive report has been sealed.
 
 Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_id`, `focus_area_id`, `discovery_track=coverage`, one-lens `audit_strategy`, scope digest, D1-D10 cells, or exact file/function/catalog coverage arrays are missing. Reject discovery reports with invalid track/evidence/seed boundaries, and reject attack-chain reports whose semantic digests or reviewed-ID sets mismatch. Record schema problems as `GAP` instead of silently inferring values.
 
@@ -90,4 +90,4 @@ Include:
 - discovery metrics (`duplicate_rate`, `novelty_yield`, `new_surface_rate`) used only to redirect later rounds
 - consumed and rejected artifact lists
 
-Return a concise markdown summary to the orchestrator. Send exploitability decisions to `vulnerability-validator`; never classify candidates as confirmed or false-positive yourself.
+Return a concise markdown summary to the orchestrator. Keep canonical findings explicitly unreviewed for the final report; the orchestrator later sends the complete sealed report—not individual candidates—to `vulnerability-validator` for independent review.

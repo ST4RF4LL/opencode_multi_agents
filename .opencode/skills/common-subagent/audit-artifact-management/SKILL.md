@@ -1,6 +1,6 @@
 ---
 name: audit-artifact-management
-description: Manage threat-led Focus Area Tri-Lens artifacts, including sealed threat/Focus manifests, coverage and discovery JSON, system attack-chain reports, SARIF, correlation, dual coverage verification, durable reports/ deliverables, and manual-only tmp retention/promotion rules.
+description: Manage threat-led Focus Area Tri-Lens artifacts, including sealed threat/Focus manifests, coverage and discovery JSON, system attack-chain reports, SARIF, correlation, dual coverage verification, final-report-bound third-party review companions, durable reports/ deliverables, and manual-only tmp retention/promotion rules.
 license: MIT
 metadata:
   role: shared
@@ -26,6 +26,8 @@ All durable deliverables go under workspace-root `reports/` only. Never write fi
 - Final accounting verification: `reports/coverage/coverage-verification.<audit-id>.json`
 - Final semantic verification: `reports/coverage/semantic-coverage-verification.<audit-id>.json`
 - Durable verification inputs: `reports/coverage/<audit-id>/inputs/`
+- OpenCode three-party review JSON: `reports/validation/vuln-judger-review.<audit-id>.json`
+- OpenCode three-party review Markdown: `reports/validation/vuln-judger-review.<audit-id>.md`
 - Recon and scratch workspace: `tmp/<audit-id>/`
 
 ## Static Analysis Reports
@@ -82,6 +84,12 @@ One audit round produces one correlation JSON under `reports/correlation/`. Incl
 ## Coverage Verification
 
 After the last correlation/gap round, the orchestrator snapshots the validated scope, function manifests, catalog, sealed threat model, and sealed Focus Areas under `reports/coverage/<audit-id>/inputs/`. Run both structural and semantic verifiers. Preserve the snapshot index and both final artifacts; do not copy a failed artifact into a report that claims completion.
+
+## Final Report and Independent Review
+
+Write the complete human-readable audit report first. After both coverage gates have emitted durable artifacts, compute the report SHA-256 and submit that exact report once to vuln-judger with `engine=opencode`. Keep the reviewed report immutable.
+
+Persist the structured and Markdown review exports under `reports/validation/`. Each companion must record the report path and SHA-256, vuln-judger run id and terminal state, three-party role results, finding accounting, disagreements, and residual gaps. A partial, failed, stopped, or digest-invalidated run remains an explicit review gap and never authorizes an independently-reviewed claim.
 
 ## Retention and Promotion (No Auto tmp Cleanup)
 

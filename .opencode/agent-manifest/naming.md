@@ -43,6 +43,7 @@ Recommended server categories:
 - `*_intel` for external documentation, advisory, or code intelligence.
 - `audit_lab` for safe local validation helpers.
 - `joern` for CPG and Joern query workflows.
+- `vuln_judger` for the final-report-only OpenCode three-party review. Expose it only to `vulnerability-validator` as `vuln_judger_*`.
 
 When replacing a placeholder MCP, keep the server name if possible so agent permissions do not need to change.
 

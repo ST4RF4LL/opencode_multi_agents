@@ -95,4 +95,4 @@ Emit:
 reports/vulnerability-mining/platform-security-auditor.<agent_session_id>.audit-report.json
 ```
 
-Emit SARIF only when a static-analysis tool actually runs. Report runtime-dependent candidates to `vulnerability-validator`.
+Emit SARIF only when a static-analysis tool actually runs. Preserve runtime-dependent candidates and assumptions for the sealed final report; do not invoke `vulnerability-validator` per finding.

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "maintenance_rule": "Define MCP servers in .opencode/opencode.json, then assign their exposed <server>_* tool patterns here and in the matching agent permission block.",
   "servers": {
     "context7": {
@@ -46,6 +46,11 @@
       "status": "placeholder",
       "type": "custom",
       "purpose": "Safe local validation and proof-of-concept assistance."
+    },
+    "vuln_judger": {
+      "status": "enabled-local",
+      "type": "custom",
+      "purpose": "Review the sealed final comprehensive report once with the asynchronous OpenCode Affirmative/Negative/Moderator pipeline."
     }
   },
   "agents": {
@@ -59,7 +64,7 @@
     "ai-security-auditor": ["context7_*", "gh_grep_*", "semgrep_*", "codeql_*", "joern_*"],
     "security-evidence-correlator": [],
     "security-attack-chain-hunter": ["joern_*"],
-    "vulnerability-validator": ["audit_lab_*", "joern_*"],
+    "vulnerability-validator": ["vuln_judger_*"],
     "security-skill-optimizer": ["joern_*"],
     "security-audit-orchestrator": ["joern_*"]
   }

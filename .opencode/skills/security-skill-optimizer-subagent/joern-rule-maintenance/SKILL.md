@@ -1,6 +1,6 @@
 ---
 name: joern-rule-maintenance
-description: Maintain dimension-and-lens-tagged Joern static-analysis rules and metadata from Tri-Lens confirmed findings and false-positive validation results.
+description: Maintain dimension-and-lens-tagged Joern static-analysis rules and metadata from completed final-report-bound vuln-judger TRUE_POSITIVE and FALSE_POSITIVE results.
 license: MIT
 metadata:
   role: security-skill-optimizer
@@ -13,8 +13,8 @@ Use this skill when validator feedback should change Joern or CPG-based static-a
 
 ## Rule Lifecycle
 
-- Add a rule when a confirmed or likely finding has a reusable source/sink, API, or data-flow shape.
-- Refine a rule when validation exposes missing guards, sanitizers, framework semantics, or reachability checks.
+- Add a rule when a `TRUE_POSITIVE` finding has a reusable source/sink, API, or data-flow shape.
+- Refine a rule when completed three-party review exposes missing guards, sanitizers, framework semantics, or reachability checks.
 - Deprecate or remove a rule when it is noisy and cannot be made precise enough for the target role.
 - Record rule intent, language, dimension, originating lens, weakness class, expected evidence, known false positives, and test cases in metadata.
 

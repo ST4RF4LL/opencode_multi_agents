@@ -41,6 +41,7 @@ async function main() {
   const config = await json(join(OPENCODE, "opencode.json"));
   const catalog = await json(join(OPENCODE, "shared/security-audit/catalogs/application-ai-vulnerability-catalog.json"));
   const orchestratorText = await readFile(join(OPENCODE, "agents/security-audit-orchestrator.md"), "utf8");
+  const validatorText = await readFile(join(OPENCODE, "agents/vulnerability-validator.md"), "utf8");
 
   const roleAgents = Object.keys(roles.agents).sort();
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
@@ -96,12 +97,26 @@ async function main() {
   assert(artifactPolicy.reports.semantic_coverage_verification.required_fields.includes("claim_boundary"), "semantic coverage verification policy lacks claim boundary");
   assert(artifactPolicy.reports.hypothesis_discovery.required_fields.includes("seed_inputs"), "discovery policy lacks seed provenance");
   assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter"), "attack-chain report is not mandatory");
+  const thirdPartyReview = artifactPolicy.reports.third_party_review;
+  assert(thirdPartyReview?.required_invocation?.tool === "vuln_judger_judge_report", "third-party review must use vuln_judger_judge_report");
+  assert(thirdPartyReview.required_invocation.engine === "opencode", "third-party review must force the OpenCode engine");
+  assert(thirdPartyReview.required_invocation.wait_for_completion === false, "third-party review must start asynchronously");
+  assert(thirdPartyReview.path_templates.every(path => path.startsWith("reports/validation/")), "third-party review artifacts must be durable reports/validation companions");
   assert(artifactPolicy.work.required_recon_files.includes("threat-model.json") && artifactPolicy.work.required_recon_files.includes("focus-areas.json"), "semantic Recon artifacts are not mandatory");
   for (const script of ["seal-semantic-manifest.mjs", "verify-semantic-coverage.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts", script)), `semantic coverage script is missing: ${script}`);
   }
 
   assert(config.mcp.joern?.enabled === true, "local Joern MCP must be enabled");
+  const vulnJudger = config.mcp.vuln_judger;
+  assert(vulnJudger?.type === "local" && vulnJudger.enabled === true, "local vuln_judger MCP must be enabled");
+  assert(Array.isArray(vulnJudger.command) && vulnJudger.command.includes("vuln-judger") && vulnJudger.command.includes("mcp"), "vuln_judger MCP command is incomplete");
+  assert(mcpMap.servers.vuln_judger?.status === "enabled-local", "mcp-map must register vuln_judger as enabled-local");
+  assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*"]), "vulnerability-validator must only receive vuln_judger MCP tools");
+  assert(/^\s*"vuln_judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln_judger MCP tools");
+  assert(validatorText.includes("vuln_judger_judge_report") && validatorText.includes("engine: opencode"), "validator must submit the final report through the OpenCode vuln_judger pipeline");
+  assert(validatorText.includes("exactly once") && validatorText.includes("final comprehensive"), "validator must enforce one full-report submission");
+  assert(orchestratorText.indexOf("Write exactly one complete human-readable report") < orchestratorText.indexOf("Invoke `vulnerability-validator` once"), "orchestrator must write the final report before invoking vulnerability-validator");
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");
   const catalogIds = catalog.entries.map(entry => entry.id);
   assert(new Set(catalogIds).size === catalogIds.length, "catalog IDs are not unique");
@@ -123,7 +138,7 @@ async function main() {
   assert(artifactPolicy.reports.vulnerability_mining.required_for_agents.includes("ai-security-auditor"), "AI auditor report is not mandatory");
   assert(artifactPolicy.work.required_recon_files.includes("ai-surfaces.json"), "Recon policy does not require ai-surfaces.json");
 
-  process.stdout.write(`${JSON.stringify({ complete: true, agents: roleAgents.length, collections: actualCollections.length, skills: skillCount, semantic_agents: ["security-threat-modeler", "security-attack-chain-hunter"], semantic_verifier: true, catalog_entries: catalog.entries.length, ai_catalog_entries: aiEntries.length, owasp_ai_agent_controls: requiredAiAgentControls, catalog_dimensions: [...catalogDimensions].sort(), ai_catalog_dimensions: [...aiDimensions].sort() })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, agents: roleAgents.length, collections: actualCollections.length, skills: skillCount, semantic_agents: ["security-threat-modeler", "security-attack-chain-hunter"], semantic_verifier: true, third_party_review: { server: "vuln_judger", engine: "opencode", input: "sealed-final-report", asynchronous: true }, catalog_entries: catalog.entries.length, ai_catalog_entries: aiEntries.length, owasp_ai_agent_controls: requiredAiAgentControls, catalog_dimensions: [...catalogDimensions].sort(), ai_catalog_dimensions: [...aiDimensions].sort() })}\n`);
 }
 
 main().catch(error => {

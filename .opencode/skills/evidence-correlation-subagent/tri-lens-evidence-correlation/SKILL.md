@@ -134,6 +134,6 @@ discovery_metrics:
 follow_up_packets: []
 ```
 
-Do not change validation state beyond `unvalidated` unless consuming an explicit validator decision.
+Keep `validation_state=unvalidated` during correlation. Independent adjudication occurs only after the complete final report is sealed and produces separate vuln-judger companion artifacts.
 
 Treat discovery metrics as routing signals, not completeness proof. When duplicate rate rises and novelty/new-surface yield falls, recommend repartitioning Focus Areas, a blind pass, or a system-chain pass instead of adding identical agents.

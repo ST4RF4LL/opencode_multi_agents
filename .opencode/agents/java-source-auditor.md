@@ -200,4 +200,4 @@ Use the session format from `secure-code-review-common` and include:
 - **Medium (M)**: Weak crypto config, information leak via error messages, CORS misconfig
 - **Low (L)**: Missing hardening headers, debug info in non-critical contexts
 
-Report only evidence-backed candidates. Flag runtime-dependent findings for `vulnerability-validator`.
+Report only evidence-backed candidates. Preserve runtime-dependent uncertainty for the sealed final report; do not invoke `vulnerability-validator` per finding.

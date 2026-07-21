@@ -117,30 +117,29 @@ Required session naming:
 19. Re-run only structural cells, threat/Focus/track cells, attack-chain surfaces, contradictory clusters, and high-risk hotspots marked `GAP`. Preserve Focus Area, discovery track, and base/AI domain. Do not repeat completed keys.
 20. Maximum rounds: `quick=1`, `standard=2`, `deep=3`. Reaching the round limit does not convert `GAP` to `PASS`; retain it in the final report.
 
-### Phase 8: VALIDATE
+### Phase 8: FINALIZE AND SEAL REPORT
 
-21. Send Critical/High, ambiguous, or exploitability-dependent canonical findings to `vulnerability-validator` with all available evidence facets:
-    - `sink_evidence`
-    - `control_evidence`
-    - `config_evidence`
-    - reachability, attacker influence, guards, effective configuration, and contradictions
-22. Accept only `confirmed`, `likely`, `needs-info`, or `false-positive` classifications.
+21. Read the threat model, Focus Areas, final correlation and attack-chain results, all coverage/discovery JSON, and SARIF. Canonical findings remain the primary audit pipeline's evidence-backed assessments; do not claim an independent verdict yet.
+22. Run `snapshot-coverage-inputs.mjs` with `--threat-model` and `--focus-areas`, then run `verify-coverage.mjs` and `verify-semantic-coverage.mjs`. Write the durable snapshot and both final verifier artifacts under `reports/coverage/`.
+23. Write exactly one complete human-readable report to `reports/final/security-audit-report.<audit_id>.md`. It must include every canonical finding, attack chain, coverage matrix, contradiction, residual gap, and artifact reference. Never use an intermediate report or a per-finding extract as the independent-review input.
+24. Compute the final report SHA-256 and byte size, then seal it. Do not modify the report after the third-party submission; review results are separate companion artifacts.
 
-### Phase 9: OPTIMIZE
+### Phase 9: OPENCODE THREE-PARTY REVIEW
 
-23. Invoke `security-skill-optimizer` for reusable learning signals. Tag updates by `threat_id`, `focus_area_id`, `dimension`, `lens`, and discovery track where applicable.
+25. Invoke `vulnerability-validator` once with only `audit_id`, the absolute sealed final report path, source repository root, both verifier paths, the report SHA-256, and optional `.opencode/skills` path.
+26. Require the validator to call `vuln_judger_judge_report` exactly once for the whole report with `engine=opencode`, digest-bound run id `<audit_id>-review-<first12(report_sha256)>`, `save=true`, and `wait_for_completion=false`. Per-finding calls, `one_round_judge`, intermediate inputs, and `builtin`/`codex` engines are forbidden.
+27. Because the review is long-running, monitor the same run with `vuln_judger_get_run` instead of resubmitting. On completion, require structured and Markdown exports covering the Affirmative, Negative, and Moderator roles.
+28. Require `reports/validation/vuln-judger-review.<audit_id>.json` and `.md` to bind the run to the unchanged final-report digest. A partial, failed, stopped, or digest-invalidated review remains an explicit review gap and must never be presented as completed independent review.
 
-### Phase 10: REPORT (NO AUTO TMP CLEANUP)
+### Phase 10: OPTIMIZE AND HANDOFF (NO AUTO TMP CLEANUP)
 
-24. Read the threat model, Focus Areas, correlation, attack-chain, validation, coverage/discovery JSON, and SARIF before reporting.
-25. Write the human-readable final audit report only to `reports/final/security-audit-report.<audit_id>.md`. Include canonical findings, attack chains, and both the structural and semantic coverage matrices. Never write this deliverable under `tmp/` or inside audited application/test source trees outside `reports/`.
-26. Run `snapshot-coverage-inputs.mjs` with `--threat-model` and `--focus-areas` to preserve the sealed semantic inputs alongside scope, functions, and catalog under `reports/coverage/<audit_id>/inputs/`.
-27. Run `verify-coverage.mjs` for structural coverage and `verify-semantic-coverage.mjs` for entry-point/threat/Focus/discovery/attack-chain coverage. Write both final artifacts under `reports/coverage/`.
-28. Do **not** delete `tmp/` or `tmp/<audit_id>/`. Temporary workspace cleanup is manual-only and owned by a human operator after durable `reports/**` deliverables are confirmed. After reusable assets are promoted by `security-skill-optimizer`, leave `tmp/` intact and note the path in the Artifact Summary for manual cleanup.
+29. Invoke `security-skill-optimizer` for reusable learning signals only after the review reaches a terminal state. Use completed vuln-judger decisions when available; if review is incomplete, do not promote uncertain candidates as confirmed cases. Tag updates by `threat_id`, `focus_area_id`, `dimension`, `lens`, and discovery track where applicable.
+30. Return the immutable final report together with its review companion paths and review status. Do not merge the companion back into or otherwise rewrite the reviewed report.
+31. Do **not** delete `tmp/` or `tmp/<audit_id>/`. Temporary workspace cleanup is manual-only and owned by a human operator after durable `reports/**` deliverables are confirmed. After reusable assets are promoted, leave `tmp/` intact and note the path for manual cleanup.
 
 ## Report Gate
 
-Before entering REPORT, verify:
+After step 22 runs both verifiers and before step 23 writes the final report, verify:
 
 - `verify-coverage.mjs` exits zero and its artifact says `complete: true`.
 - `verify-semantic-coverage.mjs` exits zero and its artifact says `complete: true`.
@@ -159,10 +158,22 @@ Before entering REPORT, verify:
 
 If either gate fails after the permitted rounds, issue a partial report with prominent gaps; never claim complete structural or semantic coverage. The two verifier artifacts authorize only their stated accounting claims and never mean every possible threat or vulnerability was recognized.
 
+## Third-Party Review Gate
+
+Before declaring the full workflow complete, verify:
+
+- The exact final report path, SHA-256, and byte size are recorded.
+- The validator submitted the whole report once with `engine=opencode` and the deterministic run id.
+- The JSON and Markdown companions identify the Affirmative, Negative, and Moderator review roles.
+- The companion source-report digest still matches the immutable report.
+- `review_complete=true` is used only for a completed run with complete finding accounting.
+- Any partial, failed, stopped, or invalidated review is prominent in the handoff and does not silently alter primary findings.
+
 ## Constraints
 
 - Do not deep-audit language-specific code.
 - Do not validate exploits directly.
+- Do not call vuln-judger directly; delegate the single sealed-report submission and monitoring lifecycle to `vulnerability-validator`.
 - Do not edit audited source or reusable audit assets directly; delegate reusable changes to `security-skill-optimizer`.
 - Do not ask an auditor to cover multiple lenses in one session.
 - A finding does not prove that its coverage cell is complete.
@@ -193,14 +204,18 @@ Write this markdown to `reports/final/security-audit-report.<audit_id>.md` (and 
 |-------|----------|----|------|---------|--------|---------------|-------|
 
 ## Canonical Findings
-| ID | Severity | D# | Origin Lens | Validation | Component | Evidence Facets | Fix |
-|----|----------|----|-------------|------------|-----------|-----------------|-----|
+| ID | Severity | D# | Origin Lens | Primary Assessment | Component | Evidence Facets | Fix |
+|----|----------|----|-------------|--------------------|-----------|-----------------|-----|
 
 ## Attack Chains
 
 ## Contradictions and Residual Gaps
 
-## Validation Summary
+## Independent Review Contract
+- Reviewer: `vuln_judger`
+- Required engine: `opencode`
+- Input: this complete immutable report
+- Companion paths: `reports/validation/vuln-judger-review.<audit_id>.{json,md}`
 
 ## Discovery Quality Signals
 - Review-depth warnings:
@@ -208,7 +223,9 @@ Write this markdown to `reports/final/security-audit-report.<audit_id>.md` (and 
 - Novelty yield:
 - New-surface rate:
 
-## Optimization Summary
+## Post-Review Optimization Contract
+- Verdict-dependent optimization runs only after the independent review reaches a terminal state.
+- This immutable report is not rewritten with later reusable-asset changes.
 
 ## Artifact Summary
 - Scope manifest and digest:
@@ -222,8 +239,10 @@ Write this markdown to `reports/final/security-audit-report.<audit_id>.md` (and 
 - Correlation report:
 - Vulnerability-mining JSON:
 - SARIF reports:
-- Reusable assets promoted:
+- Post-review optimization handoff: outside this immutable report
 - Final report path: `reports/final/security-audit-report.<audit_id>.md`
+- Third-party review JSON: `reports/validation/vuln-judger-review.<audit_id>.json`
+- Third-party review Markdown: `reports/validation/vuln-judger-review.<audit_id>.md`
 - tmp retention status: retained for manual cleanup (`tmp/<audit_id>/` not auto-deleted)
 
 ## Not Applicable / Unsupported

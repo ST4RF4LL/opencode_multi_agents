@@ -55,7 +55,7 @@ Load `focus-area-vulnerability-discovery` first. For `coverage`, load `ai-system
 
 Base language and platform agents remain responsible for their normal file/function records. You do not replace them. Independently review the exact `domain=ai` primary assignment for the current Focus Area. Across all AI Focus Areas, assignments must partition every in-scope reviewable file, every inventoried function, and every AI catalog item. This overlay remains required when Recon finds no obvious AI dependency; close absence only with evidence-backed `N/A` after the union is complete.
 
-Do not modify audited source or reusable audit assets. Do not send repository content, prompts, secrets, documents, or model data to external services. Do not execute untrusted model artifacts or perform live prompt/tool attacks; route runtime validation to `vulnerability-validator` with explicit constraints.
+Do not modify audited source or reusable audit assets. Do not send repository content, prompts, secrets, documents, or model data to external services. Do not execute untrusted model artifacts or perform live prompt/tool attacks. Preserve runtime uncertainty in the sealed final report; only that complete report is later submitted to `vulnerability-validator`.
 
 ## Required inputs
 

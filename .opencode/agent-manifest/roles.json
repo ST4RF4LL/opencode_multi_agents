@@ -1,13 +1,13 @@
 {
-  "version": 5,
+  "version": 6,
   "purpose": "Role boundaries for the OpenCode threat-led, Focus-Area-partitioned Tri-Lens multi-agent source, platform, and AI system security audit workspace.",
   "agents": {
     "security-audit-orchestrator": {
       "mode": "primary",
-      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, plan base-owner plus AI-overlay File × Function × Catalog × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural and semantic gates, consolidate validated canonical findings, and write durable deliverables under reports/. Does not auto-delete tmp/.",
+      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, plan base-owner plus AI-overlay File × Function × Catalog × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural and semantic gates, write the sealed comprehensive report, and request one report-level independent vuln-judger review. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
-      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "structural and semantic coverage verification artifacts", "base-plus-AI file/function/catalog coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
-      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
+      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "OpenCode three-party review companion under reports/validation/", "structural and semantic coverage verification artifacts", "base-plus-AI file/function/catalog coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
+      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "call vuln-judger directly instead of delegating to vulnerability-validator", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
     },
     "security-intel-collector": {
       "mode": "subagent",
@@ -74,7 +74,7 @@
     "security-evidence-correlator": {
       "mode": "subagent",
       "responsibility": "Preserve exact structural and semantic coverage, normalize Focus Area D1-D10/track evidence, deduplicate candidates, canonicalize supplied attack chains, expose contradictions and gaps, compute discovery routing metrics, and generate follow-up packets.",
-      "inputs": ["Threat model and Focus Areas", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation and validation results"],
+      "inputs": ["Threat model and Focus Areas", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation results"],
       "outputs": ["Coverage cube", "canonical findings", "duplicate map", "contradictions", "residual gaps", "follow-up packets", "attack-chain candidates"],
       "artifacts": ["reports/correlation/security-evidence-correlator.<audit-id>.r<round>.json"],
       "must_not": ["Perform new deep source auditing", "invent evidence", "classify exploitability", "modify audited source or reusable audit assets"]
@@ -89,15 +89,16 @@
     },
     "vulnerability-validator": {
       "mode": "subagent",
-      "responsibility": "Validate canonical findings and classify exploitability using safe local evidence while preserving all Tri-Lens evidence facets.",
-      "inputs": ["Canonical finding", "sink/control/config evidence", "affected code/config", "constraints"],
-      "outputs": ["confirmed/likely/needs-info/false-positive decision", "minimal local reproduction notes", "resolved and residual contradictions"],
-      "must_not": ["Attack third-party systems", "exfiltrate data", "perform persistence", "modify production data"]
+      "responsibility": "Submit exactly one sealed final comprehensive audit report to vuln-judger, force the OpenCode execution engine, monitor the asynchronous Affirmative/Negative/Moderator review, and persist report-digest-bound companion artifacts.",
+      "inputs": ["audit_id", "sealed final report path", "source repository root", "final report SHA-256", "optional project skills path"],
+      "outputs": ["vuln-judger run id and terminal state", "structured OpenCode three-party review JSON", "exported review Markdown", "source-report integrity binding", "review gaps or failure state"],
+      "artifacts": ["reports/validation/vuln-judger-review.<audit-id>.json", "reports/validation/vuln-judger-review.<audit-id>.md"],
+      "must_not": ["Submit individual findings or intermediate reports", "use one_round_judge", "use the builtin or codex engine", "rewrite the sealed final report", "attack third-party systems", "exfiltrate data", "perform persistence", "modify production data"]
     },
     "security-skill-optimizer": {
       "mode": "subagent",
-      "responsibility": "Improve audit skills, Joern rules, vulnerability cases, and false-positive cases from validator feedback, tagged by dimension and lens.",
-      "inputs": ["Validation results", "canonical findings", "source auditor notes", "existing skill/rule/case assets"],
+      "responsibility": "Improve audit skills, Joern rules, vulnerability cases, and false-positive cases from completed final-report-bound vuln-judger feedback, tagged by dimension and lens.",
+      "inputs": ["Digest-bound vuln-judger review results", "canonical findings", "source auditor notes", "existing skill/rule/case assets"],
       "outputs": ["Updated SKILL.md files", "updated Joern rules", "updated cases", "dimension-and-lens change summary"],
       "must_not": ["Modify audited application source", "create exploit instructions beyond defensive local validation", "change agent role boundaries without explicit request"]
     }
