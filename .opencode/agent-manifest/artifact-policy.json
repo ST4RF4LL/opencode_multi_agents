@@ -85,7 +85,7 @@
       "path_templates": ["reports/validation/vuln-judger-review.{audit_id}.json", "reports/validation/vuln-judger-review.{audit_id}.md"],
       "producer": "vulnerability-validator via vuln_judger MCP",
       "required_fields": ["schema_version", "audit_id", "review_type", "engine", "roles", "source_report", "vuln_judger", "review_status", "review_complete", "finding_accounting", "verdict_summary", "contradictions", "residual_gaps", "markdown_companion"],
-      "required_invocation": {"tool": "vuln_judger_judge_report", "engine": "opencode", "save": true, "wait_for_completion": false, "input_cardinality": "exactly one complete final report"},
+      "required_invocation": {"tool": "vuln_judger_judge_report", "tool_aliases": ["vuln-judger_judge_report"], "engine": "opencode", "save": true, "wait_for_completion": false, "input_cardinality": "exactly one complete final report"},
       "notes": "The JSON and Markdown companions bind to the exact final report SHA-256. Per-finding and intermediate-report submissions are forbidden. A failed, stopped, partial, or digest-invalidated run must not be reported as independently reviewed."
     },
     "coverage_verification": {

@@ -50,7 +50,13 @@
     "vuln_judger": {
       "status": "enabled-local",
       "type": "custom",
-      "purpose": "Review the sealed final comprehensive report once with the asynchronous OpenCode Affirmative/Negative/Moderator pipeline."
+      "purpose": "Review the sealed final comprehensive report once with the asynchronous OpenCode Affirmative/Negative/Moderator pipeline.",
+      "aliases": ["vuln-judger"]
+    },
+    "vuln-judger": {
+      "status": "enabled-local",
+      "type": "custom",
+      "purpose": "Alias for vuln_judger. Accepted when the global or project MCP server is named vuln-judger (hyphen) instead of vuln_judger (underscore)."
     }
   },
   "agents": {
@@ -64,7 +70,7 @@
     "ai-security-auditor": ["context7_*", "gh_grep_*", "semgrep_*", "codeql_*", "joern_*"],
     "security-evidence-correlator": [],
     "security-attack-chain-hunter": ["joern_*"],
-    "vulnerability-validator": ["vuln_judger_*"],
+    "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
     "security-skill-optimizer": ["joern_*"],
     "security-audit-orchestrator": ["joern_*"]
   }

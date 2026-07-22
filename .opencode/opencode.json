@@ -26,7 +26,8 @@
     "jvm_index_*": "deny",
     "python_index_*": "deny",
     "audit_lab_*": "deny",
-    "vuln_judger_*": "deny"
+    "vuln_judger_*": "deny",
+    "vuln-judger_*": "deny"
   },
   "mcp": {
     "context7": {

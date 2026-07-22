@@ -7,7 +7,7 @@
       "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, plan base-owner plus AI-overlay File × Function × Catalog × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural and semantic gates, write the sealed comprehensive report, and request one report-level independent vuln-judger review. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
       "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "OpenCode three-party review companion under reports/validation/", "structural and semantic coverage verification artifacts", "base-plus-AI file/function/catalog coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
-      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "call vuln-judger directly instead of delegating to vulnerability-validator", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
+      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "call vuln-judger/vuln_judger directly instead of delegating to vulnerability-validator", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
     },
     "security-intel-collector": {
       "mode": "subagent",

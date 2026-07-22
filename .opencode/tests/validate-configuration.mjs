@@ -54,6 +54,8 @@ async function main() {
   assert(/^permission:\s*allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
   assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
   assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");
+  assert(config.permission["vuln_judger_*"] === "deny", "global permission must deny vuln_judger MCP tools");
+  assert(config.permission["vuln-judger_*"] === "deny", "global permission must deny vuln-judger MCP tools");
   for (const agentFile of agentFiles) {
     const agentText = await readFile(join(OPENCODE, "agents", `${agentFile}.md`), "utf8");
     const frontmatter = /^---\s*$([\s\S]*?)^---\s*$/m.exec(agentText)?.[1] ?? "";
@@ -99,6 +101,7 @@ async function main() {
   assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter"), "attack-chain report is not mandatory");
   const thirdPartyReview = artifactPolicy.reports.third_party_review;
   assert(thirdPartyReview?.required_invocation?.tool === "vuln_judger_judge_report", "third-party review must use vuln_judger_judge_report");
+  assert(Array.isArray(thirdPartyReview?.required_invocation?.tool_aliases) && thirdPartyReview.required_invocation.tool_aliases.includes("vuln-judger_judge_report"), "third-party review must alias vuln-judger_judge_report");
   assert(thirdPartyReview.required_invocation.engine === "opencode", "third-party review must force the OpenCode engine");
   assert(thirdPartyReview.required_invocation.wait_for_completion === false, "third-party review must start asynchronously");
   assert(thirdPartyReview.path_templates.every(path => path.startsWith("reports/validation/")), "third-party review artifacts must be durable reports/validation companions");
@@ -112,9 +115,12 @@ async function main() {
   assert(vulnJudger?.type === "local" && vulnJudger.enabled === true, "local vuln_judger MCP must be enabled");
   assert(Array.isArray(vulnJudger.command) && vulnJudger.command.includes("vuln-judger") && vulnJudger.command.includes("mcp"), "vuln_judger MCP command is incomplete");
   assert(mcpMap.servers.vuln_judger?.status === "enabled-local", "mcp-map must register vuln_judger as enabled-local");
-  assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*"]), "vulnerability-validator must only receive vuln_judger MCP tools");
+  assert(mcpMap.servers["vuln-judger"]?.status === "enabled-local", "mcp-map must register vuln-judger alias as enabled-local");
+  assert(Array.isArray(mcpMap.servers.vuln_judger?.aliases) && mcpMap.servers.vuln_judger.aliases.includes("vuln-judger"), "vuln_judger must declare vuln-judger alias");
+  assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*", "vuln-judger_*"]), "vulnerability-validator must receive both vuln_judger and vuln-judger MCP tool prefixes");
   assert(/^\s*"vuln_judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln_judger MCP tools");
-  assert(validatorText.includes("vuln_judger_judge_report") && validatorText.includes("engine: opencode"), "validator must submit the final report through the OpenCode vuln_judger pipeline");
+  assert(/^\s*"vuln-judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln-judger MCP tools");
+  assert((validatorText.includes("vuln_judger_judge_report") || validatorText.includes("vuln-judger_judge_report")) && validatorText.includes("engine: opencode"), "validator must submit the final report through the OpenCode vuln_judger/vuln-judger pipeline");
   assert(validatorText.includes("exactly once") && validatorText.includes("final comprehensive"), "validator must enforce one full-report submission");
   assert(orchestratorText.indexOf("Write exactly one complete human-readable report") < orchestratorText.indexOf("Invoke `vulnerability-validator` once"), "orchestrator must write the final report before invoking vulnerability-validator");
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");

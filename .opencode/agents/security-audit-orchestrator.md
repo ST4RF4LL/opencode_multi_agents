@@ -127,8 +127,8 @@ Required session naming:
 ### Phase 9: OPENCODE THREE-PARTY REVIEW
 
 25. Invoke `vulnerability-validator` once with only `audit_id`, the absolute sealed final report path, source repository root, both verifier paths, the report SHA-256, and optional `.opencode/skills` path.
-26. Require the validator to call `vuln_judger_judge_report` exactly once for the whole report with `engine=opencode`, digest-bound run id `<audit_id>-review-<first12(report_sha256)>`, `save=true`, and `wait_for_completion=false`. Per-finding calls, `one_round_judge`, intermediate inputs, and `builtin`/`codex` engines are forbidden.
-27. Because the review is long-running, monitor the same run with `vuln_judger_get_run` instead of resubmitting. On completion, require structured and Markdown exports covering the Affirmative, Negative, and Moderator roles.
+26. Require the validator to call `vuln_judger_judge_report` (or `vuln-judger_judge_report` when the MCP server is hyphen-named) exactly once for the whole report with `engine=opencode`, digest-bound run id `<audit_id>-review-<first12(report_sha256)>`, `save=true`, and `wait_for_completion=false`. Per-finding calls, `one_round_judge`, intermediate inputs, and `builtin`/`codex` engines are forbidden.
+27. Because the review is long-running, monitor the same run with `vuln_judger_get_run` (or `vuln-judger_get_run`) instead of resubmitting. On completion, require structured and Markdown exports covering the Affirmative, Negative, and Moderator roles.
 28. Require `reports/validation/vuln-judger-review.<audit_id>.json` and `.md` to bind the run to the unchanged final-report digest. A partial, failed, stopped, or digest-invalidated review remains an explicit review gap and must never be presented as completed independent review.
 
 ### Phase 10: OPTIMIZE AND HANDOFF (NO AUTO TMP CLEANUP)
@@ -173,7 +173,7 @@ Before declaring the full workflow complete, verify:
 
 - Do not deep-audit language-specific code.
 - Do not validate exploits directly.
-- Do not call vuln-judger directly; delegate the single sealed-report submission and monitoring lifecycle to `vulnerability-validator`.
+- Do not call vuln-judger/vuln_judger directly; delegate the single sealed-report submission and monitoring lifecycle to `vulnerability-validator`.
 - Do not edit audited source or reusable audit assets directly; delegate reusable changes to `security-skill-optimizer`.
 - Do not ask an auditor to cover multiple lenses in one session.
 - A finding does not prove that its coverage cell is complete.
@@ -212,7 +212,7 @@ Write this markdown to `reports/final/security-audit-report.<audit_id>.md` (and 
 ## Contradictions and Residual Gaps
 
 ## Independent Review Contract
-- Reviewer: `vuln_judger`
+- Reviewer: `vuln_judger` (also reachable as `vuln-judger` when that server name is active)
 - Required engine: `opencode`
 - Input: this complete immutable report
 - Companion paths: `reports/validation/vuln-judger-review.<audit_id>.{json,md}`
