@@ -144,9 +144,9 @@ Orchestrator 在双覆盖门禁后把最终 Markdown 写到 `reports/final/` 并
 
 ## MCP defaults
 
-`context7` 和 `gh_grep` 已按官方远程 MCP 示例配置，但默认 `enabled: false`。`joern` 已配置为本地启用，用于 CPG、规则与函数清单；它会规范化 `js→javascript`、`cpp→c`、`jvm→java` 等前端别名并验证 CPG 文件。`vuln_judger` 已按本机 `$VULN_JUDGER_HOME` 配置为启用的本地 stdio MCP；MCP map 只把 `vuln_judger_*` 路由给 validator，orchestrator 虽保留全许可但工作流明确禁止直接调用。`judge_report` 必须传 `engine=opencode` 且异步轮询，避免完整报告处理触发 MCP 长调用超时。`semgrep`、`codeql`、`cpp_index`、`jvm_index`、`python_index`、`audit_lab` 仍是可替换占位。
+`context7` 和 `gh_grep` 已按官方远程 MCP 示例配置，但默认 `enabled: false`。`joern` 已配置为本地启用，用于 CPG、规则与函数清单；它会规范化 `js→javascript`、`cpp→c`、`jvm→java` 等前端别名并验证 CPG 文件。`vuln_judger` / `vuln-judger` 为占位的本地 stdio MCP，默认 `enabled: false`；如需启用，请在你的全局 `opencode.json`（`~/.config/opencode/opencode.json`）中配置本机的 `type`、`command` 等字段。MCP map 只把 `vuln_judger_*` / `vuln-judger_*` 路由给 validator，orchestrator 虽保留全许可但工作流明确禁止直接调用。`judge_report` 必须传 `engine=opencode` 且异步轮询，避免完整报告处理触发 MCP 长调用超时。`semgrep`、`codeql`、`cpp_index`、`jvm_index`、`python_index`、`audit_lab` 仍是可替换占位。
 
-占位 MCP 需要替换为你本机实际可运行的 `type/command` 或 `type/url` 后再启用。复制本配置到其他机器时，也必须同步修改 `vuln_judger.command` 中的绝对路径。
+占位 MCP 需要替换为你本机实际可运行的 `type/command` 或 `type/url` 后再启用。
 
 ## Permission defaults
 

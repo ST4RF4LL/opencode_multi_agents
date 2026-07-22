@@ -73,27 +73,10 @@
       "enabled": false
     },
     "vuln_judger": {
-      "type": "local",
-      "command": [
-        "uv",
-        "--directory",
-        "$VULN_JUDGER_HOME",
-        "run",
-        "vuln-judger",
-        "mcp",
-        "--records-dir",
-        "$VULN_JUDGER_HOME/.vuln-judger/runs",
-        "--providers-file",
-        "$VULN_JUDGER_HOME/.vuln-judger/providers.json",
-        "--mcp-servers-file",
-        "$VULN_JUDGER_HOME/.vuln-judger/mcp.json",
-        "--skills-file",
-        "$VULN_JUDGER_HOME/.vuln-judger/skills.json",
-        "--agents-dir",
-        "$VULN_JUDGER_HOME/agents"
-      ],
-      "enabled": true,
-      "timeout": 120000
+      "enabled": false
+    },
+    "vuln-judger": {
+      "enabled": false
     }
   }
 }
