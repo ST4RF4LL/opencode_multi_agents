@@ -39,10 +39,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：Spring Security 配置、csrf disable、状态变更映射、Cookie/Session
-2. **Semgrep**：csrf().disable()、缺 token 的 POST/PUT/DELETE、GET 变更、Cookie JSON API
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 csrf().disable()、缺 token 的 POST/PUT/DELETE、GET 变更、Cookie JSON API
 3. **Joern**：跨方法调用链、会话读、状态写操作
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：业务语义、是否状态变更、防护有效性、SameSite/浏览器前提研判
+4. **LLM**：业务语义、是否状态变更、防护有效性、SameSite/浏览器前提研判
 
 ## Progressive Loading
 

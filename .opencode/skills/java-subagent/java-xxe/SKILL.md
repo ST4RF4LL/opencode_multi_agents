@@ -38,10 +38,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与危险 API 关键词（DocumentBuilderFactory / XMLInputFactory / TransformerFactory / Unmarshaller）
-2. **Semgrep**：局部危险模式（默认工厂 + parse；缺少 secure flags）
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位默认工厂 + parse 与缺少 secure flags
 3. **Joern**：跨方法调用链、工厂配置与数据流
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：业务语义、配置是否作用于同一工厂实例、DoS vs 文件读取影响分级
+4. **LLM**：业务语义、配置是否作用于同一工厂实例、DoS vs 文件读取影响分级
 
 ## Progressive Loading
 

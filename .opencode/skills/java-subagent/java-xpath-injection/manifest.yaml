@@ -33,8 +33,6 @@ components:
     semgrep:
       - java-xpathi-sinks.yaml
       - java-xpathi-patterns.yaml
-    codeql:
-      - java-xpathi.ql
     grep:
       - keywords.yaml
   analysis:
@@ -64,7 +62,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

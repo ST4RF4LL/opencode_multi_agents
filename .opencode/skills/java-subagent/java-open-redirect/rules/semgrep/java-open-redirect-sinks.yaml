@@ -57,7 +57,7 @@ rules:
       confidence: high
 
   - id: java-open-redirect-spring-redirect-prefix
-    message: Spring redirect: prefix concatenated with possible user input
+    message: "Spring redirect: prefix concatenated with possible user input"
     severity: ERROR
     languages: [java]
     patterns:

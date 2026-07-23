@@ -36,8 +36,6 @@ components:
     semgrep:
       - java-path-traversal-sinks.yaml
       - java-path-traversal-patterns.yaml
-    codeql:
-      - java-path-traversal.ql
     grep:
       - keywords.yaml
   analysis:
@@ -68,7 +66,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

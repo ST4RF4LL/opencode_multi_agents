@@ -34,8 +34,6 @@ components:
     semgrep:
       - java-csrf-sinks.yaml
       - java-csrf-patterns.yaml
-    codeql:
-      - java-csrf.ql
     grep:
       - keywords.yaml
   analysis:
@@ -66,7 +64,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

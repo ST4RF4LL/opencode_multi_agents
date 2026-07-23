@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "tmp_root": "tmp",
   "reports_root": "reports",
   "cleanup_owner": "human",
@@ -38,7 +38,7 @@
       "standard": "SARIF 2.1.0",
       "cardinality": "one file per agent session when static-analysis tools are used",
       "path_template": "reports/sarif/{agent_name}.{agent_session_id}.sarif",
-      "required_for": ["semgrep", "codeql", "joern", "other static-analysis tools"],
+      "required_for": ["semgrep", "opengrep", "joern", "other static-analysis tools"],
       "notes": "Normalize static-analysis output to SARIF even when the underlying tool produces another format."
     },
     "vulnerability_mining": {

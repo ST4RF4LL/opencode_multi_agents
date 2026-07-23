@@ -35,10 +35,7 @@ permission:
     "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
-  "context7_*": deny
-  "gh_grep_*": deny
   "semgrep_*": deny
-  "codeql_*": deny
   "joern_*": deny
   "cpp_index_*": deny
   "jvm_index_*": deny

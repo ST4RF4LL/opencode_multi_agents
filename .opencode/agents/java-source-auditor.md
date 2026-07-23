@@ -42,10 +42,7 @@ permission:
     "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
-  "context7_*": deny
-  "gh_grep_*": deny
   "semgrep_*": allow
-  "codeql_*": allow
   "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": allow
@@ -63,6 +60,8 @@ Require the sealed threat model and Focus Areas, exact `focus_area_id`, frozen s
 Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.mjs` yourself. Update entity records in place with digest-bound evidence; never regenerate shorter arrays, hand-write D1-D10 cells, or submit target counts. After entity review, run `reconcile-audit-report.mjs`.
 
 For Coverage Plan v2, call `coverage_get_packet` with the exact audit, Focus Area, `java` domain, and assigned lens. For every packet call `coverage_inspect_subject`, create service receipts with `coverage_record_tool_result`, and submit the separate execution/result decision with `coverage_submit_decision`. Do not edit the plan or canonical ledger. Every assigned catalog type requires its negative-discovery baseline even when no target is found; a finding closes only its own atomic check.
+
+Call `semgrep_health` before local pattern scanning. Use `semgrep_scan` with the deep pack's workspace-local `rules/semgrep/*.yaml`; auto mode prefers OpenGrep and falls back to Semgrep. Consume its raw-output/SARIF digests in the Ledger receipt. A missing engine is an explicit tool gap and never substitutes for source/Joern review.
 
 ## Tri-Lens Execution Contract
 
@@ -101,7 +100,7 @@ When attack surface or sink greps hit a specific weakness, **progressive-load** 
 | Log forging / CRLF | `java-log-injection` | D8 |
 | Mass assignment / over-posting | `java-mass-assignment` | D9 |
 
-Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`, `cases/`, `validation/`, `evidence/`. Published Joern rules: `.opencode/shared/security-audit/joern-rules/java/<skill>-*.sc` via `joern_run_rule`. Casebase: `.opencode/shared/security-audit/vulnerability-cases/java/`. Skills auto-map via `collection.json`.
+Deep packs include `models/`, `rules/` (grep/Semgrep-compatible YAML/Joern), `analysis/`, `cases/`, `validation/`, `evidence/`. Run local YAML rules through `semgrep_scan`, which auto-selects OpenGrep or Semgrep and emits normalized SARIF. Published Joern rules: `.opencode/shared/security-audit/joern-rules/java/<skill>-*.sc` via `joern_run_rule`. Casebase: `.opencode/shared/security-audit/vulnerability-cases/java/`. Skills auto-map via `collection.json`.
 
 ## Audit Dimensions (Java Focus)
 

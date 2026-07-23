@@ -38,10 +38,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与危险 API 关键词
-2. **Semgrep**：局部危险模式（parseExpression 拼接、user string getValue、StandardEvaluationContext）
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 parseExpression 拼接、user string getValue、StandardEvaluationContext
 3. **Joern**：跨方法调用链与数据流；SimpleEvaluationContext 作为控制信号
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：业务语义、EvaluationContext 能力面、防护有效性研判
+4. **LLM**：业务语义、EvaluationContext 能力面、防护有效性研判
 
 ## Progressive Loading
 

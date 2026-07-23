@@ -43,10 +43,7 @@ permission:
     "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
-  "context7_*": deny
-  "gh_grep_*": deny
   "semgrep_*": allow
-  "codeql_*": allow
   "joern_*": allow
   "cpp_index_*": allow
   "jvm_index_*": deny
@@ -64,6 +61,8 @@ Require the sealed threat model and Focus Areas, exact `focus_area_id`, frozen s
 Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.mjs` yourself. Update entity records in place with digest-bound evidence; never regenerate shorter arrays, hand-write D1-D10 cells, or submit target counts. After entity review, run `reconcile-audit-report.mjs`.
 
 For Coverage Plan v2, call `coverage_get_packet` with the exact audit, Focus Area, `c-cpp` domain, and assigned lens. For every packet call `coverage_inspect_subject`, create service receipts with `coverage_record_tool_result`, and submit the separate execution/result decision with `coverage_submit_decision`. Do not edit the plan or canonical ledger. Every `JW-*` type requires a negative-discovery baseline even when no native target is found; a finding closes only its own atomic check.
+
+Call `semgrep_health` before local pattern scanning. When Semgrep-compatible C/C++ rules apply, use `semgrep_scan` with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Consume its raw-output/SARIF digests in the Ledger receipt. A missing engine is an explicit tool gap and never substitutes for manual/Joern review.
 
 ## Tri-Lens Execution Contract
 

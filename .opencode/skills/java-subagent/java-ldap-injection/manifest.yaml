@@ -32,8 +32,6 @@ components:
     semgrep:
       - java-ldap-sinks.yaml
       - java-ldap-patterns.yaml
-    codeql:
-      - java-ldap-injection.ql
     grep:
       - keywords.yaml
   analysis:
@@ -63,7 +61,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

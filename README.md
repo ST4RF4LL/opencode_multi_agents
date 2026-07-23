@@ -150,7 +150,9 @@ Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdow
 
 ## MCP defaults
 
-`context7` 和 `gh_grep` 已按官方远程 MCP 示例配置，但默认 `enabled: false`。`joern` 与 `coverage_ledger` 均已配置为本地启用：前者提供 CPG/规则/函数清单，后者暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。`coverage_*` 默认自动放行，但所有执行 agent 都显式拒绝直接编辑或通过 Bash 写 canonical ledger。`vuln_judger` / `vuln-judger` 为占位的本地 stdio MCP，默认 `enabled: false`；如需启用，请在你的全局 `opencode.json`（`~/.config/opencode/opencode.json`）中配置本机的 `type`、`command` 等字段。MCP map 只把 `vuln_judger_*` / `vuln-judger_*` 路由给 validator。`judge_report` 必须传 `engine=opencode` 且异步轮询，避免完整报告处理触发 MCP 长调用超时。`semgrep`、`codeql`、`cpp_index`、`jvm_index`、`python_index`、`audit_lab` 仍是可替换占位。
+`semgrep`、`joern` 与 `coverage_ledger` 已配置为本地启用。`semgrep` MCP 暴露 `semgrep_health` 和 `semgrep_scan`：自动模式优先使用 `opengrep`，不可用时回退 `semgrep`；只接受工作区内本地 YAML 规则，原始 JSON 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`。可通过 `OPENGREP_BIN`、`SEMGREP_BIN` 和 `SEMGREP_ENGINE` 覆盖二进制或优先级；项目不自动安装二进制。Semgrep 安装参考 `https://semgrep.dev/docs/getting-started/`，OpenGrep 安装参考 `https://github.com/opengrep/opengrep`。`joern` 提供 CPG、规则与函数清单能力；`coverage_ledger` 暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。
+
+`context7`、`gh_grep` 和 CodeQL MCP 占位已从项目配置、权限和路由中删除。历史 CodeQL 规则文件作为离线知识资产保留，但不会被 agent 调用。`cpp_index`、`jvm_index`、`python_index` 和 `audit_lab` 仍是可替换占位。`vuln_judger` / `vuln-judger` 仍为默认关闭的本地 stdio 占位；如需启用，请在全局 `opencode.json` 中配置本机 server。`judge_report` 必须传 `engine=opencode` 且异步轮询。
 
 占位 MCP 需要替换为你本机实际可运行的 `type/command` 或 `type/url` 后再启用。
 

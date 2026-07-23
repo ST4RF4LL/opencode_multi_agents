@@ -38,10 +38,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：JWT 库 import、parse/verify/decoder、密钥常量、`none`/`HS256`/`requireExp`
-2. **Semgrep**：alg=none、parse 无 verify、硬编码 secret、算法混淆模式、claims 未校验
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 alg=none、parse 无 verify、硬编码 secret、算法混淆模式、claims 未校验
 3. **Joern**：跨方法 token→parse→claims 使用链与密钥传播
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：业务语义（是否鉴权决策）、算法白名单有效性、Spring decoder 配置研判
+4. **LLM**：业务语义（是否鉴权决策）、算法白名单有效性、Spring decoder 配置研判
 
 ## Progressive Loading
 

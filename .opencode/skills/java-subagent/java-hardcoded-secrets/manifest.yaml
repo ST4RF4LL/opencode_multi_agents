@@ -35,8 +35,6 @@ components:
     semgrep:
       - java-hardcoded-secrets-sinks.yaml
       - java-hardcoded-secrets-patterns.yaml
-    codeql:
-      - java-hardcoded-secrets.ql
     grep:
       - keywords.yaml
   analysis:
@@ -67,7 +65,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

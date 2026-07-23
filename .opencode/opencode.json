@@ -17,10 +17,7 @@
     "skill": {
       "*": "deny"
     },
-    "context7_*": "deny",
-    "gh_grep_*": "deny",
-    "semgrep_*": "deny",
-    "codeql_*": "deny",
+    "semgrep_*": "allow",
     "joern_*": "allow",
     "coverage_*": "allow",
     "cpp_index_*": "deny",
@@ -31,21 +28,17 @@
     "vuln-judger_*": "deny"
   },
   "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "enabled": false
-    },
-    "gh_grep": {
-      "type": "remote",
-      "url": "https://mcp.grep.app",
-      "enabled": false
-    },
     "semgrep": {
-      "enabled": false
-    },
-    "codeql": {
-      "enabled": false
+      "type": "local",
+      "command": ["node", ".opencode/mcp/semgrep-server.mjs"],
+      "cwd": ".",
+      "environment": {
+        "OPENGREP_BIN": "opengrep",
+        "SEMGREP_BIN": "semgrep",
+        "SEMGREP_ENGINE": "auto"
+      },
+      "timeout": 900000,
+      "enabled": true
     },
     "joern": {
       "type": "local",

@@ -34,8 +34,6 @@ components:
     semgrep:
       - java-deserialization-sinks.yaml
       - java-deserialization-patterns.yaml
-    codeql:
-      - java-deserialization.ql
     grep:
       - keywords.yaml
   analysis:
@@ -67,7 +65,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

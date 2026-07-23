@@ -34,8 +34,6 @@ components:
     semgrep:
       - java-nosqli-sinks.yaml
       - java-nosqli-patterns.yaml
-    codeql:
-      - java-nosqli.ql
     grep:
       - keywords.yaml
   analysis:
@@ -66,7 +64,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

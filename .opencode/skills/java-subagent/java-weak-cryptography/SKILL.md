@@ -39,10 +39,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：算法名、Cipher/MessageDigest/SecureRandom/密钥常量
-2. **Semgrep**：弱算法字面量、ECB、static IV、Random→secret、硬编码 key
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位弱算法字面量、ECB、static IV、Random→secret、硬编码 key
 3. **Joern**：跨方法算法/密钥/IV 传播与调用链
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：用途语义（是否安全相关）、algorithm agility、密钥生命周期研判
+4. **LLM**：用途语义（是否安全相关）、algorithm agility、密钥生命周期研判
 
 ## Progressive Loading
 

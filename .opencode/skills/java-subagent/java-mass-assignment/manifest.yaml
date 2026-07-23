@@ -35,8 +35,6 @@ components:
     semgrep:
       - java-mass-assignment-sinks.yaml
       - java-mass-assignment-patterns.yaml
-    codeql:
-      - java-mass-assignment.ql
     grep:
       - keywords.yaml
   analysis:
@@ -67,7 +65,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

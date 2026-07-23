@@ -78,7 +78,7 @@ rules:
     metadata:
       cwe: CWE-601
       confidence: low
-      notes: L0/L1 context; elevate when flows to sendRedirect/Location/redirect:
+      notes: "L0/L1 context; elevate when flows to sendRedirect/Location/redirect:"
 
   - id: java-open-redirect-protocol-relative-literal-hint
     message: Protocol-relative URL pattern may indicate redirect bypass research

@@ -40,10 +40,7 @@ permission:
     "git diff -- .opencode*": allow
     "mkdir -p tmp*": allow
   task: deny
-  "context7_*": deny
-  "gh_grep_*": deny
   "semgrep_*": deny
-  "codeql_*": deny
   "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny

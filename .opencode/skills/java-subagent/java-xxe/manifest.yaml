@@ -36,8 +36,6 @@ components:
     semgrep:
       - java-xxe-sinks.yaml
       - java-xxe-patterns.yaml
-    codeql:
-      - java-xxe.ql
     grep:
       - keywords.yaml
   analysis:
@@ -68,7 +66,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

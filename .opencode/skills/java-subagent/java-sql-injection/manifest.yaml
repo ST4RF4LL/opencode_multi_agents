@@ -35,17 +35,15 @@ components:
       - derived/operator-connector-inject.sc
       - derived/dynamic-filter-fragment.sc
       - derived/path-param-to-sql.sc
+    semgrep:
+      - java-sqli-sinks.yaml
+      - java-sqli-patterns.yaml
+    grep:
+      - keywords.yaml
   references:
     - cases.md
     - pattern-to-joern.yaml
     - owasp-java-cs-jpa.md
-    semgrep:
-      - java-sqli-sinks.yaml
-      - java-sqli-patterns.yaml
-    codeql:
-      - java-sqli.ql
-    grep:
-      - keywords.yaml
   analysis:
     - candidate-triage.yaml
     - control-analysis.yaml
@@ -87,7 +85,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

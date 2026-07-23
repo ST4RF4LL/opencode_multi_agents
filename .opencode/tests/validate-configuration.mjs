@@ -3,12 +3,22 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
 const OPENCODE = join(ROOT, ".opencode");
 const REQUIRED_LENSES = ["sink-driven", "control-driven", "config-driven"];
 const REQUIRED_DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
+const REMOVED_MCP_PLACEHOLDERS = ["context7", "gh_grep", "codeql"];
+const SEMGREP_AGENTS = [
+  "c-cpp-source-auditor",
+  "java-source-auditor",
+  "web-source-auditor",
+  "python-source-auditor",
+  "platform-security-auditor",
+  "ai-security-auditor",
+];
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -59,10 +69,24 @@ async function main() {
   assert(config.permission["vuln_judger_*"] === "deny", "global permission must deny vuln_judger MCP tools");
   assert(config.permission["vuln-judger_*"] === "deny", "global permission must deny vuln-judger MCP tools");
   assert(config.permission["coverage_*"] === "allow", "global permission must auto-allow Coverage Ledger MCP tools");
+  assert(config.permission["semgrep_*"] === "allow", "global permission must auto-allow Semgrep/OpenGrep MCP tools");
+  for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
+    assert(!(placeholder in config.mcp), `${placeholder} MCP placeholder must be absent from project config`);
+    assert(!(placeholder in mcpMap.servers), `${placeholder} MCP placeholder must be absent from mcp-map`);
+    assert(!(`${placeholder}_*` in config.permission), `${placeholder} tool permission must be absent from global config`);
+  }
   for (const agentFile of agentFiles) {
     const agentText = await readFile(join(OPENCODE, "agents", `${agentFile}.md`), "utf8");
     const frontmatter = /^---\s*$([\s\S]*?)^---\s*$/m.exec(agentText)?.[1] ?? "";
     assert(!/:\s*ask\s*$/m.test(frontmatter), `${agentFile} permissions must not request user confirmation`);
+    for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
+      assert(!frontmatter.includes(`${placeholder}_*`), `${agentFile} must not retain ${placeholder} placeholder permissions`);
+    }
+  }
+  for (const [agent, toolPrefixes] of Object.entries(mcpMap.agents)) {
+    for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
+      assert(!toolPrefixes.includes(`${placeholder}_*`), `${agent} must not retain ${placeholder} placeholder routing`);
+    }
   }
 
   const collectionDirs = (await readdir(join(OPENCODE, "skills"), { withFileTypes: true }))
@@ -85,9 +109,37 @@ async function main() {
     for (const name of skillDirs) if (await exists(join(dirname(collectionPath), name, "SKILL.md"))) actualSkills.push(name);
     assert(sameSet(collection.skills.slice().sort(), actualSkills.sort()), `${collectionName} collection skill list differs from SKILL.md directories`);
     for (const skill of collection.skills) {
-      const skillText = await readFile(join(dirname(collectionPath), skill, "SKILL.md"), "utf8");
+      const skillDirectory = join(dirname(collectionPath), skill);
+      const skillText = await readFile(join(skillDirectory, "SKILL.md"), "utf8");
       const frontmatterName = /^---\s*$[\s\S]*?^name:\s*([^\s]+)\s*$/m.exec(skillText)?.[1];
       assert(frontmatterName === skill, `${collectionName}/${skill} frontmatter name mismatch`);
+      assert(!/\bcodeql\b/i.test(skillText), `${collectionName}/${skill} must not advertise the removed CodeQL execution path`);
+      const manifestPath = join(skillDirectory, "manifest.yaml");
+      if (await exists(manifestPath)) {
+        const manifestText = await readFile(manifestPath, "utf8");
+        assert(!/\bcodeql\b/i.test(manifestText), `${collectionName}/${skill} manifest must not advertise the removed CodeQL execution path`);
+        let manifest;
+        try {
+          manifest = parseYaml(manifestText);
+        } catch (error) {
+          throw new Error(`${collectionName}/${skill} manifest.yaml is invalid: ${error.message}`);
+        }
+        const semgrepRules = manifest?.components?.rules?.semgrep;
+        if (collectionName === "java-subagent") {
+          assert(Array.isArray(semgrepRules) && semgrepRules.length > 0, `${collectionName}/${skill} must declare Semgrep-compatible rules`);
+          for (const ruleName of semgrepRules) {
+            const rulePath = join(skillDirectory, "rules", "semgrep", ruleName);
+            assert(await exists(rulePath), `${collectionName}/${skill} references a missing Semgrep rule: ${ruleName}`);
+            let ruleDocument;
+            try {
+              ruleDocument = parseYaml(await readFile(rulePath, "utf8"));
+            } catch (error) {
+              throw new Error(`${collectionName}/${skill}/${ruleName} is invalid YAML: ${error.message}`);
+            }
+            assert(Array.isArray(ruleDocument?.rules) && ruleDocument.rules.length > 0, `${collectionName}/${skill}/${ruleName} lacks a non-empty rules array`);
+          }
+        }
+      }
       skillCount += 1;
     }
   }
@@ -119,6 +171,20 @@ async function main() {
   assert(artifactPolicy.work.required_recon_files.includes("coverage/interface-manifest.json")
     && artifactPolicy.work.required_recon_files.includes("coverage/interface-extractor-coverage.json"), "deterministic external-interface artifacts are not mandatory");
 
+  assert(config.mcp.semgrep?.enabled === true
+    && config.mcp.semgrep.type === "local"
+    && config.mcp.semgrep.command?.includes(".opencode/mcp/semgrep-server.mjs"), "local Semgrep/OpenGrep MCP must be enabled");
+  assert(config.mcp.semgrep.environment?.SEMGREP_ENGINE === "auto", "Semgrep/OpenGrep MCP must default to automatic engine selection");
+  assert(mcpMap.servers.semgrep?.status === "enabled-local"
+    && sameSet(mcpMap.servers.semgrep.tools, ["semgrep_health", "semgrep_scan"]), "mcp-map must register the local Semgrep/OpenGrep tools");
+  assert(await exists(join(OPENCODE, "mcp/semgrep-core.mjs"))
+    && await exists(join(OPENCODE, "mcp/semgrep-server.mjs"))
+    && await exists(join(OPENCODE, "tests/run-semgrep-tests.mjs")), "Semgrep/OpenGrep MCP implementation or tests are missing");
+  for (const agent of SEMGREP_AGENTS) {
+    assert(mcpMap.agents[agent].includes("semgrep_*"), `${agent} must receive Semgrep/OpenGrep tools`);
+    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
+    assert(/^\s*"semgrep_\*": allow\s*$/m.test(text), `${agent} must auto-allow Semgrep/OpenGrep tools`);
+  }
   assert(config.mcp.joern?.enabled === true, "local Joern MCP must be enabled");
   assert(config.mcp.coverage_ledger?.enabled === true && config.mcp.coverage_ledger.command?.includes(".opencode/mcp/coverage-ledger-server.mjs"), "local Coverage Ledger MCP must be enabled");
   assert(mcpMap.servers.coverage_ledger?.status === "enabled-local", "mcp-map must register Coverage Ledger as enabled-local");

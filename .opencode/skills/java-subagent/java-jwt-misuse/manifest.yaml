@@ -39,8 +39,6 @@ components:
     semgrep:
       - java-jwt-misuse-sinks.yaml
       - java-jwt-misuse-patterns.yaml
-    codeql:
-      - java-jwt-misuse.ql
     grep:
       - keywords.yaml
   analysis:
@@ -71,7 +69,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

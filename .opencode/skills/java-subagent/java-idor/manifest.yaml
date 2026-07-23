@@ -37,8 +37,6 @@ components:
     semgrep:
       - java-idor-sinks.yaml
       - java-idor-patterns.yaml
-    codeql:
-      - java-idor.ql
     grep:
       - keywords.yaml
   analysis:
@@ -70,7 +68,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

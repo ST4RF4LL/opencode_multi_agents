@@ -39,10 +39,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与危险 API 关键词
-2. **Semgrep**：局部危险模式（Document.parse、字符串拼接查询、$where、JSON 运算符注入）
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 Document.parse、字符串拼接查询、$where、JSON 运算符注入
 3. **Joern**：跨方法调用链与数据流
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：业务语义、运算符注入、JSON 结构控制、防护有效性研判
+4. **LLM**：业务语义、运算符注入、JSON 结构控制、防护有效性研判
 
 ## Progressive Loading
 

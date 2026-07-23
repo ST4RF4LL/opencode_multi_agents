@@ -3,3 +3,4 @@ tmp/*
 !tmp/README.md
 reports/**
 workspace/
+DESIGN_NOW.md

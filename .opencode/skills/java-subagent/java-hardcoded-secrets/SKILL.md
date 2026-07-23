@@ -38,10 +38,9 @@ metadata:
 ## Tool Priority
 
 1. **rg**：密钥关键词、AKIA*、PEM、password/secret/apiKey 字面量、yml/properties
-2. **Semgrep**：硬编码密码/API key/SecretKeySpec/JWT secret/配置明文
+2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位硬编码密码/API key/SecretKeySpec/JWT secret/配置明文
 3. **Joern**：字面量到认证/加密/DB 调用的绑定与调用链
-4. **CodeQL**：可构建项目的补充分析
-5. **LLM**：占位符 vs 真实秘密、测试范围、密钥影响面研判
+4. **LLM**：占位符 vs 真实秘密、测试范围、密钥影响面研判
 
 ## Progressive Loading
 

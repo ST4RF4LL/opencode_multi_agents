@@ -30,8 +30,6 @@ components:
       - detect-validation.sc
     semgrep:
       - java-cmdi-patterns.yaml
-    codeql:
-      - java-cmdi.ql
     grep:
       - keywords.yaml
   analysis:
@@ -60,7 +58,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

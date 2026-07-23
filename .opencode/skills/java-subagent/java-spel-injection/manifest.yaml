@@ -34,8 +34,6 @@ components:
     semgrep:
       - java-spel-sinks.yaml
       - java-spel-patterns.yaml
-    codeql:
-      - java-spel-injection.ql
     grep:
       - keywords.yaml
   analysis:
@@ -66,7 +64,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

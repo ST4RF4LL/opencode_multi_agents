@@ -33,10 +33,7 @@ permission:
     "node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/seal-semantic-manifest.mjs *": allow
     "mkdir -p tmp*": allow
   task: deny
-  "context7_*": allow
-  "gh_grep_*": allow
   "semgrep_*": deny
-  "codeql_*": deny
   "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny

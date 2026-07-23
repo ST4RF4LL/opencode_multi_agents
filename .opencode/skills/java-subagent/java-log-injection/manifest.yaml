@@ -35,8 +35,6 @@ components:
     semgrep:
       - java-log-injection-sinks.yaml
       - java-log-injection-patterns.yaml
-    codeql:
-      - java-log-injection.ql
     grep:
       - keywords.yaml
   analysis:
@@ -66,7 +64,6 @@ tool_priority:
   - rg
   - semgrep
   - joern
-  - codeql
   - llm
 
 frameworks_supported:

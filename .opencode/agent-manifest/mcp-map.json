@@ -1,26 +1,12 @@
 {
-  "version": 8,
+  "version": 10,
   "maintenance_rule": "Define MCP servers in .opencode/opencode.json, then assign their actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
   "servers": {
-    "context7": {
-      "status": "disabled-by-default",
-      "type": "remote",
-      "purpose": "Framework and library documentation lookup."
-    },
-    "gh_grep": {
-      "status": "disabled-by-default",
-      "type": "remote",
-      "purpose": "Public GitHub code search for references and ecosystem patterns."
-    },
     "semgrep": {
-      "status": "placeholder",
+      "status": "enabled-local",
       "type": "custom",
-      "purpose": "Static security rule scanning."
-    },
-    "codeql": {
-      "status": "placeholder",
-      "type": "custom",
-      "purpose": "CodeQL database/query workflows."
+      "purpose": "Workspace-confined local Semgrep/OpenGrep rule scanning with JSON retention and normalized multi-run SARIF output.",
+      "tools": ["semgrep_health", "semgrep_scan"]
     },
     "joern": {
       "status": "enabled-local",
@@ -65,14 +51,14 @@
     }
   },
   "agents": {
-    "security-intel-collector": ["context7_*", "gh_grep_*", "joern_*"],
-    "security-threat-modeler": ["context7_*", "gh_grep_*", "joern_*"],
-    "c-cpp-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "cpp_index_*", "coverage_*"],
-    "java-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "jvm_index_*", "coverage_*"],
-    "web-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "coverage_*"],
-    "python-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "python_index_*", "coverage_*"],
-    "platform-security-auditor": ["context7_*", "gh_grep_*", "coverage_*"],
-    "ai-security-auditor": ["context7_*", "gh_grep_*", "semgrep_*", "codeql_*", "joern_*", "coverage_*"],
+    "security-intel-collector": ["joern_*"],
+    "security-threat-modeler": ["joern_*"],
+    "c-cpp-source-auditor": ["semgrep_*", "joern_*", "cpp_index_*", "coverage_*"],
+    "java-source-auditor": ["semgrep_*", "joern_*", "jvm_index_*", "coverage_*"],
+    "web-source-auditor": ["semgrep_*", "joern_*", "coverage_*"],
+    "python-source-auditor": ["semgrep_*", "joern_*", "python_index_*", "coverage_*"],
+    "platform-security-auditor": ["semgrep_*", "coverage_*"],
+    "ai-security-auditor": ["semgrep_*", "joern_*", "coverage_*"],
     "security-evidence-correlator": ["coverage_*"],
     "security-attack-chain-hunter": ["joern_*"],
     "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
