@@ -1,0 +1,28 @@
+id: case-004
+vulnerability_type: idor
+subtype: missing-parent-child-authorization-binding
+parent_resource: Project
+child_resource: Issue
+operation: read
+source:
+  type: nested-path-variables
+  expression: '@PathVariable Long projectId, @PathVariable Long issueId'
+sink:
+  api: IssueRepository.findById
+  sensitive_argument: issueId
+propagation:
+  - IssueController.get
+  - IssueService.get
+  - IssueRepository.findById
+root_cause:
+  - projectId is accepted but never authorized against the principal
+  - issue is loaded by issueId alone
+  - issue.projectId is not compared to or queried with projectId
+prerequisites:
+  - authenticated principal with access to one project
+  - known issue ID in another project
+observed_behavior:
+  - principal reads an issue belonging to an unauthorized project
+fix:
+  - authorizeProject(principal, projectId)
+  - findByIdAndProjectId(issueId, projectId) after parent authorization

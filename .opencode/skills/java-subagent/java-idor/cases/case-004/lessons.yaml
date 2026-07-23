@@ -1,0 +1,9 @@
+transferable_lessons:
+  - A nested route is routing metadata, not an authorization decision.
+  - For child B under parent A, prove both principal-to-A authorization and B-to-A membership on the server path.
+  - Authorizing A without scoping the B query permits a mismatched child ID; scoping B without authorizing A permits a foreign parent scope.
+  - Apply the same binding to create, list, export, async, cache, and queue paths, not only direct reads.
+non_transferable_details:
+  - project and issue names
+  - route spelling
+  - repository method names

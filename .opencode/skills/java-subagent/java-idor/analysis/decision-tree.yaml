@@ -13,7 +13,18 @@ steps:
   - id: check_external_dataflow
     question: 是否存在外部可控 object id（PathVariable/RequestParam/Body 字段）到资源访问的数据流？
     no: candidate_needs_modeling
+    yes: check_parent_child_boundary
+
+  - id: check_parent_child_boundary
+    question: 资源 B 是否依赖父资源 A，且 A 是业务或授权边界（外键、聚合根、嵌套路由、账户/项目/组织范围）？
+    yes: check_parent_child_binding
+    no: classify_access
+    unknown: candidate_needs_modeling
+
+  - id: check_parent_child_binding
+    question: 是否对该 B 操作同时证明了可信主体对 A 的权限，以及 B 属于该已授权 A（创建时服务端绑定有效 A）？
     yes: classify_access
+    no: parent_child_high_risk_candidate
 
   - id: classify_access
     question: 操作是读、更新还是删除？是否跨用户、跨租户或跨角色？
@@ -53,6 +64,7 @@ outcomes:
   reject_intentional_public: Rejected
   candidate_needs_modeling: Candidate
   high_risk_candidate: Candidate_or_Finding
+  parent_child_high_risk_candidate: Candidate_or_Finding
   conditional_candidate: Candidate
   emit_finding: Finding
   emit_candidate: Candidate

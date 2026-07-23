@@ -116,6 +116,7 @@ Deep packs include `models/`, `rules/` (grep/semgrep/joern/codeql), `analysis/`,
 
 ### D3: Authorization
 - **IDOR**: Load `java-idor`. `findById(id)` without user ownership check → compare with `findById(id, userId)` pattern
+- **Parent/child IDOR**: For A → B resources (for example project → issue), review B create/read/update/delete/list/export as `(principal, A, B, operation)`. Require parent A authorization plus `B.parentId == authorized A.id` (or an equivalent server-enforced scoped query); a nested route or B-only role check is not enough.
 - **CRUD consistency**: Same resource — `create`/`read` have `@PreAuthorize` but `delete`/`update`/`export` do not
 - **Vertical privilege**: Admin endpoints with only frontend hiding, no `@RolesAllowed`/`@PreAuthorize`
 - **Batch operations**: Loop over IDs without per-item ownership verification

@@ -127,6 +127,11 @@ async function main() {
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");
   const catalogIds = catalog.entries.map(entry => entry.id);
   assert(new Set(catalogIds).size === catalogIds.length, "catalog IDs are not unique");
+  const parentChildEntry = catalog.entries.find(entry => entry.id === "JW-ACCESS-05");
+  assert(parentChildEntry?.title === "Parent-child resource authorization binding", "parent-child resource authorization catalog entry is missing");
+  assert(parentChildEntry.dimensions.includes("D3") && parentChildEntry.applies_to.includes("java") && parentChildEntry.applies_to.includes("web"), "parent-child resource authorization entry has incomplete D3 coverage");
+  const aiParentChildEntry = catalog.entries.find(entry => entry.id === "AI-ACCESS-01");
+  assert(aiParentChildEntry?.title === "Agent parent-child resource authorization binding" && aiParentChildEntry.applies_to.length === 1 && aiParentChildEntry.applies_to[0] === "ai", "AI parent-child resource authorization catalog entry is missing");
   const catalogDimensions = new Set(catalog.entries.flatMap(entry => entry.dimensions));
   assert(REQUIRED_DIMENSIONS.every(dimension => catalogDimensions.has(dimension)), "catalog does not cover every D1-D10 dimension");
   for (const entry of catalog.entries) {

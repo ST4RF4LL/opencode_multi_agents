@@ -24,6 +24,10 @@ l1_sink_keywords:
   - ".save("
   - ".delete("
   - ".remove("
+  - "findByIdAnd.*Id"
+  - "parentId"
+  - "projectId"
+  - "accountId"
 
 high_risk_object_id_hints:
   - "@PathVariable"
@@ -45,5 +49,7 @@ rg_commands:
     rg -n "isAuthenticated\\(|@PreAuthorize\\(\"isAuthenticated|if \\(.*!= null\\).*return" --glob '*.java'
   ownership_hints: |
     rg -n "findByIdAndUserId|findByIdAndOwner|getUserId\\(\\)\\.equals|SecurityContextHolder|TenantContext|@PostAuthorize" --glob '*.java'
+  parent_child_binding: |
+    rg -n "@(?:Get|Post|Put|Patch|Delete)Mapping.*\\{.*(?:project|account|organization|parent).*(?:id|Id).*\\}.*\\{.*(?:child|issue|document|member|item).*(?:id|Id).*\\}|findByIdAnd(?:Project|Account|Organization|Parent)Id|authorize(?:Project|Account|Organization|Parent)|(?:project|account|organization|parent)Id" --glob '*.java'
   tenant: |
     rg -n "tenantId|getTenantId|TenantContext|@RequestParam.*tenant" --glob '*.java'

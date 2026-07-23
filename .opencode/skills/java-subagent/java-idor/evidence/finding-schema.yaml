@@ -1,35 +1,48 @@
 finding_id: IDOR-001
 status: finding # finding | candidate | rejected
 vulnerability_type: idor
-subtype: horizontal-idor
+subtype: missing-parent-child-authorization-binding
 confidence: high # high | medium | low
 entry:
-  route: "GET /orders/{id}"
-  method: OrderController.getOrder
-  parameter: id
+  route: "GET /projects/{projectId}/issues/{issueId}"
+  method: IssueController.getIssue
+  parameter: projectId, issueId
+parent_child_context:
+  parent_resource: Project # A
+  parent_identifier: projectId
+  child_resource: Issue # B
+  child_identifier: issueId
+  operation: read # create | read | update | delete | list | export
+  relationship_evidence:
+    - Issue.projectId is the project foreign key
+  expected_authorization:
+    - principal may access Project(projectId)
+    - Issue(issueId).projectId == authorized Project(projectId).id
+  observed_gap:
+    - endpoint loads Issue by issueId without authorizing projectId or binding issue.projectId to it
 source:
   file: OrderController.java
   line: 28
-  expression: "@PathVariable Long id"
+  expression: "@PathVariable Long projectId, @PathVariable Long issueId"
 sink:
   file: OrderRepository.java
   line: 12
-  expression: findById(id)
+  expression: findById(issueId)
 dataflow:
-  - OrderController.getOrder
-  - OrderService.getOrder
-  - OrderRepository.findById
+  - IssueController.getIssue
+  - IssueService.getIssue
+  - IssueRepository.findById
 controls:
   observed:
     - isAuthenticated only
   assessment:
     - weak
-    - authentication-not-ownership
-    - no-owner-predicate
+    - authentication-not-parent-authorization
+    - no-child-parent-binding
 validation:
   status: verified # verified | not_attempted | failed
   observable:
-    - user A token retrieves user B order by id
+    - user authorized for project A retrieves or mutates an issue belonging to project B
 evidence:
   static:
     - source location
@@ -37,8 +50,8 @@ evidence:
     - propagation path
     - control analysis
   dynamic:
-    - baseline request as owner
-    - cross-user request with substituted id
+    - baseline request to an authorized parent-child pair
+    - cross-parent request with substituted parent or child id
     - response comparison
 limitations: []
 rejection_reason: null

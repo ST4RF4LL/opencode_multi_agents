@@ -20,6 +20,11 @@ positive:
     subtype: horizontal-idor
     sink: findById
     source: servlet-parameter
+  P06_ChildCrudWithoutParentAuthorization.java:
+    expect: candidate_or_finding
+    subtype: missing-parent-child-authorization-binding
+    sink: findById
+    control: nested-route-with-unscoped-child-lookup
 
 negative:
   N01_FindByIdAndUserId.java:
@@ -37,6 +42,9 @@ negative:
   N05_AdminOnlyDelete.java:
     expect: rejected
     reason: vertical_admin_role_enforced
+  N06_ChildCrudBoundToAuthorizedParent.java:
+    expect: rejected
+    reason: child_scoped_to_authorized_parent
 
 regression:
   R01_PathVariableFindById.java:

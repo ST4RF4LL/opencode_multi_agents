@@ -20,7 +20,7 @@ subtypes:
   - id: tenant-id-from-client
     description: 多租户场景下 tenantId 由客户端提供，破坏租户隔离
     typical_patterns:
-      - @RequestParam Long tenantId used in query filter
+      - "@RequestParam Long tenantId used in query filter"
       - body.tenantId overrides server-derived tenant
 
   - id: predictable-id-enumeration
@@ -28,3 +28,11 @@ subtypes:
     typical_patterns:
       - sequential Long id in path
       - UUID not required if authz missing; sequential raises exploitability
+
+  - id: missing-parent-child-authorization-binding
+    description: 子资源 B 在设计上依赖父资源 A，但 B 的 CRUD/list/export 未同时校验调用者对 A 的权限和 B→A 归属，导致跨父资源读取、修改、删除、创建或枚举。
+    typical_patterns:
+      - GET /projects/{projectId}/issues/{issueId} loads issue by issueId without verifying issue.projectId == projectId and authorization on projectId
+      - DELETE /accounts/{accountId}/documents/{documentId} authorizes document role or authentication but not account ownership and document.accountId
+      - POST /projects/{projectId}/members accepts a body parentId or persists child with client-controlled projectId without authorizing the effective parent
+      - async/export/cache/queue operation uses childId without propagating or verifying the authorized parent scope

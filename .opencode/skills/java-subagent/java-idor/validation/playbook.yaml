@@ -3,12 +3,15 @@ steps:
   - determine_authentication_and_roles
   - determine_controlled_object_id_parameter
   - determine_resource_type_and_ownership_model
+  - determine_whether_child_B_depends_on_parent_A_and_A_is_an_authorization_boundary
+  - trace_effective_parent_identifier_and_child_to_parent_membership_for_each_B_operation
   - inspect_load_or_mutation_path
   - inspect_existing_object_authz
   - identify_observable_behavior
   - generate_target_specific_test
   - execute_baseline_as_owner
   - execute_cross_user_or_cross_tenant_test
+  - execute_cross_parent_test_when_parent_child_boundary_applies
   - compare_results
   - preserve_evidence
 
@@ -24,6 +27,8 @@ observable_behaviors:
   - user_a_deletes_or_updates_user_b_resource
   - tenant_a_accesses_tenant_b_data
   - low_privilege_accesses_admin_only_object
+  - principal_authorized_for_parent_A_reads_mutates_or_creates_B_under_parent_B
+  - nested_parent_id_and_child_id_mismatch_is_accepted
   - deterministic_200_with_foreign_object_content
 
 notes:

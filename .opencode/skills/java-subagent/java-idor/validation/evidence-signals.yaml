@@ -3,6 +3,8 @@ strong_signals:
   - authenticated_user_mutates_or_deletes_another_users_resource
   - tenant_boundary_broken_with_client_tenant_id_or_foreign_object_id
   - response_body_matches_victim_owned_record_fields
+  - caller_authorized_for_parent_a_can_access_child_b_belonging_to_parent_b
+  - child_crud_succeeds_when_parent_id_and_child_parent_id_mismatch
 
 medium_signals:
   - deterministic_200_for_foreign_id_vs_404_for_random_id
@@ -15,6 +17,7 @@ weak_signals:
   - findById_api_presence_only
   - sequential_id_without_access_proof
   - ui_hides_resource_but_api_untested
+  - nested_route_shape_without_server_side_parent_child_binding
 
 interpretation:
   strong: supports Finding when static path is clear

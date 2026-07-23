@@ -1,6 +1,6 @@
 id: java-idor
 name: Java Insecure Direct Object Reference / Broken Object Level Authorization
-version: "1.0.0"
+version: "1.1.0"
 language: java
 cwe:
   - CWE-639
@@ -8,12 +8,13 @@ cwe:
   - CWE-284
 owasp:
   - A01:2021-Broken Access Control
-dimension: D1
+dimension: D3
 maturity: 3
 description: >
   Detect attacker-controlled object identifiers used to load, update, or delete
   resources without effective ownership, tenant, or object-level authorization checks.
-  Authentication present does not imply object-level authorization.
+  Detect parent-child resource operations where child B is not bound to authorization
+  on parent A. Authentication present does not imply object-level authorization.
 
 components:
   scope:
@@ -58,6 +59,7 @@ components:
     - case-001
     - case-002
     - case-003
+    - case-004
   tests:
     - positive/
     - negative/

@@ -15,6 +15,14 @@ not_vulnerability:
     pattern: public product/catalog listing by id with no sensitive ownership
     reason: design may allow unscoped read
 
+  - id: child-scoped-to-authorized-parent
+    pattern: authorize parent from trusted principal and query/mutate child with both childId and parentId (or an equivalent policy join)
+    reason: authorization and relationship membership are bound server-side
+
+  - id: equivalent-child-object-policy
+    pattern: B object policy is enforced server-side and documented/proven to imply A authorization for every B operation; B-to-A relation cannot be bypassed or reassigned
+    reason: independent B policy is semantically equivalent to the parent boundary
+
   - id: test-only-repository
     pattern: findById only referenced from tests
     reason: not production reachable
@@ -37,7 +45,7 @@ needs_deeper_review:
     reason: tenant-id-from-client
 
   - id: authenticated-only
-    pattern: "@PreAuthorize(\"isAuthenticated()\")" then findById
+    pattern: '@PreAuthorize("isAuthenticated()") then findById'
     reason: auth ≠ object authz
 
   - id: sequential-id
@@ -47,3 +55,11 @@ needs_deeper_review:
   - id: wrapper-service
     pattern: orderService.get(id) wrapping findById
     reason: expand to repository and check ownership in all layers
+
+  - id: nested-route-unscoped-child
+    pattern: /parents/{parentId}/children/{childId} reaches findById(childId) or deleteById(childId) without parent authorization and membership proof
+    reason: parent-child authorization binding candidate
+
+  - id: client-parent-on-create
+    pattern: authenticated create endpoint copies DTO.parentId into child without authorizing the effective parent
+    reason: parent-child create authorization candidate

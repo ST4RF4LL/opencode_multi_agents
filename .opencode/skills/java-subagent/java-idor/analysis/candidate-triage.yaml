@@ -24,6 +24,7 @@ priority_boost:
   - sequential_or_enumerable_ids
   - tenant_id_from_client
   - admin_only_data_exposed_to_normal_users
+  - child_crud_not_bound_to_authorized_parent
   - sensitive_pii_or_financial_resource
 
 priority_reduce:

@@ -32,6 +32,16 @@ sanitizers:
         - "@PreAuthorize(\"@orderAuth.canAccess(#id)\")"
         - "@PostAuthorize(\"returnObject.userId == authentication.principal.id\")"
 
+    - id: parent-child-authorized-scope
+      condition:
+        - parent_authorization_uses_server_side_principal_or_tenant_context
+        - child_query_or_mutation_is_bound_to_the_authorized_parent_identifier
+        - child_parent_membership_is_checked_before_read_update_delete_export_or_list_result
+        - create_binds_child_to_the_authorized_parent_server_side
+      examples:
+        - authorizeProject(principal, projectId); issueRepository.findByIdAndProjectId(issueId, projectId)
+        - SELECT child.* FROM child JOIN parent_acl ON ... WHERE child.id = ? AND child.parent_id = ? AND parent_acl.subject_id = ?
+
   contextual:
     - id: self-only-path
       condition:
@@ -50,6 +60,13 @@ sanitizers:
         - ids_are_unguessable_secrets
         - no_enumeration_oracle
       notes: defense-in-depth only; not a substitute for ownership checks
+
+    - id: independent-child-policy-proven-equivalent
+      condition:
+        - child_object_policy_is_enforced_server_side_for_every_operation
+        - policy_semantically_implies_parent_authorization_for_the_request
+        - child_parent_relation_is_immutable_or_mutation_is_equally_bound
+      notes: only reject after recording why the B policy is equivalent to the A authorization boundary
 
   weak:
     - id: authentication-only
@@ -74,6 +91,18 @@ sanitizers:
         - frontend hides edit button
       notes: client-side not authorization
 
+    - id: nested-route-with-unscoped-child-lookup
+      pattern:
+        - path_contains_parent_and_child_ids
+        - repository_loads_or_mutates_child_by_child_id_only
+      notes: route shape does not prove B belongs to the authorized A
+
+    - id: child-only-role-check
+      pattern:
+        - generic_role_or_authentication_check_on_child_operation
+        - no_parent_authorization_or_relationship_binding
+      notes: insufficient where A is the actual authorization boundary
+
   invalid:
     - id: trust-path-id-as-owner
       notes: treating path userId as the authenticated user
@@ -83,3 +112,5 @@ sanitizers:
       notes: security through obscurity is not authorization
     - id: csrf-token-as-idor-defense
       notes: CSRF does not enforce object ownership
+    - id: parent-id-from-client-without-binding
+      notes: a client-supplied path/body parentId is not proof of authorization or B→A membership

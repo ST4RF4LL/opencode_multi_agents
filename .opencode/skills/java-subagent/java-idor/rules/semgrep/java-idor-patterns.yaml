@@ -83,3 +83,28 @@ rules:
       cwe: CWE-639
       confidence: low
       notes: review whether userId is compared to principal or used as foreign key only
+
+  - id: java-idor-nested-parent-child-unscoped-lookup
+    message: Nested parent/child route loads a child by child ID only; verify authorization on the parent and child-to-parent membership binding
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @GetMapping($PATH)
+              public $RET $M(..., @PathVariable $PT $PARENT, ..., @PathVariable $CT $CHILD, ...) {
+                ...
+              }
+          - pattern-inside: |
+              @DeleteMapping($PATH)
+              public $RET $M(..., @PathVariable $PT $PARENT, ..., @PathVariable $CT $CHILD, ...) {
+                ...
+              }
+      - pattern-either:
+          - pattern: $REPO.findById($CHILD)
+          - pattern: $REPO.deleteById($CHILD)
+    metadata:
+      cwe: CWE-639
+      subtype: missing-parent-child-authorization-binding
+      confidence: low
+      notes: L1 candidate only; confirm A authorization and B.parentId == A.id on the expanded server path

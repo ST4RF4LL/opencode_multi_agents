@@ -33,7 +33,7 @@ questions:
       - TenantContext from JWT/session
       - Hibernate @Filter with server tenant
     reject_as_strong:
-      - @RequestParam tenantId
+      - "@RequestParam tenantId"
       - body.tenantId trusted without match
 
   - id: vertical_boundary
@@ -44,6 +44,34 @@ questions:
   - id: mutation_guard
     ask: 更新/删除前是否重新校验归属（非仅列表页过滤）？
     assessment: weak_if_only_ui_or_list_filter
+
+  - id: parent_child_semantics
+    ask: B 是否在业务/数据模型上依赖父资源 A（外键、聚合根、嵌套路由、租户/项目/账户/组织范围）？A 是否是授权边界？
+    outcomes:
+      parent_boundary: require_parent_child_binding
+      independent_resource: continue_standard_idor_review
+      unknown: candidate_needs_domain_model
+
+  - id: parent_authorization_binding
+    ask: 对 B 的每个 CRUD/list/export 操作，是否先以可信主体授权 A，并在同一服务端路径上证明 B.parentId 与已授权 A 匹配？
+    strong_yes:
+      - authorizeParent(principal, parentId) then findByIdAndParentId(childId, parentId)
+      - query joins parent membership/ACL and child foreign key using server-derived principal
+      - loadAuthorizedParent(principal, parentId) then enforce child.getParentId().equals(parentId)
+    false_friends:
+      - nested route contains parentId but repository loads only childId
+      - child has generic role or isAuthenticated check only
+      - parentId/body parentId is accepted without authorization on its effective value
+      - child authorization checked independently without proof it implies parent policy
+
+  - id: parent_child_create_guard
+    ask: 创建 B 时，是否以可信主体授权目标 A，并由服务端将 B 绑定到该 A（而非信任 body/path 中可替换的 parentId）？
+    accept:
+      - authorizeParent then setParent(authorizedParent) server-side
+      - repository insert constrained by authorized parent scope
+    reject_as_strong:
+      - DTO.parentId copied directly after authentication-only check
+      - authorize one parent but persist another client-supplied parent id
 
 control_grades:
   strong: effective_object_level_authorization

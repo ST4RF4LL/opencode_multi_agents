@@ -18,6 +18,20 @@ finding_requirements:
       - tenant_model
       - affected_component
       - subtype_classification
+      - parent_child_authorization_analysis_when_applicable
+
+  parent_child_binding_requirements:
+    applies_when: subtype_is_missing-parent-child-authorization-binding
+    mandatory:
+      - parent_resource_A_and_child_resource_B_are_named
+      - evidence_that_B_depends_on_A_and_A_is_an_authorization_boundary
+      - affected_B_operation_is_classified_as_create_read_update_delete_list_or_export
+      - parent_identifier_origin_and_effective_parent_value_are_traced
+      - evidence_of_missing_or_bypassable_authorization_on_A
+      - evidence_that_B_to_A_membership_is_not_bound_on_the_server_path
+    reject_only_when:
+      - parent_authorization_and_B_to_A_membership_are_bound_for_the_operation
+      - or_independent_B_policy_is_proven_equivalent_to_A_policy_and_relation_cannot_be_bypassed
 
 reject_when:
   - object_id_not_attacker_controlled

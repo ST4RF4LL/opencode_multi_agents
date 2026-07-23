@@ -29,7 +29,7 @@ Do not force every finding to contain three positive evidence facets. Coverage i
 |----|-----------|-------------|----------------|---------------|
 | D1 | Injection | Trace input to query, command, expression, template, or response sinks | Verify parameterization, validation, encoding, and authorization | Check ORM, template, parser, shell, and framework modes |
 | D2 | Authentication | Locate token, password, session, MFA, and recovery operations | Verify lifecycle, replay, fixation, rate-limit, and bypass controls | Check JWT/OAuth/session/cookie/identity-provider settings |
-| D3 | Authorization | Inventory sensitive resource operations | Verify role, tenant, ownership, and CRUD consistency | Check annotations, ACL, gateway, route, and policy configuration |
+| D3 | Authorization | Inventory sensitive resource operations, including parent/child CRUD | Verify role, tenant, ownership, CRUD consistency, and parent A → child B authorization binding | Check annotations, ACL, gateway, route, policy, row-level, and nested-resource configuration |
 | D4 | Unsafe Data/Object Processing | Trace untrusted bytes/objects into decoders, loaders, native parsers, and memory operations | Verify type allowlists, bounds/lifetimes, signatures, provenance, and isolation | Check polymorphism, safe loaders, serializers, parser flags, and native hardening |
 | D5 | File Operations | Trace names/content into read, write, upload, extract, or execute operations | Verify path, ownership, type, quota, and isolation controls | Check directories, permissions, size/type limits, and mounts |
 | D6 | SSRF / Network | Trace attacker-influenced destinations into clients or redirects | Verify scheme, host, IP, DNS, redirect, and egress controls | Check proxies, network policies, metadata access, and client options |
@@ -143,6 +143,8 @@ Every candidate must include:
 - Treat user-controlled configuration as a vulnerability only when it changes a reachable security boundary.
 - Record sanitizers, authorization checks, feature flags, environment overrides, and dead-code conditions.
 - Do not infer that a missing control is absent until the relevant operation inventory and inherited/global controls were checked.
+- For a resource B that semantically depends on parent A, assess each B CRUD/list/export operation as the tuple `(subject, A, B, operation)`. Require evidence that the subject may operate on A **and** that B belongs to A. A nested URL, a client-supplied `aId`, or an independent generic B role check does not establish that binding.
+- Treat independent B authorization as a valid rejection only when its policy and immutable relationship constraints demonstrably imply the same authorization decision as the required A policy; otherwise retain a Candidate and record the missing relationship proof.
 
 ## Session Output
 
