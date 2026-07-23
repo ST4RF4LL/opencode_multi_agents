@@ -2,7 +2,6 @@
 name: java-log-injection
 description: "Detect Java log injection and CRLF log forging by locating attacker-controlled input reaching logging sinks without structured logging or newline sanitization. Use for Java log injection audits, CWE-117/CWE-93 review, Log4j2/Logback/SLF4J string-concat log messages, forged log entries, and log viewer XSS risk. Keywords: log injection, CRLF injection, CWE-117, CWE-93, log forging, Log4j2, Logback, SLF4J, logger.info concat, parameterized logging, JsonTemplateLayout, structured logging. Not primary for Log4Shell/JNDI lookup (adjacent boundary only)."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

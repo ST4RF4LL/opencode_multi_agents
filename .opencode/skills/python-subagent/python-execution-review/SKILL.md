@@ -2,7 +2,6 @@
 name: python-execution-review
 description: Review Python code for command execution, dynamic code execution, plugin loading, import abuse, and template expression risks.
 license: MIT
-compatibility: opencode
 metadata:
   role: python-source-auditor
   collection: python-subagent

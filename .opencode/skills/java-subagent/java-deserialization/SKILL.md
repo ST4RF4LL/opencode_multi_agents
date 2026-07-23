@@ -2,7 +2,6 @@
 name: java-deserialization
 description: "Detect Java unsafe deserialization by locating untrusted data reaching ObjectInputStream/XMLDecoder/Fastjson/Jackson/SnakeYAML/XStream/Hessian/Kryo without type allowlisting or safe constructors. Use for CWE-502 audits, polymorphic typing, autoType, gadget-adjacent sinks. Keywords: deserialization, CWE-502, ObjectInputStream, Fastjson autoType, Jackson enableDefaultTyping, SnakeYAML SafeConstructor, XStream, Hessian, Kryo, XMLDecoder, gadget chain."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

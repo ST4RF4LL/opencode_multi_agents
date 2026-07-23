@@ -2,7 +2,6 @@
 name: java-mass-assignment
 description: "Detect Java Mass Assignment / over-posting (CWE-915) where HTTP binding or JSON deserialization maps attacker-controlled fields onto domain entities, allowing privilege, role, balance, ownership, or status overwrite. Use for Spring MVC @ModelAttribute/@RequestBody entity binding, Jackson sensitive-field binding, entity-as-DTO patterns, nested object privilege escalation, PATCH without allowlist, Spring Data REST exposure, and CWE-915 audits. Keywords: mass assignment, over-posting, CWE-915, @ModelAttribute, @RequestBody, isAdmin, role, balance, @JsonIgnore, @JsonProperty(access), DTO, BeanUtils.copyProperties, @InitBinder allowedFields, Spring Data REST, PATCH merge."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

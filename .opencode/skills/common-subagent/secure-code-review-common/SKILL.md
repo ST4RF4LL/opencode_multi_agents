@@ -1,8 +1,7 @@
 ---
 name: secure-code-review-common
-description: Universal secure code review methodology covering dual-track audit model, coverage matrix, and evidence standards.
+description: Universal threat-led Focus Area Tri-Lens secure-code-review methodology. Use for every source, platform, or AI coverage audit to examine each applicable D1-D10 dimension with sink-driven, control-driven, and config-driven evidence while preserving threat, Focus Area, provenance, and gap rules.
 license: MIT
-compatibility: opencode
 metadata:
   role: shared
   collection: common-subagent
@@ -10,63 +9,161 @@ metadata:
 
 # Secure Code Review Common
 
-Use this skill as the foundational methodology for all source security audits. Language-specific skills extend this base.
+Use this skill as the mandatory base methodology for source and platform security audits. Language- and platform-specific skills extend it with concrete patterns.
 
-## Dual-Track Audit Model
+## Tri-Lens Audit Model
 
-Three execution strategies map to different vulnerability types:
+Apply all three lenses to every applicable D1-D10 dimension. Treat the lens as an execution mode, not as exclusive ownership of a vulnerability class.
 
-| Track | Dimensions | Logic | Key Metric |
-|-------|-----------|-------|------------|
-| **Sink-driven** | D1, D4, D5, D6 | Grep dangerous functions → trace data flow → verify no sanitization | Sink fan-out rate ≥ 30% |
-| **Control-driven** | D3, D9 | Enumerate operations → verify security controls exist → missing = vulnerability | Endpoint audit rate |
-| **Config-driven** | D2, D7, D8, D10 | Search configurations → compare against security baselines | Config item coverage |
+| Lens | Core question | Required evidence | Key metric |
+|------|---------------|-------------------|------------|
+| **sink-driven** | What security-sensitive operation exists, and can untrusted influence reach it? | Anchor inventory, reachability/data-flow trace, guards encountered | Reviewed anchors / discovered anchors |
+| **control-driven** | Which required security control is present or absent around each sensitive operation? | Operation inventory, expected control, implementation evidence or explicit absence | Reviewed operations / discovered operations |
+| **config-driven** | Which effective setting, dependency, or deployment choice changes exploitability? | Config surface, effective value and precedence, baseline comparison | Reviewed config items / discovered config items |
 
-**Critical distinction**: Sink-driven finds "dangerous code that exists." Control-driven finds "security controls that are absent" — Grep cannot find code that doesn't exist.
+Do not force every finding to contain three positive evidence facets. Coverage is Tri-Lens; individual findings may originate from one lens and gain supporting or mitigating evidence from the others.
 
-## D1-D10 Coverage Matrix
+## D1-D10 Tri-Lens Questions
 
-Use this checklist to track completeness:
+| D# | Dimension | Sink-driven | Control-driven | Config-driven |
+|----|-----------|-------------|----------------|---------------|
+| D1 | Injection | Trace input to query, command, expression, template, or response sinks | Verify parameterization, validation, encoding, and authorization | Check ORM, template, parser, shell, and framework modes |
+| D2 | Authentication | Locate token, password, session, MFA, and recovery operations | Verify lifecycle, replay, fixation, rate-limit, and bypass controls | Check JWT/OAuth/session/cookie/identity-provider settings |
+| D3 | Authorization | Inventory sensitive resource operations | Verify role, tenant, ownership, and CRUD consistency | Check annotations, ACL, gateway, route, and policy configuration |
+| D4 | Unsafe Data/Object Processing | Trace untrusted bytes/objects into decoders, loaders, native parsers, and memory operations | Verify type allowlists, bounds/lifetimes, signatures, provenance, and isolation | Check polymorphism, safe loaders, serializers, parser flags, and native hardening |
+| D5 | File Operations | Trace names/content into read, write, upload, extract, or execute operations | Verify path, ownership, type, quota, and isolation controls | Check directories, permissions, size/type limits, and mounts |
+| D6 | SSRF / Network | Trace attacker-influenced destinations into clients or redirects | Verify scheme, host, IP, DNS, redirect, and egress controls | Check proxies, network policies, metadata access, and client options |
+| D7 | Cryptography | Locate security-sensitive crypto, randomness, key, and TLS APIs | Verify key lifecycle, nonce uniqueness, rotation, and trust decisions | Check algorithms, modes, KDF parameters, certificates, and TLS policy |
+| D8 | Configuration | Locate exposed endpoints, logs, error responses, and secret consumers | Verify authentication, redaction, isolation, and production guards | Compare debug, CORS, TLS, logging, secret, and hardening settings |
+| D9 | Business Logic | Inventory state-changing, financial, approval, batch, and export operations | Verify state transitions, invariants, idempotency, limits, and concurrency | Check limits, feature flags, tenant policy, and workflow configuration |
+| D10 | Supply Chain | Determine whether vulnerable package APIs, plugins, or build steps are reachable | Verify pinning, provenance, signing, update, and review controls | Check versions, lockfiles, repositories, images, plugins, and build inputs |
 
-| D# | Dimension | Core Question | Audit Track |
-|----|-----------|---------------|-------------|
-| D1 | Injection | Can user input reach SQL/Cmd/LDAP/SSTI/SpEL execution sinks? | Sink-driven |
-| D2 | Authentication | Token generation/verification complete? Secrets safe? Session fixation? | Config-driven |
-| D3 | Authorization | Does each sensitive operation verify user/resource ownership? CRUD permission consistent? | Control-driven |
-| D4 | Deserialization | Untrusted data deserialized? Gadget chains reachable? | Sink-driven |
-| D5 | File Operations | Path traversal? Unrestricted upload? Zip Slip? Symlink attacks? | Sink-driven |
-| D6 | SSRF | User-controlled URLs? Protocol restriction? Cloud metadata accessible? | Sink-driven |
-| D7 | Cryptography | Hardcoded keys/IV? ECB mode? Weak KDF? Cert validation bypass? | Config-driven |
-| D8 | Configuration | Debug endpoints exposed? CORS misconfig? Secrets in config files? | Config-driven |
-| D9 | Business Logic | Race conditions? Mass Assignment? IDOR? State machine bypass? Payment tampering? | Control-driven |
-| D10 | Supply Chain | Dependency CVEs? Vendored code risks? Version in security range? | Config-driven |
+## Work-Packet Contract
 
-## Evidence Standards
+Require one `audit_strategy` per agent session:
 
-Every finding must include:
-
-1. **Affected code** — `file:line` with actual code snippet (not fabricated)
-2. **Data flow** — source → transformation → sink (sink-driven) OR missing control description (control-driven)
-3. **Severity rationale** — `Reachability × InputControl × ExploitComplexity × Impact`
-4. **Concrete fix** — specific code change, not generic advice
-
-## False-Positive Prevention Rules
-
-- Verify file/location exists before reporting (use Read tool output)
-- Confirm the project actually uses the language/framework detected
-- Do not report missing crypto in projects without crypto functionality
-- Do not report SSRF in projects without any HTTP client code
-- User-controlled config ≠ vulnerability; user-controlled input reaching exec = vulnerability
-- `#{}` in MyBatis = safe; `${}` = dangerous; `PreparedStatement` = safe; `Statement` + concat = dangerous
-
-## Output Conventions
-
-All findings must use this header:
-
+```yaml
+audit_id: <stable audit id>
+agent_session_id: <language-focus-lens-coverage-round>
+round: <positive integer>
+threat_model: <sealed path>
+focus_areas: <sealed path>
+focus_area_id: <FA-id>
+discovery_track: coverage
+entry_point_ids: []
+threat_ids: []
+trust_boundary_ids: []
+asset_ids: []
+scope_manifest: <path>
+scope_digest: <sha256>
+assigned_file_ids: []
+function_manifests: []
+assigned_function_ids: []
+catalog_profile: <profile id>
+catalog_domain: <java|web|platform|null>
+assigned_catalog_ids: []
+language: <c-cpp|java|web|python|platform>
+audit_strategy: <sink-driven|control-driven|config-driven>
+dimensions: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]
+inventory_refs:
+  entry_points: <path>
+  sinks: <path>
+  sensitive_operations: <path>
+  config_surfaces: <path>
+previous_gaps: []
+depth: <quick|standard|deep>
 ```
+
+Do not blend multiple strategies or Focus Areas in one coverage session. If the packet omits sealed semantic inputs, `focus_area_id`, `discovery_track=coverage`, exact primary assignments, or one unambiguous `audit_strategy`, return a protocol `GAP` and request a corrected packet. Blind/seeded packets use `focus-area-vulnerability-discovery` and never close this contract.
+
+## Coverage-Cell Contract
+
+Return exactly one cell for each requested `dimension` under the assigned lens.
+
+```json
+{
+  "scope": "service-a",
+  "language": "java",
+  "dimension": "D3",
+  "lens": "control-driven",
+  "status": "PASS",
+  "targets_discovered": 12,
+  "targets_reviewed": 12,
+  "evidence": ["src/...:42"],
+  "finding_ids": [],
+  "gap_reason": null,
+  "na_reason": null
+}
+```
+
+Use only these states:
+
+- `PASS`: all discovered/in-scope targets were reviewed and no candidate remains.
+- `FINDING`: coverage is complete and at least one candidate remains.
+- `GAP`: any assigned target, inventory area, or required evidence remains unreviewed. `GAP` takes precedence even when findings exist.
+- `N/A`: the dimension/lens is genuinely inapplicable, with scope and search evidence proving why.
+
+Never translate “no grep hit” directly into `PASS` or `N/A`. State the searched scope, patterns or inventory, and limitations.
+
+## Coverage Gate
+
+Build semantic coverage over `Focus Area × Threat × Language/Domain × D1-D10 × Lens` and accounting coverage over every primary file, function, and applicable catalog-domain item × Lens. Do not average away a weak lens:
+
+```text
+dimension_coverage = min(sink_coverage, control_coverage, config_coverage)
+```
+
+Before REPORT:
+
+1. Every assigned cell has `PASS`, `FINDING`, `GAP`, or evidence-backed `N/A`.
+2. No unresolved `GAP` is hidden by a finding in the same cell.
+3. D1, D2, and D3 have terminal cells for all three lenses.
+4. Duplicate candidates across lenses are correlated into one canonical finding.
+5. `verify-coverage.mjs` reports no missing, invalid, conflicting, parser, or scope-drift item.
+6. `verify-semantic-coverage.mjs` reports no entry-point threat, Focus Area/lens/track, or system-pass gap.
+
+The machine gate proves exact accounting over a frozen manifest. It does not prove that every possible vulnerability was recognized.
+
+## Finding Evidence
+
+Every candidate must include:
+
+1. Affected code/config with real `file:line` evidence.
+2. `dimension` and originating `lens`.
+3. `focus_area_id`, related `threat_ids`, and discovery track.
+4. Relevant facets: `sink_evidence`, `control_evidence`, and/or `config_evidence`.
+5. Reachability, attacker influence, guards, provenance, and residual uncertainty.
+6. Severity rationale: `Reachability × InputControl × ExploitComplexity × Impact`.
+7. A concrete remediation.
+
+## False-Positive Controls
+
+- Confirm the file and location before reporting.
+- Confirm the language, framework, feature, and deployment mode are actually used.
+- Treat user-controlled configuration as a vulnerability only when it changes a reachable security boundary.
+- Record sanitizers, authorization checks, feature flags, environment overrides, and dead-code conditions.
+- Do not infer that a missing control is absent until the relevant operation inventory and inherited/global controls were checked.
+
+## Session Output
+
+```markdown
 === HEADER START ===
-COVERAGE: D1=✅(fan=N/M), D2=✅(N), ...
-UNCHECKED: D#:[category]: brief description
-STATS: tools=N/50 | files_read=N | grep_patterns=N | endpoints_audited=N/total
+AUDIT_STRATEGY: sink-driven|control-driven|config-driven
+FOCUS_AREA: FA-...
+DISCOVERY_TRACK: coverage
+COVERAGE: D1=PASS(N/N) | D2=N/A(evidence) | ... | D10=GAP(N/M)
+GAPS: D#:[area]:reason
+STATS: targets=N/M | files_read=N | tool_inputs=N
 === HEADER END ===
+
+=== TRANSFER BLOCK START ===
+FILES_READ: file:conclusion
+SEARCH_DONE: pattern-or-query
+HOTSPOTS: file:line:description
+NEXT_GAPS: dimension:lens:target
+=== TRANSFER BLOCK END ===
 ```
+
+Also emit the `*.audit-report.json` required by `artifact-policy.json`, including `round`, frozen scope digest, sealed semantic input references, `focus_area_id`, `discovery_track=coverage`, `audit_strategy`, `coverage_cells`, exact `file_coverage`, `function_coverage`, `catalog_coverage`, `findings`, `artifacts`, and `learning_candidates`. File/function records must explicitly identify `domain=base` or the independent `domain=ai` overlay.
+
+Populate `review_depth` with actual files/functions read, data/call paths expanded, and searches executed. The semantic verifier may flag suspiciously shallow activity, but review-depth counts never close a cell and never replace AST/CPG accounting.

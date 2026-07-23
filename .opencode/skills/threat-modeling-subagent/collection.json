@@ -1,0 +1,7 @@
+{
+  "name": "threat-modeling-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "security-threat-modeler",
+  "description": "Skill collection for evidence-backed threat modeling, owner refinement, historical vulnerability generalization, and deterministic Focus Area partitioning.",
+  "skills": ["evidence-backed-threat-modeling"]
+}

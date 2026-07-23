@@ -2,7 +2,6 @@
 name: java-open-redirect
 description: "Detect Java Open Redirect / Unvalidated Redirects (CWE-601) by locating attacker-controlled redirect targets reaching sendRedirect, Location headers, Spring redirect: prefix, or RedirectView without effective destination allowlisting. Use for Java open-redirect audits, unvalidated redirect review, phishing redirect paths, protocol-relative bypass, path-relative URL bypass, and weak startsWith checks on redirect URLs. Keywords: open redirect, unvalidated redirect, CWE-601, A01:2021, sendRedirect, setHeader Location, redirect:, RedirectView, protocol-relative //evil.example, startsWith bypass, returnUrl, next, continue, callback."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 7,
   "maintenance_rule": "Define MCP servers in .opencode/opencode.json, then assign their exposed <server>_* tool patterns here and in the matching agent permission block.",
   "servers": {
     "context7": {
@@ -46,14 +46,31 @@
       "status": "placeholder",
       "type": "custom",
       "purpose": "Safe local validation and proof-of-concept assistance."
+    },
+    "vuln_judger": {
+      "status": "disabled-by-default",
+      "type": "custom",
+      "purpose": "Placeholder for reviewing the sealed final comprehensive report once with the asynchronous OpenCode Affirmative/Negative/Moderator pipeline after an operator configures the local server.",
+      "aliases": ["vuln-judger"]
+    },
+    "vuln-judger": {
+      "status": "disabled-by-default",
+      "type": "custom",
+      "purpose": "Disabled placeholder alias for vuln_judger. Accepted when the configured global or project MCP server uses the hyphenated name."
     }
   },
   "agents": {
     "security-intel-collector": ["context7_*", "gh_grep_*", "joern_*"],
+    "security-threat-modeler": ["context7_*", "gh_grep_*", "joern_*"],
     "c-cpp-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "cpp_index_*"],
     "java-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "jvm_index_*"],
+    "web-source-auditor": ["semgrep_*", "codeql_*", "joern_*"],
     "python-source-auditor": ["semgrep_*", "codeql_*", "joern_*", "python_index_*"],
-    "vulnerability-validator": ["audit_lab_*", "joern_*"],
+    "platform-security-auditor": ["context7_*", "gh_grep_*"],
+    "ai-security-auditor": ["context7_*", "gh_grep_*", "semgrep_*", "codeql_*", "joern_*"],
+    "security-evidence-correlator": [],
+    "security-attack-chain-hunter": ["joern_*"],
+    "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
     "security-skill-optimizer": ["joern_*"],
     "security-audit-orchestrator": ["joern_*"]
   }

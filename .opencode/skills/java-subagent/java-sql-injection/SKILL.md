@@ -2,7 +2,6 @@
 name: java-sql-injection
 description: "Detect Java SQL injection by locating attacker-controlled input reaching SQL/JPA/MyBatis query sinks without effective parameterization or allowlisting. Use for Java SQLi audits, CWE-89 review, JDBC/MyBatis/Hibernate/JPA/Spring Data query analysis, order-by/column-name injection, and second-order SQL injection. Keywords: SQL injection, SQLi, CWE-89, JDBC, PreparedStatement, Statement.execute, MyBatis ${}, Hibernate createQuery, JPA native query, Spring JdbcTemplate, order by injection, second-order SQLi."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

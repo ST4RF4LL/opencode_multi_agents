@@ -2,7 +2,6 @@
 name: java-xpath-injection
 description: "Detect Java XPath injection (CWE-643) by locating attacker-controlled input reaching XPath compile/evaluate sinks without XPath Variable Resolver or parameterized $var binding. Use for Java XPath audits, javax.xml.xpath / Saxon query analysis, XML node selection injection, and OWASP Java Security CS XPath guidance. Keywords: XPath injection, CWE-643, XPath.compile, XPath.evaluate, XPathExpression, XPathVariableResolver, DocumentBuilder XPath, parameterized XPath, $bookId."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

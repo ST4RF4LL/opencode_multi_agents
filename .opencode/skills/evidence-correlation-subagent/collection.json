@@ -1,0 +1,7 @@
+{
+  "name": "evidence-correlation-subagent",
+  "type": "subagent-skill-collection",
+  "owner_agent": "security-evidence-correlator",
+  "description": "Skill collection for Tri-Lens coverage normalization, evidence correlation, deduplication, contradiction handling, and gap packet generation.",
+  "skills": ["tri-lens-evidence-correlation"]
+}

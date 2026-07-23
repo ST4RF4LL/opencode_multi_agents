@@ -2,7 +2,6 @@
 name: c-cpp-file-privilege-review
 description: Review C/C++ filesystem, process execution, temporary file, symlink, and privilege-handling code for security issues.
 license: MIT
-compatibility: opencode
 metadata:
   role: c-cpp-source-auditor
   collection: c-cpp-subagent

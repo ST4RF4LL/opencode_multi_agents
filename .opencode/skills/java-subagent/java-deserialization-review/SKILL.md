@@ -2,7 +2,6 @@
 name: java-deserialization-review
 description: Review Java/JVM deserialization and object-mapping code for gadget chains, polymorphic typing, and unsafe type resolution.
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent
@@ -102,4 +101,3 @@ rg 'jackson-databind' pom.xml build.gradle
 ## Progressive Deep Pack
 
 When sinks match ObjectInputStream / Fastjson autoType / Jackson default typing / SnakeYAML / XStream / Hessian / Kryo / XMLDecoder, progressive-load **`java-deserialization`** (full models, Joern rules, cases, validation, evidence).
-

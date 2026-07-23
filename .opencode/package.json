@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "test": "npm run test:config && npm run test:coverage && npm run test:semantic",
+    "test:config": "node tests/validate-configuration.mjs",
+    "test:coverage": "node tests/run-coverage-tests.mjs",
+    "test:semantic": "node tests/run-semantic-coverage-tests.mjs"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/plugin": "1.14.30"

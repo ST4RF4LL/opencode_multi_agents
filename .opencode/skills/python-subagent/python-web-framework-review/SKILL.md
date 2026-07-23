@@ -2,7 +2,6 @@
 name: python-web-framework-review
 description: Review Django, Flask, FastAPI, and Starlette applications for auth, CSRF/CORS, SSRF, file handling, and framework misconfiguration.
 license: MIT
-compatibility: opencode
 metadata:
   role: python-source-auditor
   collection: python-subagent

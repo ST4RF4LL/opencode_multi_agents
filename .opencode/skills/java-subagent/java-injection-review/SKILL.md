@@ -2,7 +2,6 @@
 name: java-injection-review
 description: Review Java/JVM code for SQL, JPQL, LDAP, XPath, template, expression, command, and class-loading injection issues.
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

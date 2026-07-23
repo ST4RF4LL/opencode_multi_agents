@@ -2,7 +2,6 @@
 name: c-cpp-native-boundary-review
 description: Review native C/C++ interfaces, IPC, syscalls, plugins, and FFI boundaries for unsafe trust and privilege transitions.
 license: MIT
-compatibility: opencode
 metadata:
   role: c-cpp-source-auditor
   collection: c-cpp-subagent

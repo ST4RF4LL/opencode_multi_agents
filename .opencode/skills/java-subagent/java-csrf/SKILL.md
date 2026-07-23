@@ -2,7 +2,6 @@
 name: java-csrf
 description: "Detect Java Cross-Site Request Forgery (CSRF) by locating state-changing endpoints that accept cookie-authenticated browser requests without effective CSRF defenses (token, SameSite, custom header, double-submit). Use for Java CSRF audits, CWE-352 review, Spring Security csrf().disable(), cookie-session JSON APIs without CSRF header, GET-based mutations, form POST without token, and token-not-bound-to-session analysis. Keywords: CSRF, CWE-352, A01:2021, csrf().disable(), CsrfFilter, _csrf, X-CSRF-TOKEN, SameSite, Cookie auth, session fixation adjacent, state-changing GET."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

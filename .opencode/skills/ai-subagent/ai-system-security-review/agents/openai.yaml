@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI System Security Review"
+  short_description: "Audit AI, LLM, agent, RAG, and MCP security"
+  default_prompt: "Use $ai-system-security-review to audit the entire scoped repository as an AI-security overlay with one Tri-Lens strategy."

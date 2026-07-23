@@ -2,7 +2,6 @@
 name: java-ldap-injection
 description: "Detect Java LDAP injection by locating attacker-controlled input reaching LDAP filter or DN construction without effective encoding or parameterized filters. Use for Java LDAP audits, CWE-90 review, JNDI DirContext.search filter analysis, Spring LDAP LdapQuery/LdapTemplate filter building, DN injection, and authentication-bypass via filter metacharacters. Keywords: LDAP injection, CWE-90, DirContext.search, NamingEnumeration, filter concat, Spring LdapEncoder, LdapQueryBuilder, SearchControls, distinguished name injection, JNDI LDAP."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

@@ -1,10 +1,14 @@
 {
-  "version": 2,
+  "version": 6,
   "convention": "Skills under .opencode/skills/<subagent-skill-group>/ auto-map to the owner_agent defined in each group's collection.json. Agent frontmatter uses '*': allow for skills, so any skill discovered by OpenCode is available. No manual sync needed between collection.json and agent permissions.",
   "collections": {
     "security-intel-subagent": {
       "directory": ".opencode/skills/security-intel-subagent",
       "owner_agent": "security-intel-collector"
+    },
+    "threat-modeling-subagent": {
+      "directory": ".opencode/skills/threat-modeling-subagent",
+      "owner_agent": "security-threat-modeler"
     },
     "common-subagent": {
       "directory": ".opencode/skills/common-subagent",
@@ -19,9 +23,29 @@
       "directory": ".opencode/skills/java-subagent",
       "owner_agent": "java-source-auditor"
     },
+    "web-subagent": {
+      "directory": ".opencode/skills/web-subagent",
+      "owner_agent": "web-source-auditor"
+    },
     "python-subagent": {
       "directory": ".opencode/skills/python-subagent",
       "owner_agent": "python-source-auditor"
+    },
+    "platform-subagent": {
+      "directory": ".opencode/skills/platform-subagent",
+      "owner_agent": "platform-security-auditor"
+    },
+    "ai-subagent": {
+      "directory": ".opencode/skills/ai-subagent",
+      "owner_agent": "ai-security-auditor"
+    },
+    "evidence-correlation-subagent": {
+      "directory": ".opencode/skills/evidence-correlation-subagent",
+      "owner_agent": "security-evidence-correlator"
+    },
+    "attack-chain-subagent": {
+      "directory": ".opencode/skills/attack-chain-subagent",
+      "owner_agent": "security-attack-chain-hunter"
     },
     "vulnerability-validator-subagent": {
       "directory": ".opencode/skills/vulnerability-validator-subagent",

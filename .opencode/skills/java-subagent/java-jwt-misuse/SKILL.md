@@ -2,7 +2,6 @@
 name: java-jwt-misuse
 description: "Detect Java JWT/JOSE misuse by locating alg=none acceptance, missing signature verification, weak/hardcoded HMAC secrets, algorithm confusion (RS→HS), and missing exp/aud/iss claim validation (CWE-347/CWE-345). Use for JWT audits, jjwt/nimbus-jose-jwt/auth0 java-jwt/Spring OAuth2 Resource Server review, parseClaimsJws without verify, JWT parser allow none, HS256 secret hardcoded, RSA public key as HMAC secret, and unvalidated claims. Keywords: JWT, JOSE, JWS, alg=none, CWE-347, CWE-345, jjwt, nimbus-jose-jwt, auth0 java-jwt, Spring Security OAuth2 Resource Server, algorithm confusion, hardcoded secret, missing exp, audience validation, signature bypass."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

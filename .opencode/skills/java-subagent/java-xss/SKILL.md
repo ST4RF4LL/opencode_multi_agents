@@ -2,7 +2,6 @@
 name: java-xss
 description: "Detect Java server-side Cross-Site Scripting (XSS) by locating attacker-controlled input reaching HTTP response writers, JSP/Thymeleaf/FreeMarker unescaped outputs, or wrong-context encoding without effective output encoding/sanitization. Use for Java XSS audits, CWE-79 review, JSP EL, Thymeleaf th:utext, FreeMarker ?no_esc, Spring MVC response body/writer analysis, HTML/JS/CSS context encoding, OWASP Java Encoder, and HTML Sanitizer. Keywords: XSS, cross-site scripting, CWE-79, reflected XSS, stored XSS, JSP, ${}, th:utext, response.getWriter, PrintWriter, Encode.forHtml, HtmlPolicyBuilder, context-aware encoding."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent

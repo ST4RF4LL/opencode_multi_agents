@@ -2,7 +2,6 @@
 name: java-weak-cryptography
 description: "Detect Java weak cryptography misuse by locating broken algorithms, insecure modes, static IVs, hardcoded keys, insecure random, and weak password hashing (CWE-327/328/330/916). Use for Java crypto audits, JCA/JCE review, Cipher.getInstance analysis, AES/ECB or static-IV GCM, MD5/SHA1 password storage, DES/3DES/RC4, RSA without OAEP, java.util.Random for secrets, and SecureRandom misuse. Keywords: weak crypto, CWE-327, CWE-328, CWE-330, AES/ECB, static IV, MessageDigest MD5, DES, 3DES, RC4, hardcoded key, insecure random, bcrypt, argon2, password hashing, Cipher.getInstance."
 license: MIT
-compatibility: opencode
 metadata:
   role: java-source-auditor
   collection: java-subagent
