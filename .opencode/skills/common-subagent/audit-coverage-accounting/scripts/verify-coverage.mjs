@@ -6,10 +6,12 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { isDeepStrictEqual } from "node:util";
+import { catalogQuestionDigest, deriveCoverageCells } from "./coverage-cell-accounting.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
-const CLOSED_STATUSES = new Set(["REVIEWED", "FINDING", "N/A"]);
+const CLOSED_STATUSES = new Set(["REVIEWED", "FINDING"]);
 const ALL_STATUSES = new Set([...CLOSED_STATUSES, "GAP"]);
 const DIMENSION_STATUSES = new Set(["PASS", "FINDING", "N/A", "GAP"]);
 const PARSER_LANGUAGE = new Map([
@@ -49,7 +51,7 @@ function parseArgs(argv) {
     if (key === "functions") args.functions.push(value);
     else args[key] = value;
   }
-  for (const key of ["root", "audit-id", "scope", "snapshot-index", "reports-dir", "catalog", "output"]) {
+  for (const key of ["root", "audit-id", "scope", "interfaces", "interface-extractors", "snapshot-index", "reports-dir", "catalog", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
   if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
@@ -83,23 +85,60 @@ async function fileDigest(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
-function hasEvidence(record) {
-  return Array.isArray(record?.evidence)
-    && record.evidence.length > 0
-    && record.evidence.every(item => {
-      if (typeof item === "string") return item.trim().length > 0;
-      return item && typeof item === "object" && Object.keys(item).length > 0;
-    });
+function evidenceErrors(record, context) {
+  if (!Array.isArray(record?.evidence) || record.evidence.length === 0) return ["missing-evidence"];
+  const errors = [];
+  let hasConcreteAnchor = false;
+  let hasAssignmentAnchor = false;
+  for (const item of record.evidence) {
+    if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.kind !== "string") {
+      errors.push("invalid-evidence-item");
+      continue;
+    }
+    if (item.kind === "assignment-anchor") {
+      if (item.target_kind !== context.kind || item.target_id !== context.id) errors.push("assignment-anchor-mismatch");
+      else hasAssignmentAnchor = true;
+      continue;
+    }
+    if (context.kind === "file" && item.kind === "source-location") {
+      if (context.file.type === "symlink" || item.file_id !== context.file.file_id || item.path !== context.file.path || item.sha256 !== context.file.sha256
+        || !Number.isInteger(item.line_start) || item.line_start < 1) errors.push("file-evidence-not-bound-to-frozen-source");
+      else hasConcreteAnchor = true;
+      continue;
+    }
+    if (context.kind === "file" && item.kind === "symlink-location") {
+      if (context.file.type !== "symlink" || item.file_id !== context.file.file_id || item.path !== context.file.path
+        || item.link_target !== context.file.link_target) errors.push("symlink-evidence-not-bound-to-frozen-target");
+      else hasConcreteAnchor = true;
+      continue;
+    }
+    if (context.kind === "function" && item.kind === "function-location") {
+      if (item.function_id !== context.fn.function_id || item.path !== context.fn.path || item.code_sha256 !== context.fn.code_sha256
+        || item.qualified_name !== context.fn.qualified_name || item.line_start !== context.fn.line_start) errors.push("function-evidence-not-bound-to-frozen-source");
+      else hasConcreteAnchor = true;
+      continue;
+    }
+    if (context.kind === "catalog" && item.kind === "catalog-review") {
+      if (item.catalog_id !== context.entry.id || item.domain !== context.domain || item.lens !== context.lens
+        || item.catalog_profile !== context.catalog.profile_id || item.question_sha256 !== catalogQuestionDigest(context.entry, context.lens)) {
+        errors.push("catalog-evidence-not-bound-to-frozen-question");
+      } else hasConcreteAnchor = true;
+      continue;
+    }
+    errors.push("unsupported-evidence-kind");
+  }
+  if (record.status === "GAP" && !hasAssignmentAnchor) errors.push("gap-missing-assignment-anchor");
+  if (["REVIEWED", "FINDING"].includes(record.status) && !hasConcreteAnchor) errors.push("closed-record-missing-bound-evidence");
+  return [...new Set(errors)];
 }
 
-function validateCoverageRecord(record, idField, expectedId, requiredDimensions, findingIds) {
+function validateCoverageRecord(record, idField, expectedId, requiredDimensions, findingIds, context) {
   const errors = [];
   if (!record || typeof record !== "object") return ["record-not-object"];
   if (record[idField] !== expectedId) errors.push(`${idField}-mismatch`);
   if (!ALL_STATUSES.has(record.status)) errors.push("invalid-status");
-  if (!hasEvidence(record)) errors.push("missing-evidence");
+  errors.push(...evidenceErrors(record, context));
   if (!exactStringSet(record.dimensions_reviewed, requiredDimensions)) errors.push("dimensions-not-complete");
-  if (record.status === "N/A" && (typeof record.na_reason !== "string" || record.na_reason.trim().length < 8)) errors.push("invalid-na-reason");
   if (record.status === "FINDING") {
     if (!Array.isArray(record.finding_ids) || record.finding_ids.length === 0) errors.push("finding-ids-missing");
     else if (record.finding_ids.some(id => !findingIds.has(id))) errors.push("finding-id-not-in-report");
@@ -108,29 +147,34 @@ function validateCoverageRecord(record, idField, expectedId, requiredDimensions,
   return errors;
 }
 
-function validateDimensionCells(report, findingIds) {
+function validateDimensionCells(report, catalogEntries) {
   const errors = [];
   const cells = report.coverage_cells;
   if (!Array.isArray(cells) || cells.length !== DIMENSIONS.length) return ["dimension-cell-count-mismatch"];
+  let expectedCells;
+  try {
+    expectedCells = deriveCoverageCells(report, catalogEntries);
+  } catch (error) {
+    return [`machine-cell-derivation-failed:${error.message}`];
+  }
+  const expectedByDimension = new Map(expectedCells.map(cell => [cell.dimension, cell]));
   const seen = new Set();
   for (const cell of cells) {
     if (!DIMENSIONS.includes(cell?.dimension) || seen.has(cell.dimension)) errors.push("invalid-or-duplicate-dimension");
     else seen.add(cell.dimension);
     if (cell?.lens !== report.audit_strategy) errors.push(`${cell?.dimension ?? "unknown"}:lens-mismatch`);
     if (!DIMENSION_STATUSES.has(cell?.status)) errors.push(`${cell?.dimension ?? "unknown"}:invalid-status`);
-    if (!hasEvidence(cell)) errors.push(`${cell?.dimension ?? "unknown"}:missing-evidence`);
+    if (Object.hasOwn(cell ?? {}, "targets_discovered") || Object.hasOwn(cell ?? {}, "targets_reviewed")) errors.push(`${cell?.dimension ?? "unknown"}:self-reported-target-count-forbidden`);
+    const expected = expectedByDimension.get(cell?.dimension);
+    if (!expected) continue;
+    const sameDerivedCell = cell.status === expected.status
+      && exactStringSet(cell.finding_ids ?? [], expected.finding_ids)
+      && cell.gap_reason === expected.gap_reason
+      && cell.na_reason === expected.na_reason
+      && Array.isArray(cell.evidence) && cell.evidence.length === 1
+      && isDeepStrictEqual(cell.evidence[0], expected.evidence[0]);
+    if (!sameDerivedCell) errors.push(`${cell.dimension}:machine-derived-cell-mismatch`);
     if (cell?.status === "GAP") errors.push(`${cell.dimension}:gap-status`);
-    if (cell?.status === "N/A" && (typeof cell.na_reason !== "string" || cell.na_reason.trim().length < 8)) errors.push(`${cell.dimension}:invalid-na-reason`);
-    if (["PASS", "FINDING"].includes(cell?.status)) {
-      if (!Number.isInteger(cell.targets_discovered) || cell.targets_discovered < 0
-        || !Number.isInteger(cell.targets_reviewed) || cell.targets_reviewed !== cell.targets_discovered) {
-        errors.push(`${cell.dimension}:target-count-not-closed`);
-      }
-    }
-    if (cell?.status === "FINDING") {
-      if (!Array.isArray(cell.finding_ids) || cell.finding_ids.length === 0) errors.push(`${cell.dimension}:finding-ids-missing`);
-      else if (cell.finding_ids.some(id => !findingIds.has(id))) errors.push(`${cell.dimension}:finding-id-not-in-report`);
-    }
   }
   if (!DIMENSIONS.every(dimension => seen.has(dimension))) errors.push("dimension-missing");
   return [...new Set(errors)];
@@ -208,11 +252,15 @@ async function main() {
     const requestedFunctions = args.functions.map(path => resolve(path)).sort();
     const indexedFunctions = (snapshot.functions ?? []).map(item => resolve(item.path)).sort();
     if (resolve(snapshot.scope?.path ?? "") !== resolve(args.scope)
+      || resolve(snapshot.interfaces?.path ?? "") !== resolve(args.interfaces)
+      || resolve(snapshot.interface_extractors?.path ?? "") !== resolve(args["interface-extractors"])
       || resolve(snapshot.catalog?.path ?? "") !== resolve(args.catalog)
       || !exactStringSet(requestedFunctions, indexedFunctions)) {
       pushIssue(issues, "SNAPSHOT_INPUT_SET_MISMATCH", "Verifier inputs do not exactly equal the durable snapshot index");
     }
     if (snapshot.scope?.sha256 !== await fileDigest(resolve(args.scope))) pushIssue(issues, "SNAPSHOT_SCOPE_HASH_MISMATCH", "Durable scope snapshot hash mismatch");
+    if (snapshot.interfaces?.sha256 !== await fileDigest(resolve(args.interfaces))) pushIssue(issues, "SNAPSHOT_INTERFACE_HASH_MISMATCH", "Durable interface snapshot hash mismatch");
+    if (snapshot.interface_extractors?.sha256 !== await fileDigest(resolve(args["interface-extractors"]))) pushIssue(issues, "SNAPSHOT_INTERFACE_EXTRACTOR_HASH_MISMATCH", "Durable interface extractor verification hash mismatch");
     if (snapshot.catalog?.sha256 !== await fileDigest(resolve(args.catalog))) pushIssue(issues, "SNAPSHOT_CATALOG_HASH_MISMATCH", "Durable catalog snapshot hash mismatch");
     for (const item of snapshot.functions ?? []) {
       if (item.sha256 !== await fileDigest(resolve(item.path))) pushIssue(issues, "SNAPSHOT_FUNCTION_HASH_MISMATCH", "Durable function snapshot hash mismatch", { language: item.language, path: item.path });
@@ -283,6 +331,38 @@ async function main() {
     if (file.function_inventory_state === "unsupported") {
       pushIssue(issues, "UNSUPPORTED_FUNCTION_INVENTORY", "Potential function-bearing file has no configured AST/CPG extractor", { file_id: file.file_id, path: file.path, reason: file.function_inventory_reason });
     }
+  }
+
+  let interfaceManifest = null;
+  let interfaceExtractorCoverage = null;
+  try {
+    interfaceManifest = JSON.parse(await readFile(resolve(args.interfaces), "utf8"));
+    interfaceExtractorCoverage = JSON.parse(await readFile(resolve(args["interface-extractors"]), "utf8"));
+    if (interfaceManifest.audit_id !== args["audit-id"] || interfaceManifest.scope_digest !== scope.scope_digest
+      || interfaceManifest.manifest_digest !== contentDigest(interfaceManifest)) {
+      pushIssue(issues, "INTERFACE_MANIFEST_INVALID", "Interface manifest is modified or scope-mismatched");
+    }
+    if (interfaceExtractorCoverage.audit_id !== args["audit-id"] || interfaceExtractorCoverage.scope_digest !== scope.scope_digest
+      || interfaceExtractorCoverage.interface_manifest_digest !== interfaceManifest.manifest_digest
+      || interfaceExtractorCoverage.manifest_digest !== contentDigest(interfaceExtractorCoverage)
+      || !interfaceExtractorCoverage.complete) {
+      pushIssue(issues, "INTERFACE_EXTRACTOR_COVERAGE_INVALID", "Interface extractor verification is incomplete, modified, or manifest-mismatched");
+    }
+    if (!interfaceManifest.complete || (interfaceManifest.gaps?.length ?? 0) > 0) {
+      pushIssue(issues, "INTERFACE_MANIFEST_INCOMPLETE", "Interface inventory contains unresolved extractor gaps");
+    }
+    const interfaceIds = new Set();
+    for (const item of interfaceManifest.interfaces ?? []) {
+      if (interfaceIds.has(item.interface_id)) pushIssue(issues, "DUPLICATE_INTERFACE_ID", "Interface manifest repeats interface_id", { interface_id: item.interface_id });
+      interfaceIds.add(item.interface_id);
+      const file = scopeFiles.get(item.file_id);
+      if (!file || item.path !== file.path || item.owner_agent !== file.owner_agent || !exactStringSet(item.required_lenses, LENSES)
+        || !["CONFIRMED", "CANDIDATE"].includes(item.discovery_state)) {
+        pushIssue(issues, "INVALID_INTERFACE_SCOPE", "Interface is not bound to a frozen scoped file, owner, and canonical lenses", { interface_id: item.interface_id });
+      }
+    }
+  } catch (error) {
+    pushIssue(issues, "INTERFACE_INPUT_UNREADABLE", error.message);
   }
 
   const functionManifests = [];
@@ -414,7 +494,7 @@ async function main() {
     if (findingIds.size !== report.findings.length) {
       pushIssue(issues, "INVALID_FINDINGS", "Every report finding must have a unique non-empty finding_id", { report: reportPath });
     }
-    const dimensionValidation = validateDimensionCells(report, findingIds);
+    const dimensionValidation = validateDimensionCells(report, catalogEntries);
     if (dimensionValidation.length > 0) {
       pushIssue(issues, "INVALID_DIMENSION_COVERAGE", "D1-D10 coverage cells are incomplete or invalid", { report: reportPath, errors: dimensionValidation });
     }
@@ -447,7 +527,11 @@ async function main() {
         pushIssue(issues, "FILE_OWNER_MISMATCH", "File coverage domain is invalid or not closed by its assigned base/AI owner", { report: reportPath, file_id: id, domain, expected_agent: expectedAgent });
         continue;
       }
-      const validation = validateCoverageRecord(record, "file_id", id, DIMENSIONS, findingIds);
+      const validation = validateCoverageRecord(record, "file_id", id, DIMENSIONS, findingIds, {
+        kind: "file",
+        id,
+        file,
+      });
       const key = `${id}|${domain}|${report.audit_strategy}`;
       const list = fileRecords.get(key) ?? [];
       list.push({ ...record, validation, round: report.round, report_path: reportPath });
@@ -471,7 +555,11 @@ async function main() {
         pushIssue(issues, "FUNCTION_OWNER_MISMATCH", "Function coverage domain is invalid or not closed by its assigned base/AI owner", { report: reportPath, function_id: id, domain, expected_agent: expectedAgent });
         continue;
       }
-      const validation = validateCoverageRecord(record, "function_id", id, DIMENSIONS, findingIds);
+      const validation = validateCoverageRecord(record, "function_id", id, DIMENSIONS, findingIds, {
+        kind: "function",
+        id,
+        fn,
+      });
       const key = `${id}|${domain}|${report.audit_strategy}`;
       const list = functionRecords.get(key) ?? [];
       list.push({ ...record, validation, round: report.round, report_path: reportPath });
@@ -494,7 +582,14 @@ async function main() {
         pushIssue(issues, "CATALOG_DOMAIN_MISMATCH", "Catalog coverage is not owned by an active applicable domain agent", { report: reportPath, catalog_id: id, domain });
         continue;
       }
-      const validation = validateCoverageRecord(record, "catalog_id", id, entry.dimensions, findingIds);
+      const validation = validateCoverageRecord(record, "catalog_id", id, entry.dimensions, findingIds, {
+        kind: "catalog",
+        id,
+        entry,
+        domain,
+        lens: report.audit_strategy,
+        catalog,
+      });
       const key = `${id}|${domain}|${report.audit_strategy}`;
       const list = catalogRecords.get(key) ?? [];
       list.push({ ...record, validation, round: report.round, report_path: reportPath });
@@ -558,6 +653,8 @@ async function main() {
       reports_directory: resolve(args["reports-dir"]),
       reports,
       catalog: resolve(args.catalog),
+      interfaces: resolve(args.interfaces),
+      interface_extractors: resolve(args["interface-extractors"]),
     },
     expected: {
       files: [...scopeFiles.values()].filter(file => file.review_required).length,
@@ -566,6 +663,10 @@ async function main() {
       file_domain_pairs: [...scopeFiles.values()].filter(file => file.review_required).length * COVERAGE_DOMAINS.length,
       function_domain_pairs: functions.size * COVERAGE_DOMAINS.length,
       catalog_domain_pairs: [...catalogEntries.values()].reduce((sum, entry) => sum + entry.applies_to.filter(domain => activeDomains.has(domain)).length, 0),
+      external_interfaces: interfaceManifest?.interfaces?.length ?? 0,
+      confirmed_external_interfaces: interfaceManifest?.interfaces?.filter(item => item.discovery_state === "CONFIRMED").length ?? 0,
+      candidate_external_interfaces: interfaceManifest?.interfaces?.filter(item => item.discovery_state === "CANDIDATE").length ?? 0,
+      interface_extractor_files: interfaceManifest?.file_coverage?.length ?? 0,
       lenses_per_item: LENSES.length,
     },
     observed_record_keys: {
@@ -578,7 +679,12 @@ async function main() {
     issues,
     current_scope_digest: currentScope?.scope_digest ?? null,
     complete,
-    claim_boundary: "Proves deterministic base-owner and AI-overlay accounting over the frozen files, source-defined functions and executable template units recognized by configured AST/CPG extractors, plus the application/platform/AI catalog matrix. Unsupported potential source prevents completion. It does not prove recognition of every possible vulnerability or cover runtime-generated code, hosted model behavior, remote tools, or deployed configuration absent from the evidence.",
+    interface_extractor_verification: interfaceExtractorCoverage ? {
+      manifest_digest: interfaceExtractorCoverage.manifest_digest,
+      complete: interfaceExtractorCoverage.complete,
+      interfaces: interfaceExtractorCoverage.interfaces,
+    } : null,
+    claim_boundary: "Proves deterministic base-owner and AI-overlay accounting over frozen files, source-defined functions and executable template units recognized by configured AST/CPG extractors, the application/platform/AI catalog matrix, and exact source/spec/config interface-anchor enumeration by configured extractors. CONFIRMED and CANDIDATE interface counts are reported separately. Unsupported or dynamic interface sources prevent completion. This phase does not yet prove that each interface received every applicable vulnerability-type check.",
   };
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(verification, null, 2)}\n`, "utf8");

@@ -22,6 +22,7 @@
     "semgrep_*": "deny",
     "codeql_*": "deny",
     "joern_*": "allow",
+    "coverage_*": "allow",
     "cpp_index_*": "deny",
     "jvm_index_*": "deny",
     "python_index_*": "deny",
@@ -57,6 +58,13 @@
         "JOERN_GNUBIN": "/opt/homebrew/opt/coreutils/libexec/gnubin",
         "JOERN_JAVA_BIN": "/opt/homebrew/opt/openjdk@21/bin"
       },
+      "timeout": 300000,
+      "enabled": true
+    },
+    "coverage_ledger": {
+      "type": "local",
+      "command": ["node", ".opencode/mcp/coverage-ledger-server.mjs"],
+      "cwd": ".",
       "timeout": 300000,
       "enabled": true
     },

@@ -87,23 +87,23 @@ Return exactly one cell for each requested `dimension` under the assigned lens.
   "dimension": "D3",
   "lens": "control-driven",
   "status": "PASS",
-  "targets_discovered": 12,
-  "targets_reviewed": 12,
-  "evidence": ["src/...:42"],
+  "evidence": [{"kind": "coverage-cell-summary", "machine_target_count": 12, "closed_target_count": 12}],
   "finding_ids": [],
   "gap_reason": null,
   "na_reason": null
 }
 ```
 
-Use only these states:
+Coverage cells are reconciler output, not agent-authored claims. Update file/function/catalog entity records, then run `reconcile-audit-report.mjs`; never add `targets_discovered` or `targets_reviewed`.
+
+The reconciler uses only these states:
 
 - `PASS`: all discovered/in-scope targets were reviewed and no candidate remains.
 - `FINDING`: coverage is complete and at least one candidate remains.
 - `GAP`: any assigned target, inventory area, or required evidence remains unreviewed. `GAP` takes precedence even when findings exist.
-- `N/A`: the dimension/lens is genuinely inapplicable, with scope and search evidence proving why.
+- `N/A`: no machine-assigned structural target exists for that dimension in this report. Agents cannot declare it.
 
-Never translate “no grep hit” directly into `PASS` or `N/A`. State the searched scope, patterns or inventory, and limitations.
+Never translate “no grep hit” directly into `PASS` or `N/A`. State the searched scope, patterns or inventory, and limitations in the entity-row evidence.
 
 ## Coverage Gate
 
@@ -115,11 +115,11 @@ dimension_coverage = min(sink_coverage, control_coverage, config_coverage)
 
 Before REPORT:
 
-1. Every assigned cell has `PASS`, `FINDING`, `GAP`, or evidence-backed `N/A`.
+1. Every assigned cell is machine-reconciled to `PASS`, `FINDING`, `GAP`, or zero-target `N/A`.
 2. No unresolved `GAP` is hidden by a finding in the same cell.
 3. D1, D2, and D3 have terminal cells for all three lenses.
 4. Duplicate candidates across lenses are correlated into one canonical finding.
-5. `verify-coverage.mjs` reports no missing, invalid, conflicting, parser, or scope-drift item.
+5. Intermediate `verify-coverage.mjs` reports no missing, invalid, conflicting, parser, or scope-drift item; the finalized Ledger and `verify-coverage-v2.mjs` report no unresolved required type/interface check.
 6. `verify-semantic-coverage.mjs` reports no entry-point threat, Focus Area/lens/track, or system-pass gap.
 
 The machine gate proves exact accounting over a frozen manifest. It does not prove that every possible vulnerability was recognized.

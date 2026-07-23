@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { deriveCoverageCells } from "./coverage-cell-accounting.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
@@ -57,7 +58,12 @@ function gapRecord(idField, id, dimensions, evidence, reason) {
     [idField]: id,
     status: "GAP",
     dimensions_reviewed: dimensions,
-    evidence: [evidence],
+    evidence: [{
+      kind: "assignment-anchor",
+      target_kind: idField.replace(/_id$/, ""),
+      target_id: id,
+      ...evidence,
+    }],
     gap_reason: reason,
   };
 }
@@ -179,17 +185,7 @@ async function main() {
       ...(aiSurfacesPath ? [{ kind: "ai-surfaces", path: aiSurfacesPath, scope_digest: scope.scope_digest }] : []),
       ...(args.assignment ? [{ kind: "follow-up-assignment", path: resolve(args.assignment) }] : []),
     ],
-    coverage_cells: DIMENSIONS.map(dimension => ({
-      dimension,
-      lens: args.lens,
-      status: "GAP",
-      targets_discovered: null,
-      targets_reviewed: 0,
-      evidence: [{ kind: "initialized-from-manifests" }],
-      finding_ids: [],
-      gap_reason: "audit-not-yet-completed",
-      na_reason: null,
-    })),
+    coverage_cells: [],
     review_depth: {
       files_read: [],
       functions_read: [],
@@ -214,6 +210,8 @@ async function main() {
     artifacts: [],
     learning_candidates: [],
   };
+
+  report.coverage_cells = deriveCoverageCells(report, new Map(catalog.entries.map(entry => [entry.id, entry])));
 
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");

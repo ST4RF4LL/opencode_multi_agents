@@ -4,8 +4,9 @@ import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { contentDigest } from "./function-manifest-cache.mjs";
+import { entryAppliesToDomain, validateCatalogV2 } from "./coverage-v2-common.mjs";
 
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 
 function parseArgs(argv) {
   const args = { functions: [] };
@@ -17,7 +18,7 @@ function parseArgs(argv) {
     if (key === "functions") args.functions.push(value);
     else args[key] = value;
   }
-  for (const key of ["audit-id", "scope", "catalog", "output"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
+  for (const key of ["audit-id", "scope", "interfaces", "interface-extractors", "catalog", "output"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
   return args;
 }
@@ -66,13 +67,43 @@ async function main() {
   if (missing.length > 0) throw new Error(`Function manifest membership is incomplete for ${missing.map(file => file.path).join(", ")}`);
 
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
-  if (typeof catalog.profile_id !== "string" || !Array.isArray(catalog.entries)) throw new Error("Catalog is incomplete");
+  const catalogErrors = validateCatalogV2(catalog);
+  if (catalogErrors.length > 0) throw new Error(`Catalog v2 is invalid:\n- ${catalogErrors.join("\n- ")}`);
+  const catalogDomains = Object.keys(catalog.coverage_model.domain_profiles).sort();
+  const interfacePath = resolve(args.interfaces);
+  const interfaceExtractorPath = resolve(args["interface-extractors"]);
+  const interfaceManifest = JSON.parse(await readFile(interfacePath, "utf8"));
+  const interfaceExtractors = JSON.parse(await readFile(interfaceExtractorPath, "utf8"));
+  if (interfaceManifest.audit_id !== args["audit-id"] || interfaceManifest.scope_digest !== scope.scope_digest
+    || interfaceManifest.manifest_digest !== contentDigest(interfaceManifest)
+    || interfaceExtractors.audit_id !== args["audit-id"] || interfaceExtractors.scope_digest !== scope.scope_digest
+    || interfaceExtractors.interface_manifest_digest !== interfaceManifest.manifest_digest
+    || interfaceExtractors.manifest_digest !== contentDigest(interfaceExtractors) || !interfaceExtractors.complete) {
+    throw new Error("Interface inventory or extractor verification is incomplete, modified, or scope-mismatched");
+  }
+  const interfacesByPath = new Map();
+  for (const item of interfaceManifest.interfaces ?? []) {
+    const rows = interfacesByPath.get(item.path) ?? [];
+    rows.push({
+      interface_id: item.interface_id,
+      discovery_state: item.discovery_state,
+      direction: item.direction,
+      kind: item.kind,
+      protocol: item.protocol,
+      operation: item.operation,
+      address: item.address,
+      line_start: item.line_start,
+      dimensions: item.dimensions,
+    });
+    interfacesByPath.set(item.path, rows);
+  }
   const routes = (scope.files ?? []).filter(file => file.review_required).map(file => ({
     file_id: file.file_id,
     path: file.path,
     owner_agent: file.owner_agent,
     content_kind: file.content_kind,
     functions: (functionsByPath.get(file.path) ?? []).sort((a, b) => a.line_start - b.line_start || a.function_id.localeCompare(b.function_id)),
+    interfaces: (interfacesByPath.get(file.path) ?? []).sort((a, b) => a.line_start - b.line_start || a.interface_id.localeCompare(b.interface_id)),
   }));
   const index = {
     schema_version: 1,
@@ -84,6 +115,8 @@ async function main() {
     inputs: {
       scope: { path: scopePath, manifest_digest: scope.manifest_digest },
       functions: manifests.sort((a, b) => a.language.localeCompare(b.language)),
+      interfaces: { path: interfacePath, manifest_digest: interfaceManifest.manifest_digest },
+      interface_extractors: { path: interfaceExtractorPath, manifest_digest: interfaceExtractors.manifest_digest },
       catalog: { path: catalogPath, profile_id: catalog.profile_id },
     },
     routes,
@@ -91,11 +124,15 @@ async function main() {
       catalog_id: entry.id,
       title: entry.title,
       applies_to: entry.applies_to,
+      effective_domains: catalogDomains.filter(domain => entryAppliesToDomain(entry, domain, catalog)),
       dimensions: entry.dimensions,
     })),
     summary: {
       files: routes.length,
       functions: routes.reduce((sum, route) => sum + route.functions.length, 0),
+      interfaces: interfaceManifest.interfaces.length,
+      confirmed_interfaces: interfaceManifest.interfaces.filter(item => item.discovery_state === "CONFIRMED").length,
+      candidate_interfaces: interfaceManifest.interfaces.filter(item => item.discovery_state === "CANDIDATE").length,
       catalog_entries: catalog.entries.length,
     },
   };

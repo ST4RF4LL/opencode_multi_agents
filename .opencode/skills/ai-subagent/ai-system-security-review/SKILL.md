@@ -58,7 +58,7 @@ Do not report a model behavior in isolation. Tie candidates to an application as
 ## Evidence and Accounting
 
 - Preserve the pre-initialized arrays; close each `domain=ai` file/function/catalog row in place.
-- Use `REVIEWED`, `FINDING`, evidence-backed `N/A`, or `GAP`. An empty AI inventory does not by itself justify `N/A`.
+- Use `REVIEWED`, `FINDING`, or `GAP` for entity records. An empty AI inventory does not justify a skipped overlay; record absence as `REVIEWED` with bound evidence. Only the coverage reconciler may emit a zero-target `N/A` dimension cell.
 - `N/A` for a file or function requires inspected-code evidence showing no AI data/control/tool/model role. Project-wide AI absence requires full-scope records plus negative dependency/config/runtime-interface evidence.
 - Cite concrete file/line, symbol, configuration precedence, manifest ID, or tool result. Distinguish repository evidence from deployed/runtime assumptions.
 - Redact prompts, credentials, personal data, model inputs/outputs, and retrieved documents when they contain secrets or sensitive content.

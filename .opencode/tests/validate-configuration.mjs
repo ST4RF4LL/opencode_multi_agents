@@ -51,11 +51,14 @@ async function main() {
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
-  assert(/^permission:\s*allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
+  assert(/^\s*"\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
+  assert(/^\s*"coverage_\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must auto-allow Coverage Ledger MCP tools");
+  assert(orchestratorText.includes('"*coverage-ledger.jsonl*": deny'), "security-audit-orchestrator must hard-deny direct canonical ledger writes");
   assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
   assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");
   assert(config.permission["vuln_judger_*"] === "deny", "global permission must deny vuln_judger MCP tools");
   assert(config.permission["vuln-judger_*"] === "deny", "global permission must deny vuln-judger MCP tools");
+  assert(config.permission["coverage_*"] === "allow", "global permission must auto-allow Coverage Ledger MCP tools");
   for (const agentFile of agentFiles) {
     const agentText = await readFile(join(OPENCODE, "agents", `${agentFile}.md`), "utf8");
     const frontmatter = /^---\s*$([\s\S]*?)^---\s*$/m.exec(agentText)?.[1] ?? "";
@@ -96,6 +99,9 @@ async function main() {
   }
   assert(artifactPolicy.reports.vulnerability_mining.path_template.endsWith(".audit-report.json"), "audit report path is not verifier-discoverable");
   assert(artifactPolicy.reports.coverage_verification.required_fields.includes("claim_boundary"), "coverage verification policy lacks claim boundary");
+  assert(artifactPolicy.reports.coverage_verification.required_fields.includes("summary"), "coverage v2 verification policy lacks machine-derived summary");
+  assert(artifactPolicy.reports.coverage_plan.required_fields.includes("checks"), "coverage plan policy lacks atomic checks");
+  assert(artifactPolicy.reports.coverage_summary.required_fields.includes("manifest_digest"), "coverage summary policy lacks digest");
   assert(artifactPolicy.reports.semantic_coverage_verification.required_fields.includes("claim_boundary"), "semantic coverage verification policy lacks claim boundary");
   assert(artifactPolicy.reports.hypothesis_discovery.required_fields.includes("seed_inputs"), "discovery policy lacks seed provenance");
   assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter"), "attack-chain report is not mandatory");
@@ -106,12 +112,22 @@ async function main() {
   assert(thirdPartyReview.required_invocation.wait_for_completion === false, "third-party review must start asynchronously");
   assert(thirdPartyReview.path_templates.every(path => path.startsWith("reports/validation/")), "third-party review artifacts must be durable reports/validation companions");
   assert(artifactPolicy.work.required_recon_files.includes("threat-model.json") && artifactPolicy.work.required_recon_files.includes("focus-areas.json"), "semantic Recon artifacts are not mandatory");
-  for (const script of ["build-function-manifests.mjs", "build-threat-routing-index.mjs", "seal-semantic-manifest.mjs", "verify-semantic-coverage.mjs"]) {
+  for (const script of ["build-function-manifests.mjs", "build-interface-manifest.mjs", "verify-interface-extractors.mjs", "build-threat-routing-index.mjs", "validate-vulnerability-catalog-v2.mjs", "build-coverage-plan.mjs", "initialize-coverage-ledger.mjs", "verify-coverage-v2.mjs", "render-coverage-summary.mjs", "verify-coverage-summary.mjs", "reconcile-audit-report.mjs", "seal-semantic-manifest.mjs", "verify-semantic-coverage.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts", script)), `semantic coverage script is missing: ${script}`);
   }
   assert(artifactPolicy.work.required_recon_files.includes("coverage/threat-routing-index.json"), "compact threat-routing index is not mandatory");
+  assert(artifactPolicy.work.required_recon_files.includes("coverage/interface-manifest.json")
+    && artifactPolicy.work.required_recon_files.includes("coverage/interface-extractor-coverage.json"), "deterministic external-interface artifacts are not mandatory");
 
   assert(config.mcp.joern?.enabled === true, "local Joern MCP must be enabled");
+  assert(config.mcp.coverage_ledger?.enabled === true && config.mcp.coverage_ledger.command?.includes(".opencode/mcp/coverage-ledger-server.mjs"), "local Coverage Ledger MCP must be enabled");
+  assert(mcpMap.servers.coverage_ledger?.status === "enabled-local", "mcp-map must register Coverage Ledger as enabled-local");
+  for (const agent of [...requiredAgents, "security-evidence-correlator", "security-audit-orchestrator"]) {
+    assert(mcpMap.agents[agent].includes("coverage_*"), `${agent} must receive Coverage Ledger tools`);
+    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
+    assert(/^\s*"coverage_\*": allow\s*$/m.test(text), `${agent} must auto-allow Coverage Ledger tools`);
+    assert(text.includes('"*coverage-ledger.jsonl*": deny'), `${agent} must hard-deny direct ledger bash writes`);
+  }
   const vulnJudger = config.mcp.vuln_judger;
   assert(vulnJudger?.enabled === false && Object.keys(vulnJudger).length === 1, "project vuln_judger must remain a path-free disabled placeholder");
   assert(config.mcp["vuln-judger"]?.enabled === false, "project vuln-judger alias must remain a disabled placeholder");
@@ -125,6 +141,9 @@ async function main() {
   assert(validatorText.includes("exactly once") && validatorText.includes("final comprehensive"), "validator must enforce one full-report submission");
   assert(orchestratorText.indexOf("Write exactly one complete human-readable report") < orchestratorText.indexOf("Invoke `vulnerability-validator` once"), "orchestrator must write the final report before invoking vulnerability-validator");
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");
+  assert(catalog.schema_version === 2 && catalog.profile_id.endsWith("-v4"), "catalog v2 profile is not active");
+  assert(sameSet(catalog.coverage_model.applicability_states, ["REQUIRED", "NOT_APPLICABLE", "UNKNOWN"]), "catalog applicability states are invalid");
+  assert(sameSet(Object.keys(catalog.coverage_model.domain_profiles).sort(), ["ai", "c-cpp", "java", "platform", "python", "web"]), "catalog domain profiles are incomplete");
   const catalogIds = catalog.entries.map(entry => entry.id);
   assert(new Set(catalogIds).size === catalogIds.length, "catalog IDs are not unique");
   const parentChildEntry = catalog.entries.find(entry => entry.id === "JW-ACCESS-05");

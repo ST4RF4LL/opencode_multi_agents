@@ -46,17 +46,18 @@ You collect evidence-backed context for Tri-Lens source, platform, and AI-overla
 
 Load `security-recon`, `secure-code-review-common`, `audit-coverage-accounting`, and `audit-artifact-management`. Use the `audit_id` supplied by the orchestrator and place normalized inventory files under `tmp/<audit_id>/recon/`.
 
-## Freeze scope and functions first
+## Freeze scope, functions, and interfaces first
 
 Before attack-surface discovery:
 
 1. Run `build-scope-manifest.mjs` exactly once over the repository root and write `tmp/<audit_id>/recon/coverage/scope-manifest.json`. Its default Git-aware mode includes tracked plus untracked non-ignored files and records ignored dependency/cache/build paths as exclusions. Use `--mode filesystem` only when ignored working-tree artifacts are explicitly in scope.
 2. Run `build-function-manifests.mjs --jobs 2` once. It creates the mandatory Java, JavaScript, and embedded-Web manifests plus every additional parser language present in scope. It uses scoped source projections for Joern and safely reuses digest-bound outputs on resume. Do not invoke the individual builders again unless the scope digest changed or `--force true` is explicitly required.
-3. Run `build-threat-routing-index.mjs` once after the function manifests complete and write `tmp/<audit_id>/recon/coverage/threat-routing-index.json`. This compact index, not the full scope/function JSON, is the default entity-assignment input for threat modeling.
-4. Stop and report a Recon gap when the scope or any required function manifest is incomplete. Do not replace a failed parser with regex-based function counts.
-5. Route from the scope records, not filename guesses. Preserve exact file IDs, function IDs, owners, scope digest, recorded exclusions, builder elapsed time, cache-hit state, and the routing-index path in `recon-summary.json`.
+3. Run `build-interface-manifest.mjs` once against the frozen scope and write `tmp/<audit_id>/recon/coverage/interface-manifest.json`. Then run `verify-interface-extractors.mjs` and write `tmp/<audit_id>/recon/coverage/interface-extractor-coverage.json`. Preserve `CONFIRMED` versus `CANDIDATE`; never promote candidates by prose. Any `INDETERMINATE` or `FAILED` file remains a blocking gap.
+4. Run `build-threat-routing-index.mjs` once after function and interface artifacts complete and write `tmp/<audit_id>/recon/coverage/threat-routing-index.json`. This compact index, not the full scope/function/interface JSON, is the default entity-assignment input for threat modeling.
+5. Stop and report a Recon gap when the scope, any required function manifest, or interface extractor verification is incomplete. Do not replace failed AST/CPG function extraction or interface enumeration with LLM-authored counts.
+6. Route from the frozen records, not filename guesses. Preserve exact file, function, and interface IDs, owners, scope digest, recorded exclusions, builder elapsed time, cache-hit state, interface confidence counts, and the routing-index path in `recon-summary.json`.
 
-The threat-model, planning, and gap phases must reuse these frozen artifacts. They must never rerun scope or function inventory builders.
+The threat-model, planning, and gap phases must reuse these frozen artifacts. They must never rerun scope, function, or interface inventory builders.
 
 ## Five-Layer Attack Surface
 
@@ -84,6 +85,7 @@ Additional fields:
 - attacker-controlled inputs
 - downstream component or operation
 - trust-boundary crossing
+- matching `interface_id` from the frozen interface manifest when one exists; explain inventory-only or runtime-only entries as gaps rather than inventing IDs
 
 ### 2. Sink Inventory
 
@@ -160,6 +162,8 @@ tmp/<audit_id>/recon/coverage/functions-java.json
 tmp/<audit_id>/recon/coverage/functions-javascript.json
 tmp/<audit_id>/recon/coverage/functions-embedded-web.json
 tmp/<audit_id>/recon/coverage/functions-<additional-language>.json
+tmp/<audit_id>/recon/coverage/interface-manifest.json
+tmp/<audit_id>/recon/coverage/interface-extractor-coverage.json
 tmp/<audit_id>/recon/coverage/threat-routing-index.json
 ```
 

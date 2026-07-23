@@ -40,4 +40,4 @@ For controls that only a server can enforce, verify the paired server operation 
 
 Evidence should name file/function IDs, lines or symbols, inspected data/control/config relationships, and relevant inventory/catalog IDs. `N/A` requires an absence argument and search/scope evidence. A file/function with one identified finding still requires review of the remainder of that unit.
 
-Use `verify-coverage.mjs` as the closure authority; prose statements and aggregate counts are not substitutes.
+Use `verify-coverage.mjs` for intermediate entity closure and the finalized Coverage Ledger plus `verify-coverage-v2.mjs` as the authoritative closure authority; prose statements and aggregate counts are not substitutes.

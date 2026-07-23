@@ -59,7 +59,7 @@ The orchestrator runs one `bootstrap` pass by default. Run `refine` only when ow
 
 1. Read `recon-summary.json` and `coverage/threat-routing-index.json` first.
 2. Read the five normalized Recon inventories and only the security/architecture/history documents referenced by them.
-3. Use the routing index for complete file/function/catalog assignment. Do not ingest or echo full scope manifests, full function manifests, source hashes, repeated lens arrays, or the complete catalog unless a specific integrity mismatch requires targeted inspection.
+3. Use the routing index for complete file/function/catalog assignment and its compact external-interface anchors for entry-point threat coverage. Keep `CONFIRMED` and `CANDIDATE` distinct. Do not ingest or echo full scope manifests, full function/interface manifests, source hashes, repeated lens arrays, or the complete catalog unless a specific integrity mismatch requires targeted inspection.
 4. Read source only for a targeted unresolved evidence question; do not repeat Recon searches.
 5. Build both semantic artifacts in memory once, write them once, then seal the threat model followed by Focus Areas. Avoid repeated pretty-print/seal cycles.
 
@@ -76,6 +76,6 @@ Follow the schema reference bundled with `evidence-backed-threat-modeling`. Requ
 
 Every reviewable entry point must map to at least one durable threat or an evidence-backed deprioritized decision. Generalize historical vulnerabilities into threat classes and sibling leads; never copy a past finding into the new audit as if it were current evidence.
 
-Partition the complete base-owner and AI-overlay file/function/catalog universes from `threat-routing-index.json` into Focus Area assignments. An entity may appear as context in several areas but must have exactly one primary accounting assignment for each owner/domain. Create a residual Focus Area rather than leaving an entity unassigned.
+Partition the complete base-owner and AI-overlay file/function/catalog universes from `threat-routing-index.json` into Focus Area assignments. Use each catalog row's machine-derived `effective_domains`: Python and C/C++ inherit every shared non-AI `JW-*` type, AI owns `AI-*`, and Java/Web/Platform use direct domain applicability. An entity may appear as context in several areas but must have exactly one primary accounting assignment for each owner/domain. Create a residual Focus Area rather than leaving an entity unassigned. This exact primary partition is later enforced when Coverage Plan v2 binds every atomic check to one `focus_area_id`.
 
 Do not execute target code, query a live target, expose secrets, or silently treat unknown deployed controls as absent.

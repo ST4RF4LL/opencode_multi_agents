@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { validateCatalogV2 } from "./coverage-v2-common.mjs";
 
 function parseArgs(argv) {
   const args = { functions: [] };
@@ -14,7 +15,7 @@ function parseArgs(argv) {
     if (key === "functions") args.functions.push(value);
     else args[key] = value;
   }
-  for (const key of ["audit-id", "scope", "catalog", "output-dir"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
+  for (const key of ["audit-id", "scope", "interfaces", "interface-extractors", "catalog", "output-dir"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
   if (Boolean(args["threat-model"]) !== Boolean(args["focus-areas"])) throw new Error("--threat-model and --focus-areas must be provided together");
   return args;
@@ -71,9 +72,31 @@ async function main() {
   const catalogSource = resolve(args.catalog);
   const catalogBytes = await readFile(catalogSource);
   const catalog = JSON.parse(catalogBytes.toString("utf8"));
-  if (typeof catalog.profile_id !== "string" || !Array.isArray(catalog.entries) || catalog.entries.length === 0) throw new Error("Catalog is incomplete");
+  const catalogErrors = validateCatalogV2(catalog);
+  if (catalogErrors.length > 0) throw new Error(`Cannot snapshot invalid catalog v2:\n- ${catalogErrors.join("\n- ")}`);
   const catalogTarget = join(outputDir, "application-ai-vulnerability-catalog.json");
   await copyFile(catalogSource, catalogTarget);
+
+  const interfaceSource = resolve(args.interfaces);
+  const interfaceBytes = await readFile(interfaceSource);
+  const interfaceManifest = JSON.parse(interfaceBytes.toString("utf8"));
+  if (interfaceManifest.audit_id !== args["audit-id"] || interfaceManifest.scope_digest !== scope.scope_digest
+    || interfaceManifest.manifest_digest !== objectDigest(interfaceManifest)) {
+    throw new Error("Cannot snapshot a modified or scope-mismatched interface manifest");
+  }
+  const interfaceTarget = join(outputDir, "interface-manifest.json");
+  await copyFile(interfaceSource, interfaceTarget);
+
+  const extractorSource = resolve(args["interface-extractors"]);
+  const extractorBytes = await readFile(extractorSource);
+  const extractorCoverage = JSON.parse(extractorBytes.toString("utf8"));
+  if (extractorCoverage.audit_id !== args["audit-id"] || extractorCoverage.scope_digest !== scope.scope_digest
+    || extractorCoverage.interface_manifest_digest !== interfaceManifest.manifest_digest
+    || extractorCoverage.manifest_digest !== objectDigest(extractorCoverage) || !extractorCoverage.complete) {
+    throw new Error("Cannot snapshot incomplete, modified, or interface-mismatched extractor verification");
+  }
+  const extractorTarget = join(outputDir, "interface-extractor-coverage.json");
+  await copyFile(extractorSource, extractorTarget);
 
   let semantic = null;
   if (args["threat-model"] && args["focus-areas"]) {
@@ -106,13 +129,29 @@ async function main() {
     scope_digest: scope.scope_digest,
     scope: { path: scopeTarget, file_name: basename(scopeTarget), manifest_digest: scope.manifest_digest, sha256: bytesDigest(scopeBytes), files: scope.files.length },
     functions: functionSnapshots.sort((a, b) => a.language.localeCompare(b.language)),
+    interfaces: {
+      path: interfaceTarget,
+      file_name: basename(interfaceTarget),
+      manifest_digest: interfaceManifest.manifest_digest,
+      sha256: bytesDigest(interfaceBytes),
+      total: interfaceManifest.interfaces.length,
+      confirmed: interfaceManifest.interfaces.filter(item => item.discovery_state === "CONFIRMED").length,
+      candidate: interfaceManifest.interfaces.filter(item => item.discovery_state === "CANDIDATE").length,
+    },
+    interface_extractors: {
+      path: extractorTarget,
+      file_name: basename(extractorTarget),
+      manifest_digest: extractorCoverage.manifest_digest,
+      sha256: bytesDigest(extractorBytes),
+      complete: extractorCoverage.complete,
+    },
     catalog: { path: catalogTarget, file_name: basename(catalogTarget), profile_id: catalog.profile_id, sha256: bytesDigest(catalogBytes), entries: catalog.entries.length },
     ...(semantic ? { semantic } : {}),
   };
   index.snapshot_digest = createHash("sha256").update(JSON.stringify(index)).digest("hex");
   const indexPath = join(outputDir, "snapshot-index.json");
   await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ output: indexPath, audit_id: index.audit_id, scope_files: index.scope.files, function_manifests: index.functions.length, functions: index.functions.reduce((sum, item) => sum + item.functions, 0), catalog_entries: index.catalog.entries, semantic: semantic ? { entry_points: semantic.threat_model.entry_points, threats: semantic.threat_model.threats, focus_areas: semantic.focus_areas.focus_areas } : null, snapshot_digest: index.snapshot_digest })}\n`);
+  process.stdout.write(`${JSON.stringify({ output: indexPath, audit_id: index.audit_id, scope_files: index.scope.files, function_manifests: index.functions.length, functions: index.functions.reduce((sum, item) => sum + item.functions, 0), interfaces: index.interfaces, interface_extractors_complete: index.interface_extractors.complete, catalog_entries: index.catalog.entries, semantic: semantic ? { entry_points: semantic.threat_model.entry_points, threats: semantic.threat_model.threats, focus_areas: semantic.focus_areas.focus_areas } : null, snapshot_digest: index.snapshot_digest })}\n`);
 }
 
 main().catch(error => {

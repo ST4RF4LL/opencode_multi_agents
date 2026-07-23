@@ -1,6 +1,6 @@
 # OpenCode Multi-Agent Source Security Audit
 
-这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都必须经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。结构 verifier 对文件/函数/catalog 做精确差分，语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
+这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都必须经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。v1 结构 verifier 对文件/函数做精确差分；Coverage Plan/Ledger v2 对漏洞类型和外部接口的原子检查做带回执的哈希链记账；语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
 
 ## Agent topology
 
@@ -28,9 +28,9 @@
 - `control-driven`: 枚举敏感操作并验证应该存在的安全控制。
 - `config-driven`: 确定实际生效的配置、依赖和部署选择并对照基线。
 
-Orchestrator 为每个 `Focus Area × owner/domain assignment` 分别调用三次 coverage agent，并保证所有 Focus Area 的 AI assignments 合集仍覆盖全部冻结文件、函数和 AI catalog。每个 Focus Area 还执行 Blind，映射到历史/确认案例时执行 Seeded Variant；这些轨道只贡献候选证据，不能关闭 accounting。结构覆盖以 `verify-coverage.mjs` 为门禁；入口点→威胁、威胁→Focus、Focus×三视角/发现轨道以及系统攻击链面以 `verify-semantic-coverage.mjs` 为门禁。
+Orchestrator 为每个 `Focus Area × owner/domain assignment` 分别调用三次 coverage agent，并保证所有 Focus Area 的 AI assignments 合集仍覆盖全部冻结文件、函数和 AI catalog。Recon 额外生成并验证冻结的外部接口清单，区分 `CONFIRMED` 与 `CANDIDATE`，任何动态、未知或失败提取都会阻止完整声明。目录 v2 为每个适用漏洞类型建立三视角负向发现基线，并仅对维度相交的接口/类型组合建立 REQUIRED 检查；所有检查绑定唯一 Focus Area。subagent 通过 `coverage_ledger` MCP 领取 packet、登记源哈希/定位/query/tool/result 回执并提交执行与结果双状态，不能直接修改 canonical ledger。每个 Focus Area 还执行 Blind，映射到历史/确认案例时执行 Seeded Variant；这些轨道只贡献候选证据，不能关闭 accounting。
 
-两个 `complete: true` 分别只证明结构账本和语义发现账本闭合：它们不覆盖仓库中不存在的运行时生成代码、远端模型/工具真实行为或未提供的部署配置，也不等价于数学意义上证明不存在未知威胁或漏洞。
+最终要求 v1 文件/函数结构账本、v2 漏洞类型/接口 Ledger、机器统计摘要和语义发现账本全部闭合。覆盖率中的 `R/V/U/N`、漏洞类型完全覆盖率、接口完全覆盖率（分 ingress/egress）以及文件/函数完全覆盖率只由脚本计算；`R=0` 显示 `NOT_APPLICABLE` 而不是 100%。这些门禁不覆盖仓库中不存在的运行时生成代码、远端模型/工具真实行为或未提供的部署配置，也不等价于数学意义上证明不存在未知威胁或漏洞。
 
 ## Skill management
 
@@ -105,17 +105,21 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - 系统攻击链结果：`reports/attack-chains/security-attack-chain-hunter.<audit-id>.r<round>.json`
 - 关联结果（JSON）：`reports/correlation/security-evidence-correlator.<audit-id>.r<round>.json`
 - 覆盖验收结果（JSON）：`reports/coverage/coverage-verification.<audit-id>.json`
+- 冻结 Coverage Plan：`reports/coverage/coverage-plan.<audit-id>.json`
+- 服务持有的追加式 Ledger：`reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl`
+- v1 文件/函数结构中间结果：`reports/coverage/coverage-structural-v1.<audit-id>.json`
+- 机器生成覆盖摘要：`reports/coverage/coverage-summary.<audit-id>.json`
 - 语义覆盖验收结果：`reports/coverage/semantic-coverage-verification.<audit-id>.json`
 - vuln-judger 结构化三方复核：`reports/validation/vuln-judger-review.<audit-id>.json`
 - vuln-judger 可读三方复核：`reports/validation/vuln-judger-review.<audit-id>.md`
-- 可复核覆盖输入快照：`reports/coverage/<audit_id>/inputs/{snapshot-index,scope-manifest,functions-*,application-ai-vulnerability-catalog,threat-model,focus-areas}.json`
+- 可复核覆盖输入快照：`reports/coverage/<audit_id>/inputs/{snapshot-index,scope-manifest,functions-*,interface-manifest,interface-extractor-coverage,application-ai-vulnerability-catalog,threat-model,focus-areas}.json`
 - 侦察/威胁清单：`tmp/<audit-id>/recon/{entry-points,sinks,sensitive-operations,config-surfaces,ai-surfaces,recon-summary,threat-model,focus-areas}.json`
-- 冻结范围、函数全集和威胁路由索引：`tmp/<audit-id>/recon/coverage/{scope-manifest,functions-*,threat-routing-index}.json`
+- 冻结范围、函数全集、外部接口全集、接口提取验证和威胁路由索引：`tmp/<audit-id>/recon/coverage/{scope-manifest,functions-*,interface-manifest,interface-extractor-coverage,threat-routing-index}.json`
 - 临时文件、脚本、规则：`tmp/<audit-id>/`
 
 一个 agent session 对应一个 SARIF；一个漏洞挖掘 session 对应一个 JSON。多个静态分析工具在同一 session 内运行时，应合并到同一个 SARIF 的多个 `runs`。
 
-Orchestrator 在双覆盖门禁后把最终 Markdown 写到 `reports/final/` 并计算 SHA-256。随后 `vulnerability-validator` 只把这份完整且不可变的报告提交一次给 vuln-judger，固定使用 `engine=opencode`，通过同一 `run_id` 异步轮询，而不是按 finding 重复调用。三方复核结果写入 `reports/validation/`，不回写已受审报告。流程**不会自动删除 `tmp/`**；`tmp/<audit-id>/` 的清理由人工处理。
+Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdown 写到 `reports/final/` 并计算 SHA-256。随后 `vulnerability-validator` 只把这份完整且不可变的报告提交一次给 vuln-judger，固定使用 `engine=opencode`，通过同一 `run_id` 异步轮询，而不是按 finding 重复调用。三方复核结果写入 `reports/validation/`，不回写已受审报告。流程**不会自动删除 `tmp/`**；`tmp/<audit-id>/` 的清理由人工处理。
 
 ## Usage
 
@@ -124,7 +128,7 @@ Orchestrator 在双覆盖门禁后把最终 Markdown 写到 `reports/final/` 并
 推荐入口：
 
 ```text
-@security-audit-orchestrator 对当前项目做一次 Tri-Lens 安全审计，完成双覆盖门禁并封存最终综合报告，再将整份报告交给 vuln_judger 使用 OpenCode 三方执行引擎复核。
+@security-audit-orchestrator 对当前项目做一次 Tri-Lens 安全审计，完成 v1 结构、v2 Ledger/统计和语义覆盖门禁并封存最终综合报告，再将整份报告交给 vuln_judger 使用 OpenCode 三方执行引擎复核。
 ```
 
 也可以分阶段调用：
@@ -146,7 +150,7 @@ Orchestrator 在双覆盖门禁后把最终 Markdown 写到 `reports/final/` 并
 
 ## MCP defaults
 
-`context7` 和 `gh_grep` 已按官方远程 MCP 示例配置，但默认 `enabled: false`。`joern` 已配置为本地启用，用于 CPG、规则与函数清单；它会规范化 `js→javascript`、`cpp→c`、`jvm→java` 等前端别名并验证 CPG 文件。`vuln_judger` / `vuln-judger` 为占位的本地 stdio MCP，默认 `enabled: false`；如需启用，请在你的全局 `opencode.json`（`~/.config/opencode/opencode.json`）中配置本机的 `type`、`command` 等字段。MCP map 只把 `vuln_judger_*` / `vuln-judger_*` 路由给 validator，orchestrator 虽保留全许可但工作流明确禁止直接调用。`judge_report` 必须传 `engine=opencode` 且异步轮询，避免完整报告处理触发 MCP 长调用超时。`semgrep`、`codeql`、`cpp_index`、`jvm_index`、`python_index`、`audit_lab` 仍是可替换占位。
+`context7` 和 `gh_grep` 已按官方远程 MCP 示例配置，但默认 `enabled: false`。`joern` 与 `coverage_ledger` 均已配置为本地启用：前者提供 CPG/规则/函数清单，后者暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。`coverage_*` 默认自动放行，但所有执行 agent 都显式拒绝直接编辑或通过 Bash 写 canonical ledger。`vuln_judger` / `vuln-judger` 为占位的本地 stdio MCP，默认 `enabled: false`；如需启用，请在你的全局 `opencode.json`（`~/.config/opencode/opencode.json`）中配置本机的 `type`、`command` 等字段。MCP map 只把 `vuln_judger_*` / `vuln-judger_*` 路由给 validator。`judge_report` 必须传 `engine=opencode` 且异步轮询，避免完整报告处理触发 MCP 长调用超时。`semgrep`、`codeql`、`cpp_index`、`jvm_index`、`python_index`、`audit_lab` 仍是可替换占位。
 
 占位 MCP 需要替换为你本机实际可运行的 `type/command` 或 `type/url` 后再启用。
 
@@ -154,7 +158,7 @@ Orchestrator 在双覆盖门禁后把最终 Markdown 写到 `reports/final/` 并
 
 默认配置已放开编辑和外部访问权限，便于开发和调试：
 
-- `security-audit-orchestrator` 使用 `permission: allow` 覆盖全局默认：所有内置、Skill、自定义及 MCP 工具均自动放行，不需要用户手动确认。
+- `security-audit-orchestrator` 使用 catch-all `allow` 覆盖全局默认：所有内置、Skill、自定义及 MCP 工具均自动放行，不需要用户手动确认；canonical Ledger 直接写入是硬拒绝，只能走本地 MCP。
 - 全局使用 `"*": "allow"` 兜底，`bash` 与 `task` 默认自动放行；所有 subagent 的 Bash catch-all 同样为 `allow`，执行期间不会发起权限确认。
 - 各 agent 原有的显式 `deny` 保持不变：不适用或越界工具会直接拒绝，而不是请求用户确认。
 - 大多数开发用 agent 保留现有编辑能力；`ai-security-auditor` 仅允许写入 `tmp/` 与 `reports/`。

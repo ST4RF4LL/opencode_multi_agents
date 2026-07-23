@@ -1,13 +1,13 @@
 {
-  "version": 7,
+  "version": 8,
   "purpose": "Role boundaries for the OpenCode threat-led, Focus-Area-partitioned Tri-Lens multi-agent source, platform, and AI system security audit workspace.",
   "agents": {
     "security-audit-orchestrator": {
       "mode": "primary",
-      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, plan base-owner plus AI-overlay File × Function × Catalog × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural and semantic gates, write the sealed comprehensive report, and request one report-level independent vuln-judger review. Does not auto-delete tmp/.",
+      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, build the sparse Coverage Plan, route service-owned Ledger packets, plan base-owner plus AI-overlay File × Function × Catalog × Interface × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural/v2/semantic gates, write the sealed comprehensive report, and request one report-level independent vuln-judger review. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
-      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "OpenCode three-party review companion under reports/validation/", "structural and semantic coverage verification artifacts", "base-plus-AI file/function/catalog coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
-      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "call vuln-judger/vuln_judger directly instead of delegating to vulnerability-validator", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
+      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "OpenCode three-party review companion under reports/validation/", "Coverage Plan, service-owned Ledger, v1 structural, v2 authoritative, machine summary, and semantic artifacts", "base-plus-AI file/function/catalog/interface coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
+      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "call vuln-judger/vuln_judger directly instead of delegating to vulnerability-validator", "directly edit or write the canonical Coverage Ledger", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
     },
     "security-intel-collector": {
       "mode": "subagent",
@@ -26,55 +26,55 @@
     "c-cpp-source-auditor": {
       "mode": "subagent",
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for C/C++ and native source; only coverage packets close one Tri-Lens strategy across D1-D10.",
-      "inputs": ["Sealed threat model and Focus Areas", "C/C++ scope", "build metadata", "recon inventories", "single-track work packet"],
-      "outputs": ["Focus-scoped D1-D10 coverage for one lens or discovery artifact", "candidate findings", "transfer block", "validation requests"],
+      "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "C/C++ scope", "build metadata", "recon inventories", "single-track work packet"],
+      "outputs": ["Focus-scoped D1-D10 coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/c-cpp-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/c-cpp-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "audit Java/Python-only code as primary scope", "modify audited source"]
     },
     "java-source-auditor": {
       "mode": "subagent",
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for Java/JVM source; only coverage packets close one Tri-Lens strategy across D1-D10.",
-      "inputs": ["Sealed threat model and Focus Areas", "Java/JVM scope", "complete Java/JVM function manifests", "unified application/AI vulnerability catalog", "build metadata", "recon inventories", "single-track work packet"],
-      "outputs": ["exact Java file/function/catalog coverage for one lens", "D1-D10 coverage cells for one lens", "candidate findings", "transfer block", "validation requests"],
+      "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Java/JVM scope", "complete Java/JVM function manifests", "unified application/AI vulnerability catalog", "build metadata", "recon inventories", "single-track work packet"],
+      "outputs": ["exact Java file/function/catalog coverage for one lens", "Coverage Ledger receipts and decisions", "D1-D10 coverage cells for one lens", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/java-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/java-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "audit C/C++ or Python-only code as primary scope", "modify audited source"]
     },
     "web-source-auditor": {
       "mode": "subagent",
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for browser JavaScript/TypeScript, HTML, JSP, templates, service workers, and browser security behavior.",
-      "inputs": ["Sealed threat model and Focus Areas", "Web source scope", "JavaScript and embedded-Web function manifests", "recon inventories", "unified application/AI vulnerability catalog", "single-track Focus packet"],
-      "outputs": ["Focus-scoped Web coverage for one lens or discovery artifact", "candidate findings", "transfer block", "validation requests"],
+      "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Web source scope", "JavaScript and embedded-Web function manifests", "recon inventories", "unified application/AI vulnerability catalog", "single-track Focus packet"],
+      "outputs": ["Focus-scoped Web coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/web-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/web-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "treat client-side checks as server-side enforcement", "modify audited source"]
     },
     "python-source-auditor": {
       "mode": "subagent",
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for Python source and framework configuration.",
-      "inputs": ["Sealed threat model and Focus Areas", "Python scope", "dependency metadata", "recon inventories", "single-track Focus packet"],
-      "outputs": ["Focus-scoped Python coverage for one lens or discovery artifact", "candidate findings", "transfer block", "validation requests"],
+      "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Python scope", "dependency metadata", "recon inventories", "single-track Focus packet"],
+      "outputs": ["Focus-scoped Python coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/python-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/python-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "audit C/C++ or Java-only code as primary scope", "modify audited source"]
     },
     "platform-security-auditor": {
       "mode": "subagent",
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for language-neutral dependencies, build, CI/CD, containers, orchestration, gateways, network, secrets, and IaC.",
-      "inputs": ["Sealed threat model and Focus Areas", "Platform artifact scope", "recon inventories", "single-track Focus packet"],
-      "outputs": ["Focus-scoped platform coverage for one lens or discovery artifact", "candidate findings", "effective-state gaps", "source-component correlation hints"],
+      "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Platform artifact scope", "recon inventories", "single-track Focus packet"],
+      "outputs": ["Focus-scoped platform coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "effective-state gaps", "source-component correlation hints"],
       "artifacts": ["reports/sarif/platform-security-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/platform-security-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "claim deployed state without evidence", "duplicate application-source auditing", "modify audited source"]
     },
     "ai-security-auditor": {
       "mode": "subagent",
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet as part of the independent full-repository AI overlay for LLM, agentic, RAG, memory, MCP/tool, model-provider, training, evaluation, and model-artifact risks.",
-      "inputs": ["Sealed threat model and Focus Areas", "Complete frozen file/function scope", "AI surface inventory", "all common Recon inventories", "unified application/AI vulnerability catalog", "single-track Focus assignment"],
-      "outputs": ["exact domain=ai file/function/catalog coverage for one lens", "AI D1-D10 coverage cells", "candidate findings", "AI-absence evidence or gaps", "validation requests"],
+      "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Complete frozen file/function scope", "AI surface inventory", "all common Recon inventories", "unified application/AI vulnerability catalog", "single-track Focus assignment"],
+      "outputs": ["exact domain=ai file/function/catalog coverage for one lens", "Coverage Ledger receipts and decisions", "AI D1-D10 coverage cells", "candidate findings", "AI-absence evidence or gaps", "validation requests"],
       "artifacts": ["reports/sarif/ai-security-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/ai-security-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Replace base language/platform ownership", "blend multiple audit strategies in one session", "send repository data to external AI services", "execute untrusted model artifacts", "perform live third-party prompt/tool attacks", "modify audited source"]
     },
     "security-evidence-correlator": {
       "mode": "subagent",
       "responsibility": "Preserve exact structural and semantic coverage, normalize Focus Area D1-D10/track evidence, deduplicate candidates, canonicalize supplied attack chains, expose contradictions and gaps, compute discovery routing metrics, and generate follow-up packets.",
-      "inputs": ["Threat model and Focus Areas", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation results"],
+      "inputs": ["Threat model and Focus Areas", "Coverage Plan and read-only Ledger gaps", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation results"],
       "outputs": ["Coverage cube", "canonical findings", "duplicate map", "contradictions", "residual gaps", "follow-up packets", "attack-chain candidates"],
       "artifacts": ["reports/correlation/security-evidence-correlator.<audit-id>.r<round>.json"],
       "must_not": ["Perform new deep source auditing", "invent evidence", "classify exploitability", "modify audited source or reusable audit assets"]

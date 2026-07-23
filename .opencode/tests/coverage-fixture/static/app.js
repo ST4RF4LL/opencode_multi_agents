@@ -1,5 +1,5 @@
 export function requestPath(id) {
-  return `/api/items/${id}`;
+  return fetch(`/api/items/${id}`);
 }
 
 export const normalize = value => value.trim();

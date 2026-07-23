@@ -90,6 +90,7 @@ const CLASSIFIERS = [
   { exts: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"], owner: "web-source-auditor", kind: "source", parser: "joern-js" },
   { exts: [".jsp", ".jspx", ".html", ".htm", ".ftl", ".ftlh", ".vm", ".mustache", ".hbs", ".vue", ".svelte"], owner: "web-source-auditor", kind: "template", parser: "embedded-web" },
   { exts: [".css", ".scss", ".sass", ".less"], owner: "web-source-auditor", kind: "web-resource", parser: null },
+  { exts: [".graphql", ".gql", ".proto", ".wsdl"], owner: "platform-security-auditor", kind: "interface-spec", parser: null },
   { exts: [".py", ".pyw"], owner: "python-source-auditor", kind: "source", parser: "joern-python" },
   { exts: [".c", ".h"], owner: "c-cpp-source-auditor", kind: "source", parser: "joern-c" },
   { exts: [".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"], owner: "c-cpp-source-auditor", kind: "source", parser: "joern-cpp" },
