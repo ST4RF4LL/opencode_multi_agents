@@ -5,6 +5,7 @@ import { readFile, mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { assertFrozenSources, contentDigest, FUNCTION_MANIFEST_CACHE_VERSION, printManifestResult, reusableManifest } from "./function-manifest-cache.mjs";
 
 function parseArgs(argv) {
   const args = {};
@@ -19,12 +20,6 @@ function parseArgs(argv) {
 
 function stableId(value) {
   return `function:${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
-}
-
-function contentDigest(value) {
-  const copy = { ...value };
-  delete copy.manifest_digest;
-  return createHash("sha256").update(JSON.stringify(copy)).digest("hex");
 }
 
 function lineAt(text, offset) {
@@ -127,6 +122,18 @@ async function main() {
   if (scope.manifest_digest !== contentDigest(scope)) throw new Error("Scope manifest content digest is invalid");
 
   const expected = scope.files.filter(file => file.function_parser === "embedded-web").map(file => file.path).sort();
+  await assertFrozenSources(root, scope, expected);
+  const cached = await reusableManifest(outputPath, {
+    auditId: args["audit-id"],
+    scopeDigest: scope.scope_digest,
+    language: "embedded-web",
+    expected,
+    force: args.force === "true",
+  });
+  if (cached) {
+    printManifestResult(outputPath, cached, true);
+    return;
+  }
   const parsedFiles = [];
   const units = [];
   const scriptBlocks = [];
@@ -160,8 +167,8 @@ async function main() {
     const joernScript = resolve(scriptsDir, "build-joern-function-manifest.mjs");
     const syntheticScope = resolve(workDir, "scope.json");
     const syntheticFunctions = resolve(workDir, "functions.json");
-    run("node", [scopeScript, "--root", scriptsRoot, "--audit-id", args["audit-id"], "--output", syntheticScope]);
-    run("node", [joernScript, "--root", scriptsRoot, "--audit-id", args["audit-id"], "--scope", syntheticScope, "--language", "javascript", "--output", syntheticFunctions]);
+    run(process.execPath, [scopeScript, "--root", scriptsRoot, "--audit-id", args["audit-id"], "--output", syntheticScope, "--mode", "filesystem"]);
+    run(process.execPath, [joernScript, "--root", scriptsRoot, "--audit-id", args["audit-id"], "--scope", syntheticScope, "--language", "javascript", "--output", syntheticFunctions]);
     const extracted = JSON.parse(await readFile(syntheticFunctions, "utf8"));
     for (const item of extracted.functions) {
       const block = mapping.get(item.path);
@@ -189,7 +196,7 @@ async function main() {
     schema_version: 1,
     audit_id: args["audit-id"],
     language: "embedded-web",
-    extractor: { name: "template-block-and-joern", includes: ["inline-javascript-functions", "template-macros", "html-and-framework-event-handlers", "javascript-url-handlers", "jsp-declaration-blocks", "jsp-service-and-expression-blocks"] },
+    extractor: { name: "template-block-and-joern", includes: ["inline-javascript-functions", "template-macros", "html-and-framework-event-handlers", "javascript-url-handlers", "jsp-declaration-blocks", "jsp-service-and-expression-blocks"], input_mode: "frozen-template-list-and-scoped-inline-script-projection", cache_version: FUNCTION_MANIFEST_CACHE_VERSION },
     scope_manifest: scopePath,
     scope_digest: scope.scope_digest,
     expected_files: expected,
@@ -205,8 +212,7 @@ async function main() {
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await rm(workDir, { recursive: true, force: true });
-  process.stdout.write(`${JSON.stringify({ output: outputPath, ...manifest.summary, complete: manifest.complete })}\n`);
-  if (!manifest.complete) process.exitCode = 2;
+  printManifestResult(outputPath, manifest, false);
 }
 
 main().catch(error => {

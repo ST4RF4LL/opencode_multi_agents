@@ -173,12 +173,14 @@ function selectLatest(records, key, issues) {
   return latest[0];
 }
 
-async function buildCurrentScope(root, auditId) {
+async function buildCurrentScope(root, auditId, frozenScope) {
   const work = await mkdtemp(join(tmpdir(), "opencode-coverage-"));
   const output = join(work, "scope.json");
   const script = resolve(dirname(fileURLToPath(import.meta.url)), "build-scope-manifest.mjs");
   try {
-    const result = spawnSync(process.execPath, [script, "--root", root, "--audit-id", auditId, "--output", output], {
+    const frozenMode = frozenScope.policy?.requested_mode
+      ?? (frozenScope.policy?.enumeration === "recursive-filesystem-walk" ? "filesystem" : "auto");
+    const result = spawnSync(process.execPath, [script, "--root", root, "--audit-id", auditId, "--output", output, "--mode", frozenMode], {
       encoding: "utf8",
       maxBuffer: 128 * 1024 * 1024,
     });
@@ -226,7 +228,7 @@ async function main() {
 
   let currentScope = null;
   try {
-    currentScope = await buildCurrentScope(root, args["audit-id"]);
+    currentScope = await buildCurrentScope(root, args["audit-id"], scope);
     if (currentScope.manifest_digest !== contentDigest(currentScope)) pushIssue(issues, "CURRENT_SCOPE_MANIFEST_DIGEST_INVALID", "Rebuilt scope manifest digest is invalid");
     if (currentScope.scope_digest !== scope.scope_digest) {
       const frozen = new Map(scope.files.map(file => [file.path, file]));
@@ -246,8 +248,12 @@ async function main() {
       if (!exactStringSet(frozen.required_lenses, current.required_lenses)) changedFields.push("required_lenses");
       return changedFields.length > 0 ? [{ path: current.path, changed_fields: changedFields }] : [];
     });
-    if (policyDrift.length > 0 || JSON.stringify(scope.policy) !== JSON.stringify(currentScope.policy)) {
-      pushIssue(issues, "SCOPE_POLICY_DRIFT", "Frozen owner/parser/lens policy differs from a current deterministic rebuild", { files: policyDrift, policy_changed: JSON.stringify(scope.policy) !== JSON.stringify(currentScope.policy) });
+    const comparableCurrentPolicy = { ...currentScope.policy };
+    if (!("requested_mode" in (scope.policy ?? {}))) delete comparableCurrentPolicy.requested_mode;
+    if (!("ignored_content" in (scope.policy ?? {}))) delete comparableCurrentPolicy.ignored_content;
+    const policyChanged = JSON.stringify(scope.policy) !== JSON.stringify(comparableCurrentPolicy);
+    if (policyDrift.length > 0 || policyChanged) {
+      pushIssue(issues, "SCOPE_POLICY_DRIFT", "Frozen owner/parser/lens policy differs from a current deterministic rebuild", { files: policyDrift, policy_changed: policyChanged });
     }
   } catch (error) {
     pushIssue(issues, "SCOPE_REBUILD_FAILED", error.message);

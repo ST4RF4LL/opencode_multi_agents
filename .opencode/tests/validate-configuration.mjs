@@ -106,16 +106,17 @@ async function main() {
   assert(thirdPartyReview.required_invocation.wait_for_completion === false, "third-party review must start asynchronously");
   assert(thirdPartyReview.path_templates.every(path => path.startsWith("reports/validation/")), "third-party review artifacts must be durable reports/validation companions");
   assert(artifactPolicy.work.required_recon_files.includes("threat-model.json") && artifactPolicy.work.required_recon_files.includes("focus-areas.json"), "semantic Recon artifacts are not mandatory");
-  for (const script of ["seal-semantic-manifest.mjs", "verify-semantic-coverage.mjs"]) {
+  for (const script of ["build-function-manifests.mjs", "build-threat-routing-index.mjs", "seal-semantic-manifest.mjs", "verify-semantic-coverage.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts", script)), `semantic coverage script is missing: ${script}`);
   }
+  assert(artifactPolicy.work.required_recon_files.includes("coverage/threat-routing-index.json"), "compact threat-routing index is not mandatory");
 
   assert(config.mcp.joern?.enabled === true, "local Joern MCP must be enabled");
   const vulnJudger = config.mcp.vuln_judger;
-  assert(vulnJudger?.type === "local" && vulnJudger.enabled === true, "local vuln_judger MCP must be enabled");
-  assert(Array.isArray(vulnJudger.command) && vulnJudger.command.includes("vuln-judger") && vulnJudger.command.includes("mcp"), "vuln_judger MCP command is incomplete");
-  assert(mcpMap.servers.vuln_judger?.status === "enabled-local", "mcp-map must register vuln_judger as enabled-local");
-  assert(mcpMap.servers["vuln-judger"]?.status === "enabled-local", "mcp-map must register vuln-judger alias as enabled-local");
+  assert(vulnJudger?.enabled === false && Object.keys(vulnJudger).length === 1, "project vuln_judger must remain a path-free disabled placeholder");
+  assert(config.mcp["vuln-judger"]?.enabled === false, "project vuln-judger alias must remain a disabled placeholder");
+  assert(mcpMap.servers.vuln_judger?.status === "disabled-by-default", "mcp-map must register vuln_judger as disabled-by-default");
+  assert(mcpMap.servers["vuln-judger"]?.status === "disabled-by-default", "mcp-map must register vuln-judger alias as disabled-by-default");
   assert(Array.isArray(mcpMap.servers.vuln_judger?.aliases) && mcpMap.servers.vuln_judger.aliases.includes("vuln-judger"), "vuln_judger must declare vuln-judger alias");
   assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*", "vuln-judger_*"]), "vulnerability-validator must receive both vuln_judger and vuln-judger MCP tool prefixes");
   assert(/^\s*"vuln_judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln_judger MCP tools");

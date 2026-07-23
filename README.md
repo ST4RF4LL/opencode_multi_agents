@@ -18,6 +18,8 @@
 - `vulnerability-validator`: 在最终综合报告封存后，将整份报告一次性交给 `vuln_judger`，监控 OpenCode 驱动的正方/反方/主持人三方复核并保存伴随制品。
 - `security-skill-optimizer`: 根据已完成的三方复核结果优化审计 skill、Joern 规则、漏洞案例和误报案例。
 
+为降低大型仓库的威胁分析前置耗时，Recon 默认使用 Git tracked + untracked/non-ignored 范围，Joern 只解析对应语言的临时源码投影，函数清单按 scope digest 自动复用，并额外生成紧凑的 `threat-routing-index.json`。威胁建模默认只执行一次 bootstrap，消费制品路径与紧凑索引，不重复运行 `.mjs` 构建器；只有已提供 Owner 答案或明确要求访谈时才执行 refine。
+
 ## Tri-Lens coverage
 
 三个视角是任务模式，不是互斥的漏洞类型归属：
@@ -108,7 +110,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - vuln-judger 可读三方复核：`reports/validation/vuln-judger-review.<audit-id>.md`
 - 可复核覆盖输入快照：`reports/coverage/<audit_id>/inputs/{snapshot-index,scope-manifest,functions-*,application-ai-vulnerability-catalog,threat-model,focus-areas}.json`
 - 侦察/威胁清单：`tmp/<audit-id>/recon/{entry-points,sinks,sensitive-operations,config-surfaces,ai-surfaces,recon-summary,threat-model,focus-areas}.json`
-- 冻结范围和函数全集：`tmp/<audit-id>/recon/coverage/{scope-manifest,functions-*}.json`
+- 冻结范围、函数全集和威胁路由索引：`tmp/<audit-id>/recon/coverage/{scope-manifest,functions-*,threat-routing-index}.json`
 - 临时文件、脚本、规则：`tmp/<audit-id>/`
 
 一个 agent session 对应一个 SARIF；一个漏洞挖掘 session 对应一个 JSON。多个静态分析工具在同一 session 内运行时，应合并到同一个 SARIF 的多个 `runs`。

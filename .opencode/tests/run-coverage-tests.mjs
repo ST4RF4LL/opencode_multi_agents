@@ -91,6 +91,12 @@ function run(script, args, expectedStatus = 0) {
   return result;
 }
 
+function runCommand(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${result.stderr}\n${result.stdout}`);
+  return result;
+}
+
 async function makeReports(directory, scope, manifests, catalog) {
   await mkdir(directory, { recursive: true });
   const functions = manifests.flatMap(manifest => manifest.functions);
@@ -165,18 +171,56 @@ async function main() {
     await cp(FIXTURE, root, { recursive: true });
     await mkdir(coverage, { recursive: true });
 
+    const gitScopeRoot = join(work, "git-scope");
+    await mkdir(join(gitScopeRoot, "src"), { recursive: true });
+    await mkdir(join(gitScopeRoot, "node_modules", "dependency"), { recursive: true });
+    await writeFile(join(gitScopeRoot, ".gitignore"), "node_modules/\n", "utf8");
+    await writeFile(join(gitScopeRoot, "src", "app.js"), "export const value = 1;\n", "utf8");
+    await writeFile(join(gitScopeRoot, "node_modules", "dependency", "index.js"), "module.exports = 1;\n", "utf8");
+    runCommand("git", ["-C", gitScopeRoot, "init", "--quiet"]);
+    runCommand("git", ["-C", gitScopeRoot, "add", ".gitignore", "src/app.js"]);
+    const gitScopePath = join(work, "git-scope.json");
+    run("build-scope-manifest.mjs", ["--root", gitScopeRoot, "--audit-id", AUDIT_ID, "--output", gitScopePath]);
+    const gitScope = JSON.parse(await readFile(gitScopePath, "utf8"));
+    if (gitScope.policy.enumeration !== "git-index-plus-untracked-nonignored"
+      || gitScope.files.some(file => file.path.startsWith("node_modules/"))
+      || !gitScope.exclusions.some(item => item.path === "node_modules" && item.reason === "gitignore-policy")) {
+      throw new Error("Git-aware scope did not prune and record ignored dependency content");
+    }
+
     const scopePath = join(coverage, "scope.json");
     const javaPath = join(coverage, "functions-java.json");
     const jsPath = join(coverage, "functions-javascript.json");
     const embeddedPath = join(coverage, "functions-embedded-web.json");
     run("build-scope-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--output", scopePath]);
-    run("build-java-function-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output", javaPath]);
-    run("build-joern-function-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--language", "javascript", "--output", jsPath]);
-    run("build-embedded-web-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output", embeddedPath]);
+    run("build-function-manifests.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output-dir", coverage, "--jobs", "2"]);
+    const cachedBuild = JSON.parse(run("build-function-manifests.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output-dir", coverage, "--jobs", "2"]).stdout);
+    if (!cachedBuild.manifests.every(manifest => manifest.cached === true)) throw new Error("Digest-bound function manifests were not reused on resume");
+    const cachedSourcePath = join(root, "static", "app.js");
+    const cachedSource = await readFile(cachedSourcePath, "utf8");
+    await writeFile(cachedSourcePath, `${cachedSource}\n// scope drift fixture\n`, "utf8");
+    run("build-joern-function-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--language", "javascript", "--output", jsPath], 1);
+    await writeFile(cachedSourcePath, cachedSource, "utf8");
 
     const scope = JSON.parse(await readFile(scopePath, "utf8"));
     const manifests = await Promise.all([javaPath, jsPath, embeddedPath].map(async path => JSON.parse(await readFile(path, "utf8"))));
     const catalog = JSON.parse(await readFile(CATALOG, "utf8"));
+    const routingIndexPath = join(coverage, "threat-routing-index.json");
+    run("build-threat-routing-index.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      "--functions", javaPath,
+      "--functions", jsPath,
+      "--functions", embeddedPath,
+      "--catalog", CATALOG,
+      "--output", routingIndexPath,
+    ]);
+    const routingIndex = JSON.parse(await readFile(routingIndexPath, "utf8"));
+    if (routingIndex.summary.files !== scope.files.length
+      || routingIndex.summary.functions !== manifests.flatMap(manifest => manifest.functions).length
+      || routingIndex.summary.catalog_entries !== catalog.entries.length) {
+      throw new Error("Compact threat-routing index does not preserve the complete entity universe");
+    }
     const { threatModelPath, focusAreasPath } = await makeSemanticManifests(coverage, scope, manifests, catalog);
     const aiSurfacesPath = join(coverage, "ai-surfaces.json");
     await writeFile(aiSurfacesPath, `${JSON.stringify({
@@ -429,9 +473,7 @@ async function main() {
     const unsupportedJsPath = join(unsupportedCoverage, "functions-javascript.json");
     const unsupportedEmbeddedPath = join(unsupportedCoverage, "functions-embedded-web.json");
     run("build-scope-manifest.mjs", ["--root", unsupportedRoot, "--audit-id", AUDIT_ID, "--output", unsupportedScopePath]);
-    run("build-java-function-manifest.mjs", ["--root", unsupportedRoot, "--audit-id", AUDIT_ID, "--scope", unsupportedScopePath, "--output", unsupportedJavaPath]);
-    run("build-joern-function-manifest.mjs", ["--root", unsupportedRoot, "--audit-id", AUDIT_ID, "--scope", unsupportedScopePath, "--language", "javascript", "--output", unsupportedJsPath]);
-    run("build-embedded-web-manifest.mjs", ["--root", unsupportedRoot, "--audit-id", AUDIT_ID, "--scope", unsupportedScopePath, "--output", unsupportedEmbeddedPath]);
+    run("build-function-manifests.mjs", ["--root", unsupportedRoot, "--audit-id", AUDIT_ID, "--scope", unsupportedScopePath, "--output-dir", unsupportedCoverage, "--jobs", "2"]);
     const unsupportedScope = JSON.parse(await readFile(unsupportedScopePath, "utf8"));
     const unsupportedManifests = await Promise.all([unsupportedJavaPath, unsupportedJsPath, unsupportedEmbeddedPath].map(async path => JSON.parse(await readFile(path, "utf8"))));
     await makeReports(unsupportedReports, unsupportedScope, unsupportedManifests, catalog);
@@ -463,7 +505,7 @@ async function main() {
     const malformedFunctions = JSON.parse(await readFile(malformedFunctionsPath, "utf8"));
     if (malformedFunctions.complete || !malformedFunctions.missing_files.includes("broken.js")) throw new Error("Malformed JavaScript did not produce an explicit parser gap");
 
-    process.stdout.write(`${JSON.stringify({ complete: true, positive: positive.expected, ai_initializer_requires_surface_inventory: true, targeted_gap_round_preserved_prior_coverage: true, negative_missing_function_caught: removedFunction, negative_missing_ai_overlay_file_caught: removedAiFile, missing_dimension_cell_caught: "D10", tampered_scope_caught: true, tampered_function_manifest_caught: true, unsupported_function_source_caught: "Unsupported.groovy", malformed_javascript_caught: "broken.js" })}\n`);
+    process.stdout.write(`${JSON.stringify({ complete: true, positive: positive.expected, git_aware_scope_pruning: true, function_manifest_resume_cache: true, cache_rejects_scope_drift: true, compact_threat_routing_index: true, ai_initializer_requires_surface_inventory: true, targeted_gap_round_preserved_prior_coverage: true, negative_missing_function_caught: removedFunction, negative_missing_ai_overlay_file_caught: removedAiFile, missing_dimension_cell_caught: "D10", tampered_scope_caught: true, tampered_function_manifest_caught: true, unsupported_function_source_caught: "Unsupported.groovy", malformed_javascript_caught: "broken.js" })}\n`);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

@@ -5,6 +5,7 @@ import { readFile, mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { assertFrozenSources, contentDigest, FUNCTION_MANIFEST_CACHE_VERSION, printManifestResult, reusableManifest } from "./function-manifest-cache.mjs";
 
 function parseArgs(argv) {
   const args = {};
@@ -21,12 +22,6 @@ function parseArgs(argv) {
 
 function stableId(value) {
   return `function:${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
-}
-
-function contentDigest(value) {
-  const copy = { ...value };
-  delete copy.manifest_digest;
-  return createHash("sha256").update(JSON.stringify(copy)).digest("hex");
 }
 
 function run(command, args, options = {}) {
@@ -51,6 +46,18 @@ async function main() {
     .filter(file => file.function_parser === "javac-java")
     .map(file => file.path)
     .sort();
+  await assertFrozenSources(root, scope, expected);
+  const cached = await reusableManifest(outputPath, {
+    auditId: args["audit-id"],
+    scopeDigest: scope.scope_digest,
+    language: "java",
+    expected,
+    force: args.force === "true",
+  });
+  if (cached) {
+    printManifestResult(outputPath, cached, true);
+    return;
+  }
 
   const workDir = resolve(dirname(outputPath), ".java-inventory-work");
   const classesDir = resolve(workDir, "classes");
@@ -62,9 +69,10 @@ async function main() {
 
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const helper = resolve(scriptDir, "JavaFunctionInventory.java");
-  run("javac", ["-encoding", "UTF-8", "-d", classesDir, helper]);
-  if (expected.length > 0) run("java", ["-cp", classesDir, "JavaFunctionInventory", root, listPath, rawPath]);
-  else await writeFile(rawPath, "", "utf8");
+  if (expected.length > 0) {
+    run("javac", ["-encoding", "UTF-8", "-d", classesDir, helper]);
+    run("java", ["-cp", classesDir, "JavaFunctionInventory", root, listPath, rawPath]);
+  } else await writeFile(rawPath, "", "utf8");
 
   const parsedFiles = [];
   const functions = [];
@@ -94,7 +102,7 @@ async function main() {
     schema_version: 1,
     audit_id: args["audit-id"],
     language: "java",
-    extractor: { name: "jdk-compiler-ast", helper: "JavaFunctionInventory.java", includes: ["method", "constructor", "lambda", "static-initializer", "instance-initializer"] },
+    extractor: { name: "jdk-compiler-ast", helper: "JavaFunctionInventory.java", includes: ["method", "constructor", "lambda", "static-initializer", "instance-initializer"], input_mode: "frozen-file-list", cache_version: FUNCTION_MANIFEST_CACHE_VERSION },
     scope_manifest: scopePath,
     scope_digest: scope.scope_digest,
     expected_files: expected,
@@ -111,8 +119,7 @@ async function main() {
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await rm(workDir, { recursive: true, force: true });
-  process.stdout.write(`${JSON.stringify({ output: outputPath, ...manifest.summary, complete: manifest.complete })}\n`);
-  if (!manifest.complete) process.exitCode = 2;
+  printManifestResult(outputPath, manifest, false);
 }
 
 main().catch(error => {

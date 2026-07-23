@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "purpose": "Role boundaries for the OpenCode threat-led, Focus-Area-partitioned Tri-Lens multi-agent source, platform, and AI system security audit workspace.",
   "agents": {
     "security-audit-orchestrator": {
@@ -11,17 +11,17 @@
     },
     "security-intel-collector": {
       "mode": "subagent",
-      "responsibility": "Freeze the deterministic filesystem scope, build complete language function manifests, collect evidence-backed project and attack-surface context, and produce normalized entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories.",
+      "responsibility": "Freeze the deterministic Git-aware scope, build digest-cached language function manifests from scoped source projections, emit a compact threat-routing index, collect evidence-backed project and attack-surface context, and produce normalized entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories.",
       "inputs": ["Repository path", "user scope", "audit_id"],
-      "outputs": ["scope manifest and digest", "complete function manifests", "Five-layer Attack Surface Map", "Language and Platform Routing", "five normalized inventories including AI surfaces", "D1-D10 applicability", "recon gaps"],
+      "outputs": ["scope manifest and digest", "complete function manifests", "compact threat-routing index", "builder timing and cache state", "Five-layer Attack Surface Map", "Language and Platform Routing", "five normalized inventories including AI surfaces", "D1-D10 applicability", "recon gaps"],
       "must_not": ["Produce final vulnerability claims", "mark lens coverage complete", "modify audited source"]
     },
     "security-threat-modeler": {
       "mode": "subagent",
       "responsibility": "Build and optionally owner-refine a durable threat model, generalize authorized security history into project-specific threat classes, enforce entry-point threat coverage, and partition the complete audit universe into deterministic Focus Areas.",
-      "inputs": ["Frozen scope and function manifests", "Recon inventories", "architecture and security documents", "authorized history/advisories", "owner answers when available", "unified catalog"],
+      "inputs": ["Recon summary", "compact threat-routing index", "Recon inventories", "architecture and security documents", "authorized history/advisories", "owner answers when already available"],
       "outputs": ["sealed threat-model.json", "sealed focus-areas.json", "entry-point threat coverage", "history clusters and sibling leads", "blocking open questions"],
-      "must_not": ["Issue point-vulnerability findings", "execute target code", "treat old vulnerabilities as current findings", "close source-audit coverage", "modify audited source"]
+      "must_not": ["Issue point-vulnerability findings", "execute target code", "rerun scope or function-manifest builders", "ingest full structural manifests when the routing index is valid", "pause the default workflow for an owner interview", "treat old vulnerabilities as current findings", "close source-audit coverage", "modify audited source"]
     },
     "c-cpp-source-auditor": {
       "mode": "subagent",

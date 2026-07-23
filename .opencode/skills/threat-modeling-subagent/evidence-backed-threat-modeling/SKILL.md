@@ -9,7 +9,7 @@ Read [references/artifact-schemas.md](references/artifact-schemas.md) before emi
 
 ## Build the model
 
-1. Bind all outputs to the frozen `audit_id` and `scope_digest`.
+1. Bind all outputs to the frozen `audit_id` and `scope_digest`. Start from `recon-summary.json` and the compact `threat-routing-index.json`; do not rerun coverage-accounting builders or ingest full manifests when the routing index is valid.
 2. Derive system context, assets, actors, entry points, trust boundaries, controls, and deployment uncertainties from repository evidence.
 3. Mine authorized history using stack-specific security terms in addition to `CVE`, `security`, `vuln`, `fix`, and `exploit`. Read relevant diffs; cluster evidence by `entry_point × weakness_class × asset`.
 4. Generalize point vulnerabilities into durable outcome-oriented threats. A threat must survive the patching of any one instance.
@@ -23,7 +23,7 @@ For AI systems, include malicious content, compromised tools, peer agents, knowl
 
 ## Refine with the owner
 
-Use bootstrap open questions rather than restarting cold. Ask only questions that change exposure, actor capability, asset priority, control status, or risk acceptance. Preserve the original evidence and annotate corrected assumptions.
+Use bootstrap open questions rather than restarting cold. Refine only when answers are already available or an interview pass was explicitly requested. Ask only questions that change exposure, actor capability, asset priority, control status, or risk acceptance. Preserve the original evidence and annotate corrected assumptions.
 
 ## Partition Focus Areas
 

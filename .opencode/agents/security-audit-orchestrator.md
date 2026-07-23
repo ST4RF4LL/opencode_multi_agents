@@ -59,9 +59,9 @@ Each assigned cell must end in `PASS`, `FINDING`, `GAP`, or evidence-backed `N/A
 
 ### Phase 2: THREAT MODEL
 
-3. Invoke `security-threat-modeler` in `bootstrap` mode with the frozen scope/functions, all Recon inventories, security/architecture documents, authorized history, prior findings, and unified catalog. Require sealed `threat-model.json` and `focus-areas.json`.
+3. Invoke `security-threat-modeler` once in `bootstrap` mode with artifact paths: `recon-summary.json`, the compact `threat-routing-index.json`, all Recon inventories, relevant security/architecture documents, authorized history, and prior findings. Do not inline full scope/function manifests or the full unified catalog, and do not permit any scope/function builder to run outside Recon. Require sealed `threat-model.json` and `focus-areas.json`.
 4. Require every entry point to map to at least one durable threat or an evidence-backed deprioritized decision. Blocking unknowns remain `GAP`.
-5. When an owner is available, ask only the material open questions and invoke `security-threat-modeler` in `refine` mode. Preserve `code-verified`, `owner-asserted`, `history-inferred`, `deployment-unknown`, and contradictory provenance separately.
+5. Do not block the default workflow for an owner interview. Invoke `security-threat-modeler` in `refine` mode only when answers are already available or the operator explicitly requested it. Otherwise preserve open questions as gaps and continue. Preserve `code-verified`, `owner-asserted`, `history-inferred`, `deployment-unknown`, and contradictory provenance separately.
 6. Require every threat and every applicable entry point to map to a Focus Area. Require each reviewable base-owner and AI-overlay file/function/catalog ID to have exactly one primary Focus Area assignment; overlapping context IDs do not close coverage.
 
 ### Phase 3: PLAN

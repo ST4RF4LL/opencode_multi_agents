@@ -34,8 +34,8 @@ Deep packs live under `.opencode/skills/java-subagent/` and share assets here:
 
 ## Feedback Flow
 
-1. `security-intel-collector` freezes the recursive file scope, builds complete function manifests, and produces entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories.
-2. `security-threat-modeler` bootstraps and optionally owner-refines durable threats, closes entry-point threat decisions, generalizes authorized history, and partitions primary base/AI assignments into sealed Focus Areas.
+1. `security-intel-collector` freezes a Git-aware file scope, builds digest-cached function manifests from language-scoped source projections, emits a compact threat-routing index, and produces entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories.
+2. `security-threat-modeler` performs one bounded bootstrap by default from the compact routing index and Recon artifacts, optionally refines only when owner answers are already available, closes entry-point threat decisions, generalizes authorized history, and partitions primary base/AI assignments into sealed Focus Areas.
 3. Source, platform, and AI auditors run Focus Area `coverage` sessions under each Tri-Lens strategy plus checklist-light `blind` and history/case-seeded `seeded-variant` discovery where required.
 4. `security-attack-chain-hunter` performs a new system-level pass across every Focus Area, trust boundary, and asset.
 5. `security-evidence-correlator` preserves structural/semantic accounting, merges cross-track evidence, deduplicates candidates, and canonicalizes supplied attack chains.

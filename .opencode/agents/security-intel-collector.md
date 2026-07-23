@@ -50,11 +50,13 @@ Load `security-recon`, `secure-code-review-common`, `audit-coverage-accounting`,
 
 Before attack-surface discovery:
 
-1. Run `build-scope-manifest.mjs` over the repository root and write `tmp/<audit_id>/recon/coverage/scope-manifest.json`.
-2. Always run the Java, JavaScript, and embedded-Web builders; an empty complete manifest is valid when that parser has no files.
-3. For each additional parser tag present in scope, run `build-joern-function-manifest.mjs` with the matching language: `python`, `c`, `cpp`, `kotlin`, or `jvm`.
+1. Run `build-scope-manifest.mjs` exactly once over the repository root and write `tmp/<audit_id>/recon/coverage/scope-manifest.json`. Its default Git-aware mode includes tracked plus untracked non-ignored files and records ignored dependency/cache/build paths as exclusions. Use `--mode filesystem` only when ignored working-tree artifacts are explicitly in scope.
+2. Run `build-function-manifests.mjs --jobs 2` once. It creates the mandatory Java, JavaScript, and embedded-Web manifests plus every additional parser language present in scope. It uses scoped source projections for Joern and safely reuses digest-bound outputs on resume. Do not invoke the individual builders again unless the scope digest changed or `--force true` is explicitly required.
+3. Run `build-threat-routing-index.mjs` once after the function manifests complete and write `tmp/<audit_id>/recon/coverage/threat-routing-index.json`. This compact index, not the full scope/function JSON, is the default entity-assignment input for threat modeling.
 4. Stop and report a Recon gap when the scope or any required function manifest is incomplete. Do not replace a failed parser with regex-based function counts.
-5. Route from the scope records, not filename guesses. Preserve exact file IDs, function IDs, owners, scope digest, and recorded exclusions in `recon-summary.json`.
+5. Route from the scope records, not filename guesses. Preserve exact file IDs, function IDs, owners, scope digest, recorded exclusions, builder elapsed time, cache-hit state, and the routing-index path in `recon-summary.json`.
+
+The threat-model, planning, and gap phases must reuse these frozen artifacts. They must never rerun scope or function inventory builders.
 
 ## Five-Layer Attack Surface
 
@@ -158,6 +160,7 @@ tmp/<audit_id>/recon/coverage/functions-java.json
 tmp/<audit_id>/recon/coverage/functions-javascript.json
 tmp/<audit_id>/recon/coverage/functions-embedded-web.json
 tmp/<audit_id>/recon/coverage/functions-<additional-language>.json
+tmp/<audit_id>/recon/coverage/threat-routing-index.json
 ```
 
 Use arrays for inventories and include `schema_version`, `audit_id`, `scope`, `items`, `gaps`, and `tool_inputs` in each file.

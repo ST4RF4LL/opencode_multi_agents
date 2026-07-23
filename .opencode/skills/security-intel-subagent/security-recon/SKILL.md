@@ -13,12 +13,12 @@ Build normalized discovery inputs for all three audit lenses. Discover broadly b
 
 ## Workflow
 
-1. Build the recursive filesystem scope manifest with `audit-coverage-accounting`; use its recorded exclusions as the scope boundary.
-2. Build a complete AST/CPG function manifest for every parser tag in scope. Do not use regex as a function universe.
+1. Build the scope manifest once with `audit-coverage-accounting`; default to tracked plus untracked non-ignored Git content and use its recorded exclusions as the scope boundary. Use full filesystem mode only when ignored artifacts are explicitly in scope.
+2. Build complete AST/CPG function manifests once with the bounded parallel driver. Joern must parse only its language-scoped source projection, and digest-bound results may be reused on resume. Do not use regex as a function universe.
 3. Derive the five-layer attack surface: architecture, business, framework/language, deployment, and functions.
 4. Build all five inventories below, including an empty-but-explained AI surface inventory when no AI use is found.
 5. Map inventory items to D1-D10 without assigning exclusive lens ownership.
-6. Record discovery queries, inspected files, unsupported areas, and secrets redaction.
+6. Emit the compact threat-routing index, and record discovery queries, inspected files, unsupported areas, builder timing/cache state, and secrets redaction.
 
 ## Entry-Point Inventory
 
@@ -119,7 +119,7 @@ Each JSON file must contain:
 
 Write the five inventory files—`entry-points.json`, `sinks.json`, `sensitive-operations.json`, `config-surfaces.json`, and `ai-surfaces.json`—plus `recon-summary.json` beneath `tmp/<audit_id>/recon/`. Every file must include `audit_id`, `scope_digest`, `items`, `gaps`, and discovery inputs.
 
-Write `scope-manifest.json` and all function manifests beneath `tmp/<audit_id>/recon/coverage/`. Bind every inventory and routing record to the same `scope_digest`.
+Write `scope-manifest.json`, all function manifests, and `threat-routing-index.json` beneath `tmp/<audit_id>/recon/coverage/`. Bind every inventory and routing record to the same `scope_digest`. Later phases consume the compact routing index and must not rerun builders.
 
 ## Completion Checklist
 

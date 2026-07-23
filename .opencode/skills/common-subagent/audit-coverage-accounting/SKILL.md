@@ -21,24 +21,40 @@ Run from the target repository root:
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-scope-manifest.mjs \
   --root . \
   --audit-id <audit-id> \
-  --output tmp/<audit-id>/coverage/scope-manifest.json
+  --output tmp/<audit-id>/recon/coverage/scope-manifest.json
 ```
 
-The scope builder walks the filesystem rather than only tracked files. It excludes only audit infrastructure and VCS internals, records every exclusion, hashes every file, assigns an owner, and marks which parser must inventory functions.
+In its default `--mode auto`, the scope builder uses the Git index plus untracked non-ignored files when a worktree is available. This avoids vendored dependencies, caches, and generated output already excluded by repository policy while recording ignored paths and audit/VCS infrastructure as exclusions. It falls back to a recursive filesystem walk outside Git. Use `--mode filesystem` only when ignored working-tree artifacts are intentionally part of the audit. Every included file is hashed, assigned an owner, and tagged with its required function parser.
 
-## Inventory Java functions
+## Inventory functions once
 
 ```sh
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-java-function-manifest.mjs \
+node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-function-manifests.mjs \
   --root . \
   --audit-id <audit-id> \
-  --scope tmp/<audit-id>/coverage/scope-manifest.json \
-  --output tmp/<audit-id>/coverage/functions-java.json
+  --scope tmp/<audit-id>/recon/coverage/scope-manifest.json \
+  --output-dir tmp/<audit-id>/recon/coverage \
+  --jobs 2
 ```
 
-This uses the JDK compiler AST, not regex. It inventories explicit methods, constructors, lambdas, and class initializer blocks. Any parse error or missing Java file makes the manifest incomplete and the command fail after writing diagnostics.
+The bounded driver creates the mandatory Java, JavaScript, and embedded-Web manifests and every additional parser language present in scope. Java uses the JDK compiler AST; Joern parses a temporary projection containing only files for the selected language instead of rebuilding a CPG from the whole repository for every manifest. Digest-bound valid outputs are reused automatically on resume; pass `--force true` only to deliberately rerun extraction. Any parse error or missing source file makes the relevant manifest incomplete.
 
-For JavaScript, Python, C/C++, Kotlin, and other JVM source tagged by the scope builder, use `build-joern-function-manifest.mjs --language <javascript|python|c|cpp|kotlin|jvm>`. For JSP/HTML/template inline scripts and macros, use `build-embedded-web-manifest.mjs`. Every `function_inventory_required` file must occur in exactly one complete function manifest.
+The individual Java/Joern/embedded builders remain available for diagnosis. Do not call them again in threat modeling, planning, or gap rounds. Every `function_inventory_required` file must occur in exactly one complete function manifest.
+
+Build the compact entity index used by threat modeling:
+
+```sh
+node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-threat-routing-index.mjs \
+  --audit-id <audit-id> \
+  --scope tmp/<audit-id>/recon/coverage/scope-manifest.json \
+  --functions tmp/<audit-id>/recon/coverage/functions-java.json \
+  --functions tmp/<audit-id>/recon/coverage/functions-javascript.json \
+  --functions tmp/<audit-id>/recon/coverage/functions-embedded-web.json \
+  --catalog .opencode/shared/security-audit/catalogs/application-ai-vulnerability-catalog.json \
+  --output tmp/<audit-id>/recon/coverage/threat-routing-index.json
+```
+
+Repeat `--functions` for additional languages. The routing index strips hashes, repeated lens metadata, and extractor internals while preserving every file/function/catalog ID needed for exact Focus Area assignment. Threat modeling should consume it plus the normalized Recon inventories, not the full structural manifests.
 
 ## Record review coverage
 

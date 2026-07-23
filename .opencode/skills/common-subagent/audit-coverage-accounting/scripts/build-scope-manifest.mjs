@@ -29,6 +29,10 @@ function parseArgs(argv) {
   for (const key of ["root", "audit-id", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
+  args.mode ??= "auto";
+  if (!["auto", "git", "filesystem"].includes(args.mode)) {
+    throw new Error("--mode must be auto, git, or filesystem");
+  }
   if (!/^[a-z0-9][a-z0-9._-]{2,127}$/i.test(args["audit-id"])) {
     throw new Error("Invalid --audit-id");
   }
@@ -43,30 +47,39 @@ function stableId(prefix, value) {
   return `${prefix}:${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
 }
 
-async function sha256File(path) {
-  return await new Promise((resolveHash, reject) => {
+async function inspectFile(path) {
+  return await new Promise((resolveInspection, reject) => {
     const hash = createHash("sha256");
     const stream = createReadStream(path);
-    stream.on("data", chunk => hash.update(chunk));
+    let sampled = 0;
+    let binary = false;
+    stream.on("data", chunk => {
+      hash.update(chunk);
+      if (sampled >= 8192 || binary) return;
+      const length = Math.min(chunk.length, 8192 - sampled);
+      for (let index = 0; index < length; index += 1) {
+        if (chunk[index] === 0) {
+          binary = true;
+          break;
+        }
+      }
+      sampled += length;
+    });
     stream.on("error", reject);
-    stream.on("end", () => resolveHash(hash.digest("hex")));
+    stream.on("end", () => resolveInspection({ sha256: hash.digest("hex"), binary }));
   });
 }
 
-async function looksBinary(path, size) {
-  if (size === 0) return false;
-  const handle = await import("node:fs/promises").then(m => m.open(path, "r"));
-  try {
-    const length = Math.min(size, 8192);
-    const buffer = Buffer.alloc(length);
-    const { bytesRead } = await handle.read(buffer, 0, length, 0);
-    for (let i = 0; i < bytesRead; i += 1) {
-      if (buffer[i] === 0) return true;
+async function mapLimit(items, limit, operation) {
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      await operation(items[index]);
     }
-    return false;
-  } finally {
-    await handle.close();
   }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
 const CLASSIFIERS = [
@@ -111,6 +124,28 @@ function gitTrackedFiles(root) {
   const result = spawnSync("git", ["-C", root, "ls-files", "-z", "--cached"], { encoding: "buffer" });
   if (result.status !== 0) return new Set();
   return new Set(result.stdout.toString("utf8").split("\0").filter(Boolean).map(normalizePath));
+}
+
+function gitScopeFiles(root) {
+  const result = spawnSync("git", ["-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."], { encoding: "buffer" });
+  if (result.status !== 0) return null;
+  const files = [...new Set(result.stdout.toString("utf8").split("\0").filter(Boolean).map(normalizePath))].sort();
+  if (files.length === 0) {
+    const ignoredRoot = spawnSync("git", ["-C", root, "check-ignore", "--quiet", "."]);
+    if (ignoredRoot.status === 0) return null;
+  }
+  return files;
+}
+
+function gitIgnoredPaths(root) {
+  const result = spawnSync("git", ["-C", root, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory", "--", "."], { encoding: "buffer" });
+  if (result.status !== 0) return [];
+  return [...new Set(result.stdout.toString("utf8").split("\0").filter(Boolean).map(path => normalizePath(path).replace(/\/$/, "")))].sort();
+}
+
+function infrastructureExclusion(path) {
+  const rootName = path.split("/")[0];
+  return INFRASTRUCTURE_EXCLUSIONS.get(rootName) ?? null;
 }
 
 async function walk(root) {
@@ -177,24 +212,84 @@ async function walk(root) {
   return { files, symlinks, exclusions, errors };
 }
 
+async function walkGitScope(root, candidates) {
+  const files = [];
+  const symlinks = [];
+  const exclusions = [];
+  const errors = [];
+  const excludedRoots = new Set();
+
+  for (const rel of candidates) {
+    const infrastructureReason = infrastructureExclusion(rel);
+    if (infrastructureReason) {
+      const rootName = rel.split("/")[0];
+      if (!excludedRoots.has(rootName)) {
+        exclusions.push({ path: rootName, reason: infrastructureReason });
+        excludedRoots.add(rootName);
+      }
+      continue;
+    }
+    const abs = resolve(root, rel);
+    try {
+      const info = await lstat(abs);
+      if (info.isSymbolicLink()) {
+        symlinks.push({
+          file_id: stableId("file", rel),
+          path: rel,
+          type: "symlink",
+          link_target: await readlink(abs),
+          size: info.size,
+          owner_agent: "platform-security-auditor",
+          content_kind: "symlink",
+          function_parser: null,
+          function_inventory_state: "not-applicable",
+          function_inventory_reason: "symlink-not-followed-file-target-reviewed-separately-if-in-scope",
+          function_inventory_required: false,
+          review_required: true,
+          required_lenses: LENSES,
+        });
+      } else if (info.isFile()) {
+        files.push({ abs, rel, info });
+      } else if (info.isDirectory()) {
+        exclusions.push({ path: rel, reason: "gitlink-or-directory-entry-reviewed-via-dependency-metadata" });
+      } else {
+        errors.push({ path: rel, operation: "classify", error: "unsupported-filesystem-entry" });
+      }
+    } catch (error) {
+      if (error.code === "ENOENT") exclusions.push({ path: rel, reason: "tracked-path-absent-from-working-tree" });
+      else errors.push({ path: rel, operation: "lstat", error: error.message });
+    }
+  }
+
+  for (const path of gitIgnoredPaths(root)) {
+    if (infrastructureExclusion(path) || exclusions.some(item => item.path === path)) continue;
+    exclusions.push({ path, reason: "gitignore-policy" });
+  }
+  exclusions.sort((a, b) => a.path.localeCompare(b.path));
+  return { files, symlinks, exclusions, errors };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = resolve(args.root);
   const output = resolve(args.output);
   const tracked = gitTrackedFiles(root);
-  const walked = await walk(root);
+  const gitCandidates = args.mode === "filesystem" ? null : gitScopeFiles(root);
+  if (args.mode === "git" && gitCandidates === null) throw new Error("--mode git requires a Git worktree");
+  const useGitScope = gitCandidates !== null;
+  const walked = useGitScope ? await walkGitScope(root, gitCandidates) : await walk(root);
   const records = [...walked.symlinks];
 
-  for (const item of walked.files) {
+  await mapLimit(walked.files, 16, async item => {
     try {
-      const binary = await looksBinary(item.abs, item.info.size);
-      const classification = classify(item.rel, binary);
+      const inspection = await inspectFile(item.abs);
+      const classification = classify(item.rel, inspection.binary);
       records.push({
         file_id: stableId("file", item.rel),
         path: item.rel,
         type: "file",
         size: item.info.size,
-        sha256: await sha256File(item.abs),
+        sha256: inspection.sha256,
         tracked_by_git: tracked.has(item.rel),
         owner_agent: classification.owner_agent,
         content_kind: classification.content_kind,
@@ -208,7 +303,7 @@ async function main() {
     } catch (error) {
       walked.errors.push({ path: item.rel, operation: "read-or-hash", error: error.message });
     }
-  }
+  });
 
   records.sort((a, b) => a.path.localeCompare(b.path));
   const digestInput = records.map(r => `${r.path}\0${r.type}\0${r.sha256 ?? r.link_target ?? ""}`).join("\n");
@@ -218,7 +313,9 @@ async function main() {
     root,
     scope_digest: createHash("sha256").update(digestInput).digest("hex"),
     policy: {
-      enumeration: "recursive-filesystem-walk",
+      enumeration: useGitScope ? "git-index-plus-untracked-nonignored" : "recursive-filesystem-walk",
+      requested_mode: args.mode,
+      ignored_content: useGitScope ? "excluded-by-gitignore-and-recorded-as-scope-exclusions" : "included",
       excluded_root_directories: Object.fromEntries(INFRASTRUCTURE_EXCLUSIONS),
       all_discovered_files_require_review: true,
       lenses: LENSES,

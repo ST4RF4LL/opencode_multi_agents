@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "tmp_root": "tmp",
   "reports_root": "reports",
   "cleanup_owner": "human",
@@ -109,7 +109,7 @@
   "work": {
     "path_template": "tmp/{audit_id}/",
     "recon_path_template": "tmp/{audit_id}/recon/",
-    "required_recon_files": ["coverage/scope-manifest.json", "coverage/functions-java.json", "coverage/functions-javascript.json", "coverage/functions-embedded-web.json", "entry-points.json", "sinks.json", "sensitive-operations.json", "config-surfaces.json", "ai-surfaces.json", "recon-summary.json", "threat-model.json", "focus-areas.json"],
+    "required_recon_files": ["coverage/scope-manifest.json", "coverage/functions-java.json", "coverage/functions-javascript.json", "coverage/functions-embedded-web.json", "coverage/threat-routing-index.json", "entry-points.json", "sinks.json", "sensitive-operations.json", "config-surfaces.json", "ai-surfaces.json", "recon-summary.json", "threat-model.json", "focus-areas.json"],
     "allowed_contents": ["frozen scope and function manifests", "sealed threat model and Focus Areas", "recon inventories", "intermediate files", "tool raw output", "temporary scripts", "temporary rules", "scratch notes", "follow-up work packets"],
     "disallowed_contents": ["final human-readable audit report", "durable SARIF", "durable vulnerability-mining JSON", "durable discovery JSON", "durable attack-chain JSON", "durable correlation JSON", "durable third-party review JSON or Markdown", "durable coverage verification JSON"],
     "promotion_rule": "Reusable scripts, Joern rules, static rules, vulnerability cases, and false-positive cases must be promoted by security-skill-optimizer into .opencode/skills/ or .opencode/shared/security-audit/. tmp/ is retained for human review and is not auto-deleted."

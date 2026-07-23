@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { readFile, mkdir, writeFile, rm, stat } from "node:fs/promises";
+import { readFile, mkdir, writeFile, rm, stat, link, copyFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
+import { assertFrozenSources, contentDigest, FUNCTION_MANIFEST_CACHE_VERSION, printManifestResult, reusableManifest } from "./function-manifest-cache.mjs";
 
 const LANGUAGE_CONFIG = {
   javascript: { joern: "javascript", parser_tags: ["joern-js"], owner: "web-source-auditor" },
@@ -40,16 +41,30 @@ function stableId(value) {
   return `function:${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
 }
 
-function contentDigest(value) {
-  const copy = { ...value };
-  delete copy.manifest_digest;
-  return createHash("sha256").update(JSON.stringify(copy)).digest("hex");
-}
-
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024, ...options });
   if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${result.stderr}\n${result.stdout}`);
   return result;
+}
+
+async function buildSourceProjection(root, projectionRoot, expected) {
+  let next = 0;
+  async function worker() {
+    while (next < expected.length) {
+      const path = expected[next];
+      next += 1;
+      const source = resolve(root, path);
+      const target = resolve(projectionRoot, path);
+      await mkdir(dirname(target), { recursive: true });
+      try {
+        await link(source, target);
+      } catch (error) {
+        if (!["EXDEV", "EPERM", "EACCES", "ENOTSUP"].includes(error.code)) throw error;
+        await copyFile(source, target);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(16, expected.length) }, worker));
 }
 
 function buildQuery(rawOutputPath) {
@@ -104,7 +119,20 @@ async function main() {
   if (scope.manifest_digest !== contentDigest(scope)) throw new Error("Scope manifest content digest is invalid");
 
   const expected = scope.files.filter(file => config.parser_tags.includes(file.function_parser)).map(file => file.path).sort();
+  await assertFrozenSources(root, scope, expected);
+  const cached = await reusableManifest(outputPath, {
+    auditId: args["audit-id"],
+    scopeDigest: scope.scope_digest,
+    language: args.language,
+    expected,
+    force: args.force === "true",
+  });
+  if (cached) {
+    printManifestResult(outputPath, cached, true);
+    return;
+  }
   const workDir = resolve(dirname(outputPath), `.joern-inventory-${args.language}`);
+  const projectionRoot = resolve(workDir, "source");
   const cpgPath = resolve(workDir, "cpg.bin");
   const queryPath = resolve(workDir, "export-inventory.sc");
   const rawPath = resolve(workDir, "inventory.ndjson");
@@ -112,7 +140,8 @@ async function main() {
   await mkdir(workDir, { recursive: true });
 
   if (expected.length > 0) {
-    const parseResult = run(process.env.JOERN_PARSE_BIN || "/usr/local/bin/joern-parse", [root, "-o", cpgPath, "--language", config.joern]);
+    await buildSourceProjection(root, projectionRoot, expected);
+    const parseResult = run(process.env.JOERN_PARSE_BIN || "/usr/local/bin/joern-parse", [projectionRoot, "-o", cpgPath, "--language", config.joern]);
     let cpgStat;
     try { cpgStat = await stat(cpgPath); } catch { cpgStat = null; }
     if (!cpgStat || cpgStat.size === 0 || /Exception|NoSuchElementException/.test(`${parseResult.stdout}\n${parseResult.stderr}`)) {
@@ -133,7 +162,7 @@ async function main() {
     if (tab < 1) throw new Error(`Malformed Joern inventory line ${index + 1}`);
     const kind = line.slice(0, tab);
     const record = JSON.parse(line.slice(tab + 1));
-    record.path = normalizeCpgPath(root, record.path);
+    record.path = normalizeCpgPath(projectionRoot, record.path);
     if (kind === "FILE") cpgFiles.push(record.path);
     else if (kind === "FUNCTION") {
       const identity = [args.language, record.path, record.kind, record.qualified_name, record.signature, record.line_start].join("|");
@@ -152,7 +181,7 @@ async function main() {
     schema_version: 1,
     audit_id: args["audit-id"],
     language: args.language,
-    extractor: { name: "joern-cpg", frontend_language: config.joern },
+    extractor: { name: "joern-cpg", frontend_language: config.joern, input_mode: "scoped-source-projection", cache_version: FUNCTION_MANIFEST_CACHE_VERSION },
     scope_manifest: scopePath,
     scope_digest: scope.scope_digest,
     expected_files: expected,
@@ -168,8 +197,7 @@ async function main() {
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await rm(workDir, { recursive: true, force: true });
-  process.stdout.write(`${JSON.stringify({ output: outputPath, ...manifest.summary, complete: manifest.complete })}\n`);
-  if (!manifest.complete) process.exitCode = 2;
+  printManifestResult(outputPath, manifest, false);
 }
 
 main().catch(error => {
