@@ -7,7 +7,7 @@ import { StdioServerTransport } from "../node_modules/@modelcontextprotocol/sdk/
 import { z } from "../node_modules/zod/index.js";
 import { spawn } from "node:child_process";
 import { mkdir, rm, readFile, writeFile, readdir, stat, access } from "node:fs/promises";
-import { resolve, relative, join, dirname, basename, extname } from "node:path";
+import { resolve, relative, join, dirname, basename, delimiter, extname, isAbsolute, sep } from "node:path";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { EOL } from "node:os";
@@ -18,11 +18,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const WORKSPACE_ROOT = resolve(process.cwd());
 
-const JOERN_BIN       = process.env.JOERN_BIN       || "/usr/local/bin/joern";
-const JOERN_PARSE_BIN = process.env.JOERN_PARSE_BIN || "/usr/local/bin/joern-parse";
-const JOERN_VERSION   = process.env.JOERN_VERSION   || "4.0.579";
-const JOERN_GNUBIN    = process.env.JOERN_GNUBIN    || "/opt/homebrew/opt/coreutils/libexec/gnubin";
-const JOERN_JAVA_BIN  = process.env.JOERN_JAVA_BIN  || "/opt/homebrew/opt/openjdk@21/bin";
+const JOERN_BIN       = process.env.JOERN_BIN       || "joern";
+const JOERN_PARSE_BIN = process.env.JOERN_PARSE_BIN || "joern-parse";
+const JOERN_VERSION   = process.env.JOERN_VERSION   || "unknown";
+const JOERN_GNUBIN    = process.env.JOERN_GNUBIN    || "";
+const JOERN_JAVA_BIN  = process.env.JOERN_JAVA_BIN  || "";
 
 const SHARED_RULES_DIR  = join(WORKSPACE_ROOT, ".opencode", "shared", "security-audit", "joern-rules");
 const SHARED_RULES_INDEX = join(SHARED_RULES_DIR, "index.json");
@@ -60,7 +60,19 @@ const require_ = createRequire(import.meta.url);
 /** Build a clean PATH that includes coreutils and java for joern */
 function joernPATH() {
   const base = process.env.PATH || "/usr/bin:/bin";
-  return [JOERN_GNUBIN, JOERN_JAVA_BIN, base].join(":");
+  const entries = [JOERN_GNUBIN, JOERN_JAVA_BIN, ...base.split(delimiter)].filter(Boolean);
+  return [...new Set(entries)].join(delimiter);
+}
+
+async function resolveExecutable(command) {
+  if (isAbsolute(command) || command.includes(sep)) {
+    await access(command, 1 /* X_OK */);
+    return command;
+  }
+  const { stdout } = await execCommand("sh", ["-c", 'command -v "$1"', "sh", command], { timeout: 5_000 });
+  const resolved = stdout.trim();
+  if (!resolved) throw new Error(`Executable not found on PATH: ${command}`);
+  return resolved;
 }
 
 /** Check that a file path stays inside the workspace */
@@ -161,24 +173,21 @@ const server = new McpServer({
 
 // ── Tool: joern_health ──────────────────────────────────────
 server.registerTool("joern_health", {
-  description: "Check Joern binary, JDK, coreutils availability and workspace paths.",
+  description: "Check portable Joern binary and JDK configuration. GNU coreutils is checked only when JOERN_GNUBIN is configured (normally macOS).",
 }, async () => {
   const checks = {};
-  // Check binaries via direct path access
   for (const [k, v] of [["joern", JOERN_BIN], ["joern-parse", JOERN_PARSE_BIN]]) {
-    try { await access(v, 1 /* X_OK */); checks[k] = "ok"; } catch { checks[k] = "missing"; }
+    try { await resolveExecutable(v); checks[k] = "ok"; } catch { checks[k] = "missing"; }
   }
-  // Check PATH-resolved tools
-  for (const cmd of ["java", "greadlink"]) {
-    try {
-      const { stdout } = await execCommand("sh", ["-c", `command -v ${cmd}`], { timeout: 5000 });
-      checks[cmd] = stdout.trim() ? `ok (${stdout.trim()})` : "missing";
-    } catch { checks[cmd] = "missing"; }
+  try { await resolveExecutable("java"); checks.java = "ok"; } catch { checks.java = "missing"; }
+  if (JOERN_GNUBIN) {
+    try { await resolveExecutable("greadlink"); checks.greadlink = "ok"; } catch { checks.greadlink = "missing"; }
+  } else {
+    checks.greadlink = "not-required";
   }
-  // check workspace
-  checks.workspace = WORKSPACE_ROOT;
-  checks.sharedRulesDir = SHARED_RULES_DIR;
-  checks.tmpRoot = TMP_ROOT;
+  checks.workspace = ".";
+  checks.sharedRulesDir = ".opencode/shared/security-audit/joern-rules";
+  checks.tmpRoot = "tmp/joern";
   try {
     const rulesIdx = JSON.parse(await readFile(SHARED_RULES_INDEX, "utf8"));
     checks.sharedRulesCount = rulesIdx.rules?.length ?? 0;
@@ -372,4 +381,4 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 
 // Log startup to stderr (not mixed with stdio MCP protocol)
-console.error(`[joern-mcp] started | workspace=${WORKSPACE_ROOT} | joern=${JOERN_VERSION}`);
+console.error(`[joern-mcp] started | joern=${JOERN_VERSION}`);

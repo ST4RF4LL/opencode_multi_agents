@@ -30,11 +30,12 @@ server.registerTool("semgrep_health", {
   description: "Report local OpenGrep and Semgrep availability. Auto mode prefers OpenGrep and falls back to Semgrep unless SEMGREP_ENGINE overrides the order.",
 }, async () => {
   const engines = await probeEngines({ workspaceRoot: WORKSPACE_ROOT });
+  const publicEngines = engines.map(({ command: _command, ...engine }) => engine);
   return textResult({
     healthy: engines.some(engine => engine.available),
-    workspace: WORKSPACE_ROOT,
+    workspace: ".",
     auto_selected: engines.find(engine => engine.available)?.engine ?? null,
-    engines,
+    engines: publicEngines,
   });
 });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { probeEngines, runSemgrepScan, selectEngine } from "../mcp/semgrep-core.mjs";
@@ -90,6 +90,10 @@ process.stdout.write(JSON.stringify({
     if (sarif.runs.length !== 1 || sarif.runs[0].results[0].ruleId !== "fixture.rule"
       || sarif.runs[0].results[0].partialFingerprints.semgrepFingerprint !== "fixture-fingerprint") {
       throw new Error("Semgrep JSON was not normalized to SARIF 2.1.0");
+    }
+    const commandLine = sarif.runs[0].invocations[0].commandLine;
+    if (commandLine.includes(workspace) || commandLine.includes(await realpath(workspace))) {
+      throw new Error("SARIF command line leaked the absolute workspace path");
     }
 
     const merged = await runSemgrepScan({

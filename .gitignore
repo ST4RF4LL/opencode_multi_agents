@@ -4,3 +4,6 @@ tmp/*
 reports/**
 workspace/
 DESIGN_NOW.md
+
+# Generated locally from .opencode/opencode.json.bak.
+.opencode/opencode.json

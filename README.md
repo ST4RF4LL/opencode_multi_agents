@@ -2,6 +2,8 @@
 
 这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都必须经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。v1 结构 verifier 对文件/函数做精确差分；Coverage Plan/Ledger v2 对漏洞类型和外部接口的原子检查做带回执的哈希链记账；语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
 
+首次使用请先完成[初始化与安装](docs/installation.md)，生成仅保存在本机的 `.opencode/opencode.json`。
+
 ## Agent topology
 
 - `security-audit-orchestrator`: 主控入口，负责生成单视角任务包、维护覆盖立方体、执行门禁并汇总报告。
@@ -73,7 +75,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - `artifact-policy.json` — 报告格式、临时目录和清理策略。
 - `naming.md` — 新增 skill/MCP 时的命名和维护规则。
 
-添加自有 MCP 时，先在 `.opencode/opencode.json` 的 `mcp` 中替换或新增服务器定义，再在 `mcp-map.json` 和对应 agent frontmatter 的权限中加入 `<server>_*`。
+可提交的配置源是 `.opencode/opencode.json.bak`；`.opencode/opencode.json` 由每位使用者从模板生成并填写本机工具路径，不进入 Git。添加自有项目 MCP 时，先更新模板，再在 `mcp-map.json` 和对应 agent frontmatter 的权限中加入 `<server>_*`。
 
 ## Shared audit assets
 
@@ -123,7 +125,7 @@ Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdow
 
 ## Usage
 
-在需要审计的源码项目根目录运行 OpenCode，并使用本配置目录作为项目配置，或把 `.opencode/` 复制到目标项目根目录。
+按[初始化与安装](docs/installation.md)生成本地配置后，在需要审计的源码项目根目录设置 `OPENCODE_CONFIG="$PWD/.opencode/opencode.json"` 并运行 OpenCode；也可以把整个 `.opencode/` 复制到目标项目再生成其本地配置。
 
 推荐入口：
 
@@ -150,7 +152,7 @@ Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdow
 
 ## MCP defaults
 
-`semgrep`、`joern` 与 `coverage_ledger` 已配置为本地启用。`semgrep` MCP 暴露 `semgrep_health` 和 `semgrep_scan`：自动模式优先使用 `opengrep`，不可用时回退 `semgrep`；只接受工作区内本地 YAML 规则，原始 JSON 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`。可通过 `OPENGREP_BIN`、`SEMGREP_BIN` 和 `SEMGREP_ENGINE` 覆盖二进制或优先级；项目不自动安装二进制。Semgrep 安装参考 `https://semgrep.dev/docs/getting-started/`，OpenGrep 安装参考 `https://github.com/opengrep/opengrep`。`joern` 提供 CPG、规则与函数清单能力；`coverage_ledger` 暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。
+配置模板默认启用 `semgrep`、`joern` 与 `coverage_ledger`。`semgrep` MCP 暴露 `semgrep_health` 和 `semgrep_scan`：自动模式优先使用 `opengrep`，不可用时回退 `semgrep`；只接受工作区内本地 YAML 规则，原始 JSON 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`。实际二进制路径由每位使用者写入被忽略的 `.opencode/opencode.json`。`joern` 提供 CPG、规则与函数清单能力；`coverage_ledger` 暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。
 
 `context7`、`gh_grep`、CodeQL 以及 `vuln_judger` / `vuln-judger` MCP 占位均已从项目配置中删除。历史 CodeQL 规则文件仅作为离线知识资产保留，不会被 agent 调用。`vuln_judger` 服务完全由用户的全局 OpenCode 配置提供；项目只保留 validator 的工具前缀权限与路由契约，`judge_report` 必须传 `engine=opencode` 且异步轮询。`cpp_index`、`jvm_index`、`python_index` 和 `audit_lab` 仍是可替换占位。
 

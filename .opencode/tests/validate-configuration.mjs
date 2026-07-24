@@ -48,15 +48,32 @@ async function main() {
   const skillMap = await json(join(manifestDir, "skill-map.json"));
   const mcpMap = await json(join(manifestDir, "mcp-map.json"));
   const artifactPolicy = await json(join(manifestDir, "artifact-policy.json"));
-  const config = await json(join(OPENCODE, "opencode.json"));
+  const config = await json(join(OPENCODE, "opencode.json.bak"));
+  const rootGitignore = await readFile(join(ROOT, ".gitignore"), "utf8");
   const catalog = await json(join(OPENCODE, "shared/security-audit/catalogs/application-ai-vulnerability-catalog.json"));
   const orchestratorText = await readFile(join(OPENCODE, "agents/security-audit-orchestrator.md"), "utf8");
   const validatorText = await readFile(join(OPENCODE, "agents/vulnerability-validator.md"), "utf8");
+  const joernServerText = await readFile(join(OPENCODE, "mcp/joern-server.mjs"), "utf8");
+  const joernManifestBuilderText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-joern-function-manifest.mjs"), "utf8");
 
   const roleAgents = Object.keys(roles.agents).sort();
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
   assert(sameSet(roleAgents, agentFiles), `roles.json and agent Markdown files differ: roles=${roleAgents} files=${agentFiles}`);
   assert(roleAgents.includes(config.default_agent), "default_agent is not declared in roles.json");
+  assert(rootGitignore.split(/\r?\n/).includes(".opencode/opencode.json"), "local .opencode/opencode.json must be ignored");
+  assert(await exists(join(OPENCODE, "opencode.json.bak")), "portable OpenCode config template is missing");
+  const templateText = JSON.stringify(config);
+  for (const machinePath of ["/Users/", "/opt/homebrew/", "/usr/local/bin/joern", "\\\\Users\\\\"]) {
+    assert(!templateText.includes(machinePath), `OpenCode config template contains a machine-specific path: ${machinePath}`);
+    assert(!joernServerText.includes(machinePath), `Joern MCP contains a machine-specific default path: ${machinePath}`);
+    assert(!joernManifestBuilderText.includes(machinePath), `Joern manifest builder contains a machine-specific default path: ${machinePath}`);
+  }
+  assert(config.mcp.joern?.environment?.JOERN_BIN === "joern"
+    && config.mcp.joern?.environment?.JOERN_PARSE_BIN === "joern-parse", "Joern template must use PATH-resolved portable defaults");
+  assert(joernManifestBuilderText.includes('join(root, ".opencode", "opencode.json")')
+    && joernManifestBuilderText.includes("configured.JOERN_BIN")
+    && joernManifestBuilderText.includes("configured.JOERN_PARSE_BIN"), "Joern manifest builder must consume the generated local config");
+  assert(await exists(join(ROOT, "docs/installation.md")), "initial installation guide is missing");
   assert(roleAgents.includes("ai-security-auditor"), "AI security auditor is not registered");
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");

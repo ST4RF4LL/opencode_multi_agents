@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile, rm, stat, link, copyFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertFrozenSources, contentDigest, FUNCTION_MANIFEST_CACHE_VERSION, printManifestResult, reusableManifest } from "./function-manifest-cache.mjs";
 
@@ -45,6 +45,30 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024, ...options });
   if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${result.stderr}\n${result.stdout}`);
   return result;
+}
+
+async function loadJoernToolchain(root) {
+  const configPath = join(root, ".opencode", "opencode.json");
+  let configured = {};
+  try {
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    configured = config?.mcp?.joern?.environment ?? {};
+  } catch (error) {
+    if (error.code !== "ENOENT") throw new Error(`Cannot read local Joern configuration at ${configPath}: ${error.message}`);
+  }
+  const joernBin = process.env.JOERN_BIN || configured.JOERN_BIN || "joern";
+  const joernParseBin = process.env.JOERN_PARSE_BIN || configured.JOERN_PARSE_BIN || "joern-parse";
+  const basePath = process.env.PATH || "/usr/bin:/bin";
+  const pathEntries = [
+    process.env.JOERN_GNUBIN || configured.JOERN_GNUBIN,
+    process.env.JOERN_JAVA_BIN || configured.JOERN_JAVA_BIN,
+    ...basePath.split(delimiter),
+  ].filter(Boolean);
+  return {
+    joernBin,
+    joernParseBin,
+    environment: { ...process.env, PATH: [...new Set(pathEntries)].join(delimiter) },
+  };
 }
 
 async function buildSourceProjection(root, projectionRoot, expected) {
@@ -111,6 +135,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const config = LANGUAGE_CONFIG[args.language];
   const root = resolve(args.root);
+  const toolchain = await loadJoernToolchain(root);
   const scopePath = resolve(args.scope);
   const outputPath = resolve(args.output);
   const scope = JSON.parse(await readFile(scopePath, "utf8"));
@@ -141,14 +166,14 @@ async function main() {
 
   if (expected.length > 0) {
     await buildSourceProjection(root, projectionRoot, expected);
-    const parseResult = run(process.env.JOERN_PARSE_BIN || "/usr/local/bin/joern-parse", [projectionRoot, "-o", cpgPath, "--language", config.joern]);
+    const parseResult = run(toolchain.joernParseBin, [projectionRoot, "-o", cpgPath, "--language", config.joern], { env: toolchain.environment });
     let cpgStat;
     try { cpgStat = await stat(cpgPath); } catch { cpgStat = null; }
     if (!cpgStat || cpgStat.size === 0 || /Exception|NoSuchElementException/.test(`${parseResult.stdout}\n${parseResult.stderr}`)) {
       throw new Error(`Joern did not produce a valid CPG\n${parseResult.stderr}\n${parseResult.stdout}`);
     }
     await writeFile(queryPath, buildQuery(rawPath), "utf8");
-    run(process.env.JOERN_BIN || "/usr/local/bin/joern", [cpgPath, "--script", queryPath]);
+    run(toolchain.joernBin, [cpgPath, "--script", queryPath], { env: toolchain.environment });
   } else {
     await writeFile(rawPath, "", "utf8");
   }

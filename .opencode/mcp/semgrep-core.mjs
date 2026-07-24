@@ -282,7 +282,13 @@ export async function runSemgrepScan({
   } catch (error) {
     throw new Error(`${selected.engine} returned invalid JSON: ${error.message}; stderr=${processResult.stderr.slice(0, 1000)}`);
   }
-  const commandLine = [selected.command, ...args].join(" ");
+  const displayArgs = args.map(argument => {
+    const value = String(argument);
+    if (!isAbsolute(value)) return value;
+    const absolute = resolve(value);
+    return isInside(root, absolute) ? relative(root, absolute).replaceAll("\\", "/") || "." : value;
+  });
+  const commandLine = [selected.engine, ...displayArgs].join(" ");
   const rawBytes = `${JSON.stringify(payload, null, 2)}\n`;
   const rawDirectory = await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
   await mkdir(rawDirectory, { recursive: true });
@@ -315,6 +321,6 @@ export async function runSemgrepScan({
     sarif_path: relative(root, outputPath),
     sarif_sha256: sha256(sarifBytes),
     sarif_runs: combinedSarif.runs.length,
-    stderr: processResult.stderr.trim() || null,
+    stderr: processResult.stderr.trim().replaceAll(root, ".") || null,
   };
 }
