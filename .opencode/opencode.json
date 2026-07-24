@@ -72,12 +72,6 @@
     },
     "audit_lab": {
       "enabled": false
-    },
-    "vuln_judger": {
-      "enabled": false
-    },
-    "vuln-judger": {
-      "enabled": false
     }
   }
 }

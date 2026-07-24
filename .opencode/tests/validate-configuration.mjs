@@ -194,11 +194,10 @@ async function main() {
     assert(/^\s*"coverage_\*": allow\s*$/m.test(text), `${agent} must auto-allow Coverage Ledger tools`);
     assert(text.includes('"*coverage-ledger.jsonl*": deny'), `${agent} must hard-deny direct ledger bash writes`);
   }
-  const vulnJudger = config.mcp.vuln_judger;
-  assert(vulnJudger?.enabled === false && Object.keys(vulnJudger).length === 1, "project vuln_judger must remain a path-free disabled placeholder");
-  assert(config.mcp["vuln-judger"]?.enabled === false, "project vuln-judger alias must remain a disabled placeholder");
-  assert(mcpMap.servers.vuln_judger?.status === "disabled-by-default", "mcp-map must register vuln_judger as disabled-by-default");
-  assert(mcpMap.servers["vuln-judger"]?.status === "disabled-by-default", "mcp-map must register vuln-judger alias as disabled-by-default");
+  assert(!("vuln_judger" in config.mcp), "project config must not shadow the globally configured vuln_judger server");
+  assert(!("vuln-judger" in config.mcp), "project config must not shadow the globally configured vuln-judger alias");
+  assert(mcpMap.servers.vuln_judger?.status === "global-config", "mcp-map must identify vuln_judger as supplied by global config");
+  assert(!("vuln-judger" in mcpMap.servers), "mcp-map must not retain a separate vuln-judger placeholder");
   assert(Array.isArray(mcpMap.servers.vuln_judger?.aliases) && mcpMap.servers.vuln_judger.aliases.includes("vuln-judger"), "vuln_judger must declare vuln-judger alias");
   assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*", "vuln-judger_*"]), "vulnerability-validator must receive both vuln_judger and vuln-judger MCP tool prefixes");
   assert(/^\s*"vuln_judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln_judger MCP tools");

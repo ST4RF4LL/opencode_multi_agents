@@ -1,6 +1,6 @@
 {
-  "version": 10,
-  "maintenance_rule": "Define MCP servers in .opencode/opencode.json, then assign their actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
+  "version": 11,
+  "maintenance_rule": "Define project MCP servers in .opencode/opencode.json, or mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
   "servers": {
     "semgrep": {
       "status": "enabled-local",
@@ -39,15 +39,10 @@
       "purpose": "Safe local validation and proof-of-concept assistance."
     },
     "vuln_judger": {
-      "status": "disabled-by-default",
-      "type": "custom",
-      "purpose": "Placeholder for reviewing the sealed final comprehensive report once with the asynchronous OpenCode Affirmative/Negative/Moderator pipeline after an operator configures the local server.",
+      "status": "global-config",
+      "type": "external",
+      "purpose": "Review the sealed final comprehensive report once through the asynchronous OpenCode Affirmative/Negative/Moderator pipeline. The server is supplied exclusively by the user's global OpenCode configuration.",
       "aliases": ["vuln-judger"]
-    },
-    "vuln-judger": {
-      "status": "disabled-by-default",
-      "type": "custom",
-      "purpose": "Disabled placeholder alias for vuln_judger. Accepted when the configured global or project MCP server uses the hyphenated name."
     }
   },
   "agents": {
