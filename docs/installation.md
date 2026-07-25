@@ -91,10 +91,19 @@ command -v semgrep
 ## 3. 验证并启动
 
 ```sh
-node -e 'JSON.parse(require("node:fs").readFileSync(".opencode/opencode.json", "utf8"))'
-npm --prefix .opencode test
+./initial.sh
 export OPENCODE_CONFIG="$PWD/.opencode/opencode.json"
 opencode
 ```
+
+`initial.sh` 会检查核心 CLI、项目依赖、本地和全局 OpenCode 配置、OpenGrep/Semgrep、Joern/JDK，以及项目内 MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
+
+```sh
+./initial.sh --python          # Python 项目：额外验证 Joern Python 前端
+./initial.sh --require-review  # 要求全局已配置 vuln_judger
+./initial.sh --test            # 初始化检查通过后执行完整回归
+```
+
+输出中的 `【通过】` 表示当前工作流可用，`【警告】` 表示可选能力缺失，`【失败】` 表示所选工作流被阻断。处理完 `【失败】` 后重新运行 `./initial.sh`；只有 Python 审计、最终三方复核或完整回归需要时，才分别增加对应参数。
 
 进入 OpenCode 后分别调用 `joern_health` 和 `semgrep_health`。两者应至少识别出 Joern、Java，以及 OpenGrep/Semgrep 中的一个；缺失项应先修正本地配置，不要在审计过程中临时跳过。
