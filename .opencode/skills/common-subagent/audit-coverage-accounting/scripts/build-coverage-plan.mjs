@@ -8,9 +8,11 @@ import {
   activeDomains,
   coverageCheckId,
   entryAppliesToDomain,
+  functionManifestMembership,
   interfaceDomains,
   objectDigest,
   validateCatalogV2,
+  validateFocusAreaPartition,
   validatePlan,
 } from "./coverage-v2-common.mjs";
 
@@ -89,6 +91,7 @@ async function main() {
   }
 
   const functionInputs = [];
+  const functionManifests = [];
   const expectedFiles = new Set();
   const functionIds = new Set();
   for (const path of args.functions) {
@@ -98,9 +101,17 @@ async function main() {
       throw new Error(`Function manifest is incomplete, modified, or scope-mismatched: ${path}`);
     }
     functionInputs.push({ language: manifest.language, manifest_digest: manifest.manifest_digest, functions: manifest.functions.length });
+    functionManifests.push(manifest);
     for (const fileId of manifest.expected_files ?? []) expectedFiles.add(fileId);
     for (const fn of manifest.functions ?? []) functionIds.add(fn.function_id);
   }
+  const membership = functionManifestMembership(scope, functionManifests);
+  if (membership.missing.length > 0 || membership.duplicates.length > 0) {
+    throw new Error(`Coverage Plan requires complete function inventory: missing=${membership.missing.map(file => file.path).join(",") || "none"}; duplicate=${membership.duplicates.join(",") || "none"}`);
+  }
+
+  const focusErrors = validateFocusAreaPartition({ scope, functionManifests, catalog, focusAreas });
+  if (focusErrors.length > 0) throw new Error(`Focus Area primary assignments are invalid:\n- ${focusErrors.join("\n- ")}`);
 
   const domains = activeDomains(scope);
   const domainSourceIds = new Map(domains.map(domain => [
@@ -117,9 +128,9 @@ async function main() {
   }
   for (const focusArea of focusAreas.focus_areas ?? []) {
     for (const assignment of focusArea.assignments ?? []) {
-      const domain = assignment.catalog_domain ?? assignment.language;
+      const domain = assignment.catalog_domain;
       for (const catalogId of assignment.catalog_ids ?? []) bindUnique(catalogFocus, `${domain}|${catalogId}`, focusArea.focus_area_id, "Catalog type");
-      const coverageDomain = assignment.file_function_domain === "ai" || domain === "ai" ? "ai" : domain;
+      const coverageDomain = assignment.file_function_domain === "ai" ? "ai" : assignment.language;
       for (const fileId of assignment.file_ids ?? []) bindUnique(fileFocus, `${coverageDomain}|${fileId}`, focusArea.focus_area_id, "Interface source file");
     }
   }

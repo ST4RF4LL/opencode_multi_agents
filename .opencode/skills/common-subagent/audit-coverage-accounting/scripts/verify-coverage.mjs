@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { isDeepStrictEqual } from "node:util";
 import { catalogQuestionDigest, deriveCoverageCells } from "./coverage-cell-accounting.mjs";
+import { DOMAIN_AGENTS } from "./coverage-v2-common.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
@@ -24,12 +25,7 @@ const PARSER_LANGUAGE = new Map([
   ["joern-jvm", "jvm"],
   ["embedded-web", "embedded-web"],
 ]);
-const DOMAIN_AGENT = new Map([
-  ["java", "java-source-auditor"],
-  ["web", "web-source-auditor"],
-  ["platform", "platform-security-auditor"],
-  ["ai", "ai-security-auditor"],
-]);
+const DOMAIN_AGENT = new Map(Object.entries(DOMAIN_AGENTS));
 const AGENT_LANGUAGE = new Map([
   ["c-cpp-source-auditor", "c-cpp"],
   ["java-source-auditor", "java"],

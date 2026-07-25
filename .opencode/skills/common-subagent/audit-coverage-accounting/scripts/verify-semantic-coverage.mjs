@@ -3,17 +3,13 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { DOMAIN_AGENTS, activeDomains, entryAppliesToDomain } from "./coverage-v2-common.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
 const DISCOVERY_TRACKS = ["coverage", "blind", "seeded-variant"];
 const CLOSED = new Set(["PASS", "FINDING"]);
-const DOMAIN_AGENT = new Map([
-  ["java", "java-source-auditor"],
-  ["web", "web-source-auditor"],
-  ["platform", "platform-security-auditor"],
-  ["ai", "ai-security-auditor"],
-]);
+const DOMAIN_AGENT = new Map(Object.entries(DOMAIN_AGENTS));
 
 function parseArgs(argv) {
   const args = {};
@@ -114,19 +110,18 @@ async function main() {
   const functionManifests = await Promise.all((snapshot.functions ?? []).map(async item => JSON.parse(await readFile(resolve(item.path), "utf8"))));
   const catalog = JSON.parse(await readFile(resolve(snapshot.catalog.path), "utf8"));
   const expectedPrimary = new Set();
-  const activeCatalogDomains = new Set(["ai"]);
+  const activeCatalogDomains = new Set(activeDomains(scope));
   for (const file of scope.files ?? []) {
     if (!file.review_required) continue;
     expectedPrimary.add(`${file.owner_agent}|base|file|${file.file_id}`);
     expectedPrimary.add(`ai-security-auditor|ai|file|${file.file_id}`);
-    for (const [domain, agent] of DOMAIN_AGENT) if (file.owner_agent === agent) activeCatalogDomains.add(domain);
   }
   for (const fn of functionManifests.flatMap(manifest => manifest.functions ?? [])) {
     expectedPrimary.add(`${fn.owner_agent}|base|function|${fn.function_id}`);
     expectedPrimary.add(`ai-security-auditor|ai|function|${fn.function_id}`);
   }
   for (const entry of catalog.entries ?? []) {
-    for (const domain of (entry.applies_to ?? []).filter(value => activeCatalogDomains.has(value))) {
+    for (const domain of [...activeCatalogDomains].filter(value => entryAppliesToDomain(entry, value, catalog))) {
       expectedPrimary.add(`${DOMAIN_AGENT.get(domain)}|${domain}|catalog|${entry.id}`);
     }
   }
@@ -212,11 +207,16 @@ async function main() {
     if (!Array.isArray(focus.asset_ids) || focus.asset_ids.some(ref => !assets.has(ref))) errors.push("unknown-asset");
     if (!Array.isArray(focus.history_cluster_ids) || focus.history_cluster_ids.some(ref => !historyClusters.has(ref))) errors.push("unknown-history-cluster");
     if (!Array.isArray(focus.assignments) || focus.assignments.length === 0) errors.push("assignments-missing");
-    for (const assignment of focus.assignments ?? []) {
-      const assignmentErrors = [];
-      for (const field of ["file_ids", "function_ids", "catalog_ids"]) if (!Array.isArray(assignment[field]) || new Set(assignment[field]).size !== assignment[field].length) assignmentErrors.push(`${field}-invalid`);
-      if (typeof assignment.assignment_id !== "string" || typeof assignment.agent_name !== "string" || typeof assignment.language !== "string") assignmentErrors.push("identity-fields-missing");
-      if (!["base", "ai"].includes(assignment.file_function_domain)) assignmentErrors.push("file-function-domain-invalid");
+      for (const assignment of focus.assignments ?? []) {
+        const assignmentErrors = [];
+        for (const field of ["file_ids", "function_ids", "catalog_ids"]) if (!Array.isArray(assignment[field]) || new Set(assignment[field]).size !== assignment[field].length) assignmentErrors.push(`${field}-invalid`);
+        if (typeof assignment.assignment_id !== "string" || typeof assignment.agent_name !== "string" || typeof assignment.language !== "string") assignmentErrors.push("identity-fields-missing");
+        if (!["base", "ai"].includes(assignment.file_function_domain)) assignmentErrors.push("file-function-domain-invalid");
+        if (!Object.hasOwn(DOMAIN_AGENTS, assignment.language) || DOMAIN_AGENTS[assignment.language] !== assignment.agent_name) assignmentErrors.push("agent-language-mismatch");
+        if ((assignment.catalog_ids?.length ?? 0) > 0
+          && (!Object.hasOwn(DOMAIN_AGENTS, assignment.catalog_domain)
+            || DOMAIN_AGENTS[assignment.catalog_domain] !== assignment.agent_name
+            || assignment.catalog_domain !== assignment.language)) assignmentErrors.push("catalog-domain-mismatch");
       if ((assignment.file_ids?.length ?? 0) + (assignment.function_ids?.length ?? 0) + (assignment.catalog_ids?.length ?? 0) === 0) assignmentErrors.push("empty-assignment");
       for (const [kind, field] of [["file", "file_ids"], ["function", "function_ids"], ["catalog", "catalog_ids"]]) {
         for (const entityId of assignment[field] ?? []) {

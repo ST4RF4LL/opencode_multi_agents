@@ -14,7 +14,7 @@ import {
   submitDecision,
   verifyLedger,
 } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs";
-import { objectDigest, sha256, validatePlan } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-v2-common.mjs";
+import { DOMAIN_AGENTS, objectDigest, sha256, validatePlan } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-v2-common.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY = resolve(HERE, "../..");
@@ -25,7 +25,19 @@ const MALFORMED_JS_FIXTURE = resolve(HERE, "malformed-js-fixture");
 const AUDIT_ID = "coverage-fixture-audit";
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
-const DOMAIN_AGENT = { java: "java-source-auditor", web: "web-source-auditor", platform: "platform-security-auditor", ai: "ai-security-auditor" };
+const DOMAIN_AGENT = DOMAIN_AGENTS;
+
+async function writeParserCapabilities(path, scope, capabilities) {
+  const manifest = {
+    schema_version: 1,
+    audit_id: AUDIT_ID,
+    scope_digest: scope.scope_digest,
+    capabilities,
+    complete: capabilities.every(item => item.status === "available"),
+  };
+  manifest.manifest_digest = objectDigest(manifest);
+  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
 
 async function makeSemanticManifests(directory, scope, manifests, catalog) {
   const threatModelPath = join(directory, "threat-model.json");
@@ -389,6 +401,27 @@ async function main() {
     const snapshotInterfacesPath = snapshotIndex.interfaces.path;
     const snapshotInterfaceExtractorsPath = snapshotIndex.interface_extractors.path;
     const snapshotFunctionPaths = snapshotIndex.functions.map(item => item.path);
+
+    const missingCatalogFocusPath = join(coverage, "focus-areas-missing-catalog.json");
+    const missingCatalogFocus = JSON.parse(await readFile(focusAreasPath, "utf8"));
+    delete missingCatalogFocus.manifest_digest;
+    const javaAssignment = missingCatalogFocus.focus_areas[0].assignments.find(assignment => assignment.language === "java");
+    javaAssignment.catalog_ids = [];
+    await writeFile(missingCatalogFocusPath, `${JSON.stringify(missingCatalogFocus, null, 2)}\n`, "utf8");
+    run("seal-semantic-manifest.mjs", ["--input", missingCatalogFocusPath]);
+    run("snapshot-coverage-inputs.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      "--functions", javaPath,
+      "--functions", jsPath,
+      "--functions", embeddedPath,
+      "--interfaces", interfacesPath,
+      "--interface-extractors", interfaceExtractorsPath,
+      "--catalog", CATALOG,
+      "--threat-model", threatModelPath,
+      "--focus-areas", missingCatalogFocusPath,
+      "--output-dir", join(work, "snapshot-missing-catalog"),
+    ], 1);
 
     const commonVerifyArgs = [
       "--root", root,
@@ -869,7 +902,73 @@ async function main() {
     const malformedFunctions = JSON.parse(await readFile(malformedFunctionsPath, "utf8"));
     if (malformedFunctions.complete || !malformedFunctions.missing_files.includes("broken.js")) throw new Error("Malformed JavaScript did not produce an explicit parser gap");
 
-    process.stdout.write(`${JSON.stringify({ complete: true, positive: positive.expected, coverage_v2: { required_checks: coveragePlan.summary.required, not_applicable_checks: coveragePlan.summary.not_applicable, focus_area_bound: true, finalized_hash_chain: true, exact_summary: true }, git_aware_scope_pruning: true, function_manifest_resume_cache: true, cache_rejects_scope_drift: true, compact_threat_routing_index: true, deterministic_interface_inventory: true, dynamic_interface_gap_caught: "static/dynamic-route.js", failed_interface_extractor_caught: true, tampered_interface_manifest_caught: true, machine_reconciled_coverage_cells: true, self_reported_target_counts_rejected: true, forged_evidence_rejected: true, stale_receipt_rejected: true, incomplete_source_universe_rejected: true, receiptless_verified_rejected: true, fake_check_id_rejected: true, two_lens_plan_rejected: true, agent_declared_na_rejected: true, tampered_summary_rejected: true, tampered_ledger_chain_rejected: true, ai_initializer_requires_surface_inventory: true, targeted_gap_round_preserved_prior_coverage: true, negative_missing_function_caught: removedFunction, containing_file_completeness_reduced: true, negative_missing_ai_overlay_file_caught: removedAiFile, missing_dimension_cell_caught: "D10", tampered_scope_caught: true, tampered_function_manifest_caught: true, unsupported_function_source_caught: "Unsupported.groovy", malformed_javascript_caught: "broken.js" })}\n`);
+    const partialRoot = join(work, "fixture-partial-python");
+    const partialCoverage = join(work, "coverage-partial-python");
+    await mkdir(partialRoot, { recursive: true });
+    await mkdir(partialCoverage, { recursive: true });
+    await writeFile(join(partialRoot, "service.py"), "def handle(value):\n    return value\n", "utf8");
+    const partialScopePath = join(partialCoverage, "scope.json");
+    const partialCapabilitiesPath = join(partialCoverage, "parser-capabilities.json");
+    const detectedCapabilitiesPath = join(partialCoverage, "parser-capabilities-detected.json");
+    const partialInterfacesPath = join(partialCoverage, "interface-manifest.json");
+    const partialExtractorsPath = join(partialCoverage, "interface-extractor-coverage.json");
+    const partialRoutingPath = join(partialCoverage, "threat-routing-index.json");
+    run("build-scope-manifest.mjs", ["--root", partialRoot, "--audit-id", AUDIT_ID, "--output", partialScopePath]);
+    const partialScope = JSON.parse(await readFile(partialScopePath, "utf8"));
+    run("build-parser-capabilities.mjs", ["--root", partialRoot, "--audit-id", AUDIT_ID, "--scope", partialScopePath, "--output", detectedCapabilitiesPath]);
+    const detectedCapabilities = JSON.parse(await readFile(detectedCapabilitiesPath, "utf8"));
+    if (!detectedCapabilities.capabilities.some(item => item.parser === "joern-python" && ["available", "unavailable"].includes(item.status))) {
+      throw new Error("Parser capability probe did not emit a Python frontend status");
+    }
+    await writeParserCapabilities(partialCapabilitiesPath, partialScope, [{
+      parser: "joern-python",
+      status: "unavailable",
+      reason: "fixture-python-frontend-unavailable",
+      files: ["service.py"],
+    }]);
+    const partialBuild = JSON.parse(run("build-function-manifests.mjs", [
+      "--root", partialRoot,
+      "--audit-id", AUDIT_ID,
+      "--scope", partialScopePath,
+      "--parser-capabilities", partialCapabilitiesPath,
+      "--allow-partial", "true",
+      "--output-dir", partialCoverage,
+      "--jobs", "2",
+    ]).stdout);
+    if (partialBuild.complete || !partialBuild.partial || !partialBuild.skipped.some(item => item.parser === "joern-python")) {
+      throw new Error("Unavailable Python parser did not produce an explicit partial function-inventory result");
+    }
+    const partialFunctionPaths = ["java", "javascript", "embedded-web"].map(language => join(partialCoverage, `functions-${language}.json`));
+    run("build-interface-manifest.mjs", ["--root", partialRoot, "--audit-id", AUDIT_ID, "--scope", partialScopePath, "--output", partialInterfacesPath]);
+    run("verify-interface-extractors.mjs", ["--audit-id", AUDIT_ID, "--scope", partialScopePath, "--interfaces", partialInterfacesPath, "--output", partialExtractorsPath]);
+    const partialRoutingArgs = [
+      "--audit-id", AUDIT_ID,
+      "--scope", partialScopePath,
+      ...partialFunctionPaths.flatMap(path => ["--functions", path]),
+      "--interfaces", partialInterfacesPath,
+      "--interface-extractors", partialExtractorsPath,
+      "--catalog", CATALOG,
+      "--parser-capabilities", partialCapabilitiesPath,
+      "--output", partialRoutingPath,
+    ];
+    run("build-threat-routing-index.mjs", partialRoutingArgs, 1);
+    const partialRouting = JSON.parse(run("build-threat-routing-index.mjs", [...partialRoutingArgs, "--allow-partial", "true"]).stdout);
+    const partialIndex = JSON.parse(await readFile(partialRoutingPath, "utf8"));
+    if (partialRouting.complete || !partialRouting.partial || partialIndex.complete || partialIndex.gaps.length !== 1
+      || partialIndex.gaps[0].path !== "service.py" || partialIndex.routes.find(route => route.path === "service.py")?.function_inventory.state !== "unavailable") {
+      throw new Error("Partial threat-routing index did not preserve the Python parser gap");
+    }
+    run("snapshot-coverage-inputs.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", partialScopePath,
+      ...partialFunctionPaths.flatMap(path => ["--functions", path]),
+      "--interfaces", partialInterfacesPath,
+      "--interface-extractors", partialExtractorsPath,
+      "--catalog", CATALOG,
+      "--output-dir", join(partialCoverage, "snapshot"),
+    ], 1);
+
+    process.stdout.write(`${JSON.stringify({ complete: true, positive: positive.expected, coverage_v2: { required_checks: coveragePlan.summary.required, not_applicable_checks: coveragePlan.summary.not_applicable, focus_area_bound: true, finalized_hash_chain: true, exact_summary: true }, git_aware_scope_pruning: true, function_manifest_resume_cache: true, cache_rejects_scope_drift: true, compact_threat_routing_index: true, parser_unavailable_partial_routing: true, partial_audit_snapshot_blocked: true, focus_catalog_assignment_preflight: true, isolated_joern_workspace: true, deterministic_interface_inventory: true, dynamic_interface_gap_caught: "static/dynamic-route.js", failed_interface_extractor_caught: true, tampered_interface_manifest_caught: true, machine_reconciled_coverage_cells: true, self_reported_target_counts_rejected: true, forged_evidence_rejected: true, stale_receipt_rejected: true, incomplete_source_universe_rejected: true, receiptless_verified_rejected: true, fake_check_id_rejected: true, two_lens_plan_rejected: true, agent_declared_na_rejected: true, tampered_summary_rejected: true, tampered_ledger_chain_rejected: true, ai_initializer_requires_surface_inventory: true, targeted_gap_round_preserved_prior_coverage: true, negative_missing_function_caught: removedFunction, containing_file_completeness_reduced: true, negative_missing_ai_overlay_file_caught: removedAiFile, missing_dimension_cell_caught: "D10", tampered_scope_caught: true, tampered_function_manifest_caught: true, unsupported_function_source_caught: "Unsupported.groovy", malformed_javascript_caught: "broken.js" })}\n`);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

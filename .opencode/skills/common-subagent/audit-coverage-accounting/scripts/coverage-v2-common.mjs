@@ -14,6 +14,19 @@ export const DOMAIN_AGENTS = {
   ai: "ai-security-auditor",
 };
 
+export function functionManifestMembership(scope, manifests) {
+  const membership = new Map();
+  for (const manifest of manifests ?? []) {
+    for (const path of manifest.expected_files ?? []) membership.set(path, (membership.get(path) ?? 0) + 1);
+  }
+  const missing = (scope.files ?? []).filter(file => file.function_inventory_required && membership.get(file.path) !== 1);
+  return {
+    membership,
+    missing,
+    duplicates: [...membership.entries()].filter(([, count]) => count > 1).map(([path]) => path).sort(),
+  };
+}
+
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -45,6 +58,77 @@ export function activeDomains(scope) {
     .filter(([domain, agent]) => domain === "ai" || owners.has(agent))
     .map(([domain]) => domain);
   return domains.sort();
+}
+
+export function validateFocusAreaPartition({ scope, functionManifests, catalog, focusAreas }) {
+  const errors = [];
+  const expected = new Set();
+  const observed = new Set();
+  const catalogEntries = new Map((catalog.entries ?? []).map(entry => [entry.id, entry]));
+  const domains = activeDomains(scope);
+  const addExpected = (agent, domain, kind, id) => expected.add(`${agent}|${domain}|${kind}|${id}`);
+  const addObserved = (agent, domain, kind, id, assignmentId) => {
+    const key = `${agent}|${domain}|${kind}|${id}`;
+    if (observed.has(key)) errors.push(`duplicate primary ${kind} assignment: ${key}`);
+    observed.add(key);
+    if (!expected.has(key)) errors.push(`assignment outside frozen universe (${assignmentId}): ${key}`);
+  };
+
+  for (const file of scope.files ?? []) {
+    if (!file.review_required) continue;
+    addExpected(file.owner_agent, "base", "file", file.file_id);
+    addExpected(DOMAIN_AGENTS.ai, "ai", "file", file.file_id);
+  }
+  for (const fn of (functionManifests ?? []).flatMap(manifest => manifest.functions ?? [])) {
+    addExpected(fn.owner_agent, "base", "function", fn.function_id);
+    addExpected(DOMAIN_AGENTS.ai, "ai", "function", fn.function_id);
+  }
+  for (const domain of domains) {
+    for (const entry of catalog.entries ?? []) {
+      if (entryAppliesToDomain(entry, domain, catalog)) addExpected(DOMAIN_AGENTS[domain], domain, "catalog", entry.id);
+    }
+  }
+
+  for (const focus of focusAreas.focus_areas ?? []) {
+    const focusId = focus.focus_area_id ?? "unknown-focus";
+    if (!Array.isArray(focus.assignments) || focus.assignments.length === 0) {
+      errors.push(`Focus Area has no assignments: ${focusId}`);
+      continue;
+    }
+    for (const assignment of focus.assignments) {
+      const assignmentId = assignment.assignment_id ?? `${focusId}:unknown-assignment`;
+      for (const field of ["file_ids", "function_ids", "catalog_ids"]) {
+        if (!Array.isArray(assignment[field]) || new Set(assignment[field]).size !== assignment[field].length) {
+          errors.push(`invalid ${field} in ${assignmentId}`);
+        }
+      }
+      const fileFunctionDomain = assignment.file_function_domain;
+      if (!['base', 'ai'].includes(fileFunctionDomain)) errors.push(`invalid file_function_domain in ${assignmentId}`);
+      if (!Object.hasOwn(DOMAIN_AGENTS, assignment.language)) errors.push(`invalid language in ${assignmentId}: ${assignment.language ?? "missing"}`);
+      else if (assignment.agent_name !== DOMAIN_AGENTS[assignment.language]) errors.push(`agent/language mismatch in ${assignmentId}: ${assignment.agent_name}|${assignment.language}`);
+      for (const fileId of assignment.file_ids ?? []) addObserved(assignment.agent_name, fileFunctionDomain, "file", fileId, assignmentId);
+      for (const functionId of assignment.function_ids ?? []) addObserved(assignment.agent_name, fileFunctionDomain, "function", functionId, assignmentId);
+
+      if ((assignment.catalog_ids?.length ?? 0) > 0) {
+        const domain = assignment.catalog_domain;
+        if (!Object.hasOwn(DOMAIN_AGENTS, domain)) {
+          errors.push(`invalid catalog_domain in ${assignmentId}: ${domain ?? "missing"}`);
+          continue;
+        }
+        if (assignment.agent_name !== DOMAIN_AGENTS[domain]) {
+          errors.push(`catalog agent/domain mismatch in ${assignmentId}: ${assignment.agent_name}|${domain}`);
+        }
+        if (assignment.language !== domain) errors.push(`catalog language/domain mismatch in ${assignmentId}: ${assignment.language}|${domain}`);
+        for (const catalogId of assignment.catalog_ids) {
+          if (!catalogEntries.has(catalogId)) errors.push(`unknown catalog ID in ${assignmentId}: ${catalogId}`);
+          addObserved(assignment.agent_name, domain, "catalog", catalogId, assignmentId);
+        }
+      }
+    }
+  }
+
+  for (const key of expected) if (!observed.has(key)) errors.push(`missing primary assignment: ${key}`);
+  return [...new Set(errors)].sort();
 }
 
 export function interfaceDomains(item) {

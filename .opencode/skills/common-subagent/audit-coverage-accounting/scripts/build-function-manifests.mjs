@@ -25,6 +25,8 @@ function parseArgs(argv) {
   for (const key of ["root", "audit-id", "scope", "output-dir"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   args.jobs = Number(args.jobs ?? 2);
   if (!Number.isInteger(args.jobs) || args.jobs < 1 || args.jobs > 4) throw new Error("--jobs must be an integer from 1 through 4");
+  if (args["allow-partial"] != null && !["true", "false"].includes(args["allow-partial"])) throw new Error("--allow-partial must be true or false");
+  if (args["allow-partial"] === "true" && !args["parser-capabilities"]) throw new Error("--allow-partial true requires --parser-capabilities");
   return args;
 }
 
@@ -67,6 +69,23 @@ async function runPool(tasks, jobs) {
   return results;
 }
 
+async function readParserCapabilities(path, auditId, scopeDigest) {
+  if (!path) return null;
+  const capabilities = JSON.parse(await readFile(resolve(path), "utf8"));
+  if (capabilities.audit_id !== auditId || capabilities.scope_digest !== scopeDigest
+    || capabilities.manifest_digest !== contentDigest(capabilities) || !Array.isArray(capabilities.capabilities)) {
+    throw new Error("Parser capability manifest is incomplete, modified, or scope-mismatched");
+  }
+  const byParser = new Map();
+  for (const item of capabilities.capabilities) {
+    if (typeof item.parser !== "string" || !["available", "unavailable"].includes(item.status) || byParser.has(item.parser)) {
+      throw new Error("Parser capability manifest contains an invalid or duplicate parser record");
+    }
+    byParser.set(item.parser, item);
+  }
+  return byParser;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = resolve(args.root);
@@ -76,6 +95,7 @@ async function main() {
   if (scope.audit_id !== args["audit-id"] || !scope.complete || scope.manifest_digest !== contentDigest(scope)) {
     throw new Error("Scope manifest is incomplete, modified, or bound to another audit");
   }
+  const capabilities = await readParserCapabilities(args["parser-capabilities"], args["audit-id"], scope.scope_digest);
   await mkdir(outputDir, { recursive: true });
   const scriptsDir = dirname(fileURLToPath(import.meta.url));
   const common = ["--root", root, "--audit-id", args["audit-id"], "--scope", scopePath];
@@ -83,16 +103,19 @@ async function main() {
   const tasks = [
     {
       language: "java",
+      parser: "javac-java",
       script: join(scriptsDir, "build-java-function-manifest.mjs"),
       args: [...common, "--output", join(outputDir, "functions-java.json"), ...force],
     },
     {
       language: "javascript",
+      parser: "joern-js",
       script: join(scriptsDir, "build-joern-function-manifest.mjs"),
       args: [...common, "--language", "javascript", "--output", join(outputDir, "functions-javascript.json"), ...force],
     },
     {
       language: "embedded-web",
+      parser: "embedded-web",
       script: join(scriptsDir, "build-embedded-web-manifest.mjs"),
       args: [...common, "--output", join(outputDir, "functions-embedded-web.json"), ...force],
     },
@@ -102,14 +125,25 @@ async function main() {
     if (!parserTags.has(parser)) continue;
     tasks.push({
       language,
+      parser,
       script: join(scriptsDir, "build-joern-function-manifest.mjs"),
       args: [...common, "--language", language, "--output", join(outputDir, `functions-${language}.json`), ...force],
     });
   }
 
+  const skipped = [];
+  const runnable = tasks.filter(task => {
+    const capability = capabilities?.get(task.parser);
+    if (!parserTags.has(task.parser) || capability?.status !== "unavailable") return true;
+    skipped.push({ language: task.language, parser: task.parser, reason: capability.reason ?? "parser-capability-probe-failed" });
+    return false;
+  });
+  if (skipped.length > 0 && args["allow-partial"] !== "true") {
+    throw new Error(`Function inventory requires unavailable parser(s): ${skipped.map(item => item.parser).join(", ")}. Re-run with --allow-partial true only for an explicitly partial audit.`);
+  }
   const started = Date.now();
-  const manifests = await runPool(tasks, args.jobs);
-  process.stdout.write(`${JSON.stringify({ complete: true, jobs: args.jobs, elapsed_ms: Date.now() - started, manifests })}\n`);
+  const manifests = await runPool(runnable, args.jobs);
+  process.stdout.write(`${JSON.stringify({ complete: skipped.length === 0, partial: skipped.length > 0, jobs: args.jobs, elapsed_ms: Date.now() - started, manifests, skipped })}\n`);
 }
 
 main().catch(error => {

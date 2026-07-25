@@ -4,9 +4,9 @@ import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { contentDigest } from "./function-manifest-cache.mjs";
-import { entryAppliesToDomain, validateCatalogV2 } from "./coverage-v2-common.mjs";
+import { entryAppliesToDomain, functionManifestMembership, validateCatalogV2 } from "./coverage-v2-common.mjs";
 
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 
 function parseArgs(argv) {
   const args = { functions: [] };
@@ -20,6 +20,8 @@ function parseArgs(argv) {
   }
   for (const key of ["audit-id", "scope", "interfaces", "interface-extractors", "catalog", "output"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
+  if (args["allow-partial"] != null && !["true", "false"].includes(args["allow-partial"])) throw new Error("--allow-partial must be true or false");
+  if (args["allow-partial"] === "true" && !args["parser-capabilities"]) throw new Error("--allow-partial true requires --parser-capabilities");
   return args;
 }
 
@@ -27,6 +29,23 @@ function indexDigest(value) {
   const copy = { ...value };
   delete copy.manifest_digest;
   return createHash("sha256").update(JSON.stringify(copy)).digest("hex");
+}
+
+async function readParserCapabilities(path, auditId, scopeDigest) {
+  if (!path) return null;
+  const capabilities = JSON.parse(await readFile(resolve(path), "utf8"));
+  if (capabilities.audit_id !== auditId || capabilities.scope_digest !== scopeDigest
+    || capabilities.manifest_digest !== contentDigest(capabilities) || !Array.isArray(capabilities.capabilities)) {
+    throw new Error("Parser capability manifest is incomplete, modified, or scope-mismatched");
+  }
+  const byParser = new Map();
+  for (const item of capabilities.capabilities) {
+    if (typeof item.parser !== "string" || !["available", "unavailable"].includes(item.status) || byParser.has(item.parser)) {
+      throw new Error("Parser capability manifest contains an invalid or duplicate parser record");
+    }
+    byParser.set(item.parser, item);
+  }
+  return { path: resolve(path), manifest_digest: capabilities.manifest_digest, byParser };
 }
 
 async function main() {
@@ -38,10 +57,11 @@ async function main() {
   if (scope.audit_id !== args["audit-id"] || !scope.complete || scope.manifest_digest !== contentDigest(scope)) {
     throw new Error("Scope manifest is incomplete, modified, or bound to another audit");
   }
+  const parserCapabilities = await readParserCapabilities(args["parser-capabilities"], args["audit-id"], scope.scope_digest);
 
   const manifests = [];
+  const manifestObjects = [];
   const functionsByPath = new Map();
-  const membership = new Map();
   const languages = new Set();
   const functionIds = new Set();
   for (const input of args.functions) {
@@ -54,7 +74,7 @@ async function main() {
     if (languages.has(manifest.language)) throw new Error(`Duplicate function manifest language: ${manifest.language}`);
     languages.add(manifest.language);
     manifests.push({ language: manifest.language, path, manifest_digest: manifest.manifest_digest });
-    for (const file of manifest.expected_files ?? []) membership.set(file, (membership.get(file) ?? 0) + 1);
+    manifestObjects.push(manifest);
     for (const fn of manifest.functions ?? []) {
       if (functionIds.has(fn.function_id)) throw new Error(`Duplicate function ID across manifests: ${fn.function_id}`);
       functionIds.add(fn.function_id);
@@ -63,8 +83,26 @@ async function main() {
       functionsByPath.set(fn.path, rows);
     }
   }
-  const missing = (scope.files ?? []).filter(file => file.function_inventory_required && membership.get(file.path) !== 1);
-  if (missing.length > 0) throw new Error(`Function manifest membership is incomplete for ${missing.map(file => file.path).join(", ")}`);
+  const membershipState = functionManifestMembership(scope, manifestObjects);
+  if (membershipState.duplicates.length > 0) {
+    throw new Error(`Function manifest membership is duplicated for ${membershipState.duplicates.join(", ")}`);
+  }
+  const missing = membershipState.missing;
+  const partialFunctionGaps = [];
+  const strictMissing = [];
+  for (const file of missing) {
+    const capability = parserCapabilities?.byParser.get(file.function_parser);
+    if (args["allow-partial"] === "true" && capability?.status === "unavailable") {
+      partialFunctionGaps.push({
+        code: "FUNCTION_INVENTORY_PARSER_UNAVAILABLE",
+        path: file.path,
+        file_id: file.file_id,
+        parser: file.function_parser,
+        reason: capability.reason ?? "parser-capability-probe-failed",
+      });
+    } else strictMissing.push(file);
+  }
+  if (strictMissing.length > 0) throw new Error(`Function manifest membership is incomplete for ${strictMissing.map(file => file.path).join(", ")}`);
 
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const catalogErrors = validateCatalogV2(catalog);
@@ -97,11 +135,15 @@ async function main() {
     });
     interfacesByPath.set(item.path, rows);
   }
+  const gapByPath = new Map(partialFunctionGaps.map(gap => [gap.path, gap]));
   const routes = (scope.files ?? []).filter(file => file.review_required).map(file => ({
     file_id: file.file_id,
     path: file.path,
     owner_agent: file.owner_agent,
     content_kind: file.content_kind,
+    function_inventory: gapByPath.has(file.path)
+      ? { state: "unavailable", ...gapByPath.get(file.path) }
+      : { state: "complete" },
     functions: (functionsByPath.get(file.path) ?? []).sort((a, b) => a.line_start - b.line_start || a.function_id.localeCompare(b.function_id)),
     interfaces: (interfacesByPath.get(file.path) ?? []).sort((a, b) => a.line_start - b.line_start || a.interface_id.localeCompare(b.interface_id)),
   }));
@@ -112,12 +154,16 @@ async function main() {
     scope_digest: scope.scope_digest,
     required_lenses: scope.policy?.lenses ?? [],
     coverage_domains: ["base", "ai"],
+    complete: partialFunctionGaps.length === 0,
+    partial: partialFunctionGaps.length > 0,
+    gaps: partialFunctionGaps,
     inputs: {
       scope: { path: scopePath, manifest_digest: scope.manifest_digest },
       functions: manifests.sort((a, b) => a.language.localeCompare(b.language)),
       interfaces: { path: interfacePath, manifest_digest: interfaceManifest.manifest_digest },
       interface_extractors: { path: interfaceExtractorPath, manifest_digest: interfaceExtractors.manifest_digest },
       catalog: { path: catalogPath, profile_id: catalog.profile_id },
+      ...(parserCapabilities ? { parser_capabilities: { path: parserCapabilities.path, manifest_digest: parserCapabilities.manifest_digest } } : {}),
     },
     routes,
     catalog: catalog.entries.map(entry => ({
@@ -134,12 +180,13 @@ async function main() {
       confirmed_interfaces: interfaceManifest.interfaces.filter(item => item.discovery_state === "CONFIRMED").length,
       candidate_interfaces: interfaceManifest.interfaces.filter(item => item.discovery_state === "CANDIDATE").length,
       catalog_entries: catalog.entries.length,
+      function_inventory_gaps: partialFunctionGaps.length,
     },
   };
   index.manifest_digest = indexDigest(index);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(index)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ output: outputPath, ...index.summary, manifest_digest: index.manifest_digest })}\n`);
+  process.stdout.write(`${JSON.stringify({ output: outputPath, complete: index.complete, partial: index.partial, ...index.summary, manifest_digest: index.manifest_digest })}\n`);
 }
 
 main().catch(error => {

@@ -161,19 +161,22 @@ async function main() {
   const cpgPath = resolve(workDir, "cpg.bin");
   const queryPath = resolve(workDir, "export-inventory.sc");
   const rawPath = resolve(workDir, "inventory.ndjson");
+  const joernWorkspace = resolve(workDir, "workspace");
   await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { recursive: true });
+  await mkdir(joernWorkspace, { recursive: true });
+  const joernEnvironment = { ...toolchain.environment, JOERN_WORKSPACE: joernWorkspace };
 
   if (expected.length > 0) {
     await buildSourceProjection(root, projectionRoot, expected);
-    const parseResult = run(toolchain.joernParseBin, [projectionRoot, "-o", cpgPath, "--language", config.joern], { env: toolchain.environment });
+    const parseResult = run(toolchain.joernParseBin, [projectionRoot, "-o", cpgPath, "--language", config.joern], { env: joernEnvironment, cwd: workDir });
     let cpgStat;
     try { cpgStat = await stat(cpgPath); } catch { cpgStat = null; }
     if (!cpgStat || cpgStat.size === 0 || /Exception|NoSuchElementException/.test(`${parseResult.stdout}\n${parseResult.stderr}`)) {
       throw new Error(`Joern did not produce a valid CPG\n${parseResult.stderr}\n${parseResult.stdout}`);
     }
     await writeFile(queryPath, buildQuery(rawPath), "utf8");
-    run(toolchain.joernBin, [cpgPath, "--script", queryPath], { env: toolchain.environment });
+    run(toolchain.joernBin, [cpgPath, "--script", queryPath], { env: joernEnvironment, cwd: workDir });
   } else {
     await writeFile(rawPath, "", "utf8");
   }

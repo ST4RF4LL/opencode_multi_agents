@@ -56,7 +56,7 @@ The orchestrator runs one `bootstrap` pass by default. Run `refine` only when ow
 
 1. Read `recon-summary.json` and `coverage/threat-routing-index.json` first.
 2. Read the five normalized Recon inventories and only the security/architecture/history documents referenced by them.
-3. Use the routing index for complete file/function/catalog assignment and its compact external-interface anchors for entry-point threat coverage. Keep `CONFIRMED` and `CANDIDATE` distinct. Do not ingest or echo full scope manifests, full function/interface manifests, source hashes, repeated lens arrays, or the complete catalog unless a specific integrity mismatch requires targeted inspection.
+3. Use the routing index for complete file/function/catalog assignment and its compact external-interface anchors for entry-point threat coverage. Keep `CONFIRMED` and `CANDIDATE` distinct. If `complete=false` or `partial=true`, preserve every routing-index gap as a blocking Recon gap and restrict conclusions to file-level evidence where necessary; never fabricate function IDs, claim full partition completeness, or authorize PLAN from that artifact. Do not ingest or echo full scope manifests, full function/interface manifests, source hashes, repeated lens arrays, or the complete catalog unless a specific integrity mismatch requires targeted inspection.
 4. Read source only for a targeted unresolved evidence question; do not repeat Recon searches.
 5. Build both semantic artifacts in memory once, write them once, then seal the threat model followed by Focus Areas. Avoid repeated pretty-print/seal cycles.
 

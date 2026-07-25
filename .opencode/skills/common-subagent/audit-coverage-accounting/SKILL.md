@@ -26,6 +26,17 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-sc
 
 In its default `--mode auto`, the scope builder uses the Git index plus untracked non-ignored files when a worktree is available. This avoids vendored dependencies, caches, and generated output already excluded by repository policy while recording ignored paths and audit/VCS infrastructure as exclusions. It falls back to a recursive filesystem walk outside Git. Use `--mode filesystem` only when ignored working-tree artifacts are intentionally part of the audit. Every included file is hashed, assigned an owner, and tagged with its required function parser.
 
+Before inventorying functions, probe every parser actually required by the frozen scope:
+
+```sh
+node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-parser-capabilities.mjs \
+  --root . --audit-id <audit-id> \
+  --scope tmp/<audit-id>/recon/coverage/scope-manifest.json \
+  --output tmp/<audit-id>/recon/coverage/parser-capabilities.json
+```
+
+This artifact records whether each configured frontend can create a real CPG from a smoke source; `joern-parse --list-languages` alone is not sufficient. An unavailable parser is a capability gap, not evidence that its source files contain no functions.
+
 ## Inventory functions once
 
 ```sh
@@ -33,13 +44,16 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-fu
   --root . \
   --audit-id <audit-id> \
   --scope tmp/<audit-id>/recon/coverage/scope-manifest.json \
+  --parser-capabilities tmp/<audit-id>/recon/coverage/parser-capabilities.json \
   --output-dir tmp/<audit-id>/recon/coverage \
   --jobs 2
 ```
 
-The bounded driver creates the mandatory Java, JavaScript, and embedded-Web manifests and every additional parser language present in scope. Java uses the JDK compiler AST; Joern parses a temporary projection containing only files for the selected language instead of rebuilding a CPG from the whole repository for every manifest. Digest-bound valid outputs are reused automatically on resume; pass `--force true` only to deliberately rerun extraction. Any parse error or missing source file makes the relevant manifest incomplete.
+The bounded driver creates the mandatory Java, JavaScript, and embedded-Web manifests and every additional parser language present in scope. Java uses the JDK compiler AST; Joern parses a temporary projection containing only files for the selected language and an isolated Joern workspace. Digest-bound valid outputs are reused automatically on resume; pass `--force true` only to deliberately rerun extraction. Any parse error or missing source file makes the relevant manifest incomplete.
 
 The individual Java/Joern/embedded builders remain available for diagnosis. Do not call them again in threat modeling, planning, or gap rounds. Every `function_inventory_required` file must occur in exactly one complete function manifest.
+
+If a capability artifact says a required parser is unavailable, strict inventory stops. An operator may explicitly produce a Recon-only partial index by passing `--allow-partial true` to both the function driver and routing-index builder, together with the same capability artifact. That index carries `complete=false` and structured function-inventory gaps. It may inform file-level threat modeling only; it must not be snapshotted, planned, ledger-initialized, or represented as a complete audit.
 
 Build and verify the external-interface universe, then build the compact entity index used by threat modeling:
 
@@ -47,6 +61,7 @@ Build and verify the external-interface universe, then build the compact entity 
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-interface-manifest.mjs \
   --root <workspace> --audit-id <audit-id> \
   --scope tmp/<audit-id>/recon/coverage/scope-manifest.json \
+  --parser-capabilities tmp/<audit-id>/recon/coverage/parser-capabilities.json \
   --output tmp/<audit-id>/recon/coverage/interface-manifest.json
 
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-interface-extractors.mjs \
@@ -98,7 +113,7 @@ Name every single-lens report `*.audit-report.json` and include `round`, one can
 - `function_coverage`: one entry for every assigned function ID with the same explicit base/AI domain rule.
 - `catalog_coverage`: one entry for every required unified application/platform/AI catalog ID.
 
-Catalog records include `domain=java`, `domain=web`, `domain=platform`, or `domain=ai`. When a catalog entry applies to multiple active domains, each domain owner reviews it independently.
+Catalog records include `domain=java`, `domain=web`, `domain=platform`, `domain=c-cpp`, `domain=python`, or `domain=ai`. When a catalog entry applies to multiple active domains, each domain owner reviews it independently.
 
 Use only `REVIEWED`, `FINDING`, or `GAP` for entity rows. Do not submit `N/A` for file/function/catalog rows. A reported finding never closes a remaining gap.
 
@@ -180,7 +195,7 @@ File evidence uses `kind=source-location` and must bind `file_id`, exact frozen 
 
 ## Verify before reporting
 
-Seal `threat-model.json` and `focus-areas.json` with `seal-semantic-manifest.mjs`. Before final verification, run `snapshot-coverage-inputs.mjs` with `--interfaces`, `--interface-extractors`, `--threat-model`, and `--focus-areas` to copy them alongside the validated scope, every function manifest, and exact catalog into `reports/coverage/<audit-id>/inputs/`.
+Seal `threat-model.json` and `focus-areas.json` with `seal-semantic-manifest.mjs`. Before final verification, run `snapshot-coverage-inputs.mjs` with `--interfaces`, `--interface-extractors`, `--threat-model`, and `--focus-areas` to copy them alongside the validated scope, every function manifest, and exact catalog into `reports/coverage/<audit-id>/inputs/`. Snapshotting now preflights the exact primary file/function/catalog partition and rejects missing or duplicate function-manifest membership, so Focus Area omissions fail before Coverage Plan construction.
 
 Run the legacy structural verifier into a non-authoritative intermediate artifact, finalize the Ledger, then run v2 as the authoritative structural/type/interface gate:
 

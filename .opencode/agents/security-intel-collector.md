@@ -48,11 +48,12 @@ Load `security-recon`, `secure-code-review-common`, `audit-coverage-accounting`,
 Before attack-surface discovery:
 
 1. Run `build-scope-manifest.mjs` exactly once over the repository root and write `tmp/<audit_id>/recon/coverage/scope-manifest.json`. Its default Git-aware mode includes tracked plus untracked non-ignored files and records ignored dependency/cache/build paths as exclusions. Use `--mode filesystem` only when ignored working-tree artifacts are explicitly in scope.
-2. Run `build-function-manifests.mjs --jobs 2` once. It creates the mandatory Java, JavaScript, and embedded-Web manifests plus every additional parser language present in scope. It uses scoped source projections for Joern and safely reuses digest-bound outputs on resume. Do not invoke the individual builders again unless the scope digest changed or `--force true` is explicitly required.
-3. Run `build-interface-manifest.mjs` once against the frozen scope and write `tmp/<audit_id>/recon/coverage/interface-manifest.json`. Then run `verify-interface-extractors.mjs` and write `tmp/<audit_id>/recon/coverage/interface-extractor-coverage.json`. Preserve `CONFIRMED` versus `CANDIDATE`; never promote candidates by prose. Any `INDETERMINATE` or `FAILED` file remains a blocking gap.
-4. Run `build-threat-routing-index.mjs` once after function and interface artifacts complete and write `tmp/<audit_id>/recon/coverage/threat-routing-index.json`. This compact index, not the full scope/function/interface JSON, is the default entity-assignment input for threat modeling.
-5. Stop and report a Recon gap when the scope, any required function manifest, or interface extractor verification is incomplete. Do not replace failed AST/CPG function extraction or interface enumeration with LLM-authored counts.
-6. Route from the frozen records, not filename guesses. Preserve exact file, function, and interface IDs, owners, scope digest, recorded exclusions, builder elapsed time, cache-hit state, interface confidence counts, and the routing-index path in `recon-summary.json`.
+2. Run `build-parser-capabilities.mjs` once against that scope and write `tmp/<audit_id>/recon/coverage/parser-capabilities.json`. It must perform real frontend smoke probes, not rely on a frontend name advertised by Joern.
+3. Run `build-function-manifests.mjs --jobs 2 --parser-capabilities <artifact>` once. It creates the mandatory Java, JavaScript, and embedded-Web manifests plus every additional parser language present in scope. It uses scoped source projections and an isolated Joern workspace, and safely reuses digest-bound outputs on resume. Do not invoke the individual builders again unless the scope digest changed or `--force true` is explicitly required.
+4. Run `build-interface-manifest.mjs` once against the frozen scope and write `tmp/<audit_id>/recon/coverage/interface-manifest.json`. Then run `verify-interface-extractors.mjs` and write `tmp/<audit_id>/recon/coverage/interface-extractor-coverage.json`. Preserve `CONFIRMED` versus `CANDIDATE`; never promote candidates by prose. Any `INDETERMINATE` or `FAILED` file remains a blocking gap.
+5. Run `build-threat-routing-index.mjs` once after function and interface artifacts complete and write `tmp/<audit_id>/recon/coverage/threat-routing-index.json`. This compact index, not the full scope/function/interface JSON, is the default entity-assignment input for threat modeling.
+6. Stop and report a Recon gap when the scope, any required function manifest, or interface extractor verification is incomplete. If and only if the capability artifact proves a required parser unavailable, an operator may explicitly pass `--allow-partial true` to both function and routing builders. Preserve the emitted structured gap, mark `recon-summary.json` partial, and do not enter PLAN or claim complete coverage. Do not replace failed AST/CPG function extraction or interface enumeration with LLM-authored counts.
+7. Route from the frozen records, not filename guesses. Preserve exact file, function, and interface IDs, owners, scope digest, recorded exclusions, parser-capability status, builder elapsed time, cache-hit state, interface confidence counts, and the routing-index path in `recon-summary.json`.
 
 The threat-model, planning, and gap phases must reuse these frozen artifacts. They must never rerun scope, function, or interface inventory builders.
 
@@ -159,6 +160,7 @@ tmp/<audit_id>/recon/coverage/functions-java.json
 tmp/<audit_id>/recon/coverage/functions-javascript.json
 tmp/<audit_id>/recon/coverage/functions-embedded-web.json
 tmp/<audit_id>/recon/coverage/functions-<additional-language>.json
+tmp/<audit_id>/recon/coverage/parser-capabilities.json
 tmp/<audit_id>/recon/coverage/interface-manifest.json
 tmp/<audit_id>/recon/coverage/interface-extractor-coverage.json
 tmp/<audit_id>/recon/coverage/threat-routing-index.json

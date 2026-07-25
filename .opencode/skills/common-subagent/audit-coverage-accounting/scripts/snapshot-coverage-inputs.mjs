@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { validateCatalogV2 } from "./coverage-v2-common.mjs";
+import { functionManifestMembership, validateCatalogV2, validateFocusAreaPartition } from "./coverage-v2-common.mjs";
 
 function parseArgs(argv) {
   const args = { functions: [] };
@@ -46,6 +46,7 @@ async function main() {
   await copyFile(scopeSource, scopeTarget);
 
   const functionSnapshots = [];
+  const functionManifests = [];
   const languages = new Set();
   for (const input of args.functions) {
     const source = resolve(input);
@@ -56,6 +57,7 @@ async function main() {
     }
     if (languages.has(manifest.language)) throw new Error(`Duplicate function manifest language: ${manifest.language}`);
     languages.add(manifest.language);
+    functionManifests.push(manifest);
     const target = join(outputDir, `functions-${manifest.language}.json`);
     await copyFile(source, target);
     functionSnapshots.push({
@@ -67,6 +69,10 @@ async function main() {
       expected_files: manifest.expected_files.length,
       functions: manifest.functions.length,
     });
+  }
+  const membership = functionManifestMembership(scope, functionManifests);
+  if (membership.missing.length > 0 || membership.duplicates.length > 0) {
+    throw new Error(`Cannot snapshot incomplete function inventory: missing=${membership.missing.map(file => file.path).join(",") || "none"}; duplicate=${membership.duplicates.join(",") || "none"}`);
   }
 
   const catalogSource = resolve(args.catalog);
@@ -113,6 +119,8 @@ async function main() {
       || focus.threat_model_digest !== threat.manifest_digest) {
       throw new Error("Cannot snapshot incomplete, modified, or threat-model-mismatched Focus Areas");
     }
+    const focusErrors = validateFocusAreaPartition({ scope, functionManifests, catalog, focusAreas: focus });
+    if (focusErrors.length > 0) throw new Error(`Cannot snapshot invalid Focus Area primary assignments:\n- ${focusErrors.join("\n- ")}`);
     const threatTarget = join(outputDir, "threat-model.json");
     const focusTarget = join(outputDir, "focus-areas.json");
     await copyFile(threatSource, threatTarget);

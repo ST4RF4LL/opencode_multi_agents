@@ -45,7 +45,7 @@ async function writeSemanticInputs(directory) {
     entry_points: [{ entry_point_id: "EP-001", name: "tenant API", trust_boundary_ids: ["TB-001"], reachable_asset_ids: ["ASSET-001"], inventory_ids: ["entry-1"], evidence: [{ fixture: true }] }],
     threats: [{ threat_id: "T-001", outcome: "Authenticated tenant reads another tenant sensitive record", actor_ids: ["ACTOR-001"], entry_point_ids: ["EP-001"], trust_boundary_ids: ["TB-001"], asset_ids: ["ASSET-001"], dimensions: ["D3"], impact: "high", likelihood: "possible", status: "partially_mitigated", controls: ["ownership check"], evidence: [{ fixture: true }], provenance_tags: ["code-verified", "owner-asserted"] }],
     deprioritized: [],
-    history_clusters: [{ cluster_id: "HC-001", entry_point_ids: ["EP-001"], weakness_class: "cross-tenant access", asset_ids: ["ASSET-001"], evidence: [{ fixture: true }], sibling_locations: ["src/TenantApi.java"] }],
+    history_clusters: [{ cluster_id: "HC-001", entry_point_ids: ["EP-001"], weakness_class: "cross-tenant access", asset_ids: ["ASSET-001"], evidence: [{ fixture: true }], sibling_locations: ["src/TenantApi.py"] }],
     entry_point_coverage: [{ entry_point_id: "EP-001", status: "THREAT", threat_ids: ["T-001"], reason: null, evidence: [{ fixture: true }] }],
     open_questions: [{ question_id: "Q-001", question: "Is the gateway tenant-aware?", blocking: true, status: "resolved", evidence: [{ owner_answer: "yes" }] }],
     provenance: { target: "fixture", commit: "abc123", inputs: ["fixture"], owner: "test-owner" },
@@ -70,11 +70,11 @@ async function writeSemanticInputs(directory) {
       history_cluster_ids: ["HC-001"],
       required_discovery_tracks: ["coverage", "blind", "seeded-variant"],
       assignments: [{
-        assignment_id: "FA-001-java-base",
-        agent_name: "java-source-auditor",
-        language: "java",
+        assignment_id: "FA-001-python-base",
+        agent_name: "python-source-auditor",
+        language: "python",
         file_function_domain: "base",
-        catalog_domain: "java",
+        catalog_domain: "python",
         file_ids: ["file:001"],
         function_ids: ["function:001"],
         catalog_ids: ["JW-AUTHZ-01"],
@@ -102,9 +102,9 @@ async function writeSnapshot(path, threatPath, focusPath, threat, focus) {
   const scopePath = join(structuralDir, "scope.json");
   const functionsPath = join(structuralDir, "functions-java.json");
   const catalogPath = join(structuralDir, "catalog.json");
-  await writeFile(scopePath, `${JSON.stringify({ audit_id: AUDIT_ID, scope_digest: SCOPE_DIGEST, files: [{ file_id: "file:001", path: "src/TenantApi.java", review_required: true, owner_agent: "java-source-auditor" }] }, null, 2)}\n`, "utf8");
-  await writeFile(functionsPath, `${JSON.stringify({ audit_id: AUDIT_ID, scope_digest: SCOPE_DIGEST, language: "java", functions: [{ function_id: "function:001", path: "src/TenantApi.java", qualified_name: "TenantApi.get", owner_agent: "java-source-auditor" }] }, null, 2)}\n`, "utf8");
-  await writeFile(catalogPath, `${JSON.stringify({ profile_id: "semantic-fixture", entries: [{ id: "JW-AUTHZ-01", applies_to: ["java"] }] }, null, 2)}\n`, "utf8");
+  await writeFile(scopePath, `${JSON.stringify({ audit_id: AUDIT_ID, scope_digest: SCOPE_DIGEST, files: [{ file_id: "file:001", path: "src/TenantApi.py", review_required: true, owner_agent: "python-source-auditor" }] }, null, 2)}\n`, "utf8");
+  await writeFile(functionsPath, `${JSON.stringify({ audit_id: AUDIT_ID, scope_digest: SCOPE_DIGEST, language: "python", functions: [{ function_id: "function:001", path: "src/TenantApi.py", qualified_name: "TenantApi.get", owner_agent: "python-source-auditor" }] }, null, 2)}\n`, "utf8");
+  await writeFile(catalogPath, `${JSON.stringify({ profile_id: "semantic-fixture-v4", coverage_model: { domain_profiles: { java: { entry_selector: { kind: "applies_to", value: "java" } }, web: { entry_selector: { kind: "applies_to", value: "web" } }, platform: { entry_selector: { kind: "applies_to", value: "platform" } }, "c-cpp": { entry_selector: { kind: "id-prefix", value: "JW-" } }, python: { entry_selector: { kind: "id-prefix", value: "JW-" } }, ai: { entry_selector: { kind: "id-prefix", value: "AI-" } } } }, entries: [{ id: "JW-AUTHZ-01", applies_to: ["java"] }] }, null, 2)}\n`, "utf8");
   const threatBytes = await readFile(threatPath);
   const focusBytes = await readFile(focusPath);
   const snapshot = {
@@ -112,7 +112,7 @@ async function writeSnapshot(path, threatPath, focusPath, threat, focus) {
     audit_id: AUDIT_ID,
     scope_digest: SCOPE_DIGEST,
     scope: { path: scopePath, sha256: bytesDigest(await readFile(scopePath)) },
-    functions: [{ language: "java", path: functionsPath, sha256: bytesDigest(await readFile(functionsPath)) }],
+    functions: [{ language: "python", path: functionsPath, sha256: bytesDigest(await readFile(functionsPath)) }],
     catalog: { path: catalogPath, sha256: bytesDigest(await readFile(catalogPath)) },
     semantic: {
       threat_model: { path: threatPath, manifest_digest: threat.manifest_digest, sha256: bytesDigest(threatBytes) },
@@ -126,7 +126,7 @@ async function writeSnapshot(path, threatPath, focusPath, threat, focus) {
 async function writeReports(directory) {
   await mkdir(directory, { recursive: true });
   for (const assignment of [
-    { agent: "java-source-auditor", language: "java", catalog: ["JW-AUTHZ-01"] },
+    { agent: "python-source-auditor", language: "python", catalog: ["JW-AUTHZ-01"] },
     { agent: "ai-security-auditor", language: "ai", catalog: [] },
   ]) {
     for (const lens of LENSES) {
@@ -140,7 +140,7 @@ async function writeReports(directory) {
         focus_area_id: "FA-001",
         discovery_track: "coverage",
         audit_strategy: lens,
-        review_depth: { files_read: ["src/TenantApi.java"], functions_read: ["TenantApi.get"] },
+        review_depth: { files_read: ["src/TenantApi.py"], functions_read: ["TenantApi.get"] },
         scope: { scope_digest: SCOPE_DIGEST, assigned_file_ids: ["file:001"], assigned_function_ids: ["function:001"], assigned_catalog_ids: assignment.catalog },
       };
       await writeFile(join(directory, `${assignment.agent}.${lens}.audit-report.json`), `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -151,14 +151,14 @@ async function writeReports(directory) {
       schema_version: 1,
       audit_id: AUDIT_ID,
       round: 1,
-      agent_name: "java-source-auditor",
-      agent_session_id: `java-fa-001-${track}-r1`,
+      agent_name: "python-source-auditor",
+      agent_session_id: `python-fa-001-${track}-r1`,
       scope_digest: SCOPE_DIGEST,
       focus_area_id: "FA-001",
       discovery_track: track,
       entry_point_ids: ["EP-001"],
       threat_ids: ["T-001"],
-      files_read: ["src/TenantApi.java"],
+      files_read: ["src/TenantApi.py"],
       functions_read: ["TenantApi.get"],
       hypotheses_tested: [track === "blind" ? "alternate tenant identity flow" : "same-class sibling endpoint"],
       seed_inputs: track === "blind" ? [] : ["HC-001"],
@@ -167,7 +167,7 @@ async function writeReports(directory) {
       findings: [],
       gaps: [],
     };
-    await writeFile(join(directory, `java-source-auditor.${track}.discovery.json`), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    await writeFile(join(directory, `python-source-auditor.${track}.discovery.json`), `${JSON.stringify(report, null, 2)}\n`, "utf8");
   }
 }
 
@@ -212,8 +212,26 @@ async function main() {
     const positive = JSON.parse(await readFile(outputPath, "utf8"));
     if (!positive.complete || positive.expected.focus_assignment_lens_sessions !== 6 || positive.expected.primary_assignments !== 5) throw new Error("Positive semantic coverage fixture did not verify");
 
+    const wrongDomainFocusPath = join(work, "focus-areas-platform-domain.json");
+    const wrongDomainFocus = structuredClone(focus);
+    delete wrongDomainFocus.manifest_digest;
+    wrongDomainFocus.focus_areas[0].assignments[0].catalog_domain = "platform";
+    await writeFile(wrongDomainFocusPath, `${JSON.stringify(wrongDomainFocus, null, 2)}\n`, "utf8");
+    run("seal-semantic-manifest.mjs", ["--input", wrongDomainFocusPath]);
+    const sealedWrongDomainFocus = JSON.parse(await readFile(wrongDomainFocusPath, "utf8"));
+    const wrongDomainSnapshot = join(work, "snapshot-platform-domain.json");
+    const wrongDomainAttack = join(work, "attack-platform-domain.json");
+    const wrongDomainOutput = join(work, "semantic-platform-domain.json");
+    await writeSnapshot(wrongDomainSnapshot, threatPath, wrongDomainFocusPath, threat, sealedWrongDomainFocus);
+    await writeAttack(wrongDomainAttack, threat, sealedWrongDomainFocus);
+    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", wrongDomainSnapshot, "--reports-dir", reports, "--attack-chain-report", wrongDomainAttack, "--output", wrongDomainOutput], 2);
+    const wrongDomain = JSON.parse(await readFile(wrongDomainOutput, "utf8"));
+    if (wrongDomain.complete || !wrongDomain.missing.primary_assignments.some(item => item.key.includes("python-source-auditor|python|catalog|JW-AUTHZ-01"))) {
+      throw new Error("Python catalog domain mismatch was not detected");
+    }
+
     await cp(reports, negativeReports, { recursive: true });
-    await unlink(join(negativeReports, "java-source-auditor.control-driven.audit-report.json"));
+    await unlink(join(negativeReports, "python-source-auditor.control-driven.audit-report.json"));
     const missingLensOutput = join(work, "semantic-missing-lens.json");
     run("verify-semantic-coverage.mjs", [...commonArgs, "--reports-dir", negativeReports, "--output", missingLensOutput], 2);
     const missingLens = JSON.parse(await readFile(missingLensOutput, "utf8"));
@@ -242,7 +260,7 @@ async function main() {
     const missingPrimary = JSON.parse(await readFile(missingPrimaryOutput, "utf8"));
     if (missingPrimary.complete || !missingPrimary.missing.primary_assignments.some(item => item.key.includes("ai-security-auditor|ai|file|file:001"))) throw new Error("Missing AI primary Focus Area assignment was not detected");
 
-    process.stdout.write(`${JSON.stringify({ complete: true, threat_model_sealed: true, focus_areas_sealed: true, primary_assignments_verified: 5, focus_lenses_verified: 6, blind_track_verified: true, seeded_variant_verified: true, missing_focus_lens_caught: "control-driven", missing_attack_chain_asset_caught: "ASSET-001", missing_ai_primary_assignment_caught: "file:001" })}\n`);
+    process.stdout.write(`${JSON.stringify({ complete: true, threat_model_sealed: true, focus_areas_sealed: true, primary_assignments_verified: 5, python_catalog_domain_verified: true, focus_lenses_verified: 6, blind_track_verified: true, seeded_variant_verified: true, missing_focus_lens_caught: "control-driven", missing_attack_chain_asset_caught: "ASSET-001", missing_ai_primary_assignment_caught: "file:001" })}\n`);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
