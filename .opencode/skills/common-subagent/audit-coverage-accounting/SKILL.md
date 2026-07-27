@@ -167,14 +167,15 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/initiali
   --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl
 ```
 
-Coverage sessions never edit the plan or canonical ledger. Use the `coverage_ledger` MCP tools:
+Coverage sessions never edit the plan or canonical ledger. The `coverage_ledger` MCP is intentionally paginated: do not request or paste a full plan, ledger, or all gaps into model context. Use the tools in this order:
 
-1. `coverage_get_packet` filtered by exact `audit_id`, `focus_area_id`, domain, and lens.
-2. `coverage_inspect_subject` for each assigned check.
-3. `coverage_record_tool_result` with frozen source hashes, concrete locators, exact query/rule, tool name, and result digest. The service creates the receipt. Catalog-domain checks freeze every source file owned by that domain (all scoped files for AI); the union of referenced receipts must cover that entire source set. Interface checks must cover their source file.
-4. `coverage_submit_decision` with separate execution and result states.
-5. `coverage_get_gaps` for follow-up routing.
-6. `coverage_finalize` only after all required checks are verified.
+1. `coverage_get_packet` filtered by exact `audit_id`, `focus_area_id`, domain, and lens. It returns compact check summaries in pages of at most 10; follow `next_cursor` only while the assignment remains unresolved.
+2. `coverage_inspect_subject` for each assigned check. It returns only the compact immutable packet; it never returns the check's source universe.
+3. Call `coverage_record_tool_result` with `source_scope: "required"` after the tool has reviewed the complete frozen scope. The service resolves that check's source universe internally and records only its count and digest, so do not fetch or send hundreds of source IDs. Keep locator JSON below 16 KiB and bind large raw results by digest.
+4. Use `coverage_get_subject_sources` only for a small, targeted diagnostic page when a particular file's metadata is needed. Never page through the full source universe as part of the normal receipt workflow.
+5. `coverage_submit_decision` with separate execution and result states.
+6. `coverage_get_gaps` for follow-up routing. It is paginated and intentionally returns compact summaries; retrieve a subject only when it is selected for rework.
+7. `coverage_finalize` only after all required checks are verified.
 
 Execution states are `PLANNED → INSPECTED → VERIFIED`, or terminally incomplete `GAP`/`INVALIDATED`. Result states are independently `NO_FINDING`, `FINDING`, or `INCONCLUSIVE`. `VERIFIED` requires a valid same-check receipt. `FINDING` requires finding IDs and closes only its atomic check; it never closes other types, interfaces, or lenses. Agents cannot submit `N/A`. Direct writes to `reports/coverage/<audit-id>/ledger/` are denied.
 

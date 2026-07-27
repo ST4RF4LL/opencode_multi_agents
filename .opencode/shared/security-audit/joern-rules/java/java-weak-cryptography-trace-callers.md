@@ -5,7 +5,7 @@
 - **weakness**: `weak-cryptography`
 - **dimension**: D7
 - **source_script**: `skills/java-subagent/java-weak-cryptography/rules/joern/trace-callers.sc`
-- **adapted_for_mcp**: True
+- **execution**: direct Joern CLI
 - **params**: ['cpgFile: String', 'sinkMethod: String = ".*Cipher\\\\.getInstance.*"']
 
 ## Intent
@@ -15,8 +15,8 @@ Outputs candidates (sinks/sources/flows/validation hints), not final findings.
 
 ## How to run
 
-1. `joern_create_cpg` for the target Java sources.
-2. `joern_run_rule` with `language=java`, `rule_id=java-weak-cryptography-trace-callers`.
+1. `joern-parse <source> -o <cpg.bin> --language java`.
+2. `joern <cpg.bin> --script .opencode/shared/security-audit/joern-rules/java/java-weak-cryptography-trace-callers.sc`.
 
 ## Safety
 

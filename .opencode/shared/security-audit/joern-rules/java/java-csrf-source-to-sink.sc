@@ -1,7 +1,7 @@
 // L2: connect cookie/session auth and request inputs to state-changing handlers.
 // CSRF is not classic string taint SSRF-style; model auth + mutation reachability.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

@@ -1,7 +1,7 @@
 // L1: locate CSRF-related sinks — state-changing endpoints and CSRF disable config.
 // Output SinkCandidate, not findings.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

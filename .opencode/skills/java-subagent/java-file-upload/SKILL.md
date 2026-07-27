@@ -38,7 +38,7 @@ metadata:
 ## Tool Priority
 
 1. **rg**：multipart / transferTo / webapp 存储 / Content-Type 校验关键词
-2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位无扩展名校验直存、仅 MIME 校验、双扩展名、webroot 路径
+2. **Semgrep/OpenGrep**：通过受控 `.opencode/scripts/semgrep-scan.mjs` CLI 执行本地兼容规则，定位无扩展名校验直存、仅 MIME 校验、双扩展名、webroot 路径
 3. **Joern**：跨方法调用链与数据流
 4. **LLM**：存储位置是否 web-accessible、策略是否可绕过、业务语义研判
 

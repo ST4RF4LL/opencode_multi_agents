@@ -17,8 +17,6 @@
     "skill": {
       "*": "deny"
     },
-    "semgrep_*": "allow",
-    "joern_*": "allow",
     "coverage_*": "allow",
     "cpp_index_*": "deny",
     "jvm_index_*": "deny",
@@ -28,32 +26,6 @@
     "vuln-judger_*": "deny"
   },
   "mcp": {
-    "semgrep": {
-      "type": "local",
-      "command": ["node", ".opencode/mcp/semgrep-server.mjs"],
-      "cwd": ".",
-      "environment": {
-        "OPENGREP_BIN": "opengrep",
-        "SEMGREP_BIN": "semgrep",
-        "SEMGREP_ENGINE": "auto"
-      },
-      "timeout": 900000,
-      "enabled": true
-    },
-    "joern": {
-      "type": "local",
-      "command": ["node", ".opencode/mcp/joern-server.mjs"],
-      "cwd": ".",
-      "environment": {
-        "JOERN_BIN": "joern",
-        "JOERN_PARSE_BIN": "joern-parse",
-        "JOERN_VERSION": "unknown",
-        "JOERN_GNUBIN": "",
-        "JOERN_JAVA_BIN": ""
-      },
-      "timeout": 300000,
-      "enabled": true
-    },
     "coverage_ledger": {
       "type": "local",
       "command": ["node", ".opencode/mcp/coverage-ledger-server.mjs"],

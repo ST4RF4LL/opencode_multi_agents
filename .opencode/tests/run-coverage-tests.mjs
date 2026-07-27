@@ -542,31 +542,31 @@ async function main() {
       resultState: "NO_FINDING",
       receiptIds: [partialReceipt.receipt.receipt_id],
       rationale: "invalid partial source decision",
-    }), /do not cover the frozen source universe/);
+    }), /do not cover .* frozen source files/);
 
     for (const check of coveragePlan.checks.filter(item => item.applicability === "REQUIRED")) {
-      const requiredSources = check.required_source_file_ids.map(fileId => {
-        const source = coveragePlan.source_index.find(item => item.file_id === fileId);
-        return { file_id: source.file_id, sha256: source.sha256, link_target: source.link_target };
-      });
       const receipt = await recordToolResult({
         planPath: coveragePlanPath,
         ledgerPath,
         checkId: check.check_id,
         sessionId: "fixture-ledger-session",
         idempotencyKey: `receipt-${check.check_id}`,
-        sourceHashes: requiredSources,
-        locators: requiredSources.map(source => ({
-          file_id: source.file_id,
-          path: coveragePlan.source_index.find(item => item.file_id === source.file_id).path,
-          line_start: 1,
+        sourceScope: "required",
+        locators: [{
+          kind: "required-source-set",
+          source_count: check.required_source_file_ids.length,
           check_id: check.check_id,
-        })),
+        }],
         queryOrRule: `fixture-review:${check.vulnerability_type_id}:${check.lens}`,
         tool: "fixture-deterministic-review",
         resultDigest: sha256(`result:${check.check_id}`),
         resultSummary: "No fixture finding.",
       });
+      if (receipt.receipt.source_hashes?.mode !== "required-source-set"
+        || receipt.receipt.source_hashes.source_count !== check.required_source_file_ids.length
+        || !/^[a-f0-9]{64}$/.test(receipt.receipt.source_hashes.source_set_sha256 ?? "")) {
+        throw new Error("Required source universe was not represented by a compact digest-bound source set");
+      }
       await submitDecision({
         planPath: coveragePlanPath,
         ledgerPath,

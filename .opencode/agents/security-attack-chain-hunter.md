@@ -32,8 +32,6 @@ permission:
     "mkdir -p reports*": allow
     "mkdir -p tmp*": allow
   task: deny
-  "semgrep_*": deny
-  "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": deny

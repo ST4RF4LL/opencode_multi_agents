@@ -35,20 +35,13 @@ function diagnostic(result) {
   return combined.slice(0, 600) || "probe-command-failed";
 }
 
-async function loadToolchain(root) {
-  let configured = {};
-  try {
-    const config = JSON.parse(await readFile(join(root, ".opencode", "opencode.json"), "utf8"));
-    configured = config?.mcp?.joern?.environment ?? {};
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
+function loadToolchain() {
   const basePath = process.env.PATH || "/usr/bin:/bin";
   return {
-    joernParseBin: process.env.JOERN_PARSE_BIN || configured.JOERN_PARSE_BIN || "joern-parse",
+    joernParseBin: process.env.JOERN_PARSE_BIN || "joern-parse",
     environment: {
       ...process.env,
-      PATH: [process.env.JOERN_GNUBIN || configured.JOERN_GNUBIN, process.env.JOERN_JAVA_BIN || configured.JOERN_JAVA_BIN, ...basePath.split(delimiter)].filter(Boolean).join(delimiter),
+      PATH: [process.env.JOERN_GNUBIN, process.env.JOERN_JAVA_BIN, ...basePath.split(delimiter)].filter(Boolean).join(delimiter),
     },
   };
 }
@@ -98,7 +91,7 @@ async function main() {
     files.push(file.path);
     parserFiles.set(file.function_parser, files);
   }
-  const toolchain = await loadToolchain(root);
+  const toolchain = loadToolchain();
   const capabilities = [];
   for (const parser of [...parserFiles.keys()].sort()) {
     const capability = await probe(parser, toolchain);

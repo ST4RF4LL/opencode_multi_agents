@@ -5,7 +5,7 @@
 - **weakness**: `csrf`
 - **dimension**: D2
 - **source_script**: `skills/java-subagent/java-csrf/rules/joern/source-to-sink.sc`
-- **adapted_for_mcp**: True
+- **execution**: direct Joern CLI
 
 ## Intent
 
@@ -14,8 +14,8 @@ Outputs candidates (sinks/sources/flows/validation hints), not final findings.
 
 ## How to run
 
-1. `joern_create_cpg` for the target Java sources.
-2. `joern_run_rule` with `language=java`, `rule_id=java-csrf-source-to-sink`.
+1. `joern-parse <source> -o <cpg.bin> --language java`.
+2. `joern <cpg.bin> --script .opencode/shared/security-audit/joern-rules/java/java-csrf-source-to-sink.sc`.
 
 ## Safety
 

@@ -38,7 +38,7 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与资源访问关键词（findById、deleteById、PathVariable、tenantId）
-2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位路径 id 直查、删除无 owner、client tenantId
+2. **Semgrep/OpenGrep**：通过受控 `.opencode/scripts/semgrep-scan.mjs` CLI 执行本地兼容规则，定位路径 id 直查、删除无 owner、client tenantId
 3. **Joern**：跨方法调用链与数据流
 4. **LLM**：业务语义、资源归属模型、水平/垂直越权研判
 

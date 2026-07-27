@@ -30,7 +30,7 @@
 - `control-driven`: 枚举敏感操作并验证应该存在的安全控制。
 - `config-driven`: 确定实际生效的配置、依赖和部署选择并对照基线。
 
-Orchestrator 为每个 `Focus Area × owner/domain assignment` 分别调用三次 coverage agent，并保证所有 Focus Area 的 AI assignments 合集仍覆盖全部冻结文件、函数和 AI catalog。Recon 额外生成并验证冻结的外部接口清单，区分 `CONFIRMED` 与 `CANDIDATE`，任何动态、未知或失败提取都会阻止完整声明。目录 v2 为每个适用漏洞类型建立三视角负向发现基线，并仅对维度相交的接口/类型组合建立 REQUIRED 检查；所有检查绑定唯一 Focus Area。subagent 通过 `coverage_ledger` MCP 领取 packet、登记源哈希/定位/query/tool/result 回执并提交执行与结果双状态，不能直接修改 canonical ledger。每个 Focus Area 还执行 Blind，映射到历史/确认案例时执行 Seeded Variant；这些轨道只贡献候选证据，不能关闭 accounting。
+Orchestrator 为每个 `Focus Area × owner/domain assignment` 分别调用三次 coverage agent，并保证所有 Focus Area 的 AI assignments 合集仍覆盖全部冻结文件、函数和 AI catalog。Recon 额外生成并验证冻结的外部接口清单，区分 `CONFIRMED` 与 `CANDIDATE`，任何动态、未知或失败提取都会阻止完整声明。目录 v2 为每个适用漏洞类型建立三视角负向发现基线，并仅对维度相交的接口/类型组合建立 REQUIRED 检查；所有检查绑定唯一 Focus Area。subagent 通过 `coverage_ledger` MCP 领取紧凑 packet，并以 `source_scope: "required"` 让服务端登记完整冻结源集合的数量与摘要，再提交定位/query/tool/result 回执以及执行与结果双状态；完整 source 列表不会进入正常 MCP 响应，subagent 也不能直接修改 canonical ledger。每个 Focus Area 还执行 Blind，映射到历史/确认案例时执行 Seeded Variant；这些轨道只贡献候选证据，不能关闭 accounting。
 
 最终要求 v1 文件/函数结构账本、v2 漏洞类型/接口 Ledger、机器统计摘要和语义发现账本全部闭合。覆盖率中的 `R/V/U/N`、漏洞类型完全覆盖率、接口完全覆盖率（分 ingress/egress）以及文件/函数完全覆盖率只由脚本计算；`R=0` 显示 `NOT_APPLICABLE` 而不是 100%。这些门禁不覆盖仓库中不存在的运行时生成代码、远端模型/工具真实行为或未提供的部署配置，也不等价于数学意义上证明不存在未知威胁或漏洞。
 
@@ -150,9 +150,13 @@ Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdow
 @security-skill-optimizer 根据已完成的 vuln-judger 三方复核结果优化 skill、Joern 规则和案例库。
 ```
 
-## MCP defaults
+## Local analysis and MCP defaults
 
-配置模板默认启用 `semgrep`、`joern` 与 `coverage_ledger`。`semgrep` MCP 暴露 `semgrep_health` 和 `semgrep_scan`：自动模式优先使用 `opengrep`，不可用时回退 `semgrep`；只接受工作区内本地 YAML 规则，原始 JSON 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`。实际二进制路径由每位使用者写入被忽略的 `.opencode/opencode.json`。`joern` 提供 CPG、规则与函数清单能力；`coverage_ledger` 暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。
+Semgrep/OpenGrep 不再注册为 MCP。Agent 通过 `node .opencode/scripts/semgrep-scan.mjs` 直接调用受控扫描入口：`health` 检查本地引擎，`scan` 自动优先使用 `opengrep` 并回退 `semgrep`，只接受工作区内本地 YAML 规则。完整 JSON 与 stderr 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`，终端只输出不超过 16 KiB 的摘要。扫描器的异常 JSON 也有 64 MiB 硬上限。
+
+Joern 不再注册为 MCP。函数清单构建器和审计命令直接调用 `joern-parse` 与 `joern`；默认从 `PATH` 解析，也可在启动 OpenCode 前通过 `JOERN_BIN`、`JOERN_PARSE_BIN`、`JOERN_JAVA_BIN` 和 `JOERN_GNUBIN` 指定本机工具链。Joern 查询应把完整 stdout/stderr 写入 `tmp/`，只把有界摘要带回 agent 上下文。
+
+配置模板目前只默认启用 `coverage_ledger` 本地 MCP；它暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。正常流程只交换紧凑检查、事件元数据和服务端派生的冻结 source-set 摘要，单次响应硬限制为 16 KiB；完整 source 元数据仅允许按小页做定向诊断。
 
 `context7`、`gh_grep`、CodeQL 以及 `vuln_judger` / `vuln-judger` MCP 占位均已从项目配置中删除。历史 CodeQL 规则文件仅作为离线知识资产保留，不会被 agent 调用。`vuln_judger` 服务完全由用户的全局 OpenCode 配置提供；项目只保留 validator 的工具前缀权限与路由契约，`judge_report` 必须传 `engine=opencode` 且异步轮询。`cpp_index`、`jvm_index`、`python_index` 和 `audit_lab` 仍是可替换占位。
 

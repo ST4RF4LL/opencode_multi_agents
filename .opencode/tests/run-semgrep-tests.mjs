@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
 import { chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { probeEngines, runSemgrepScan, selectEngine } from "../mcp/semgrep-core.mjs";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { probeEngines, runSemgrepScan, selectEngine } from "../scripts/semgrep-core.mjs";
+
+const executeFile = promisify(execFile);
+const SEMGREP_CLI = fileURLToPath(new URL("../scripts/semgrep-scan.mjs", import.meta.url));
 
 async function expectReject(operation, pattern) {
   try {
@@ -35,6 +41,7 @@ if (process.argv.includes("--version")) {
   process.stdout.write("OpenGrep fixture 1.0.0\\\\n");
   process.exit(0);
 }
+process.stderr.write("D".repeat(500000));
 process.stdout.write(JSON.stringify({
   version: "fixture",
   results: [{
@@ -51,7 +58,10 @@ process.stdout.write(JSON.stringify({
       fingerprint: "fixture-fingerprint"
     }
   }],
-  errors: [],
+  errors: Array.from({ length: 100 }, (_, index) => ({
+    message: "E".repeat(2000),
+    index
+  })),
   paths: { scanned: ["src/app.js"] }
 }));
 `, "utf8");
@@ -84,8 +94,15 @@ process.stdout.write(JSON.stringify({
       rulePaths: ["rules/test.yaml"],
       environment,
     });
-    if (scan.engine !== "opengrep" || scan.findings !== 1 || scan.errors.length !== 0) throw new Error("OpenGrep-compatible scan result was not normalized");
+    if (scan.engine !== "opengrep" || scan.findings !== 1 || scan.error_count !== 100
+      || scan.error_samples.length !== 5 || scan.error_samples.some(error => Buffer.byteLength(error) > 550)) {
+      throw new Error("OpenGrep-compatible scan result was not normalized and bounded");
+    }
     if (!scan.raw_output_path.startsWith("tmp/fixture-audit/semgrep/")) throw new Error("Raw scan output is not scoped by audit_id");
+    if (scan.stderr_bytes !== 500000 || !scan.stderr_path
+      || (await readFile(resolve(workspace, scan.stderr_path))).length !== 500000) {
+      throw new Error("Scanner stderr was not retained outside the CLI summary");
+    }
     const sarif = JSON.parse(await readFile(resolve(workspace, scan.sarif_path), "utf8"));
     if (sarif.runs.length !== 1 || sarif.runs[0].results[0].ruleId !== "fixture.rule"
       || sarif.runs[0].results[0].partialFingerprints.semgrepFingerprint !== "fixture-fingerprint") {
@@ -106,6 +123,51 @@ process.stdout.write(JSON.stringify({
       environment,
     });
     if (merged.sarif_runs !== 2) throw new Error("A second static-analysis run did not merge into the session SARIF");
+
+    const cliResult = await executeFile(process.execPath, [
+      SEMGREP_CLI,
+      "scan",
+      "--audit-id", "fixture-audit",
+      "--session-id", "fixture-cli-r1",
+      "--agent-name", "web-source-auditor",
+      "--target", "src",
+      "--rule", "rules/test.yaml",
+    ], {
+      cwd: workspace,
+      env: environment,
+      maxBuffer: 20_000,
+    });
+    const cliSummary = JSON.parse(cliResult.stdout);
+    if (cliSummary.complete !== true || cliSummary.transport !== "direct-cli" || cliSummary.findings !== 1) {
+      throw new Error("Direct Semgrep/OpenGrep CLI did not return the expected bounded summary");
+    }
+    if (Buffer.byteLength(cliResult.stdout) > 16 * 1024 || cliResult.stderr !== "") {
+      throw new Error("Direct Semgrep/OpenGrep CLI leaked scanner output to the invoking context");
+    }
+
+    const concurrentArgs = [
+      SEMGREP_CLI,
+      "scan",
+      "--audit-id", "fixture-audit",
+      "--session-id", "fixture-cli-concurrent-r1",
+      "--agent-name", "web-source-auditor",
+      "--target", "src",
+      "--rule", "rules/test.yaml",
+    ];
+    const concurrentRuns = await Promise.all([
+      executeFile(process.execPath, concurrentArgs, { cwd: workspace, env: environment, maxBuffer: 20_000 }),
+      executeFile(process.execPath, concurrentArgs, { cwd: workspace, env: environment, maxBuffer: 20_000 }),
+    ]);
+    if (concurrentRuns.some(run => Buffer.byteLength(run.stdout) > 16 * 1024 || run.stderr !== "")) {
+      throw new Error("Concurrent direct scans leaked scanner output to the invoking context");
+    }
+    const concurrentSarif = JSON.parse(await readFile(
+      join(workspace, "reports", "sarif", "web-source-auditor.fixture-cli-concurrent-r1.sarif"),
+      "utf8",
+    ));
+    if (concurrentSarif.runs.length !== 2) {
+      throw new Error("Concurrent direct scans lost a SARIF run");
+    }
 
     await expectReject(() => runSemgrepScan({
       workspaceRoot: workspace,
@@ -153,6 +215,11 @@ process.stdout.write(JSON.stringify({
       complete: true,
       opengrep_compatibility: true,
       semgrep_fallback_supported: true,
+      direct_cli: true,
+      bounded_cli_summary: true,
+      bounded_error_samples: true,
+      stderr_retained_on_disk: true,
+      concurrent_sarif_merge: true,
       local_rules_only: true,
       normalized_sarif: true,
       merged_sarif_runs: merged.sarif_runs,

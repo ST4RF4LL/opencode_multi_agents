@@ -38,7 +38,7 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与绑定/敏感字段关键词
-2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 @ModelAttribute 实体、@RequestBody 实体、BeanUtils 全量拷贝
+2. **Semgrep/OpenGrep**：通过受控 `.opencode/scripts/semgrep-scan.mjs` CLI 执行本地兼容规则，定位 @ModelAttribute 实体、@RequestBody 实体、BeanUtils 全量拷贝
 3. **Joern**：跨方法调用链、实体字段写入、save/update 路径
 4. **LLM**：业务语义、敏感字段判定、防护有效性研判
 

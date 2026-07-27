@@ -65,26 +65,29 @@ command -v opengrep
 command -v semgrep
 ```
 
-把存在的命令路径写入 `.opencode/opencode.json`：
+Semgrep/OpenGrep 不再通过项目 MCP 配置。若命令已在 `PATH` 中无需额外设置；否则在运行 `initial.sh`、受控扫描 CLI 和 OpenCode 的同一个 Shell 中导出：
 
-```json
-{
-  "OPENGREP_BIN": "/absolute/path/to/opengrep",
-  "SEMGREP_BIN": "/absolute/path/to/semgrep",
-  "SEMGREP_ENGINE": "auto",
-  "JOERN_BIN": "/absolute/path/to/joern",
-  "JOERN_PARSE_BIN": "/absolute/path/to/joern-parse",
-  "JOERN_VERSION": "installed-version",
-  "JOERN_GNUBIN": "",
-  "JOERN_JAVA_BIN": "/absolute/path/to/java/bin"
-}
+```sh
+export OPENGREP_BIN="/absolute/path/to/opengrep"
+export SEMGREP_BIN="/absolute/path/to/semgrep"
+export SEMGREP_ENGINE="auto"
 ```
 
-这些字段分别位于模板的 `mcp.semgrep.environment` 和 `mcp.joern.environment` 中。没有安装 Semgrep 时保留 `SEMGREP_BIN: "semgrep"` 即可；自动模式仍会使用 OpenGrep。
+没有安装 Semgrep 时可不设置 `SEMGREP_BIN`；自动模式仍会使用 OpenGrep。反之亦然。
+
+Joern 不再通过项目 MCP 配置。只要 `joern`、`joern-parse` 和 `java` 已在 `PATH` 中，就不需要额外配置；否则在启动 `initial.sh` 和 OpenCode 的同一个 Shell 中导出：
+
+```sh
+export JOERN_BIN="/absolute/path/to/joern"
+export JOERN_PARSE_BIN="/absolute/path/to/joern-parse"
+export JOERN_JAVA_BIN="/absolute/path/to/java/bin"
+export JOERN_GNUBIN=""
+```
 
 - `JOERN_JAVA_BIN` 填写 `dirname "$(command -v java)"` 的结果。
 - Linux 通常保持 `JOERN_GNUBIN` 为空。
 - macOS 安装 coreutils 后，将 `JOERN_GNUBIN` 设置为 `$(brew --prefix coreutils)/libexec/gnubin`。
+- 如需长期使用，将这些导出写入你的 Shell 配置或专用启动脚本；不要再创建 `mcp.joern` 配置。
 
 `vuln_judger` 不在项目模板中定义；如需最终三方复核，请在用户全局 `~/.config/opencode/opencode.json` 中配置。OpenCode 的全局与自定义配置规则见[官方配置文档](https://opencode.ai/docs/config/)。
 
@@ -96,7 +99,7 @@ export OPENCODE_CONFIG="$PWD/.opencode/opencode.json"
 opencode
 ```
 
-`initial.sh` 会检查核心 CLI、项目依赖、本地和全局 OpenCode 配置、OpenGrep/Semgrep、Joern/JDK，以及项目内 MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
+`initial.sh` 会直接解析并检查 OpenGrep/Semgrep、`joern`、`joern-parse`、Java 及可选 GNU coreutils，同时检查核心 CLI、项目依赖、本地和全局 OpenCode 配置，以及 Coverage Ledger MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
 
 ```sh
 ./initial.sh --python          # Python 项目：额外验证 Joern Python 前端
@@ -106,4 +109,16 @@ opencode
 
 输出中的 `【通过】` 表示当前工作流可用，`【警告】` 表示可选能力缺失，`【失败】` 表示所选工作流被阻断。处理完 `【失败】` 后重新运行 `./initial.sh`；只有 Python 审计、最终三方复核或完整回归需要时，才分别增加对应参数。
 
-进入 OpenCode 后分别调用 `joern_health` 和 `semgrep_health`。两者应至少识别出 Joern、Java，以及 OpenGrep/Semgrep 中的一个；缺失项应先修正本地配置，不要在审计过程中临时跳过。
+Joern 和 OpenGrep/Semgrep 的可用性都由 `initial.sh` 直接检查。也可运行：
+
+```sh
+node .opencode/scripts/semgrep-scan.mjs health
+node .opencode/scripts/semgrep-scan.mjs scan \
+  --audit-id audit-001 \
+  --session-id web-r1 \
+  --agent-name java-source-auditor \
+  --target src \
+  --rule .opencode/skills/java-subagent/java-sql-injection/rules/semgrep/java-sqli-sinks.yaml
+```
+
+`scan` 只接受工作区内的本地规则和目标，完整 JSON、stderr 与 SARIF 落盘，终端只返回有硬上限的 JSON 摘要。工具缺失时应修正当前 Shell 的 `PATH` 或上述环境变量，不要在审计过程中临时跳过。

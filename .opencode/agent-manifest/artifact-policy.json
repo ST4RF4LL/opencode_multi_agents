@@ -111,7 +111,7 @@
       "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
       "producer": "coverage_ledger MCP service",
       "required_event_types": ["GENESIS", "INSPECT", "RECEIPT", "DECISION", "FINALIZE"],
-      "notes": "Every event binds the plan digest and previous event hash. Subagents and the orchestrator are denied direct edit/bash writes to the canonical ledger; all state changes use coverage_ledger tools with automatic allow."
+      "notes": "Every event binds the plan digest and previous event hash. Complete source coverage is stored as a compact server-derived required-source-set count and SHA-256 rather than an expanded source array; normal MCP responses are capped at 16 KiB, while source metadata is available only through small targeted diagnostic pages. Subagents and the orchestrator are denied direct edit/bash writes to the canonical ledger; all state changes use coverage_ledger tools with automatic allow."
     },
     "coverage_structural_v1": {
       "format": "json",

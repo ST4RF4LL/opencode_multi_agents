@@ -53,8 +53,13 @@ async function main() {
   const catalog = await json(join(OPENCODE, "shared/security-audit/catalogs/application-ai-vulnerability-catalog.json"));
   const orchestratorText = await readFile(join(OPENCODE, "agents/security-audit-orchestrator.md"), "utf8");
   const validatorText = await readFile(join(OPENCODE, "agents/vulnerability-validator.md"), "utf8");
-  const joernServerText = await readFile(join(OPENCODE, "mcp/joern-server.mjs"), "utf8");
   const joernManifestBuilderText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-joern-function-manifest.mjs"), "utf8");
+  const parserCapabilitiesText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-parser-capabilities.mjs"), "utf8");
+  const semgrepCliText = await readFile(join(OPENCODE, "scripts/semgrep-scan.mjs"), "utf8");
+  const semgrepCoreText = await readFile(join(OPENCODE, "scripts/semgrep-core.mjs"), "utf8");
+  const coverageServerText = await readFile(join(OPENCODE, "mcp/coverage-ledger-server.mjs"), "utf8");
+  const coverageCoreText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs"), "utf8");
+  const packageConfig = await json(join(OPENCODE, "package.json"));
 
   const roleAgents = Object.keys(roles.agents).sort();
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
@@ -65,14 +70,19 @@ async function main() {
   const templateText = JSON.stringify(config);
   for (const machinePath of ["/Users/", "/opt/homebrew/", "/usr/local/bin/joern", "\\\\Users\\\\"]) {
     assert(!templateText.includes(machinePath), `OpenCode config template contains a machine-specific path: ${machinePath}`);
-    assert(!joernServerText.includes(machinePath), `Joern MCP contains a machine-specific default path: ${machinePath}`);
     assert(!joernManifestBuilderText.includes(machinePath), `Joern manifest builder contains a machine-specific default path: ${machinePath}`);
+    assert(!parserCapabilitiesText.includes(machinePath), `Parser capability builder contains a machine-specific default path: ${machinePath}`);
   }
-  assert(config.mcp.joern?.environment?.JOERN_BIN === "joern"
-    && config.mcp.joern?.environment?.JOERN_PARSE_BIN === "joern-parse", "Joern template must use PATH-resolved portable defaults");
-  assert(joernManifestBuilderText.includes('join(root, ".opencode", "opencode.json")')
-    && joernManifestBuilderText.includes("configured.JOERN_BIN")
-    && joernManifestBuilderText.includes("configured.JOERN_PARSE_BIN"), "Joern manifest builder must consume the generated local config");
+  assert(!("joern" in config.mcp), "Joern must not be registered as a project MCP");
+  assert(!("joern" in mcpMap.servers), "mcp-map must not register a Joern MCP");
+  assert(!("joern_*" in config.permission), "global config must not retain Joern MCP permissions");
+  assert(!await exists(join(OPENCODE, "mcp/joern-server.mjs")), "Joern MCP server must be removed");
+  assert(!await exists(join(OPENCODE, "tests/run-joern-tests.mjs")), "Joern MCP integration test must be removed");
+  assert(joernManifestBuilderText.includes('process.env.JOERN_BIN || "joern"')
+    && joernManifestBuilderText.includes('process.env.JOERN_PARSE_BIN || "joern-parse"')
+    && !joernManifestBuilderText.includes("mcp?.joern"), "Joern manifest builder must consume the direct CLI environment");
+  assert(parserCapabilitiesText.includes('process.env.JOERN_PARSE_BIN || "joern-parse"')
+    && !parserCapabilitiesText.includes("mcp?.joern"), "Parser capability builder must consume the direct Joern CLI environment");
   assert(await exists(join(ROOT, "docs/installation.md")), "initial installation guide is missing");
   assert(roleAgents.includes("ai-security-auditor"), "AI security auditor is not registered");
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
@@ -86,7 +96,7 @@ async function main() {
   assert(config.permission["vuln_judger_*"] === "deny", "global permission must deny vuln_judger MCP tools");
   assert(config.permission["vuln-judger_*"] === "deny", "global permission must deny vuln-judger MCP tools");
   assert(config.permission["coverage_*"] === "allow", "global permission must auto-allow Coverage Ledger MCP tools");
-  assert(config.permission["semgrep_*"] === "allow", "global permission must auto-allow Semgrep/OpenGrep MCP tools");
+  assert(!("semgrep_*" in config.permission), "global config must not retain Semgrep/OpenGrep MCP permissions");
   for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
     assert(!(placeholder in config.mcp), `${placeholder} MCP placeholder must be absent from project config`);
     assert(!(placeholder in mcpMap.servers), `${placeholder} MCP placeholder must be absent from mcp-map`);
@@ -96,11 +106,15 @@ async function main() {
     const agentText = await readFile(join(OPENCODE, "agents", `${agentFile}.md`), "utf8");
     const frontmatter = /^---\s*$([\s\S]*?)^---\s*$/m.exec(agentText)?.[1] ?? "";
     assert(!/:\s*ask\s*$/m.test(frontmatter), `${agentFile} permissions must not request user confirmation`);
+    assert(!frontmatter.includes("joern_*"), `${agentFile} must not retain Joern MCP permissions`);
+    assert(!frontmatter.includes("semgrep_*"), `${agentFile} must not retain Semgrep/OpenGrep MCP permissions`);
     for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
       assert(!frontmatter.includes(`${placeholder}_*`), `${agentFile} must not retain ${placeholder} placeholder permissions`);
     }
   }
   for (const [agent, toolPrefixes] of Object.entries(mcpMap.agents)) {
+    assert(!toolPrefixes.includes("joern_*"), `${agent} must not retain Joern MCP routing`);
+    assert(!toolPrefixes.includes("semgrep_*"), `${agent} must not retain Semgrep/OpenGrep MCP routing`);
     for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
       assert(!toolPrefixes.includes(`${placeholder}_*`), `${agent} must not retain ${placeholder} placeholder routing`);
     }
@@ -188,23 +202,33 @@ async function main() {
   assert(artifactPolicy.work.required_recon_files.includes("coverage/interface-manifest.json")
     && artifactPolicy.work.required_recon_files.includes("coverage/interface-extractor-coverage.json"), "deterministic external-interface artifacts are not mandatory");
 
-  assert(config.mcp.semgrep?.enabled === true
-    && config.mcp.semgrep.type === "local"
-    && config.mcp.semgrep.command?.includes(".opencode/mcp/semgrep-server.mjs"), "local Semgrep/OpenGrep MCP must be enabled");
-  assert(config.mcp.semgrep.environment?.SEMGREP_ENGINE === "auto", "Semgrep/OpenGrep MCP must default to automatic engine selection");
-  assert(mcpMap.servers.semgrep?.status === "enabled-local"
-    && sameSet(mcpMap.servers.semgrep.tools, ["semgrep_health", "semgrep_scan"]), "mcp-map must register the local Semgrep/OpenGrep tools");
-  assert(await exists(join(OPENCODE, "mcp/semgrep-core.mjs"))
-    && await exists(join(OPENCODE, "mcp/semgrep-server.mjs"))
-    && await exists(join(OPENCODE, "tests/run-semgrep-tests.mjs")), "Semgrep/OpenGrep MCP implementation or tests are missing");
+  assert(!("semgrep" in config.mcp), "Semgrep/OpenGrep must not be registered as a project MCP");
+  assert(!("semgrep" in mcpMap.servers), "mcp-map must not register a Semgrep/OpenGrep MCP");
+  assert(!await exists(join(OPENCODE, "mcp/semgrep-core.mjs"))
+    && !await exists(join(OPENCODE, "mcp/semgrep-server.mjs")), "Semgrep/OpenGrep MCP files must be removed");
+  assert(await exists(join(OPENCODE, "scripts/semgrep-core.mjs"))
+    && await exists(join(OPENCODE, "scripts/semgrep-scan.mjs"))
+    && await exists(join(OPENCODE, "tests/run-semgrep-tests.mjs")), "direct Semgrep/OpenGrep CLI implementation or tests are missing");
+  assert(semgrepCliText.includes("MAX_OUTPUT_BYTES = 16 * 1024")
+    && semgrepCoreText.includes("MAX_STDOUT_BYTES = 64 * 1024 * 1024")
+    && semgrepCoreText.includes("stderrPath"), "direct Semgrep/OpenGrep CLI must bound context output and retain scanner stderr");
   for (const agent of SEMGREP_AGENTS) {
-    assert(mcpMap.agents[agent].includes("semgrep_*"), `${agent} must receive Semgrep/OpenGrep tools`);
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
-    assert(/^\s*"semgrep_\*": allow\s*$/m.test(text), `${agent} must auto-allow Semgrep/OpenGrep tools`);
+    assert(text.includes("node .opencode/scripts/semgrep-scan.mjs health"), `${agent} must use the direct Semgrep/OpenGrep CLI`);
   }
-  assert(config.mcp.joern?.enabled === true, "local Joern MCP must be enabled");
   assert(config.mcp.coverage_ledger?.enabled === true && config.mcp.coverage_ledger.command?.includes(".opencode/mcp/coverage-ledger-server.mjs"), "local Coverage Ledger MCP must be enabled");
   assert(mcpMap.servers.coverage_ledger?.status === "enabled-local", "mcp-map must register Coverage Ledger as enabled-local");
+  assert(coverageServerText.includes("MAX_RESPONSE_BYTES = 16 * 1024")
+    && coverageServerText.includes('source_scope: z.literal("required")')
+    && coverageServerText.includes("compactReceipt"), "Coverage Ledger MCP must enforce bounded responses and compact required-source-set receipts");
+  assert(coverageCoreText.includes('"required-source-set"')
+    && coverageCoreText.includes("source_set_sha256"), "Coverage Ledger core must bind frozen source universes by a server-derived digest");
+  assert(await exists(join(OPENCODE, "tests/run-coverage-response-tests.mjs"))
+    && packageConfig.scripts["test:coverage"]?.includes("run-coverage-response-tests.mjs"), "Coverage Ledger large-response regression test must be enabled");
+  for (const agent of requiredAgents) {
+    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
+    assert(text.includes('source_scope: "required"'), `${agent} must use compact required-source-set receipts`);
+  }
   for (const agent of [...requiredAgents, "security-evidence-correlator", "security-audit-orchestrator"]) {
     assert(mcpMap.agents[agent].includes("coverage_*"), `${agent} must receive Coverage Ledger tools`);
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");

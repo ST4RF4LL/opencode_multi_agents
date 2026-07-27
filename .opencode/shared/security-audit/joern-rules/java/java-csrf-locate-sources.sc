@@ -1,7 +1,7 @@
 // Locate session/cookie authentication sources relevant to CSRF.
 // CSRF "source" is browser auto-credentials + attacker-controlled request parameters.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

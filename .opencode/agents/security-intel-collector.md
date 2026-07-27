@@ -31,8 +31,6 @@ permission:
     "mkdir -p tmp*": allow
     "node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/*": allow
   task: deny
-  "semgrep_*": deny
-  "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": deny

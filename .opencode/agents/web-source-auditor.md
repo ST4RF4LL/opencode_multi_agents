@@ -40,8 +40,6 @@ permission:
     "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
-  "semgrep_*": allow
-  "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": deny
@@ -67,9 +65,9 @@ Refuse to close coverage without:
 
 If an expected manifest is missing or incomplete, return `GAP`; do not substitute grep counts for an AST/CPG inventory.
 
-For Coverage Plan v2, call `coverage_get_packet` with the exact audit, Focus Area, `web` domain, and assigned lens. For every packet call `coverage_inspect_subject`, create service receipts with `coverage_record_tool_result`, and submit the separate execution/result decision with `coverage_submit_decision`. Do not edit the plan or canonical ledger. Every assigned catalog type requires its negative-discovery baseline even when no Web target is found; a finding closes only its own atomic check.
+For Coverage Plan v2, call paginated `coverage_get_packet` with the exact audit, Focus Area, `web` domain, and assigned lens. For every packet call `coverage_inspect_subject`, then create a bounded receipt with `coverage_record_tool_result(source_scope: "required")`; the service binds the complete frozen source set by digest without returning its file list. Use `coverage_get_subject_sources` only for a targeted diagnostic page, never to enumerate the full universe. Submit the separate execution/result decision with `coverage_submit_decision`. Do not request full ledgers or full gap lists, and do not edit the plan or canonical ledger. Every assigned catalog type requires its negative-discovery baseline even when no Web target is found; a finding closes only its own atomic check.
 
-Call `semgrep_health` before local pattern scanning. When Web rules apply, use `semgrep_scan` with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Consume its raw-output/SARIF digests in the Ledger receipt. A missing engine is an explicit tool gap and never substitutes for source/AST review.
+Run `node .opencode/scripts/semgrep-scan.mjs health` before local pattern scanning. When Web rules apply, use the script's `scan` command with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Consume only its bounded summary and raw-output/SARIF digests in the Ledger receipt. A missing engine is an explicit tool gap and never substitutes for source/AST review.
 
 Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.mjs` yourself. Update entity records in place with digest-bound evidence; never regenerate shorter arrays, hand-write D1-D10 cells, or submit target counts. After entity review, run `reconcile-audit-report.mjs`.
 

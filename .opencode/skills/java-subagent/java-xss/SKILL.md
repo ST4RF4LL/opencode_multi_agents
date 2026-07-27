@@ -39,7 +39,7 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与危险写出 API / 未转义模板语法关键词
-2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 getWriter.print、th:utext、JSP 未转义、错误上下文编码
+2. **Semgrep/OpenGrep**：通过受控 `.opencode/scripts/semgrep-scan.mjs` CLI 执行本地兼容规则，定位 getWriter.print、th:utext、JSP 未转义、错误上下文编码
 3. **Joern**：跨方法调用链与数据流
 4. **LLM**：输出上下文（HTML body / attribute / JS / CSS / URL）、编码是否匹配、消毒策略有效性研判
 

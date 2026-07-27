@@ -39,7 +39,7 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与危险 API / 依赖关键词
-2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 readObject、JSON.parse + autoType、new Yaml()、enableDefaultTyping
+2. **Semgrep/OpenGrep**：通过受控 `.opencode/scripts/semgrep-scan.mjs` CLI 执行本地兼容规则，定位 readObject、JSON.parse + autoType、new Yaml()、enableDefaultTyping
 3. **Joern**：跨方法调用链与数据流
 4. **LLM**：业务语义、类型解析策略、防护有效性、与 JNDI 边界判定
 

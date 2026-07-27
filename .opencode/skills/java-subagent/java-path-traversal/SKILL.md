@@ -38,7 +38,7 @@ metadata:
 ## Tool Priority
 
 1. **rg**：技术栈与危险文件 API 关键词
-2. **Semgrep/OpenGrep**：通过 `semgrep_scan` 执行本地兼容规则，定位 `../` 拼接、ZipEntry 解压、getOriginalFilename 直写
+2. **Semgrep/OpenGrep**：通过受控 `.opencode/scripts/semgrep-scan.mjs` CLI 执行本地兼容规则，定位 `../` 拼接、ZipEntry 解压、getOriginalFilename 直写
 3. **Joern**：跨方法调用链与数据流
 4. **LLM**：业务语义、normalize 有效性、基目录边界、符号链接研判
 

@@ -1,22 +1,11 @@
 {
-  "version": 12,
+  "version": 15,
   "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
   "servers": {
-    "semgrep": {
-      "status": "enabled-local",
-      "type": "custom",
-      "purpose": "Workspace-confined local Semgrep/OpenGrep rule scanning with JSON retention and normalized multi-run SARIF output.",
-      "tools": ["semgrep_health", "semgrep_scan"]
-    },
-    "joern": {
-      "status": "enabled-local",
-      "type": "custom",
-      "purpose": "Workspace-shared local Joern CPG generation, published-rule execution, SARIF export, and session cleanup."
-    },
     "coverage_ledger": {
       "status": "enabled-local",
       "type": "custom",
-      "purpose": "Canonical Coverage Plan packet delivery, digest-bound evidence receipts, append-only hash-chained decisions, gap queries, and finalization."
+      "purpose": "Bounded canonical Coverage Plan packet delivery, compact server-derived required-source-set receipts, append-only hash-chained decisions, paginated gap queries, and finalization."
     },
     "cpp_index": {
       "status": "placeholder",
@@ -46,18 +35,18 @@
     }
   },
   "agents": {
-    "security-intel-collector": ["joern_*"],
-    "security-threat-modeler": ["joern_*"],
-    "c-cpp-source-auditor": ["semgrep_*", "joern_*", "cpp_index_*", "coverage_*"],
-    "java-source-auditor": ["semgrep_*", "joern_*", "jvm_index_*", "coverage_*"],
-    "web-source-auditor": ["semgrep_*", "joern_*", "coverage_*"],
-    "python-source-auditor": ["semgrep_*", "joern_*", "python_index_*", "coverage_*"],
-    "platform-security-auditor": ["semgrep_*", "coverage_*"],
-    "ai-security-auditor": ["semgrep_*", "joern_*", "coverage_*"],
+    "security-intel-collector": [],
+    "security-threat-modeler": [],
+    "c-cpp-source-auditor": ["cpp_index_*", "coverage_*"],
+    "java-source-auditor": ["jvm_index_*", "coverage_*"],
+    "web-source-auditor": ["coverage_*"],
+    "python-source-auditor": ["python_index_*", "coverage_*"],
+    "platform-security-auditor": ["coverage_*"],
+    "ai-security-auditor": ["coverage_*"],
     "security-evidence-correlator": ["coverage_*"],
-    "security-attack-chain-hunter": ["joern_*"],
+    "security-attack-chain-hunter": [],
     "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
-    "security-skill-optimizer": ["joern_*"],
-    "security-audit-orchestrator": ["joern_*", "coverage_*"]
+    "security-skill-optimizer": [],
+    "security-audit-orchestrator": ["coverage_*"]
   }
 }

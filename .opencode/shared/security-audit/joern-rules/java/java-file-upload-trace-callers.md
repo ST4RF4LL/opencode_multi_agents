@@ -5,7 +5,7 @@
 - **weakness**: `file-upload`
 - **dimension**: D5
 - **source_script**: `skills/java-subagent/java-file-upload/rules/joern/trace-callers.sc`
-- **adapted_for_mcp**: True
+- **execution**: direct Joern CLI
 
 ## Intent
 
@@ -14,8 +14,8 @@ Outputs candidates (sinks/sources/flows/validation hints), not final findings.
 
 ## How to run
 
-1. `joern_create_cpg` for the target Java sources.
-2. `joern_run_rule` with `language=java`, `rule_id=java-file-upload-trace-callers`.
+1. `joern-parse <source> -o <cpg.bin> --language java`.
+2. `joern <cpg.bin> --script .opencode/shared/security-audit/joern-rules/java/java-file-upload-trace-callers.sc`.
 
 ## Safety
 

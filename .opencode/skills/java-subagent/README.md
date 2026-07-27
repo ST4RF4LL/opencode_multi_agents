@@ -20,7 +20,7 @@ Deep packs were merged from `vuln_skill_builder/skills/java-*` and keep their in
   scope/ models/ rules/ analysis/ cases/ validation/ evidence/ tests/
 ```
 
-Shared promotions (used by Joern MCP + skill optimizer):
+Shared promotions (used by direct Joern CLI queries + skill optimizer):
 
 - Joern rules → `.opencode/shared/security-audit/joern-rules/java/<skill>-*.sc`
 - Vulnerability cases → `.opencode/shared/security-audit/vulnerability-cases/java/<skill>-case-*`

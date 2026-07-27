@@ -36,7 +36,11 @@ async function readJson(path) {
 export async function loadPlan(planPath) {
   const plan = await readJson(resolve(planPath));
   const errors = validatePlan(plan);
-  if (errors.length > 0) throw new Error(`Coverage plan is invalid:\n- ${errors.join("\n- ")}`);
+  if (errors.length > 0) {
+    const shown = errors.slice(0, 20);
+    const remainder = errors.length - shown.length;
+    throw new Error(`Coverage plan is invalid:\n- ${shown.join("\n- ")}${remainder > 0 ? `\n- … ${remainder} additional validation errors omitted` : ""}`);
+  }
   return plan;
 }
 
@@ -153,6 +157,26 @@ function requireRequiredCheck(plan, checkId) {
   return check;
 }
 
+function decodeCursor(cursor) {
+  if (cursor == null || cursor === "") return 0;
+  const match = /^offset:(\d+)$/.exec(cursor);
+  if (!match) throw new Error("Invalid cursor; use the next_cursor returned by this service");
+  return Number(match[1]);
+}
+
+function page(items, cursor, limit, maxLimit) {
+  const offset = decodeCursor(cursor);
+  if (offset > items.length) throw new Error("Cursor is beyond the available result set");
+  const size = Math.max(1, Math.min(maxLimit, limit));
+  const values = items.slice(offset, offset + size);
+  const nextOffset = offset + values.length;
+  return {
+    values,
+    total: items.length,
+    next_cursor: nextOffset < items.length ? `offset:${nextOffset}` : null,
+  };
+}
+
 function validateSessionId(value) {
   if (!/^[a-z0-9][a-z0-9._:-]{2,255}$/i.test(value ?? "")) throw new Error(`Invalid session_id: ${value}`);
 }
@@ -216,6 +240,40 @@ function validateSourceHashes(plan, sourceHashes) {
   }
 }
 
+function sourceHashesForIds(plan, sourceFileIds) {
+  if (!Array.isArray(sourceFileIds) || sourceFileIds.length === 0) {
+    throw new Error("source_file_ids must be a non-empty array");
+  }
+  const sourceIndex = new Map((plan.source_index ?? []).map(source => [source.file_id, source]));
+  return sourceFileIds.map(fileId => {
+    if (typeof fileId !== "string") throw new Error("Each source_file_ids value must be a file_id string");
+    const source = sourceIndex.get(fileId);
+    if (!source) throw new Error(`Stale or non-frozen source file_id: ${fileId}`);
+    return {
+      file_id: source.file_id,
+      sha256: source.sha256,
+      ...(source.sha256 === null ? { link_target: source.link_target } : {}),
+    };
+  });
+}
+
+function requiredSourceSet(plan, check) {
+  const frozenHashes = sourceHashesForIds(plan, check.required_source_file_ids);
+  return {
+    mode: "required-source-set",
+    source_count: frozenHashes.length,
+    source_set_sha256: sha256(JSON.stringify(frozenHashes)),
+  };
+}
+
+function matchesRequiredSourceSet(sourceEvidence, expected) {
+  return sourceEvidence != null
+    && !Array.isArray(sourceEvidence)
+    && sourceEvidence.mode === expected.mode
+    && sourceEvidence.source_count === expected.source_count
+    && sourceEvidence.source_set_sha256 === expected.source_set_sha256;
+}
+
 export async function recordToolResult({
   planPath,
   ledgerPath,
@@ -223,6 +281,8 @@ export async function recordToolResult({
   sessionId,
   idempotencyKey,
   sourceHashes,
+  sourceFileIds,
+  sourceScope,
   locators,
   queryOrRule,
   tool,
@@ -233,7 +293,19 @@ export async function recordToolResult({
   const { plan, events } = await boundState(planPath, ledgerPath);
   requireMutable(events);
   const check = requireRequiredCheck(plan, checkId);
-  validateSourceHashes(plan, sourceHashes);
+  const sourceInputs = [sourceHashes, sourceFileIds, sourceScope].filter(value => value !== undefined);
+  if (sourceInputs.length !== 1) {
+    throw new Error("Provide exactly one of source_hashes, source_file_ids, or source_scope");
+  }
+  if (sourceScope !== undefined && sourceScope !== "required") {
+    throw new Error("source_scope must be required");
+  }
+  const sourceEvidence = sourceScope === "required"
+    ? requiredSourceSet(plan, check)
+    : sourceFileIds
+      ? sourceHashesForIds(plan, sourceFileIds)
+      : sourceHashes;
+  if (sourceScope !== "required") validateSourceHashes(plan, sourceEvidence);
   if (!Array.isArray(locators) || locators.length === 0 || locators.some(locator => typeof locator !== "object" || locator == null)) {
     throw new Error("locators must be a non-empty object array");
   }
@@ -248,7 +320,7 @@ export async function recordToolResult({
     session_id: sessionId,
     idempotency_key: idempotencyKey,
     receipt_id: receiptId,
-    source_hashes: sourceHashes,
+    source_hashes: sourceEvidence,
     locators,
     query_or_rule: queryOrRule,
     tool,
@@ -288,9 +360,19 @@ export async function submitDecision({
     if (!Array.isArray(receiptIds) || receiptIds.length === 0) throw new Error("VERIFIED requires at least one receipt_id");
     for (const receiptId of receiptIds) if (!validReceipts.has(receiptId)) throw new Error(`Receipt is missing, stale, or belongs to another check: ${receiptId}`);
     const referencedReceipts = receiptEvents.filter(event => receiptIds.includes(event.receipt_id));
-    const evidencedSources = new Set(referencedReceipts.flatMap(event => event.source_hashes.map(source => source.file_id)));
-    const missingSources = check.required_source_file_ids.filter(fileId => !evidencedSources.has(fileId));
-    if (missingSources.length > 0) throw new Error(`VERIFIED receipts do not cover the frozen source universe: ${missingSources.join(", ")}`);
+    const expectedSourceSet = requiredSourceSet(plan, check);
+    const completeSourceSet = referencedReceipts.some(event => matchesRequiredSourceSet(event.source_hashes, expectedSourceSet));
+    const evidencedSources = new Set(referencedReceipts.flatMap(event => Array.isArray(event.source_hashes)
+      ? event.source_hashes.map(source => source.file_id)
+      : []));
+    const missingSources = completeSourceSet
+      ? []
+      : check.required_source_file_ids.filter(fileId => !evidencedSources.has(fileId));
+    if (missingSources.length > 0) {
+      const preview = missingSources.slice(0, 10).join(", ");
+      const omitted = missingSources.length - 10;
+      throw new Error(`VERIFIED receipts do not cover ${missingSources.length} frozen source files: ${preview}${omitted > 0 ? `, … ${omitted} additional file_ids omitted` : ""}`);
+    }
   }
   if (typeof rationale !== "string" || rationale.trim() === "") throw new Error("Decision rationale is required");
   const body = {
@@ -314,29 +396,60 @@ export async function submitDecision({
   return { decision: event, idempotent_replay: Boolean(prior) };
 }
 
-export async function getPackets({ planPath, ledgerPath, focusAreaId, domain, lens, subjectKind, limit = 25 }) {
+export async function getPackets({ planPath, ledgerPath, focusAreaId, domain, lens, subjectKind, cursor, limit = 25 }) {
   const { plan, events } = await boundState(planPath, ledgerPath);
   const state = deriveLedgerState(plan, events);
-  const packets = [...state.values()]
+  const matching = [...state.values()]
     .filter(item => !focusAreaId || item.check.focus_area_id === focusAreaId)
     .filter(item => !domain || item.check.domain === domain)
     .filter(item => !lens || item.check.lens === lens)
     .filter(item => !subjectKind || item.check.subject_kind === subjectKind)
     .filter(item => item.execution_state !== "VERIFIED")
-    .sort((a, b) => a.check.check_id.localeCompare(b.check.check_id))
-    .slice(0, Math.max(1, Math.min(250, limit)));
-  return { audit_id: plan.audit_id, plan_digest: plan.manifest_digest, packets };
+    .sort((a, b) => a.check.check_id.localeCompare(b.check.check_id));
+  const result = page(matching, cursor, limit, 250);
+  return {
+    audit_id: plan.audit_id,
+    plan_digest: plan.manifest_digest,
+    total: result.total,
+    next_cursor: result.next_cursor,
+    packets: result.values,
+  };
 }
 
-export async function getGaps({ planPath, ledgerPath }) {
+export async function getGaps({ planPath, ledgerPath, cursor, limit = 25 }) {
   const { plan, events } = await boundState(planPath, ledgerPath);
   const state = deriveLedgerState(plan, events);
-  const gaps = [...state.values()].filter(item => item.execution_state !== "VERIFIED");
+  const allGaps = [...state.values()]
+    .filter(item => item.execution_state !== "VERIFIED")
+    .sort((a, b) => a.check.check_id.localeCompare(b.check.check_id));
+  const result = page(allGaps, cursor, limit, 250);
   return {
     audit_id: plan.audit_id,
     required: state.size,
-    verified: state.size - gaps.length,
-    gaps: gaps.sort((a, b) => a.check.check_id.localeCompare(b.check.check_id)),
+    verified: state.size - allGaps.length,
+    total_gaps: allGaps.length,
+    next_cursor: result.next_cursor,
+    gaps: result.values,
+  };
+}
+
+export async function getSubjectSources({ planPath, ledgerPath, checkId, cursor, limit = 25 }) {
+  const { plan } = await boundState(planPath, ledgerPath);
+  const check = requireRequiredCheck(plan, checkId);
+  const sourceIndex = new Map((plan.source_index ?? []).map(source => [source.file_id, source]));
+  const sources = check.required_source_file_ids.map(fileId => {
+    const source = sourceIndex.get(fileId);
+    if (!source) throw new Error(`Coverage check references an unknown frozen source: ${fileId}`);
+    return source;
+  });
+  const result = page(sources, cursor, limit, 100);
+  return {
+    audit_id: plan.audit_id,
+    plan_digest: plan.manifest_digest,
+    check_id: check.check_id,
+    total_sources: result.total,
+    next_cursor: result.next_cursor,
+    sources: result.values,
   };
 }
 

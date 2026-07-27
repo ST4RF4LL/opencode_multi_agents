@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const ENGINE_NAMES = new Set(["auto", "semgrep", "opengrep"]);
+const MAX_STDOUT_BYTES = 64 * 1024 * 1024;
+const MAX_STDERR_SUMMARY_BYTES = 32 * 1024;
+const LOCK_WAIT_MS = 30_000;
 
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -41,7 +45,20 @@ export async function resolveWorkspacePath(workspaceRoot, inputPath, { mustExist
   }
 }
 
-function runProcess(command, args, { cwd, timeoutMs, env = {} }) {
+function truncateText(value, maxBytes) {
+  const buffer = Buffer.from(String(value ?? ""), "utf8");
+  if (buffer.length <= maxBytes) return buffer.toString("utf8");
+  return `${buffer.subarray(0, Math.max(0, maxBytes - 32)).toString("utf8")}\n...[truncated ${buffer.length - maxBytes} bytes]`;
+}
+
+function runProcess(command, args, {
+  cwd,
+  timeoutMs,
+  env = {},
+  stdoutLimitBytes = MAX_STDOUT_BYTES,
+  stderrSummaryBytes = MAX_STDERR_SUMMARY_BYTES,
+  stderrPath,
+}) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
       cwd,
@@ -53,27 +70,80 @@ function runProcess(command, args, { cwd, timeoutMs, env = {} }) {
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stdout = "";
-    let stderr = "";
+    const stdoutChunks = [];
+    let stdoutBytes = 0;
+    let stderrTail = Buffer.alloc(0);
+    let stderrBytes = 0;
+    const stderrHash = createHash("sha256");
     let timedOut = false;
+    let stdoutLimitExceeded = false;
+    let settled = false;
+    const stderrWriter = stderrPath ? createWriteStream(stderrPath, { flags: "w" }) : null;
+    const stderrFinished = stderrWriter
+      ? new Promise((resolveStream, rejectStream) => {
+        stderrWriter.once("finish", resolveStream);
+        stderrWriter.once("error", rejectStream);
+      })
+      : Promise.resolve();
+    if (stderrWriter) child.stderr.pipe(stderrWriter);
+
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
       setTimeout(() => child.kill("SIGKILL"), 2_000).unref();
     }, timeoutMs);
-    child.stdout.on("data", chunk => { stdout += chunk.toString(); });
-    child.stderr.on("data", chunk => { stderr += chunk.toString(); });
+
+    child.stdout.on("data", chunk => {
+      const buffer = Buffer.from(chunk);
+      stdoutBytes += buffer.length;
+      if (stdoutBytes <= stdoutLimitBytes) stdoutChunks.push(buffer);
+      else if (!stdoutLimitExceeded) {
+        stdoutLimitExceeded = true;
+        child.kill("SIGTERM");
+        setTimeout(() => child.kill("SIGKILL"), 2_000).unref();
+      }
+    });
+    child.stderr.on("data", chunk => {
+      const buffer = Buffer.from(chunk);
+      stderrBytes += buffer.length;
+      stderrHash.update(buffer);
+      stderrTail = Buffer.concat([stderrTail, buffer]);
+      if (stderrTail.length > stderrSummaryBytes) {
+        stderrTail = stderrTail.subarray(stderrTail.length - stderrSummaryBytes);
+      }
+    });
     child.on("error", error => {
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       reject(error);
     });
-    child.on("close", code => {
+    child.on("close", async code => {
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      try {
+        await stderrFinished;
+      } catch (error) {
+        reject(error);
+        return;
+      }
       if (timedOut) {
         reject(new Error(`Static-analysis process timed out after ${timeoutMs} ms`));
         return;
       }
-      resolvePromise({ code, stdout, stderr });
+      if (stdoutLimitExceeded) {
+        reject(new Error(`Static-analysis JSON exceeded the ${stdoutLimitBytes}-byte safety limit`));
+        return;
+      }
+      resolvePromise({
+        code,
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stderr: stderrTail.toString("utf8"),
+        stderrBytes,
+        stderrSha256: stderrBytes > 0 ? stderrHash.digest("hex") : null,
+        stderrTruncated: stderrBytes > stderrTail.length,
+      });
     });
   });
 }
@@ -102,11 +172,11 @@ export async function probeEngines({ workspaceRoot, environment = process.env })
       probes.push({
         ...candidate,
         available: result.code === 0,
-        version: result.code === 0 ? result.stdout.trim() || result.stderr.trim() : null,
-        error: result.code === 0 ? null : `exit-${result.code}: ${result.stderr.trim()}`,
+        version: result.code === 0 ? truncateText(result.stdout.trim() || result.stderr.trim(), 1_000) : null,
+        error: result.code === 0 ? null : truncateText(`exit-${result.code}: ${result.stderr.trim()}`, 1_000),
       });
     } catch (error) {
-      probes.push({ ...candidate, available: false, version: null, error: error.message });
+      probes.push({ ...candidate, available: false, version: null, error: truncateText(error.message, 1_000) });
     }
   }
   return probes;
@@ -124,12 +194,12 @@ export async function selectEngine({ workspaceRoot, engine = "auto", environment
       if (result.code === 0) {
         return {
           ...candidate,
-          version: result.stdout.trim() || result.stderr.trim() || "unknown",
+          version: truncateText(result.stdout.trim() || result.stderr.trim() || "unknown", 1_000),
         };
       }
-      failures.push(`${candidate.engine}: exit ${result.code} ${result.stderr.trim()}`);
+      failures.push(truncateText(`${candidate.engine}: exit ${result.code} ${result.stderr.trim()}`, 1_000));
     } catch (error) {
-      failures.push(`${candidate.engine}: ${error.message}`);
+      failures.push(truncateText(`${candidate.engine}: ${error.message}`, 1_000));
     }
   }
   throw new Error(`No usable Semgrep/OpenGrep binary found (${failures.join("; ")})`);
@@ -218,18 +288,47 @@ export function semgrepJsonToSarif(payload, { engine, version, commandLine, work
   };
 }
 
-async function mergeSarif(outputPath, sarif) {
-  let combined = sarif;
-  try {
-    const existing = JSON.parse(await readFile(outputPath, "utf8"));
-    if (existing.version !== "2.1.0" || !Array.isArray(existing.runs)) throw new Error("Existing SARIF has an unsupported shape");
-    combined = { ...existing, runs: [...existing.runs, ...sarif.runs] };
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+async function acquireFileLock(lockPath) {
+  const started = Date.now();
+  while (true) {
+    try {
+      const handle = await open(lockPath, "wx");
+      await handle.writeFile(`${process.pid}\n`, "utf8");
+      return async () => {
+        await handle.close();
+        await rm(lockPath, { force: true });
+      };
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      if (Date.now() - started >= LOCK_WAIT_MS) {
+        throw new Error(`Timed out waiting for SARIF lock: ${basename(lockPath)}`);
+      }
+      await new Promise(resolvePromise => setTimeout(resolvePromise, 100));
+    }
   }
+}
+
+async function mergeSarif(outputPath, sarif) {
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(combined, null, 2)}\n`, "utf8");
-  return combined;
+  const lockPath = `${outputPath}.lock`;
+  const release = await acquireFileLock(lockPath);
+  const temporaryPath = `${outputPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    let combined = sarif;
+    try {
+      const existing = JSON.parse(await readFile(outputPath, "utf8"));
+      if (existing.version !== "2.1.0" || !Array.isArray(existing.runs)) throw new Error("Existing SARIF has an unsupported shape");
+      combined = { ...existing, runs: [...existing.runs, ...sarif.runs] };
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await writeFile(temporaryPath, `${JSON.stringify(combined, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, outputPath);
+    return combined;
+  } finally {
+    await rm(temporaryPath, { force: true });
+    await release();
+  }
 }
 
 export async function runSemgrepScan({
@@ -260,6 +359,9 @@ export async function runSemgrepScan({
     if (!info.isFile() && !info.isDirectory()) throw new Error(`Unsupported rule path: ${rule}`);
   }
   const selected = await selectEngine({ workspaceRoot: root, engine, environment });
+  const rawDirectory = await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
+  await mkdir(rawDirectory, { recursive: true });
+  const stderrTemporaryPath = join(rawDirectory, `.${selected.engine}.${process.pid}.${Date.now()}.stderr.log`);
   const args = ["scan", "--json", "--metrics=off", "--jobs", String(jobs), "--timeout", String(ruleTimeoutSeconds)];
   if (maxMemoryMb > 0) args.push("--max-memory", String(maxMemoryMb));
   for (const rule of rules) args.push("--config", rule);
@@ -268,19 +370,47 @@ export async function runSemgrepScan({
     args.push("--exclude", pattern);
   }
   args.push(target);
-  const processResult = await runProcess(selected.command, args, {
-    cwd: root,
-    timeoutMs: processTimeoutMs,
-    env: environment,
-  });
+  let processResult;
+  try {
+    processResult = await runProcess(selected.command, args, {
+      cwd: root,
+      timeoutMs: processTimeoutMs,
+      env: environment,
+      stderrPath: stderrTemporaryPath,
+    });
+  } catch (error) {
+    let retainedPath = null;
+    try {
+      if ((await stat(stderrTemporaryPath)).size > 0) {
+        retainedPath = join(rawDirectory, `${selected.engine}.failed.${Date.now()}.stderr.log`);
+        await rename(stderrTemporaryPath, retainedPath);
+      } else {
+        await rm(stderrTemporaryPath, { force: true });
+      }
+    } catch (fileError) {
+      if (fileError.code !== "ENOENT") throw fileError;
+    }
+    const retained = retainedPath ? `; stderr retained at ${relative(root, retainedPath)}` : "";
+    throw new Error(`${truncateText(error.message, 2_000)}${retained}`);
+  }
+
+  let stderrOutputPath = null;
+  if (processResult.stderrBytes > 0) {
+    stderrOutputPath = join(rawDirectory, `${selected.engine}.${processResult.stderrSha256.slice(0, 16)}.stderr.log`);
+    await rename(stderrTemporaryPath, stderrOutputPath);
+  } else {
+    await rm(stderrTemporaryPath, { force: true });
+  }
   if (![0, 1].includes(processResult.code)) {
-    throw new Error(`${selected.engine} scan failed with exit ${processResult.code}: ${processResult.stderr.trim()}`);
+    const retained = stderrOutputPath ? `; stderr retained at ${relative(root, stderrOutputPath)}` : "";
+    throw new Error(`${selected.engine} scan failed with exit ${processResult.code}${retained}`);
   }
   let payload;
   try {
     payload = JSON.parse(processResult.stdout);
   } catch (error) {
-    throw new Error(`${selected.engine} returned invalid JSON: ${error.message}; stderr=${processResult.stderr.slice(0, 1000)}`);
+    const retained = stderrOutputPath ? `; stderr retained at ${relative(root, stderrOutputPath)}` : "";
+    throw new Error(`${selected.engine} returned invalid JSON: ${truncateText(error.message, 1_000)}${retained}`);
   }
   const displayArgs = args.map(argument => {
     const value = String(argument);
@@ -290,8 +420,6 @@ export async function runSemgrepScan({
   });
   const commandLine = [selected.engine, ...displayArgs].join(" ");
   const rawBytes = `${JSON.stringify(payload, null, 2)}\n`;
-  const rawDirectory = await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
-  await mkdir(rawDirectory, { recursive: true });
   const rawOutputPath = join(rawDirectory, `${selected.engine}.${sha256(rawBytes).slice(0, 16)}.json`);
   await writeFile(rawOutputPath, rawBytes, "utf8");
 
@@ -315,12 +443,18 @@ export async function runSemgrepScan({
     target_path: relative(root, target) || ".",
     rule_paths: rules.map(path => relative(root, path)),
     findings: payload.results?.length ?? 0,
-    errors: payload.errors ?? [],
+    error_count: payload.errors?.length ?? 0,
+    error_samples: (payload.errors ?? []).slice(0, 5).map(error => truncateText(
+      typeof error === "string" ? error : JSON.stringify(error),
+      500,
+    )),
     raw_output_path: relative(root, rawOutputPath),
     raw_output_sha256: sha256(rawBytes),
+    stderr_path: stderrOutputPath ? relative(root, stderrOutputPath) : null,
+    stderr_sha256: processResult.stderrSha256,
+    stderr_bytes: processResult.stderrBytes,
     sarif_path: relative(root, outputPath),
     sarif_sha256: sha256(sarifBytes),
     sarif_runs: combinedSarif.runs.length,
-    stderr: processResult.stderr.trim().replaceAll(root, ".") || null,
   };
 }

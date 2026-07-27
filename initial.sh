@@ -16,14 +16,14 @@ usage() {
   cat <<'EOF'
 用法: ./initial.sh [选项]
 
-检查本地工具、项目/全局 OpenCode 配置及本地 MCP 健康状态。
+检查本地工具、项目/全局 OpenCode 配置及 Coverage Ledger MCP 健康状态。
 当扫描器为 auto 模式时，OpenGrep 与 Semgrep 二选一即可，优先使用 OpenGrep。
 
 选项:
   --python          运行临时 Joern Python 前端冒烟检查。
   --test            环境检查后运行完整项目回归测试。
   --require-review  将缺少全局 vuln_judger MCP 视为失败。
-  --no-mcp          跳过本地 MCP 进程健康检查。
+  --no-mcp          跳过 Coverage Ledger MCP 健康检查；仍直接检查扫描器和 Joern CLI。
   -h, --help        显示本帮助。
 
 项目配置默认为 .opencode/opencode.json。若需检查其他配置，运行前设置
@@ -108,23 +108,6 @@ probe_available() {
   return 1
 }
 
-config_env() {
-  server="$1"
-  key="$2"
-  fallback="$3"
-  node - "$project_config" "$server" "$key" "$fallback" <<'NODE'
-const fs = require("fs");
-const [configPath, server, key, fallback] = process.argv.slice(2);
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  const value = config?.mcp?.[server]?.environment?.[key];
-  process.stdout.write(typeof value === "string" && value ? value : fallback);
-} catch {
-  process.stdout.write(fallback);
-}
-NODE
-}
-
 check_configs() {
   node - "$project_config" "$template_config" "$global_config" "$require_review" <<'NODE'
 const fs = require("fs");
@@ -164,7 +147,7 @@ if (project) {
     console.log("  - 项目 opencode.json: 缺少 default_agent");
     invalid = true;
   }
-  const requiredLocal = ["semgrep", "joern", "coverage_ledger"];
+  const requiredLocal = ["coverage_ledger"];
   for (const name of requiredLocal) {
     const server = project.mcp?.[name];
     if (!server || server.enabled === false || server.type !== "local" || !Array.isArray(server.command)) {
@@ -212,8 +195,6 @@ import { StdioClientTransport } from "./.opencode/node_modules/@modelcontextprot
 const configPath = process.argv[2];
 const config = JSON.parse(await readFile(configPath, "utf8"));
 const probes = [
-  { name: "semgrep", health: "semgrep_health" },
-  { name: "joern", health: "joern_health" },
   { name: "coverage_ledger", requiredTools: ["coverage_get_packet", "coverage_finalize"] },
 ];
 let failed = false;
@@ -246,8 +227,7 @@ for (const probe of probes) {
       const health = JSON.parse(raw);
       if (health.healthy !== true) throw new Error(JSON.stringify(health.checks ?? health.engines ?? health));
     }
-    const label = probe.name === "semgrep" ? "semgrep（OpenGrep/Semgrep 适配器）" : probe.name;
-    console.log(`【通过】MCP ${label}: 健康`);
+    console.log(`【通过】MCP ${probe.name}: 健康`);
   } catch (error) {
     console.log(`【失败】MCP ${probe.name}: ${error.message}`);
     failed = true;
@@ -307,9 +287,9 @@ fi
 
 if [ "$config_ok" = true ]; then
   printf '\n静态扫描器与 Joern 工具\n'
-  opengrep_bin="$(config_env semgrep OPENGREP_BIN opengrep)"
-  semgrep_bin="$(config_env semgrep SEMGREP_BIN semgrep)"
-  semgrep_engine="$(config_env semgrep SEMGREP_ENGINE auto)"
+  opengrep_bin="${OPENGREP_BIN:-opengrep}"
+  semgrep_bin="${SEMGREP_BIN:-semgrep}"
+  semgrep_engine="${SEMGREP_ENGINE:-auto}"
 
   opengrep_ok=false
   semgrep_ok=false
@@ -355,10 +335,10 @@ if [ "$config_ok" = true ]; then
     *) fail "SEMGREP_ENGINE 必须是 auto、opengrep 或 semgrep" ;;
   esac
 
-  joern_bin="$(config_env joern JOERN_BIN joern)"
-  joern_parse_bin="$(config_env joern JOERN_PARSE_BIN joern-parse)"
-  joern_java_bin="$(config_env joern JOERN_JAVA_BIN '')"
-  joern_gnubin="$(config_env joern JOERN_GNUBIN '')"
+  joern_bin="${JOERN_BIN:-joern}"
+  joern_parse_bin="${JOERN_PARSE_BIN:-joern-parse}"
+  joern_java_bin="${JOERN_JAVA_BIN:-}"
+  joern_gnubin="${JOERN_GNUBIN:-}"
   joern_parse_path=""
 
   if probe_available "Joern" "$joern_bin"; then :; else fail "Joern 不可用"; fi
@@ -397,10 +377,18 @@ if [ "$config_ok" = true ]; then
       python_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/opencode-initial.XXXXXX")"
       trap 'rm -rf "$python_probe_dir"' EXIT
       printf 'def health_check(value):\n    return value\n' > "$python_probe_dir/source.py"
-      if "$joern_parse_path" "$python_probe_dir/source.py" -o "$python_probe_dir/cpg.bin" --language python >/dev/null 2>&1 && [ -s "$python_probe_dir/cpg.bin" ]; then
+      if "$joern_parse_path" "$python_probe_dir/source.py" -o "$python_probe_dir/cpg.bin" --language python \
+        >"$python_probe_dir/parse.stdout.log" 2>"$python_probe_dir/parse.stderr.log" \
+        && [ -s "$python_probe_dir/cpg.bin" ]; then
         pass "Joern Python 前端冒烟检查"
       else
-        fail "Joern Python 前端冒烟检查失败；请重装或修复 Python 前端"
+        python_probe_diagnostic="$(
+          {
+            tail -n 20 "$python_probe_dir/parse.stderr.log"
+            tail -n 20 "$python_probe_dir/parse.stdout.log"
+          } 2>/dev/null | tail -c 4000
+        )"
+        fail "Joern Python 前端冒烟检查失败；诊断尾部：${python_probe_diagnostic:-无输出}"
       fi
     fi
   else

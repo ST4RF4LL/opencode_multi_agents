@@ -1,7 +1,7 @@
 // Derived from: H1 #2958619 / #2633959 / #2266081 (URL path SQLi)
 // Pattern: path variables / pathInfo flow into SQL construction.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

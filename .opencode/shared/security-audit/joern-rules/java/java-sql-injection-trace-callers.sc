@@ -1,6 +1,6 @@
 // Expand callers from a sink method to build call chains (L1/L2 assist).
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String, sinkMethod: String = ".*executeQuery.*")
 // Do not call importCpg; use the ambient `cpg` symbol.
 // Extra param default inlined: sinkMethod: String = ".*executeQuery.*"

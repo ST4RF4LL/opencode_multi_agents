@@ -5,7 +5,7 @@
 - **weakness**: `mass-assignment`
 - **dimension**: D9
 - **source_script**: `skills/java-subagent/java-mass-assignment/rules/joern/locate-sources.sc`
-- **adapted_for_mcp**: True
+- **execution**: direct Joern CLI
 
 ## Intent
 
@@ -14,8 +14,8 @@ Outputs candidates (sinks/sources/flows/validation hints), not final findings.
 
 ## How to run
 
-1. `joern_create_cpg` for the target Java sources.
-2. `joern_run_rule` with `language=java`, `rule_id=java-mass-assignment-locate-sources`.
+1. `joern-parse <source> -o <cpg.bin> --language java`.
+2. `joern <cpg.bin> --script .opencode/shared/security-audit/joern-rules/java/java-mass-assignment-locate-sources.sc`.
 
 ## Safety
 

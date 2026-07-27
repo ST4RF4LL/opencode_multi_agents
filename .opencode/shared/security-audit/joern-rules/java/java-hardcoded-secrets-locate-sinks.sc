@@ -1,6 +1,6 @@
 // L1: locate secret-binding sinks. Output SecretCandidate, not findings.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

@@ -41,8 +41,6 @@ permission:
     "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
-  "semgrep_*": allow
-  "joern_*": allow
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": deny
@@ -66,9 +64,9 @@ Require the sealed threat model and Focus Areas, exact `focus_area_id`, frozen s
 
 Use the pre-initialized all-`GAP` report or run `initialize-audit-report.mjs`. Update entity rows only with digest-bound evidence, never regenerate shorter arrays or hand-write D1-D10 cells/counts, then run `reconcile-audit-report.mjs`.
 
-For Coverage Plan v2, call `coverage_get_packet` with the exact audit, Focus Area, `ai` domain, and assigned lens. For every packet call `coverage_inspect_subject`, create service receipts with `coverage_record_tool_result`, and submit the separate execution/result decision with `coverage_submit_decision`. Do not edit the plan or canonical ledger. Every `AI-*` type requires a negative-discovery baseline even when Recon found no AI system; a finding closes only its own atomic check.
+For Coverage Plan v2, call paginated `coverage_get_packet` with the exact audit, Focus Area, `ai` domain, and assigned lens. For every packet call `coverage_inspect_subject`, then create a bounded receipt with `coverage_record_tool_result(source_scope: "required")`; the service binds the complete frozen source set by digest without returning its file list. Use `coverage_get_subject_sources` only for a targeted diagnostic page, never to enumerate the full universe. Submit the separate execution/result decision with `coverage_submit_decision`. Do not request full ledgers or full gap lists, and do not edit the plan or canonical ledger. Every `AI-*` type requires a negative-discovery baseline even when Recon found no AI system; a finding closes only its own atomic check.
 
-Call `semgrep_health` before local AI integration/configuration scanning. When a workspace-local Semgrep-compatible rule applies, use `semgrep_scan`; auto mode prefers OpenGrep and falls back to Semgrep. Consume its raw-output/SARIF digests in the Ledger receipt. Never use remote registry configs or upload repository content.
+Run `node .opencode/scripts/semgrep-scan.mjs health` before local AI integration/configuration scanning. When a workspace-local Semgrep-compatible rule applies, use the script's `scan` command; auto mode prefers OpenGrep and falls back to Semgrep. Consume only its bounded summary and raw-output/SARIF digests in the Ledger receipt. Never use remote registry configs or upload repository content.
 
 ## Execution
 

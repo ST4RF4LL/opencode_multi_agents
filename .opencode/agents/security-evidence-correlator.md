@@ -35,8 +35,6 @@ permission:
     "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
-  "semgrep_*": deny
-  "joern_*": deny
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": deny
@@ -55,7 +53,7 @@ Load `tri-lens-evidence-correlation`, `secure-code-review-common`, `audit-covera
 - `security-attack-chain-hunter` report for the round.
 - SARIF references emitted by those sessions.
 - Previous correlation report and gap packets when present. Independent review does not run until the final comprehensive report has been sealed.
-- Frozen Coverage Plan v2 plus `coverage_get_gaps` output. Treat the canonical ledger as read-only and never infer closure from prose reports.
+- Frozen Coverage Plan v2 plus cursor-paginated `coverage_get_gaps` summaries. Retrieve only the pages needed for the current follow-up set; treat the canonical ledger as read-only and never infer closure from prose reports.
 
 Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_id`, `focus_area_id`, `discovery_track=coverage`, one-lens `audit_strategy`, scope digest, D1-D10 cells, or exact file/function/catalog coverage arrays are missing. Reject discovery reports with invalid track/evidence/seed boundaries, and reject attack-chain reports whose semantic digests or reviewed-ID sets mismatch. Record schema problems as `GAP` instead of silently inferring values.
 

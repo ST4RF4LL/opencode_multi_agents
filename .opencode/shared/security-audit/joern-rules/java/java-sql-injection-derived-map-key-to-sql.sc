@@ -1,7 +1,7 @@
 // Derived from: CVE-2025-65896 / GHSA-qhqw-rrw9-25rm (asyncmy dict key SQLi)
 // Pattern: Map keys used as SQL identifiers while values may be escaped/bound.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

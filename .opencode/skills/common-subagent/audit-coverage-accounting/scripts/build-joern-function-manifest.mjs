@@ -41,27 +41,26 @@ function stableId(value) {
   return `function:${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
 }
 
+function processDiagnostic(result, maxBytes = 4 * 1024) {
+  const combined = `${result.error?.message ?? ""}\n${result.stderr ?? ""}\n${result.stdout ?? ""}`.trim();
+  const bytes = Buffer.from(combined, "utf8");
+  if (bytes.length <= maxBytes) return combined || "no process output";
+  return `...[earlier output truncated; ${bytes.length} bytes total]...\n${bytes.subarray(bytes.length - maxBytes + 128).toString("utf8")}`;
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024, ...options });
-  if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${result.stderr}\n${result.stdout}`);
+  if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${processDiagnostic(result)}`);
   return result;
 }
 
-async function loadJoernToolchain(root) {
-  const configPath = join(root, ".opencode", "opencode.json");
-  let configured = {};
-  try {
-    const config = JSON.parse(await readFile(configPath, "utf8"));
-    configured = config?.mcp?.joern?.environment ?? {};
-  } catch (error) {
-    if (error.code !== "ENOENT") throw new Error(`Cannot read local Joern configuration at ${configPath}: ${error.message}`);
-  }
-  const joernBin = process.env.JOERN_BIN || configured.JOERN_BIN || "joern";
-  const joernParseBin = process.env.JOERN_PARSE_BIN || configured.JOERN_PARSE_BIN || "joern-parse";
+function loadJoernToolchain() {
+  const joernBin = process.env.JOERN_BIN || "joern";
+  const joernParseBin = process.env.JOERN_PARSE_BIN || "joern-parse";
   const basePath = process.env.PATH || "/usr/bin:/bin";
   const pathEntries = [
-    process.env.JOERN_GNUBIN || configured.JOERN_GNUBIN,
-    process.env.JOERN_JAVA_BIN || configured.JOERN_JAVA_BIN,
+    process.env.JOERN_GNUBIN,
+    process.env.JOERN_JAVA_BIN,
     ...basePath.split(delimiter),
   ].filter(Boolean);
   return {
@@ -135,7 +134,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const config = LANGUAGE_CONFIG[args.language];
   const root = resolve(args.root);
-  const toolchain = await loadJoernToolchain(root);
+  const toolchain = loadJoernToolchain();
   const scopePath = resolve(args.scope);
   const outputPath = resolve(args.output);
   const scope = JSON.parse(await readFile(scopePath, "utf8"));
@@ -173,7 +172,7 @@ async function main() {
     let cpgStat;
     try { cpgStat = await stat(cpgPath); } catch { cpgStat = null; }
     if (!cpgStat || cpgStat.size === 0 || /Exception|NoSuchElementException/.test(`${parseResult.stdout}\n${parseResult.stderr}`)) {
-      throw new Error(`Joern did not produce a valid CPG\n${parseResult.stderr}\n${parseResult.stdout}`);
+      throw new Error(`Joern did not produce a valid CPG\n${processDiagnostic(parseResult)}`);
     }
     await writeFile(queryPath, buildQuery(rawPath), "utf8");
     run(toolchain.joernBin, [cpgPath, "--script", queryPath], { env: joernEnvironment, cwd: workDir });

@@ -1,7 +1,7 @@
 // Derived from: CVE-2024-12909 / GHSA-x48g-hm9c-ww42 (llama-index run_sql_query)
 // Pattern: entire SQL string is external/agent-controlled and executed.
 
-// Adapted for OpenCode Joern MCP: CPG is pre-loaded via `joern cpg.bin --script`.
+// Direct Joern CLI execution: `joern cpg.bin --script <rule>.sc` preloads the CPG.
 // Original entry: @main def exec(cpgFile: String)
 // Do not call importCpg; use the ambient `cpg` symbol.
 

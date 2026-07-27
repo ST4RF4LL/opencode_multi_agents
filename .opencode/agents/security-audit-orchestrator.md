@@ -127,7 +127,7 @@ Required session naming:
 
 ### Phase 7: GAP ROUND
 
-21. Query `coverage_get_gaps` and re-run only unresolved atomic checks, structural cells, threat/Focus/track cells, attack-chain surfaces, contradictory clusters, and high-risk hotspots marked `GAP`. Preserve Focus Area, discovery track, and base/AI domain. Do not repeat completed keys.
+21. Page through `coverage_get_gaps` and re-run only unresolved atomic checks, structural cells, threat/Focus/track cells, attack-chain surfaces, contradictory clusters, and high-risk hotspots marked `GAP`. Preserve Focus Area, discovery track, and base/AI domain. Do not repeat completed keys or request the full gap set in one MCP response.
 22. Maximum rounds: `quick=1`, `standard=2`, `deep=3`. Reaching the round limit does not convert `GAP` to `PASS`; retain it in the final report.
 
 ### Phase 8: FINALIZE AND SEAL REPORT
