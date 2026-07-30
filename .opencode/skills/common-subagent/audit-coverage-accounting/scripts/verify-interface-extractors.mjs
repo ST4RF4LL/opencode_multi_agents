@@ -6,7 +6,7 @@ import { dirname, resolve } from "node:path";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const FILE_STATES = new Set(["INSPECTED", "NOT_APPLICABLE", "INDETERMINATE", "FAILED"]);
-const INTERFACE_STATES = new Set(["CONFIRMED", "CANDIDATE"]);
+const INTERFACE_STATES = new Set(["CONFIRMED", "CANDIDATE", "REJECTED"]);
 const DIRECTIONS = new Set(["ingress", "egress", "bidirectional"]);
 
 function parseArgs(argv) {
@@ -51,6 +51,7 @@ async function main() {
   const issues = [];
   if (scope.audit_id !== args["audit-id"] || !scope.complete || scope.manifest_digest !== objectDigest(scope)) issue(issues, "SCOPE_INVALID", "Scope manifest is incomplete, modified, or bound to another audit");
   if (manifest.audit_id !== args["audit-id"] || manifest.scope_digest !== scope.scope_digest || manifest.manifest_digest !== objectDigest(manifest)) issue(issues, "INTERFACE_MANIFEST_INVALID", "Interface manifest is modified or scope-mismatched");
+  if (manifest.schema_version !== 2) issue(issues, "INTERFACE_SCHEMA_INVALID", "Interface manifest schema_version must be 2");
   if (!exactSet(manifest.required_lenses, LENSES)) issue(issues, "INTERFACE_LENSES_INVALID", "Interface manifest does not require all three lenses");
 
   const files = new Map((scope.files ?? []).filter(file => file.review_required).map(file => [file.file_id, file]));
@@ -76,7 +77,8 @@ async function main() {
     if (!file || item.path !== file.path || item.owner_agent !== file.owner_agent || !row?.interface_ids?.includes(item.interface_id)) {
       issue(issues, "INTERFACE_SCOPE_MISMATCH", "Interface is not bound to a scoped file and extractor row", { interface_id: item.interface_id });
     }
-    if (!INTERFACE_STATES.has(item.discovery_state) || !DIRECTIONS.has(item.direction) || !exactSet(item.required_lenses, LENSES)
+    if (!INTERFACE_STATES.has(item.discovery_state) || !INTERFACE_STATES.has(item.discovery_origin_state)
+      || !DIRECTIONS.has(item.direction) || !exactSet(item.required_lenses, LENSES)
       || !Array.isArray(item.dimensions) || item.dimensions.length === 0 || !item.dimensions.every(value => /^D(?:10|[1-9])$/.test(value))
       || !Number.isInteger(item.line_start) || item.line_start < 1 || typeof item.address !== "string" || !item.address) {
       issue(issues, "INTERFACE_SHAPE_INVALID", "Interface record has invalid state, direction, dimensions, location, or address", { interface_id: item.interface_id });
@@ -91,10 +93,46 @@ async function main() {
         issue(issues, "INTERFACE_EVIDENCE_NOT_BOUND", "Interface evidence is not bound to its frozen source and extractor", { interface_id: item.interface_id });
       }
     }
+    if (item.discovery_origin_state === "CANDIDATE" && item.discovery_state !== "CANDIDATE") {
+      const resolution = item.resolution;
+      const expectedResolutionDigest = digest(JSON.stringify({
+        interface_id: item.interface_id,
+        state: item.discovery_state,
+        reason: resolution?.reason,
+        evidence: resolution?.evidence,
+      }));
+      if (!["CONFIRMED", "REJECTED"].includes(item.discovery_state)
+        || typeof resolution?.reason !== "string" || resolution.reason.trim() === ""
+        || !Array.isArray(resolution.evidence) || resolution.evidence.length === 0
+        || resolution.resolution_digest !== expectedResolutionDigest) {
+        issue(issues, "INTERFACE_RESOLUTION_INVALID", "Resolved candidate requires an exact evidence-bound decision", { interface_id: item.interface_id });
+      }
+    } else if (item.discovery_state === "REJECTED") {
+      issue(issues, "INTERFACE_REJECTION_INVALID", "Rejected interface must originate from an evidence-bound candidate resolution", { interface_id: item.interface_id });
+    }
   }
   for (const row of coverageRows.values()) {
     if (new Set(row.interface_ids ?? []).size !== (row.interface_ids ?? []).length) issue(issues, "DUPLICATE_FILE_INTERFACE_ID", "File extractor row repeats an interface ID", { file_id: row.file_id });
     for (const interfaceId of row.interface_ids ?? []) if (!interfaces.has(interfaceId)) issue(issues, "UNKNOWN_FILE_INTERFACE_ID", "File extractor row references an unknown interface", { file_id: row.file_id, interface_id: interfaceId });
+  }
+  const actualCounts = {
+    interfaces: interfaces.size,
+    confirmed_interfaces: [...interfaces.values()].filter(item => item.discovery_state === "CONFIRMED").length,
+    candidate_interfaces: [...interfaces.values()].filter(item => item.discovery_state === "CANDIDATE").length,
+    rejected_interfaces: [...interfaces.values()].filter(item => item.discovery_state === "REJECTED").length,
+    ingress: [...interfaces.values()].filter(item => item.direction === "ingress").length,
+    egress: [...interfaces.values()].filter(item => item.direction === "egress").length,
+    bidirectional: [...interfaces.values()].filter(item => item.direction === "bidirectional").length,
+  };
+  for (const [field, value] of Object.entries(actualCounts)) {
+    if (manifest.summary?.[field] !== value) {
+      issue(issues, "INTERFACE_SUMMARY_MISMATCH", "Interface manifest summary does not equal its records", { field });
+    }
+  }
+  const expectedInventoryBounded = manifest.complete === true
+    && [...interfaces.values()].every(item => item.discovery_state !== "CANDIDATE");
+  if (manifest.inventory_bounded !== expectedInventoryBounded) {
+    issue(issues, "INTERFACE_INVENTORY_STATE_MISMATCH", "Interface manifest bounded state does not match extraction and candidate records");
   }
   if ((manifest.gaps?.length ?? 0) > 0 || manifest.complete !== true) issue(issues, "INTERFACE_MANIFEST_INCOMPLETE", "Interface manifest contains extraction gaps");
 
@@ -109,12 +147,14 @@ async function main() {
       total: interfaces.size,
       confirmed: [...interfaces.values()].filter(item => item.discovery_state === "CONFIRMED").length,
       candidate: [...interfaces.values()].filter(item => item.discovery_state === "CANDIDATE").length,
+      rejected: [...interfaces.values()].filter(item => item.discovery_state === "REJECTED").length,
       ingress: [...interfaces.values()].filter(item => item.direction === "ingress").length,
       egress: [...interfaces.values()].filter(item => item.direction === "egress").length,
       bidirectional: [...interfaces.values()].filter(item => item.direction === "bidirectional").length,
     },
     issues,
     complete: issues.length === 0,
+    inventory_bounded: issues.length === 0 && expectedInventoryBounded,
     claim_boundary: "Proves exact accounting and frozen-source binding for the configured interface extractors. It does not turn CANDIDATE anchors into confirmed deployed endpoints and cannot cover runtime-only interfaces absent from source/spec/config evidence.",
   };
   verification.manifest_digest = objectDigest(verification);

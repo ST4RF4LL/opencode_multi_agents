@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { DOMAIN_AGENTS, activeDomains, entryAppliesToDomain } from "./coverage-v2-common.mjs";
+import { validateAttackChainManifest } from "../../../attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
@@ -19,7 +20,7 @@ function parseArgs(argv) {
     if (!token?.startsWith("--") || value == null) throw new Error(`Invalid argument near ${token ?? "<end>"}`);
     args[token.slice(2)] = value;
   }
-  for (const key of ["audit-id", "snapshot-index", "reports-dir", "attack-chain-report", "output"]) {
+  for (const key of ["audit-id", "snapshot-index", "reports-dir", "adjudication", "attack-chain-report", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
   return args;
@@ -307,13 +308,21 @@ async function main() {
   }
 
   const attackPath = resolve(args["attack-chain-report"]);
-  const attack = JSON.parse(await readFile(attackPath, "utf8"));
+  const adjudicationPath = resolve(args.adjudication);
+  const [attack, adjudication] = await Promise.all([
+    readFile(attackPath, "utf8").then(JSON.parse),
+    readFile(adjudicationPath, "utf8").then(JSON.parse),
+  ]);
   if (attack.audit_id !== args["audit-id"] || attack.scope_digest !== snapshot.scope_digest
     || attack.threat_model_digest !== threatModel.manifest_digest || attack.focus_areas_digest !== focusManifest.manifest_digest) {
     invalid.push({ kind: "attack-chain-report", id: attackPath, errors: ["identity-or-digest-mismatch"] });
   }
-  if (!CLOSED.has(attack.status) || !Array.isArray(attack.gaps) || attack.gaps.length > 0 || !nonEmptyEvidence(attack.evidence)) {
-    invalid.push({ kind: "attack-chain-report", id: attackPath, errors: ["non-terminal-or-missing-evidence"] });
+  const chainErrors = validateAttackChainManifest(attack, adjudication);
+  if (chainErrors.length > 0) {
+    invalid.push({ kind: "attack-chain-report", id: attackPath, errors: chainErrors });
+  }
+  if (!Array.isArray(attack.gaps) || attack.gaps.length > 0) {
+    invalid.push({ kind: "attack-chain-report", id: attackPath, errors: ["unresolved-chain-gaps"] });
   }
   for (const [field, expected] of [
     ["reviewed_focus_area_ids", [...focusAreas.keys()]],
@@ -330,7 +339,7 @@ async function main() {
     scope_digest: snapshot.scope_digest,
     threat_model_digest: threatModel.manifest_digest,
     focus_areas_digest: focusManifest.manifest_digest,
-    inputs: { snapshot_index: snapshotPath, threat_model: threatPath, focus_areas: focusPath, reports_directory: resolve(args["reports-dir"]), attack_chain_report: attackPath },
+    inputs: { snapshot_index: snapshotPath, threat_model: threatPath, focus_areas: focusPath, reports_directory: resolve(args["reports-dir"]), adjudication: adjudicationPath, attack_chain_report: attackPath },
     expected: { entry_points: entryPoints.size, threats: threats.size, focus_areas: focusAreas.size, primary_assignments: expectedPrimary.size, focus_assignment_lens_sessions: expectedSessions.length, trust_boundaries: boundaries.size, assets: assets.size },
     observed: { reports: reports.length, completed_focus_lenses: completedFocusLenses.size },
     missing,

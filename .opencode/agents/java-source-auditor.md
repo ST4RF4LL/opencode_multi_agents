@@ -113,7 +113,7 @@ Deep packs include `models/`, `rules/` (grep/Semgrep-compatible YAML/Joern), `an
 - **Secondary injection**: Input→storage→retrieve→concatenate without parameterization
 
 ### D2: Authentication
-- **JWT**: Load `java-jwt-misuse`. `JWT.decode()` without `JWTVerifier.verify()` = **Critical (CVSS 9.1)**; check `algorithms` parameter — `"none"` = bypass; algorithm confusion RS→HS
+- **JWT**: Load `java-jwt-misuse`. Treat `JWT.decode()` without a proven `JWTVerifier.verify()` path as a candidate; resolve the actual API overload and algorithm configuration before semantic adjudication. Do not assign severity here. Check `algorithms` parameters for `"none"` and verify any alleged RS→HS confusion against the resolved library semantics.
 - **Hardcoded secrets**: Load `java-hardcoded-secrets`. JWT signing keys, AES keys, DB passwords in `application.yml` / `.properties` / source code
 - **Filter chain**: Auth filter placed before business logic? OPTIONS preflight exemption scope?
 - **Remember-me**: Shiro < 1.2.5 default AES key (kPH+bIxk5D2deZiIxcaaaA==); Spring Security persistent token

@@ -50,7 +50,8 @@ Load `tri-lens-evidence-correlation`, `secure-code-review-common`, `audit-covera
 
 - Sealed `threat-model.json` and `focus-areas.json` plus Recon summary and all five inventory files, including `ai-surfaces.json`.
 - Every `coverage` audit report and every required `blind`/`seeded-variant` discovery JSON for the current `audit_id` and round.
-- `security-attack-chain-hunter` report for the round.
+- Preliminary `security-attack-chain-hunter` candidates for the round when available; they remain untrusted until the post-adjudication chain pass.
+- The independent Finding Adjudication manifest for final synthesis.
 - SARIF references emitted by those sessions.
 - Previous correlation report and gap packets when present. Independent review does not run until the final comprehensive report has been sealed.
 - Frozen Coverage Plan v2 plus cursor-paginated `coverage_get_gaps` summaries. Retrieve only the pages needed for the current follow-up set; treat the canonical ledger as read-only and never infer closure from prose reports.
@@ -67,7 +68,7 @@ Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_
 5. Fingerprint and cluster duplicate candidates across agents, Focus Areas, lenses, and blind/seeded/system tracks.
 6. Merge sink, control, and config evidence into canonical findings without requiring all facets to be positive.
 7. Record conflicting evidence rather than arbitrarily selecting a winner.
-8. Canonicalize the attack-chain hunter's evidence-backed candidates without creating new transitions.
+8. Canonicalize only the post-adjudication attack-chain candidates without creating new transitions; raw candidates and non-supported findings remain diagnostic evidence.
 9. Emit minimal follow-up work packets for every missing/invalid structural or semantic coverage cell, contradiction, and high-risk unknown.
 
 ## Output
@@ -93,4 +94,4 @@ Include:
 - discovery metrics (`duplicate_rate`, `novelty_yield`, `new_surface_rate`) used only to redirect later rounds
 - consumed and rejected artifact lists
 
-Return a concise markdown summary to the orchestrator. Keep canonical findings explicitly unreviewed for the final report; the orchestrator later sends the complete sealed report—not individual candidates—to `vulnerability-validator` for independent review.
+Return a concise markdown summary to the orchestrator. Keep canonical findings as candidates until the independent Finding Adjudication manifest accounts for them. Only its `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` decisions may enter attack-chain construction or final synthesis; the later `vulnerability-validator` still reviews the complete sealed report, not individual findings.

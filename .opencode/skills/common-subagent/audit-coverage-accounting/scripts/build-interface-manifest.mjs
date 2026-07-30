@@ -4,10 +4,12 @@ import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, extname, posix, resolve } from "node:path";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const EXTRACTOR_VERSION = 1;
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "options", "head", "trace"]);
+const KNOWN_NON_EXECUTABLE_FILENAMES = new Set([".gitignore", "license", "manifest.mf"]);
+const KNOWN_NON_EXECUTABLE_PREFIXES = ["document/pdm/", "document/pos/"];
 
 function parseArgs(argv) {
   const args = {};
@@ -57,6 +59,7 @@ function dimensionsFor(kind, direction) {
 
 function scannerFor(file, scopePaths) {
   const extension = extname(file.path.toLowerCase());
+  const basename = file.path.toLowerCase().split("/").at(-1);
   if (file.type === "symlink") {
     const target = posix.normalize(posix.join(posix.dirname(file.path), file.link_target ?? ""));
     return scopePaths.has(target)
@@ -64,6 +67,9 @@ function scannerFor(file, scopePaths) {
       : { state: "INDETERMINATE", extractor_ids: [], reason: "symlink-target-not-covered-by-frozen-scope" };
   }
   if (file.content_kind === "binary") return { state: "NOT_APPLICABLE", extractor_ids: [], reason: "binary-artifact" };
+  if (KNOWN_NON_EXECUTABLE_FILENAMES.has(basename) || KNOWN_NON_EXECUTABLE_PREFIXES.some(prefix => file.path.toLowerCase().startsWith(prefix))) {
+    return { state: "NOT_APPLICABLE", extractor_ids: [], reason: "known-non-executable-document-or-metadata" };
+  }
   if ([".java", ".kt", ".kts"].includes(extension)) return { state: "INSPECTED", extractor_ids: ["jvm-interface-anchors"], reason: "supported-jvm-source" };
   if ([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"].includes(extension)) return { state: "INSPECTED", extractor_ids: ["javascript-interface-anchors"], reason: "supported-javascript-source" };
   if ([".py", ".pyw"].includes(extension)) return { state: "INSPECTED", extractor_ids: ["python-interface-anchors"], reason: "supported-python-source" };
@@ -72,6 +78,8 @@ function scannerFor(file, scopePaths) {
     return { state: "INSPECTED", extractor_ids: ["web-template-interface-anchors"], reason: "supported-web-template" };
   }
   if ([".proto", ".graphql", ".gql", ".wsdl"].includes(extension)) return { state: "INSPECTED", extractor_ids: ["declarative-interface-spec"], reason: "supported-interface-spec" };
+  if ([".sh", ".bash", ".zsh"].includes(extension)) return { state: "INSPECTED", extractor_ids: ["shell-deployment-interface-anchors"], reason: "supported-shell-deployment-script" };
+  if (extension === ".sql") return { state: "NOT_APPLICABLE", extractor_ids: [], reason: "database-schema-is-not-an-application-interface" };
   if (file.content_kind === "configuration" || ["dockerfile", "procfile"].includes(file.path.toLowerCase().split("/").at(-1))) {
     return { state: "INSPECTED", extractor_ids: ["configuration-interface-anchors"], reason: "supported-configuration" };
   }
@@ -110,7 +118,7 @@ function scanJvm(text, emit, gap) {
     ["ShellMethod", "cli", "cli"],
   ];
   for (const [annotation, kind, protocol] of annotations) {
-    const regex = new RegExp(`@${annotation}\\\\s*\\\\(([^)]*)\\\\)`, "g");
+    const regex = new RegExp(`@${annotation}\\s*\\(([^)]*)\\)`, "g");
     scanMatches(text, regex, match => {
       const address = /["']([^"']+)["']/.exec(match[1])?.[1] ?? `<${annotation}>`;
       emit({ extractor_id: "jvm-interface-anchors", direction: "ingress", kind, protocol, operation: annotation, address, state: "CANDIDATE", offset: match.index, matched: match[0] });
@@ -182,9 +190,22 @@ function scanNative(text, emit) {
     ["curl_easy_perform", "egress", "outbound-network", "HTTP_CALL"],
   ];
   for (const [name, direction, kind, operation] of calls) {
-    const regex = new RegExp(`\\\\b${name}\\\\s*\\\\(`, "g");
+    const regex = new RegExp(`\\b${name}\\s*\\(`, "g");
     scanMatches(text, regex, match => emit({ extractor_id: "native-interface-anchors", direction, kind, protocol: kind === "socket" ? "socket" : "http-or-custom", operation, address: "<resolved-at-runtime>", state: "CANDIDATE", offset: match.index, matched: match[0] }));
   }
+}
+
+function scanShell(text, emit) {
+  scanMatches(text, /(?:^|\s)(?:-p|--publish)(?:\s+|=)([^\s\\]+)/gm, match => {
+    const mapping = match[1].replace(/["']/g, "");
+    if (/^\d{2,5}(?::\d{2,5})?(?:\/(?:tcp|udp))?$/.test(mapping)) {
+      emit({ extractor_id: "shell-deployment-interface-anchors", direction: "ingress", kind: "configured-network", protocol: "container-or-service", operation: "PUBLISH", address: mapping, state: "CANDIDATE", offset: match.index, matched: match[0] });
+    }
+  });
+  scanMatches(text, /\bcurl\s+(?:-[A-Za-z]+\s+)*([^\s\\]+)/g, match => {
+    const address = stringLiteral(match[1]) ?? (match[1].startsWith("http") ? match[1] : "<dynamic>");
+    emit({ extractor_id: "shell-deployment-interface-anchors", direction: "egress", kind: "outbound-network", protocol: "http", operation: "CALL", address, state: "CANDIDATE", offset: match.index, matched: match[0] });
+  });
 }
 
 function scanTemplate(text, emit) {
@@ -334,6 +355,7 @@ async function main() {
       interfaces.push({
         interface_id: interfaceId,
         discovery_state: item.state,
+        discovery_origin_state: item.state,
         direction: item.direction,
         kind: item.kind,
         protocol: item.protocol,
@@ -370,6 +392,7 @@ async function main() {
     else if (extractor === "javascript-interface-anchors") scanJavascript(text, emit, gap);
     else if (extractor === "python-interface-anchors") scanPython(text, emit, gap);
     else if (extractor === "native-interface-anchors") scanNative(text, emit);
+    else if (extractor === "shell-deployment-interface-anchors") scanShell(text, emit);
     else if (extractor === "web-template-interface-anchors") scanTemplate(text, emit);
     else if (extractor === "declarative-interface-spec") scanSpec(file.path, text, emit, gap);
     else if (extractor === "configuration-interface-anchors") scanConfiguration(file.path, text, emit, gap);
@@ -393,6 +416,7 @@ async function main() {
       "jvm-interface-anchors",
       "native-interface-anchors",
       "python-interface-anchors",
+      "shell-deployment-interface-anchors",
       "web-template-interface-anchors",
     ],
     interfaces,
@@ -407,11 +431,13 @@ async function main() {
       interfaces: interfaces.length,
       confirmed_interfaces: interfaces.filter(item => item.discovery_state === "CONFIRMED").length,
       candidate_interfaces: interfaces.filter(item => item.discovery_state === "CANDIDATE").length,
+      rejected_interfaces: 0,
       ingress: interfaces.filter(item => item.direction === "ingress").length,
       egress: interfaces.filter(item => item.direction === "egress").length,
       bidirectional: interfaces.filter(item => item.direction === "bidirectional").length,
     },
     complete: gaps.length === 0,
+    inventory_bounded: gaps.length === 0 && interfaces.every(item => item.discovery_state !== "CANDIDATE"),
     claim_boundary: "Enumerates deterministic source/spec/config interface anchors recognized by the configured extractors. CONFIRMED means a literal framework/spec declaration; CANDIDATE means a reviewable executable or configuration anchor. Dynamic registration, unsupported potential sources, symlinks, and extractor failures remain explicit gaps and prohibit complete interface-inventory claims.",
   };
   manifest.manifest_digest = objectDigest(manifest);

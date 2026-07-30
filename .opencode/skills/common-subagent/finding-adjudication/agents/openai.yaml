@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finding Adjudication"
+  short_description: "Independently adjudicate Finding v2 candidates."
+  default_prompt: "Adjudicate the supplied Finding v2 candidate set and emit a verified manifest."

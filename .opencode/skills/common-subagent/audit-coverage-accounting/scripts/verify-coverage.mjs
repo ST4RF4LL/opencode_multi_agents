@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { isDeepStrictEqual } from "node:util";
 import { catalogQuestionDigest, deriveCoverageCells } from "./coverage-cell-accounting.mjs";
-import { DOMAIN_AGENTS } from "./coverage-v2-common.mjs";
+import { DOMAIN_AGENTS, entryAppliesToDomain } from "./coverage-v2-common.mjs";
+import { FINDING_SCHEMA_VERSION, findingObjectDigest, validateFinding } from "../../finding-evidence-contract/scripts/finding-contract.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
@@ -128,16 +129,28 @@ function evidenceErrors(record, context) {
   return [...new Set(errors)];
 }
 
-function validateCoverageRecord(record, idField, expectedId, requiredDimensions, findingIds, context) {
+function validateCoverageRecord(record, idField, expectedId, requiredDimensions, findingsById, context) {
   const errors = [];
   if (!record || typeof record !== "object") return ["record-not-object"];
   if (record[idField] !== expectedId) errors.push(`${idField}-mismatch`);
   if (!ALL_STATUSES.has(record.status)) errors.push("invalid-status");
   errors.push(...evidenceErrors(record, context));
   if (!exactStringSet(record.dimensions_reviewed, requiredDimensions)) errors.push("dimensions-not-complete");
+  if (CLOSED_STATUSES.has(record.status) && record.gap_reason != null) errors.push("closed-record-has-gap-reason");
+  if (record.status === "GAP" && (typeof record.gap_reason !== "string" || !record.gap_reason.trim())) errors.push("gap-reason-missing");
+  if (record.status !== "FINDING" && Array.isArray(record.finding_ids) && record.finding_ids.length > 0) {
+    errors.push("finding-ids-on-non-finding-record");
+  }
   if (record.status === "FINDING") {
     if (!Array.isArray(record.finding_ids) || record.finding_ids.length === 0) errors.push("finding-ids-missing");
-    else if (record.finding_ids.some(id => !findingIds.has(id))) errors.push("finding-id-not-in-report");
+    else {
+      if (record.finding_ids.some(id => !findingsById.has(id))) errors.push("finding-id-not-in-report");
+      const outOfScopeDimensions = record.finding_ids
+        .map(id => findingsById.get(id)?.classification?.dimension_claims ?? [])
+        .flatMap(claims => claims.map(claim => claim?.dimension))
+        .some(dimension => !requiredDimensions.includes(dimension));
+      if (outOfScopeDimensions) errors.push("finding-dimension-outside-record");
+    }
   }
   if (record.status === "GAP") errors.push("gap-status");
   return errors;
@@ -443,52 +456,90 @@ async function main() {
   }
 
   const reports = [];
+  const reportDispositions = [];
+  const reportFindingReferences = [];
   const fileRecords = new Map();
   const functionRecords = new Map();
   const catalogRecords = new Map();
   const reportPaths = await listAuditReports(resolve(args["reports-dir"]));
   for (const reportPath of reportPaths) {
     let report;
+    let reportSha256;
     try {
-      report = JSON.parse(await readFile(reportPath, "utf8"));
+      const bytes = await readFile(reportPath);
+      report = JSON.parse(bytes.toString("utf8"));
+      reportSha256 = createHash("sha256").update(bytes).digest("hex");
     } catch (error) {
       pushIssue(issues, "REPORT_UNREADABLE", error.message, { report: reportPath });
       continue;
     }
     if (report.audit_id !== args["audit-id"]) continue;
     reports.push(reportPath);
-    const reportIssues = [];
-    if (!Number.isInteger(report.round) || report.round < 1) reportIssues.push("invalid-round");
-    if (typeof report.agent_name !== "string" || !report.agent_name) reportIssues.push("missing-agent-name");
-    if (typeof report.agent_session_id !== "string" || !report.agent_session_id) reportIssues.push("missing-agent-session-id");
-    if (!LENSES.includes(report.audit_strategy)) reportIssues.push("report-must-contain-one-canonical-lens");
-    if (!AGENT_LANGUAGE.has(report.agent_name) || report.language !== AGENT_LANGUAGE.get(report.agent_name)) reportIssues.push("agent-language-mismatch");
-    if (!exactStringSet(report.dimensions, DIMENSIONS)) reportIssues.push("report-must-cover-D1-through-D10");
-    if (!Array.isArray(report.tool_inputs) || report.tool_inputs.length === 0) reportIssues.push("tool-inputs-missing");
+    const reportIssueStart = issues.length;
+    const headerIssues = [];
+    if (report.schema_version !== 2) headerIssues.push("report-schema-version-invalid");
+    if (!Number.isInteger(report.round) || report.round < 1) headerIssues.push("invalid-round");
+    if (typeof report.agent_name !== "string" || !report.agent_name) headerIssues.push("missing-agent-name");
+    if (typeof report.agent_session_id !== "string" || !report.agent_session_id) headerIssues.push("missing-agent-session-id");
+    if (!LENSES.includes(report.audit_strategy)) headerIssues.push("report-must-contain-one-canonical-lens");
+    if (report.discovery_track !== "coverage") headerIssues.push("report-discovery-track-must-be-coverage");
+    if (typeof report.focus_area_id !== "string" || !report.focus_area_id) headerIssues.push("report-focus-area-missing");
+    if (!Array.isArray(report.threat_ids) || report.threat_ids.length === 0 || report.threat_ids.some(id => typeof id !== "string" || !id)) {
+      headerIssues.push("report-threat-ids-invalid");
+    }
+    if (!AGENT_LANGUAGE.has(report.agent_name) || report.language !== AGENT_LANGUAGE.get(report.agent_name)) headerIssues.push("agent-language-mismatch");
+    if (!exactStringSet(report.dimensions, DIMENSIONS)) headerIssues.push("report-must-cover-D1-through-D10");
+    if (!Array.isArray(report.tool_inputs) || report.tool_inputs.length === 0) headerIssues.push("tool-inputs-missing");
     if (report.agent_name === AI_AGENT
       && !report.tool_inputs?.some(input => input?.kind === "ai-surfaces" && input.scope_digest === scope.scope_digest)) {
-      reportIssues.push("ai-surfaces-input-missing");
+      headerIssues.push("ai-surfaces-input-missing");
     }
-    if (!Array.isArray(report.coverage_cells)) reportIssues.push("coverage-cells-missing");
-    if (!Array.isArray(report.findings)) reportIssues.push("findings-missing");
-    if (!Array.isArray(report.artifacts)) reportIssues.push("artifacts-missing");
-    if (!Array.isArray(report.learning_candidates)) reportIssues.push("learning-candidates-missing");
-    if ((report.scope?.scope_digest ?? report.scope_digest) !== scope.scope_digest) reportIssues.push("scope-digest-mismatch");
+    if (!Array.isArray(report.coverage_cells)) headerIssues.push("coverage-cells-missing");
+    if (!Array.isArray(report.findings)) headerIssues.push("findings-missing");
+    if (!Array.isArray(report.artifacts)) headerIssues.push("artifacts-missing");
+    if (!Array.isArray(report.learning_candidates)) headerIssues.push("learning-candidates-missing");
+    if ((report.scope?.scope_digest ?? report.scope_digest) !== scope.scope_digest) headerIssues.push("scope-digest-mismatch");
     if (!Array.isArray(report.scope?.assigned_file_ids) || !Array.isArray(report.scope?.assigned_function_ids) || !Array.isArray(report.scope?.assigned_catalog_ids)) {
-      reportIssues.push("assigned-scope-id-arrays-missing");
+      headerIssues.push("assigned-scope-id-arrays-missing");
     }
     if (!Array.isArray(report.file_coverage) || !Array.isArray(report.function_coverage) || !Array.isArray(report.catalog_coverage)) {
-      reportIssues.push("coverage-arrays-missing");
+      headerIssues.push("coverage-arrays-missing");
     }
-    if (reportIssues.length > 0) {
-      pushIssue(issues, "INVALID_REPORT", "Audit report does not satisfy the coverage schema", { report: reportPath, errors: reportIssues });
+    if (headerIssues.length > 0) {
+      pushIssue(issues, "INVALID_REPORT", "Audit report does not satisfy the coverage schema", { report: reportPath, errors: headerIssues });
+      reportDispositions.push({
+        report_path: reportPath,
+        report_sha256: reportSha256,
+        state: "QUARANTINED",
+        issue_codes: headerIssues,
+      });
       continue;
     }
 
-    const rawFindingIds = report.findings.map(item => item?.finding_id);
-    const findingIds = new Set(rawFindingIds.filter(id => typeof id === "string" && id.length > 0));
-    if (findingIds.size !== report.findings.length) {
+    const findingsById = new Map(report.findings
+      .filter(item => typeof item?.finding_id === "string" && item.finding_id.length > 0)
+      .map(item => [item.finding_id, item]));
+    if (findingsById.size !== report.findings.length) {
       pushIssue(issues, "INVALID_FINDINGS", "Every report finding must have a unique non-empty finding_id", { report: reportPath });
+    }
+    if (report.findings.length > 0 && report.finding_schema_version !== FINDING_SCHEMA_VERSION) {
+      pushIssue(issues, "INVALID_FINDINGS", "Reports with findings must declare finding_schema_version 2", { report: reportPath });
+    }
+    const invalidFindings = report.findings.flatMap(finding => {
+      const errors = validateFinding(finding, {
+        auditId: args["audit-id"],
+        scopeDigest: scope.scope_digest,
+      });
+      if (finding?.routing?.focus_area_id !== report.focus_area_id) errors.push("finding-focus-area-not-bound-to-report");
+      if (finding?.classification?.origin_lens !== report.audit_strategy) errors.push("finding-lens-not-bound-to-report");
+      if (finding?.classification?.discovery_track !== report.discovery_track) errors.push("finding-track-not-bound-to-report");
+      if (finding?.routing?.domain !== report.language) errors.push("finding-domain-not-bound-to-report");
+      if (Array.isArray(finding?.routing?.threat_ids)
+        && finding.routing.threat_ids.some(id => !report.threat_ids.includes(id))) errors.push("finding-threat-not-bound-to-report");
+      return [...new Set(errors)].map(error => ({ finding_id: finding?.finding_id ?? null, error }));
+    });
+    if (invalidFindings.length > 0) {
+      pushIssue(issues, "INVALID_FINDINGS", "Report findings violate the v2 finding evidence contract", { report: reportPath, findings: invalidFindings });
     }
     const dimensionValidation = validateDimensionCells(report, catalogEntries);
     if (dimensionValidation.length > 0) {
@@ -523,11 +574,18 @@ async function main() {
         pushIssue(issues, "FILE_OWNER_MISMATCH", "File coverage domain is invalid or not closed by its assigned base/AI owner", { report: reportPath, file_id: id, domain, expected_agent: expectedAgent });
         continue;
       }
-      const validation = validateCoverageRecord(record, "file_id", id, DIMENSIONS, findingIds, {
+      const validation = validateCoverageRecord(record, "file_id", id, DIMENSIONS, findingsById, {
         kind: "file",
         id,
         file,
       });
+      if (validation.length > 0) {
+        pushIssue(issues, "INVALID_FILE_COVERAGE_RECORD", "File coverage record violates the coverage decision contract", {
+          report: reportPath,
+          file_id: id,
+          errors: validation,
+        });
+      }
       const key = `${id}|${domain}|${report.audit_strategy}`;
       const list = fileRecords.get(key) ?? [];
       list.push({ ...record, validation, round: report.round, report_path: reportPath });
@@ -551,11 +609,18 @@ async function main() {
         pushIssue(issues, "FUNCTION_OWNER_MISMATCH", "Function coverage domain is invalid or not closed by its assigned base/AI owner", { report: reportPath, function_id: id, domain, expected_agent: expectedAgent });
         continue;
       }
-      const validation = validateCoverageRecord(record, "function_id", id, DIMENSIONS, findingIds, {
+      const validation = validateCoverageRecord(record, "function_id", id, DIMENSIONS, findingsById, {
         kind: "function",
         id,
         fn,
       });
+      if (validation.length > 0) {
+        pushIssue(issues, "INVALID_FUNCTION_COVERAGE_RECORD", "Function coverage record violates the coverage decision contract", {
+          report: reportPath,
+          function_id: id,
+          errors: validation,
+        });
+      }
       const key = `${id}|${domain}|${report.audit_strategy}`;
       const list = functionRecords.get(key) ?? [];
       list.push({ ...record, validation, round: report.round, report_path: reportPath });
@@ -574,11 +639,12 @@ async function main() {
       const localKey = `${id}|${domain}`;
       if (seenCatalogKeys.has(localKey)) pushIssue(issues, "DUPLICATE_REPORT_CATALOG", "Report repeats a catalog/domain coverage record", { report: reportPath, catalog_id: id, domain });
       seenCatalogKeys.add(localKey);
-      if (!DOMAIN_AGENT.has(domain) || DOMAIN_AGENT.get(domain) !== report.agent_name || !activeDomains.has(domain) || !entry.applies_to.includes(domain)) {
+      if (!DOMAIN_AGENT.has(domain) || DOMAIN_AGENT.get(domain) !== report.agent_name || !activeDomains.has(domain)
+        || !entryAppliesToDomain(entry, domain, catalog)) {
         pushIssue(issues, "CATALOG_DOMAIN_MISMATCH", "Catalog coverage is not owned by an active applicable domain agent", { report: reportPath, catalog_id: id, domain });
         continue;
       }
-      const validation = validateCoverageRecord(record, "catalog_id", id, entry.dimensions, findingIds, {
+      const validation = validateCoverageRecord(record, "catalog_id", id, entry.dimensions, findingsById, {
         kind: "catalog",
         id,
         entry,
@@ -586,10 +652,40 @@ async function main() {
         lens: report.audit_strategy,
         catalog,
       });
+      if (validation.length > 0) {
+        pushIssue(issues, "INVALID_CATALOG_COVERAGE_RECORD", "Catalog coverage record violates the coverage decision contract", {
+          report: reportPath,
+          catalog_id: id,
+          errors: validation,
+        });
+      }
       const key = `${id}|${domain}|${report.audit_strategy}`;
       const list = catalogRecords.get(key) ?? [];
       list.push({ ...record, validation, round: report.round, report_path: reportPath });
       catalogRecords.set(key, list);
+    }
+
+    const reportScopedIssues = issues.slice(reportIssueStart)
+      .filter(issue => issue.report === reportPath);
+    const disposition = {
+      report_path: reportPath,
+      report_sha256: reportSha256,
+      state: reportScopedIssues.length === 0 ? "ACCEPTED" : "QUARANTINED",
+      issue_codes: [...new Set(reportScopedIssues.map(issue => issue.code))].sort(),
+    };
+    reportDispositions.push(disposition);
+    for (const finding of report.findings) {
+      reportFindingReferences.push({
+        report_path: reportPath,
+        report_sha256: reportSha256,
+        report_state: disposition.state,
+        finding_id: finding?.finding_id ?? null,
+        finding_object_digest: finding && typeof finding === "object" && !Array.isArray(finding)
+          ? findingObjectDigest(finding)
+          : null,
+        primary_check_id: finding?.routing?.primary_check_id ?? null,
+        discovery_track: finding?.classification?.discovery_track ?? null,
+      });
     }
   }
 
@@ -621,7 +717,7 @@ async function main() {
     }
   }
   for (const entry of catalogEntries.values()) {
-    for (const domain of entry.applies_to.filter(item => activeDomains.has(item))) {
+    for (const domain of [...activeDomains].filter(item => entryAppliesToDomain(entry, item, catalog))) {
       for (const lens of LENSES) {
         const key = `${entry.id}|${domain}|${lens}`;
         const latest = selectLatest(catalogRecords.get(key) ?? [], key, issues);
@@ -630,6 +726,22 @@ async function main() {
       }
     }
   }
+
+  const acceptedReports = reportDispositions
+    .filter(report => report.state === "ACCEPTED")
+    .sort((left, right) => left.report_path.localeCompare(right.report_path));
+  const quarantinedReports = reportDispositions
+    .filter(report => report.state === "QUARANTINED")
+    .sort((left, right) => left.report_path.localeCompare(right.report_path));
+  const acceptedReportSetDigest = createHash("sha256")
+    .update(JSON.stringify(acceptedReports.map(report => ({ report_path: report.report_path, report_sha256: report.report_sha256 }))))
+    .digest("hex");
+  const acceptedFindings = reportFindingReferences
+    .filter(finding => finding.report_state === "ACCEPTED")
+    .sort((left, right) => `${left.finding_id ?? ""}|${left.report_path}`.localeCompare(`${right.finding_id ?? ""}|${right.report_path}`));
+  const quarantinedFindings = reportFindingReferences
+    .filter(finding => finding.report_state === "QUARANTINED")
+    .sort((left, right) => `${left.finding_id ?? ""}|${left.report_path}`.localeCompare(`${right.finding_id ?? ""}|${right.report_path}`));
 
   const complete = issues.length === 0
     && missing.files.length === 0 && missing.functions.length === 0 && missing.catalog.length === 0
@@ -658,7 +770,8 @@ async function main() {
       file_function_coverage_domains: COVERAGE_DOMAINS,
       file_domain_pairs: [...scopeFiles.values()].filter(file => file.review_required).length * COVERAGE_DOMAINS.length,
       function_domain_pairs: functions.size * COVERAGE_DOMAINS.length,
-      catalog_domain_pairs: [...catalogEntries.values()].reduce((sum, entry) => sum + entry.applies_to.filter(domain => activeDomains.has(domain)).length, 0),
+      catalog_domain_pairs: [...catalogEntries.values()].reduce((sum, entry) => sum
+        + [...activeDomains].filter(domain => entryAppliesToDomain(entry, domain, catalog)).length, 0),
       external_interfaces: interfaceManifest?.interfaces?.length ?? 0,
       confirmed_external_interfaces: interfaceManifest?.interfaces?.filter(item => item.discovery_state === "CONFIRMED").length ?? 0,
       candidate_external_interfaces: interfaceManifest?.interfaces?.filter(item => item.discovery_state === "CANDIDATE").length ?? 0,
@@ -669,6 +782,14 @@ async function main() {
       files: fileRecords.size,
       functions: functionRecords.size,
       catalog: catalogRecords.size,
+    },
+    finding_intake: {
+      schema_version: 1,
+      accepted_report_set_digest: acceptedReportSetDigest,
+      accepted_reports: acceptedReports,
+      quarantined_reports: quarantinedReports,
+      accepted_findings: acceptedFindings,
+      quarantined_findings: quarantinedFindings,
     },
     missing,
     invalid,
@@ -682,6 +803,7 @@ async function main() {
     } : null,
     claim_boundary: "Proves deterministic base-owner and AI-overlay accounting over frozen files, source-defined functions and executable template units recognized by configured AST/CPG extractors, the application/platform/AI catalog matrix, and exact source/spec/config interface-anchor enumeration by configured extractors. CONFIRMED and CANDIDATE interface counts are reported separately. Unsupported or dynamic interface sources prevent completion. This phase does not yet prove that each interface received every applicable vulnerability-type check.",
   };
+  verification.manifest_digest = contentDigest(verification);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(verification, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify({ output: outputPath, complete, expected: verification.expected, missing: { files: missing.files.length, functions: missing.functions.length, catalog: missing.catalog.length }, invalid: { files: invalid.files.length, functions: invalid.functions.length, catalog: invalid.catalog.length }, issues: issues.length })}\n`);

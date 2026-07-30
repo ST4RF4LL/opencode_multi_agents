@@ -10,10 +10,13 @@ const SCHEMA_VERSION = 1;
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const INFRASTRUCTURE_EXCLUSIONS = new Map([
   [".git", "version-control-internals"],
+  [".atlas", "local-code-facts-cache"],
   [".opencode", "audit-infrastructure"],
   ["reports", "audit-output"],
   ["tmp", "audit-runtime-output"],
 ]);
+const NON_EXECUTABLE_DOCUMENT_PREFIXES = ["document/pdm/", "document/pos/"];
+const NON_EXECUTABLE_METADATA_FILENAMES = new Set([".gitignore", "license", "manifest.mf"]);
 
 function parseArgs(argv) {
   const args = {};
@@ -103,6 +106,13 @@ const CLASSIFIERS = [
 function classify(path, binary) {
   if (binary) return { owner_agent: "platform-security-auditor", content_kind: "binary", parser: null, inventory_state: "not-applicable", inventory_reason: "binary-artifact-outside-source-function-universe" };
   const base = path.toLowerCase().split("/").at(-1);
+  const normalized = path.toLowerCase();
+  if (NON_EXECUTABLE_METADATA_FILENAMES.has(base) || NON_EXECUTABLE_DOCUMENT_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+    return { owner_agent: "platform-security-auditor", content_kind: "documentation", parser: null, inventory_state: "not-applicable", inventory_reason: "known-non-executable-document-or-metadata" };
+  }
+  if (normalized.startsWith("document/sql/") && extname(base) === ".sql") {
+    return { owner_agent: "platform-security-auditor", content_kind: "database-schema", parser: null, inventory_state: "not-applicable", inventory_reason: "declarative-database-schema-reviewed-as-file-not-function" };
+  }
   if (base === "jenkinsfile") {
     return { owner_agent: "platform-security-auditor", content_kind: "build-source", parser: null, inventory_state: "unsupported", inventory_reason: "no-configured-groovy-ast-cpg-extractor" };
   }
@@ -110,6 +120,9 @@ function classify(path, binary) {
     return { owner_agent: "platform-security-auditor", content_kind: "configuration", parser: null, inventory_state: "not-applicable", inventory_reason: "declarative-build-or-runtime-configuration" };
   }
   const ext = extname(base);
+  if ([".sh", ".bash", ".zsh"].includes(ext)) {
+    return { owner_agent: "platform-security-auditor", content_kind: "deployment-script", parser: null, inventory_state: "not-applicable", inventory_reason: "deployment-script-reviewed-as-file-and-interface-source-not-function" };
+  }
   const hit = CLASSIFIERS.find(item => item.exts.includes(ext));
   if (hit) return {
     owner_agent: hit.owner,

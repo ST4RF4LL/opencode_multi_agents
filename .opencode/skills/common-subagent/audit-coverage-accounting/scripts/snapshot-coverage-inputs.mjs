@@ -98,8 +98,8 @@ async function main() {
   const extractorCoverage = JSON.parse(extractorBytes.toString("utf8"));
   if (extractorCoverage.audit_id !== args["audit-id"] || extractorCoverage.scope_digest !== scope.scope_digest
     || extractorCoverage.interface_manifest_digest !== interfaceManifest.manifest_digest
-    || extractorCoverage.manifest_digest !== objectDigest(extractorCoverage) || !extractorCoverage.complete) {
-    throw new Error("Cannot snapshot incomplete, modified, or interface-mismatched extractor verification");
+    || extractorCoverage.manifest_digest !== objectDigest(extractorCoverage)) {
+    throw new Error("Cannot snapshot modified or interface-mismatched extractor verification");
   }
   const extractorTarget = join(outputDir, "interface-extractor-coverage.json");
   await copyFile(extractorSource, extractorTarget);
@@ -132,7 +132,7 @@ async function main() {
   }
 
   const index = {
-    schema_version: 1,
+    schema_version: 2,
     audit_id: args["audit-id"],
     scope_digest: scope.scope_digest,
     scope: { path: scopeTarget, file_name: basename(scopeTarget), manifest_digest: scope.manifest_digest, sha256: bytesDigest(scopeBytes), files: scope.files.length },
@@ -145,6 +145,7 @@ async function main() {
       total: interfaceManifest.interfaces.length,
       confirmed: interfaceManifest.interfaces.filter(item => item.discovery_state === "CONFIRMED").length,
       candidate: interfaceManifest.interfaces.filter(item => item.discovery_state === "CANDIDATE").length,
+      rejected: interfaceManifest.interfaces.filter(item => item.discovery_state === "REJECTED").length,
     },
     interface_extractors: {
       path: extractorTarget,
@@ -152,6 +153,7 @@ async function main() {
       manifest_digest: extractorCoverage.manifest_digest,
       sha256: bytesDigest(extractorBytes),
       complete: extractorCoverage.complete,
+      issues: extractorCoverage.issues?.length ?? 0,
     },
     catalog: { path: catalogTarget, file_name: basename(catalogTarget), profile_id: catalog.profile_id, sha256: bytesDigest(catalogBytes), entries: catalog.entries.length },
     ...(semantic ? { semantic } : {}),

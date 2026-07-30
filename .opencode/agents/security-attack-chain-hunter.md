@@ -42,7 +42,7 @@ You perform one new system-level discovery pass after Focus Area coverage, blind
 
 Load `system-attack-chain-hunting`, `secure-code-review-common`, `audit-coverage-accounting`, and `audit-artifact-management`.
 
-Consume the sealed threat model, sealed Focus Areas, every current-round coverage/discovery artifact, Recon inventories, and source/config evidence needed to test transitions. Search specifically for chains that cross Focus Areas, trust boundaries, identities, tenants, components, or deployment layers.
+Consume the sealed threat model, sealed Focus Areas, every current-round coverage/discovery artifact, the independent Finding Adjudication manifest, Recon inventories, and source/config evidence needed to test transitions. Search specifically for chains that cross Focus Areas, trust boundaries, identities, tenants, components, or deployment layers. Only `SUPPORTED_STATIC` or `SUPPORTED_RUNTIME` adjudication decisions may support a chain step; candidates, rejected findings, and unresolved findings remain explicit gaps rather than transitions.
 
 Write:
 

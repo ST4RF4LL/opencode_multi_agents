@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opencode://security/finding-v2.schema.json",
+  "title": "Security Finding v2",
+  "type": "object",
+  "required": [
+    "finding_schema_version",
+    "finding_id",
+    "audit_id",
+    "scope_digest",
+    "state",
+    "classification",
+    "routing",
+    "locations",
+    "evidence",
+    "reachability",
+    "attacker_influence",
+    "guards",
+    "contradictions",
+    "uncertainty",
+    "severity",
+    "remediation",
+    "provenance"
+  ],
+  "properties": {
+    "finding_schema_version": { "const": 2 },
+    "finding_id": { "type": "string", "minLength": 1 },
+    "audit_id": { "type": "string", "minLength": 1 },
+    "scope_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "state": {
+      "enum": ["HYPOTHESIS", "CANDIDATE", "SUPPORTED_STATIC", "SUPPORTED_RUNTIME", "REJECTED", "INCONCLUSIVE"]
+    },
+    "classification": { "type": "object" },
+    "routing": { "type": "object" },
+    "locations": { "type": "object" },
+    "evidence": { "type": "object" },
+    "reachability": { "type": "object" },
+    "attacker_influence": { "type": "object" },
+    "guards": { "type": "array" },
+    "contradictions": { "type": "array" },
+    "uncertainty": { "type": "object" },
+    "severity": { "type": "object" },
+    "remediation": { "type": "object" },
+    "provenance": { "type": "object" }
+  },
+  "additionalProperties": true
+}

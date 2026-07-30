@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "version": 16,
   "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
   "servers": {
     "coverage_ledger": {
@@ -45,6 +45,7 @@
     "ai-security-auditor": ["coverage_*"],
     "security-evidence-correlator": ["coverage_*"],
     "security-attack-chain-hunter": [],
+    "security-finding-adjudicator": [],
     "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
     "security-skill-optimizer": [],
     "security-audit-orchestrator": ["coverage_*"]

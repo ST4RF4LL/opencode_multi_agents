@@ -1,6 +1,6 @@
 # OpenCode Multi-Agent Source Security Audit
 
-这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都必须经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。v1 结构 verifier 对文件/函数做精确差分；Coverage Plan/Ledger v2 对漏洞类型和外部接口的原子检查做带回执的哈希链记账；语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
+这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都必须经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。可信结构 verifier 对文件/函数做精确差分；Coverage Plan/Ledger v3 对快照绑定的漏洞类型和已确认外部接口做授权回执、服务认证哈希链和有界库存记账；语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
 
 首次使用请先完成[初始化与安装](docs/installation.md)，生成仅保存在本机的 `.opencode/opencode.json`。
 
@@ -111,6 +111,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - 服务持有的追加式 Ledger：`reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl`
 - v1 文件/函数结构中间结果：`reports/coverage/coverage-structural-v1.<audit-id>.json`
 - 机器生成覆盖摘要：`reports/coverage/coverage-summary.<audit-id>.json`
+- 与 JSON 精确同源的覆盖摘要：`reports/coverage/coverage-summary.<audit-id>.md`
 - 语义覆盖验收结果：`reports/coverage/semantic-coverage-verification.<audit-id>.json`
 - vuln-judger 结构化三方复核：`reports/validation/vuln-judger-review.<audit-id>.json`
 - vuln-judger 可读三方复核：`reports/validation/vuln-judger-review.<audit-id>.md`
@@ -121,7 +122,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 
 一个 agent session 对应一个 SARIF；一个漏洞挖掘 session 对应一个 JSON。多个静态分析工具在同一 session 内运行时，应合并到同一个 SARIF 的多个 `runs`。
 
-Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdown 写到 `reports/final/` 并计算 SHA-256。随后 `vulnerability-validator` 只把这份完整且不可变的报告提交一次给 vuln-judger，固定使用 `engine=opencode`，通过同一 `run_id` 异步轮询，而不是按 finding 重复调用。三方复核结果写入 `reports/validation/`，不回写已受审报告。流程**不会自动删除 `tmp/`**；`tmp/<audit-id>/` 的清理由人工处理。
+Orchestrator 在可信结构、v3 Ledger/统计和语义门禁后把最终 Markdown 写到 `reports/final/` 并计算 SHA-256。随后 `vulnerability-validator` 只把这份完整且不可变的报告提交一次给 vuln-judger，固定使用 `engine=opencode`，通过同一 `run_id` 异步轮询，而不是按 finding 重复调用。三方复核结果写入 `reports/validation/`，不回写已受审报告。流程**不会自动删除 `tmp/`**；`tmp/<audit-id>/` 的清理由人工处理。
 
 ## Usage
 
@@ -130,7 +131,7 @@ Orchestrator 在 v1 结构、v2 Ledger/统计和语义门禁后把最终 Markdow
 推荐入口：
 
 ```text
-@security-audit-orchestrator 对当前项目做一次 Tri-Lens 安全审计，完成 v1 结构、v2 Ledger/统计和语义覆盖门禁并封存最终综合报告，再将整份报告交给 vuln_judger 使用 OpenCode 三方执行引擎复核。
+@security-audit-orchestrator 对当前项目做一次 Tri-Lens 安全审计，完成可信结构、v3 Ledger/统计和语义覆盖门禁并封存最终综合报告，再将整份报告交给 vuln_judger 使用 OpenCode 三方执行引擎复核。
 ```
 
 也可以分阶段调用：

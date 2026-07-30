@@ -1,9 +1,15 @@
 {
   "scripts": {
-    "test": "npm run test:config && npm run test:semgrep && npm run test:coverage && npm run test:semantic",
+    "test": "npm run test:config && npm run test:semgrep && npm run test:finding-contract && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
     "test:config": "node tests/validate-configuration.mjs",
     "test:semgrep": "node tests/run-semgrep-tests.mjs",
-    "test:coverage": "node tests/run-coverage-tests.mjs && node tests/run-coverage-response-tests.mjs",
+    "test:finding-contract": "node tests/run-finding-contract-tests.mjs",
+    "test:finding-adjudication": "node tests/run-finding-adjudication-tests.mjs",
+    "test:cvss-assessment": "node tests/run-cvss-assessment-tests.mjs",
+    "test:adjudication-regressions": "node tests/run-adjudication-regression-tests.mjs",
+    "test:attack-chain-contract": "node tests/run-attack-chain-contract-tests.mjs",
+    "test:semantic-reseed": "node tests/run-semantic-reseed-tests.mjs",
+    "test:coverage": "node tests/run-coverage-tests.mjs && node tests/run-coverage-response-tests.mjs && node tests/run-coverage-concurrency-tests.mjs",
     "test:semantic": "node tests/run-semantic-coverage-tests.mjs"
   },
   "dependencies": {

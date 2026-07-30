@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
-import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { catalogQuestionDigest, deriveCoverageCells } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-cell-accounting.mjs";
 import {
+  checkpointLedger,
+  delegateAssignment,
+  finalizePartialLedger,
   finalizeLedger,
   initializeLedger,
   inspectSubject,
@@ -14,11 +17,22 @@ import {
   submitDecision,
   verifyLedger,
 } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs";
-import { DOMAIN_AGENTS, objectDigest, sha256, validatePlan } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-v2-common.mjs";
+import {
+  DOMAIN_AGENTS,
+  entryAppliesToDomain,
+  objectDigest,
+  sha256,
+  sourceFileIdsForCheck,
+  validatePlan,
+} from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-v2-common.mjs";
+import { candidateManifestDigest } from "../skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs";
+import { buildCvssAssessmentManifest } from "../skills/common-subagent/finding-adjudication/scripts/cvss-assessment-contract.mjs";
+import { attackChainManifestDigest } from "../skills/attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY = resolve(HERE, "../..");
 const SCRIPTS = resolve(REPOSITORY, ".opencode/skills/common-subagent/audit-coverage-accounting/scripts");
+const ADJUDICATION_SCRIPTS = resolve(REPOSITORY, ".opencode/skills/common-subagent/finding-adjudication/scripts");
 const CATALOG = resolve(REPOSITORY, ".opencode/shared/security-audit/catalogs/application-ai-vulnerability-catalog.json");
 const FIXTURE = resolve(HERE, "coverage-fixture");
 const MALFORMED_JS_FIXTURE = resolve(HERE, "malformed-js-fixture");
@@ -34,6 +48,41 @@ async function writeParserCapabilities(path, scope, capabilities) {
     scope_digest: scope.scope_digest,
     capabilities,
     complete: capabilities.every(item => item.status === "available"),
+  };
+  manifest.manifest_digest = objectDigest(manifest);
+  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+async function writeSyntheticFunctionManifest(path, scope, { language, ownerAgent, sourcePath, qualifiedName }) {
+  const source = scope.files.find(file => file.path === sourcePath);
+  if (!source) throw new Error(`Synthetic function source is outside scope: ${sourcePath}`);
+  const fn = {
+    function_id: `function:${sha256(`${language}|${sourcePath}|${qualifiedName}|1`).slice(0, 32)}`,
+    language,
+    owner_agent: ownerAgent,
+    required_lenses: LENSES,
+    code_sha256: source.sha256,
+    path: sourcePath,
+    kind: "function",
+    qualified_name: qualifiedName,
+    signature: `${qualifiedName}(...)`,
+    line_start: 1,
+    line_end: 3,
+  };
+  const manifest = {
+    schema_version: 1,
+    audit_id: AUDIT_ID,
+    language,
+    extractor: { name: "fixture-contract-extractor", frontend_language: language, input_mode: "test-fixture" },
+    scope_manifest: null,
+    scope_digest: scope.scope_digest,
+    expected_files: [sourcePath],
+    parsed_files: [sourcePath],
+    missing_files: [],
+    unexpected_cpg_files: [],
+    functions: [fn],
+    summary: { expected_files: 1, parsed_files: 1, functions: 1, missing_files: 0, unexpected_cpg_files: 0 },
+    complete: true,
   };
   manifest.manifest_digest = objectDigest(manifest);
   await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
@@ -62,7 +111,9 @@ async function makeSemanticManifests(directory, scope, manifests, catalog) {
   run("seal-semantic-manifest.mjs", ["--input", threatModelPath]);
   const threatModel = JSON.parse(await readFile(threatModelPath, "utf8"));
   const functions = manifests.flatMap(manifest => manifest.functions);
-  const assignments = Object.entries(DOMAIN_AGENT).map(([domain, agent]) => {
+  const activeDomainNames = Object.keys(DOMAIN_AGENT)
+    .filter(domain => domain === "ai" || scope.files.some(file => file.review_required && file.owner_agent === DOMAIN_AGENT[domain]));
+  const assignments = Object.entries(DOMAIN_AGENT).filter(([domain]) => activeDomainNames.includes(domain)).map(([domain, agent]) => {
     const isAi = domain === "ai";
     return {
       assignment_id: `FA-001-${domain}-${isAi ? "ai" : "base"}`,
@@ -72,7 +123,7 @@ async function makeSemanticManifests(directory, scope, manifests, catalog) {
       catalog_domain: domain,
       file_ids: scope.files.filter(file => file.review_required && (isAi || file.owner_agent === agent)).map(file => file.file_id),
       function_ids: functions.filter(fn => isAi || fn.owner_agent === agent).map(fn => fn.function_id),
-      catalog_ids: catalog.entries.filter(entry => entry.applies_to.includes(domain)).map(entry => entry.id),
+      catalog_ids: catalog.entries.filter(entry => entryAppliesToDomain(entry, domain, catalog)).map(entry => entry.id),
     };
   }).filter(assignment => assignment.file_ids.length + assignment.function_ids.length + assignment.catalog_ids.length > 0);
   await writeFile(focusAreasPath, `${JSON.stringify({
@@ -113,6 +164,17 @@ function run(script, args, expectedStatus = 0) {
   return result;
 }
 
+function runAdjudication(script, args, expectedStatus = 0) {
+  const result = spawnSync(process.execPath, [resolve(ADJUDICATION_SCRIPTS, script), ...args], {
+    encoding: "utf8",
+    maxBuffer: 128 * 1024 * 1024,
+  });
+  if (result.status !== expectedStatus) {
+    throw new Error(`${script} returned ${result.status}, expected ${expectedStatus}\n${result.stderr}\n${result.stdout}`);
+  }
+  return result;
+}
+
 function runCommand(command, args) {
   const result = spawnSync(command, args, { encoding: "utf8" });
   if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${result.stderr}\n${result.stdout}`);
@@ -129,6 +191,67 @@ async function expectReject(operation, messagePattern) {
   throw new Error("Expected operation to fail");
 }
 
+function ledgerFindingArtifact(findingId, check, plan) {
+  const sourceDigest = sha256(`fixture-source:${check.check_id}`);
+  return {
+    finding_schema_version: 2,
+    finding_id: findingId,
+    audit_id: plan.audit_id,
+    scope_digest: plan.scope_digest,
+    state: "CANDIDATE",
+    classification: {
+      vulnerability_type_id: check.vulnerability_type_id,
+      origin_lens: check.lens,
+      discovery_track: "coverage",
+      dimension_claims: [{
+        dimension: check.dimensions[0],
+        rationale: "Fixture finding explicitly claims only the check's first dimension.",
+      }],
+    },
+    routing: {
+      focus_area_id: check.focus_area_id,
+      primary_check_id: check.check_id,
+      domain: check.domain,
+      threat_ids: ["T-001"],
+    },
+    locations: {
+      primary: {
+        file: "src/main/java/com/example/SampleController.java",
+        line_start: 1,
+        source_digest: sourceDigest,
+      },
+    },
+    evidence: {
+      facts: [
+        {
+          kind: "source",
+          claim: "Fixture request parameter reaches the security boundary.",
+          locator: { file: "src/main/java/com/example/SampleController.java", line_start: 1, source_digest: sourceDigest },
+          method: "fixture",
+          source_digest: sourceDigest,
+          confidence: "high",
+        },
+        {
+          kind: "sink",
+          claim: "Fixture security-sensitive operation is reachable.",
+          locator: { file: "src/main/java/com/example/SampleController.java", line_start: 2, source_digest: sourceDigest },
+          method: "fixture",
+          source_digest: sourceDigest,
+          confidence: "high",
+        },
+      ],
+    },
+    reachability: { state: "static-reachable" },
+    attacker_influence: { state: "direct" },
+    guards: [],
+    contradictions: [],
+    uncertainty: { level: "medium", assumptions: ["Fixture has no runtime deployment."] },
+    severity: { rationale: "Fixture only verifies ledger binding." },
+    remediation: { summary: "Fix the fixture security condition." },
+    provenance: { source_report_sha256: sha256(`fixture-report:${check.check_id}`) },
+  };
+}
+
 async function makeReports(directory, scope, manifests, catalog) {
   await mkdir(directory, { recursive: true });
   const functions = manifests.flatMap(manifest => manifest.functions);
@@ -141,7 +264,8 @@ async function makeReports(directory, scope, manifests, catalog) {
     const assignedFunctions = functions.filter(fn => isAiOverlay || fn.owner_agent === agent);
     for (const lens of LENSES) {
       const report = {
-        schema_version: 1,
+        schema_version: 2,
+        finding_schema_version: 2,
         audit_id: AUDIT_ID,
         round: 1,
         agent_name: agent,
@@ -155,7 +279,7 @@ async function makeReports(directory, scope, manifests, catalog) {
           scope_digest: scope.scope_digest,
           assigned_file_ids: assignedFiles.map(file => file.file_id),
           assigned_function_ids: assignedFunctions.map(fn => fn.function_id),
-          assigned_catalog_ids: catalog.entries.filter(entry => entry.applies_to.includes(domain)).map(entry => entry.id),
+          assigned_catalog_ids: catalog.entries.filter(entry => entryAppliesToDomain(entry, domain, catalog)).map(entry => entry.id),
         },
         language: domain,
         audit_strategy: lens,
@@ -180,7 +304,7 @@ async function makeReports(directory, scope, manifests, catalog) {
         function_coverage: assignedFunctions
           .map(fn => ({ function_id: fn.function_id, domain: isAiOverlay ? "ai" : "base", status: "REVIEWED", dimensions_reviewed: DIMENSIONS, evidence: [{ kind: "function-location", function_id: fn.function_id, path: fn.path, code_sha256: fn.code_sha256, qualified_name: fn.qualified_name, line_start: fn.line_start }] })),
         catalog_coverage: catalog.entries
-          .filter(entry => entry.applies_to.includes(domain))
+          .filter(entry => entryAppliesToDomain(entry, domain, catalog))
           .map(entry => ({ catalog_id: entry.id, domain, status: "REVIEWED", dimensions_reviewed: entry.dimensions, evidence: [{ kind: "catalog-review", catalog_id: entry.id, domain, lens, catalog_profile: catalog.profile_id, question_sha256: catalogQuestionDigest(entry, lens) }] })),
         findings: [],
         artifacts: [],
@@ -200,15 +324,30 @@ async function main() {
     const positiveReports = join(work, "reports-positive");
     const negativeReports = join(work, "reports-negative");
     await cp(FIXTURE, root, { recursive: true });
+    await mkdir(join(root, "src", "main", "python"), { recursive: true });
+    await mkdir(join(root, "src", "main", "c"), { recursive: true });
+    await writeFile(join(root, "src", "main", "python", "sample.py"), "def normalize(value):\n    return value.strip()\n", "utf8");
+    await writeFile(join(root, "src", "main", "c", "sample.c"), [
+      "#include <stddef.h>",
+      "",
+      "size_t fixture_length(const char *value) {",
+      "    size_t length = 0;",
+      "    while (value[length] != '\\0') length += 1;",
+      "    return length;",
+      "}",
+      "",
+    ].join("\n"), "utf8");
     await symlink("static/app.js", join(root, "linked-app.js"));
     await mkdir(coverage, { recursive: true });
 
     const gitScopeRoot = join(work, "git-scope");
     await mkdir(join(gitScopeRoot, "src"), { recursive: true });
     await mkdir(join(gitScopeRoot, "node_modules", "dependency"), { recursive: true });
+    await mkdir(join(gitScopeRoot, ".atlas"), { recursive: true });
     await writeFile(join(gitScopeRoot, ".gitignore"), "node_modules/\n", "utf8");
     await writeFile(join(gitScopeRoot, "src", "app.js"), "export const value = 1;\n", "utf8");
     await writeFile(join(gitScopeRoot, "node_modules", "dependency", "index.js"), "module.exports = 1;\n", "utf8");
+    await writeFile(join(gitScopeRoot, ".atlas", "atlas.db"), "ephemeral local analysis cache\n", "utf8");
     runCommand("git", ["-C", gitScopeRoot, "init", "--quiet"]);
     runCommand("git", ["-C", gitScopeRoot, "add", ".gitignore", "src/app.js"]);
     const gitScopePath = join(work, "git-scope.json");
@@ -216,19 +355,77 @@ async function main() {
     const gitScope = JSON.parse(await readFile(gitScopePath, "utf8"));
     if (gitScope.policy.enumeration !== "git-index-plus-untracked-nonignored"
       || gitScope.files.some(file => file.path.startsWith("node_modules/"))
-      || !gitScope.exclusions.some(item => item.path === "node_modules" && item.reason === "gitignore-policy")) {
-      throw new Error("Git-aware scope did not prune and record ignored dependency content");
+      || !gitScope.exclusions.some(item => item.path === "node_modules" && item.reason === "gitignore-policy")
+      || !gitScope.exclusions.some(item => item.path === ".atlas" && item.reason === "local-code-facts-cache")) {
+      throw new Error("Git-aware scope did not prune dependency and local-analysis-cache content");
+    }
+
+    const shellInterfaceRoot = join(work, "shell-interface");
+    await mkdir(shellInterfaceRoot, { recursive: true });
+    await writeFile(join(shellInterfaceRoot, "deploy.sh"), "#!/usr/bin/env bash\ndocker run --publish 8080:8080 fixture-app\n", "utf8");
+    const shellScopePath = join(work, "shell-interface-scope.json");
+    const shellRawInterfacesPath = join(work, "shell-interface-raw.json");
+    const shellDecisionsPath = join(work, "shell-interface-decisions.json");
+    const shellInterfacesPath = join(work, "shell-interface-resolved.json");
+    run("build-scope-manifest.mjs", ["--root", shellInterfaceRoot, "--audit-id", AUDIT_ID, "--output", shellScopePath]);
+    const shellScope = JSON.parse(await readFile(shellScopePath, "utf8"));
+    if (shellScope.files[0]?.function_inventory_state !== "not-applicable"
+      || shellScope.files[0]?.content_kind !== "deployment-script") {
+      throw new Error("Deployment scripts must remain file/interface review subjects without inventing a function parser requirement");
+    }
+    run("build-interface-manifest.mjs", ["--root", shellInterfaceRoot, "--audit-id", AUDIT_ID, "--scope", shellScopePath, "--output", shellRawInterfacesPath]);
+    run("build-source-anchored-interface-decisions.mjs", ["--audit-id", AUDIT_ID, "--input", shellRawInterfacesPath, "--output", shellDecisionsPath]);
+    run("resolve-interface-candidates.mjs", ["--audit-id", AUDIT_ID, "--input", shellRawInterfacesPath, "--decisions", shellDecisionsPath, "--output", shellInterfacesPath]);
+    const shellInterfaces = JSON.parse(await readFile(shellInterfacesPath, "utf8"));
+    if (!shellInterfaces.complete || !shellInterfaces.inventory_bounded
+      || !shellInterfaces.interfaces.some(item => item.address === "8080:8080" && item.evidence.some(evidence => evidence.extractor_id === "shell-deployment-interface-anchors"))) {
+      throw new Error("Shell deployment interface extraction did not produce a source-anchored bounded port mapping");
     }
 
     const scopePath = join(coverage, "scope.json");
     const javaPath = join(coverage, "functions-java.json");
     const jsPath = join(coverage, "functions-javascript.json");
     const embeddedPath = join(coverage, "functions-embedded-web.json");
+    const pythonPath = join(coverage, "functions-python.json");
+    const cPath = join(coverage, "functions-c.json");
+    const functionPaths = [javaPath, jsPath, embeddedPath, pythonPath, cPath];
+    const rawInterfacesPath = join(coverage, "interface-manifest.raw.json");
+    const rawInterfaceExtractorsPath = join(coverage, "interface-extractor-coverage.raw.json");
     const interfacesPath = join(coverage, "interface-manifest.json");
     const interfaceExtractorsPath = join(coverage, "interface-extractor-coverage.json");
     run("build-scope-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--output", scopePath]);
-    run("build-function-manifests.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output-dir", coverage, "--jobs", "2"]);
-    const cachedBuild = JSON.parse(run("build-function-manifests.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output-dir", coverage, "--jobs", "2"]).stdout);
+    const scope = JSON.parse(await readFile(scopePath, "utf8"));
+    const parserCapabilitiesPath = join(coverage, "parser-capabilities.json");
+    await writeParserCapabilities(parserCapabilitiesPath, scope, [
+      { parser: "javac-java", status: "available", reason: null },
+      { parser: "joern-js", status: "available", reason: null },
+      { parser: "embedded-web", status: "available", reason: null },
+      { parser: "joern-python", status: "unavailable", reason: "fixture uses a contract manifest to isolate selector behavior" },
+      { parser: "joern-c", status: "unavailable", reason: "fixture uses a contract manifest to isolate selector behavior" },
+    ]);
+    const buildFunctionArgs = [
+      "--root", root,
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      "--output-dir", coverage,
+      "--jobs", "2",
+      "--parser-capabilities", parserCapabilitiesPath,
+      "--allow-partial", "true",
+    ];
+    run("build-function-manifests.mjs", buildFunctionArgs);
+    await writeSyntheticFunctionManifest(pythonPath, scope, {
+      language: "python",
+      ownerAgent: "python-source-auditor",
+      sourcePath: "src/main/python/sample.py",
+      qualifiedName: "normalize",
+    });
+    await writeSyntheticFunctionManifest(cPath, scope, {
+      language: "c",
+      ownerAgent: "c-cpp-source-auditor",
+      sourcePath: "src/main/c/sample.c",
+      qualifiedName: "fixture_length",
+    });
+    const cachedBuild = JSON.parse(run("build-function-manifests.mjs", buildFunctionArgs).stdout);
     if (!cachedBuild.manifests.every(manifest => manifest.cached === true)) throw new Error("Digest-bound function manifests were not reused on resume");
     const cachedSourcePath = join(root, "static", "app.js");
     const cachedSource = await readFile(cachedSourcePath, "utf8");
@@ -236,10 +433,38 @@ async function main() {
     run("build-joern-function-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--language", "javascript", "--output", jsPath], 1);
     await writeFile(cachedSourcePath, cachedSource, "utf8");
 
-    const scope = JSON.parse(await readFile(scopePath, "utf8"));
-    const manifests = await Promise.all([javaPath, jsPath, embeddedPath].map(async path => JSON.parse(await readFile(path, "utf8"))));
+    const manifests = await Promise.all(functionPaths.map(async path => JSON.parse(await readFile(path, "utf8"))));
     const catalog = JSON.parse(await readFile(CATALOG, "utf8"));
-    run("build-interface-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output", interfacesPath]);
+    run("build-interface-manifest.mjs", ["--root", root, "--audit-id", AUDIT_ID, "--scope", scopePath, "--output", rawInterfacesPath]);
+    const rawInterfaceManifest = JSON.parse(await readFile(rawInterfacesPath, "utf8"));
+    run("verify-interface-extractors.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      "--interfaces", rawInterfacesPath,
+      "--output", rawInterfaceExtractorsPath,
+    ]);
+    const rawInterfaceExtractors = JSON.parse(await readFile(rawInterfaceExtractorsPath, "utf8"));
+    if (!rawInterfaceExtractors.complete || rawInterfaceExtractors.inventory_bounded
+      || rawInterfaceExtractors.interfaces.candidate === 0) {
+      throw new Error("Candidate interfaces were not separated from extractor completeness");
+    }
+    const interfaceDecisionsPath = join(coverage, "interface-decisions.json");
+    run("build-source-anchored-interface-decisions.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--input", rawInterfacesPath,
+      "--output", interfaceDecisionsPath,
+    ]);
+    const interfaceDecisions = JSON.parse(await readFile(interfaceDecisionsPath, "utf8"));
+    if (interfaceDecisions.decisions.length !== rawInterfaceManifest.interfaces.filter(item => item.discovery_state === "CANDIDATE").length
+      || !interfaceDecisions.decisions.every(decision => decision.evidence[0]?.kind === "interface-source-anchor")) {
+      throw new Error("Source-anchored interface resolver did not bind every literal candidate to frozen evidence");
+    }
+    run("resolve-interface-candidates.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--input", rawInterfacesPath,
+      "--decisions", interfaceDecisionsPath,
+      "--output", interfacesPath,
+    ]);
     run("verify-interface-extractors.mjs", ["--audit-id", AUDIT_ID, "--scope", scopePath, "--interfaces", interfacesPath, "--output", interfaceExtractorsPath]);
     const interfaceManifest = JSON.parse(await readFile(interfacesPath, "utf8"));
     const interfaceExtractorCoverage = JSON.parse(await readFile(interfaceExtractorsPath, "utf8"));
@@ -247,13 +472,29 @@ async function main() {
       || interfaceManifest.interfaces.every(item => item.direction !== "egress")) {
       throw new Error("Deterministic interface extraction did not inventory the fixture egress interface");
     }
+    const forgedResolutionManifestPath = join(coverage, "interface-manifest-forged-resolution.json");
+    const forgedResolutionExtractorPath = join(coverage, "interface-extractor-forged-resolution.json");
+    const forgedResolutionManifest = structuredClone(interfaceManifest);
+    const resolvedCandidate = forgedResolutionManifest.interfaces.find(item => item.discovery_origin_state === "CANDIDATE");
+    if (!resolvedCandidate) throw new Error("Fixture lacks a resolved interface candidate");
+    delete resolvedCandidate.resolution;
+    forgedResolutionManifest.manifest_digest = objectDigest(forgedResolutionManifest);
+    await writeFile(forgedResolutionManifestPath, `${JSON.stringify(forgedResolutionManifest, null, 2)}\n`, "utf8");
+    run("verify-interface-extractors.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      "--interfaces", forgedResolutionManifestPath,
+      "--output", forgedResolutionExtractorPath,
+    ], 2);
+    const forgedResolutionExtractor = JSON.parse(await readFile(forgedResolutionExtractorPath, "utf8"));
+    if (!forgedResolutionExtractor.issues.some(issue => issue.code === "INTERFACE_RESOLUTION_INVALID")) {
+      throw new Error("Evidence-free interface candidate resolution was accepted");
+    }
     const routingIndexPath = join(coverage, "threat-routing-index.json");
     run("build-threat-routing-index.mjs", [
       "--audit-id", AUDIT_ID,
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--interfaces", interfacesPath,
       "--interface-extractors", interfaceExtractorsPath,
       "--catalog", CATALOG,
@@ -287,9 +528,7 @@ async function main() {
       "--lens", "sink-driven",
       "--language", "java",
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--interfaces", interfacesPath,
       "--interface-extractors", interfaceExtractorsPath,
       "--catalog", CATALOG,
@@ -304,6 +543,36 @@ async function main() {
       || [...skeleton.file_coverage, ...skeleton.function_coverage].some(record => record.domain !== "base")) {
       throw new Error("Report initializer did not create the exact all-GAP Java matrix");
     }
+    for (const [agent, language] of [
+      ["python-source-auditor", "python"],
+      ["c-cpp-source-auditor", "c-cpp"],
+    ]) {
+      const output = join(coverage, `${language}-skeleton.audit-report.json`);
+      run("initialize-audit-report.mjs", [
+        "--audit-id", AUDIT_ID,
+        "--round", "1",
+        "--agent", agent,
+        "--session", `${language}-sink-r1`,
+        "--lens", "sink-driven",
+        "--language", language,
+        "--scope", scopePath,
+        ...functionPaths.flatMap(path => ["--functions", path]),
+        "--interfaces", interfacesPath,
+        "--interface-extractors", interfaceExtractorsPath,
+        "--catalog", CATALOG,
+        "--threat-model", threatModelPath,
+        "--focus-areas", focusAreasPath,
+        "--focus-area", "FA-001",
+        "--output", output,
+      ]);
+      const initialized = JSON.parse(await readFile(output, "utf8"));
+      const expectedCatalog = catalog.entries.filter(entry => entryAppliesToDomain(entry, language, catalog)).length;
+      if (initialized.file_coverage.length === 0 || initialized.function_coverage.length === 0
+        || initialized.catalog_coverage.length !== expectedCatalog
+        || initialized.catalog_coverage.some(record => !record.catalog_id.startsWith("JW-") || record.status !== "GAP")) {
+        throw new Error(`${language} initializer did not use the shared JW catalog selector end to end`);
+      }
+    }
     run("initialize-audit-report.mjs", [
       "--audit-id", AUDIT_ID,
       "--round", "1",
@@ -312,9 +581,7 @@ async function main() {
       "--lens", "sink-driven",
       "--language", "ai",
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--interfaces", interfacesPath,
       "--interface-extractors", interfaceExtractorsPath,
       "--catalog", CATALOG,
@@ -332,9 +599,7 @@ async function main() {
       "--lens", "config-driven",
       "--language", "ai",
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--catalog", CATALOG,
       "--threat-model", threatModelPath,
       "--focus-areas", focusAreasPath,
@@ -363,9 +628,7 @@ async function main() {
       "--lens", "control-driven",
       "--language", "web",
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--catalog", CATALOG,
       "--threat-model", threatModelPath,
       "--focus-areas", focusAreasPath,
@@ -380,13 +643,46 @@ async function main() {
     }
     await makeReports(positiveReports, scope, manifests, catalog);
 
+    const candidateSnapshotDir = join(work, "durable-snapshot-candidate-interface");
+    run("snapshot-coverage-inputs.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
+      "--interfaces", rawInterfacesPath,
+      "--interface-extractors", rawInterfaceExtractorsPath,
+      "--catalog", CATALOG,
+      "--threat-model", threatModelPath,
+      "--focus-areas", focusAreasPath,
+      "--output-dir", candidateSnapshotDir,
+    ]);
+    const candidateSnapshotIndexPath = join(candidateSnapshotDir, "snapshot-index.json");
+    const candidateSnapshot = JSON.parse(await readFile(candidateSnapshotIndexPath, "utf8"));
+    const candidatePlanPath = join(coverage, "coverage-plan-candidate-interface.json");
+    run("build-coverage-plan.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", candidateSnapshot.scope.path,
+      ...candidateSnapshot.functions.flatMap(item => ["--functions", item.path]),
+      "--interfaces", candidateSnapshot.interfaces.path,
+      "--interface-extractors", candidateSnapshot.interface_extractors.path,
+      "--catalog", candidateSnapshot.catalog.path,
+      "--focus-areas", candidateSnapshot.semantic.focus_areas.path,
+      "--snapshot-index", candidateSnapshotIndexPath,
+      "--output", candidatePlanPath,
+    ]);
+    const candidatePlan = JSON.parse(await readFile(candidatePlanPath, "utf8"));
+    const candidateIds = new Set(candidatePlan.inventory.candidate_interface_ids);
+    if (candidatePlan.complete || candidatePlan.inventory.bounded
+      || candidatePlan.inventory.candidate_interfaces !== rawInterfaceExtractors.interfaces.candidate
+      || candidatePlan.summary.unknown !== 0
+      || candidatePlan.checks.some(check => check.subject_kind === "interface" && candidateIds.has(check.subject_id))) {
+      throw new Error("Unconfirmed interface candidates inflated or disappeared from Coverage Plan accounting");
+    }
+
     const snapshotDir = join(work, "durable-snapshot");
     run("snapshot-coverage-inputs.mjs", [
       "--audit-id", AUDIT_ID,
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--interfaces", interfacesPath,
       "--interface-extractors", interfaceExtractorsPath,
       "--catalog", CATALOG,
@@ -412,9 +708,7 @@ async function main() {
     run("snapshot-coverage-inputs.mjs", [
       "--audit-id", AUDIT_ID,
       "--scope", scopePath,
-      "--functions", javaPath,
-      "--functions", jsPath,
-      "--functions", embeddedPath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
       "--interfaces", interfacesPath,
       "--interface-extractors", interfaceExtractorsPath,
       "--catalog", CATALOG,
@@ -442,6 +736,23 @@ async function main() {
       throw new Error("Coverage verification did not preserve the exact external-interface universe");
     }
 
+    const staleGapReports = join(work, "reports-stale-gap");
+    await cp(positiveReports, staleGapReports, { recursive: true });
+    const staleGapReportPath = join(staleGapReports, "web-source-auditor.sink-driven.audit-report.json");
+    const staleGapReport = JSON.parse(await readFile(staleGapReportPath, "utf8"));
+    if (!staleGapReport.file_coverage[0]) throw new Error("Stale-gap fixture has no web file coverage record");
+    staleGapReport.file_coverage[0].gap_reason = "stale-gap-reason-must-not-survive-closure";
+    await writeFile(staleGapReportPath, `${JSON.stringify(staleGapReport, null, 2)}\n`, "utf8");
+    const staleGapOutput = join(coverage, "verification-stale-gap.json");
+    run("verify-coverage.mjs", [...commonVerifyArgs, "--reports-dir", staleGapReports, "--output", staleGapOutput], 2);
+    const staleGap = JSON.parse(await readFile(staleGapOutput, "utf8"));
+    if (staleGap.complete
+      || !staleGap.invalid.files.some(item => item.errors.includes("closed-record-has-gap-reason"))
+      || !staleGap.finding_intake.quarantined_reports.some(item => item.report_path === staleGapReportPath
+        && item.issue_codes.includes("INVALID_FILE_COVERAGE_RECORD"))) {
+      throw new Error("Closed coverage record with a stale gap_reason was not quarantined");
+    }
+
     const coveragePlanPath = join(coverage, "coverage-plan.json");
     run("build-coverage-plan.mjs", [
       "--audit-id", AUDIT_ID,
@@ -451,14 +762,49 @@ async function main() {
       "--interface-extractors", snapshotInterfaceExtractorsPath,
       "--catalog", snapshotCatalogPath,
       "--focus-areas", snapshotIndex.semantic.focus_areas.path,
+      "--snapshot-index", snapshotIndexPath,
       "--output", coveragePlanPath,
     ]);
     const coveragePlan = JSON.parse(await readFile(coveragePlanPath, "utf8"));
     if (!coveragePlan.complete || coveragePlan.summary.required === 0
       || coveragePlan.summary.catalog_domain_required === 0 || coveragePlan.summary.interface_required === 0
       || validatePlan(coveragePlan).length > 0) {
-      throw new Error("Coverage Plan v2 did not produce a complete sparse catalog/interface check universe");
+      throw new Error("Coverage Plan v3 did not produce a complete sparse catalog/interface check universe");
     }
+    const requiredChecks = coveragePlan.checks.filter(check => check.applicability === "REQUIRED");
+    if (coveragePlan.checks.some(check => Object.hasOwn(check, "required_source_file_ids"))
+      || coveragePlan.source_sets.length >= requiredChecks.length
+      || requiredChecks.some(check => !coveragePlan.source_sets.some(sourceSet =>
+        sourceSet.source_set_id === check.required_source_set_id
+        && sourceSet.file_ids.length === check.required_source_count))) {
+      throw new Error("Coverage Plan did not normalize repeated source universes into shared source sets");
+    }
+    run("build-coverage-plan.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      ...snapshotFunctionPaths.flatMap(path => ["--functions", path]),
+      "--interfaces", snapshotInterfacesPath,
+      "--interface-extractors", snapshotInterfaceExtractorsPath,
+      "--catalog", snapshotCatalogPath,
+      "--focus-areas", snapshotIndex.semantic.focus_areas.path,
+      "--snapshot-index", snapshotIndexPath,
+      "--output", join(coverage, "coverage-plan-stale-input.json"),
+    ], 1);
+    const legacyPlanPath = join(coverage, "coverage-plan-v2-rejected.json");
+    const legacyPlan = structuredClone(coveragePlan);
+    legacyPlan.schema_version = 2;
+    legacyPlan.coverage_model_version = "coverage-v2";
+    legacyPlan.manifest_digest = objectDigest(legacyPlan);
+    await writeFile(legacyPlanPath, `${JSON.stringify(legacyPlan, null, 2)}\n`, "utf8");
+    const legacyPlanErrors = validatePlan(legacyPlan);
+    if (!legacyPlanErrors.some(error => error.includes("schema_version must be 3"))
+      || !legacyPlanErrors.some(error => error.includes("coverage_model_version must be coverage-v3"))) {
+      throw new Error("Coverage Plan v2 was not explicitly rejected by the v3 contract");
+    }
+    await expectReject(() => initializeLedger({
+      planPath: legacyPlanPath,
+      ledgerPath: join(coverage, "coverage-ledger-v2-rejected.jsonl"),
+    }), /schema_version must be 3/);
     const negativeLensPlan = structuredClone(coveragePlan);
     const removedLensCheck = negativeLensPlan.checks.shift();
     negativeLensPlan.summary.atomic_checks = negativeLensPlan.checks.length;
@@ -474,33 +820,91 @@ async function main() {
 
     const ledgerPath = join(coverage, "coverage-ledger.jsonl");
     await initializeLedger({ planPath: coveragePlanPath, ledgerPath });
+    const terminalPartialLedgerPath = join(coverage, "coverage-ledger-terminal-partial.jsonl");
+    await initializeLedger({ planPath: coveragePlanPath, ledgerPath: terminalPartialLedgerPath });
+    await finalizePartialLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: terminalPartialLedgerPath,
+      idempotencyKey: "fixture-terminal-partial",
+      terminationReason: "round-limit-reached",
+    });
+    const terminalPartialVerification = await verifyLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: terminalPartialLedgerPath,
+      requireFinalized: false,
+    });
+    if (terminalPartialVerification.seal_state !== "FINALIZED_PARTIAL" || terminalPartialVerification.complete
+      || terminalPartialVerification.gaps.length === 0) {
+      throw new Error("Terminal partial ledger did not preserve explicit incomplete coverage");
+    }
+    await expectReject(() => checkpointLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: terminalPartialLedgerPath,
+      idempotencyKey: "terminal-partial-mutation",
+      label: "must-fail",
+    }), /finalized and immutable/);
     const firstRequiredCheck = coveragePlan.checks.find(check => check.applicability === "REQUIRED");
-    const frozenSource = coveragePlan.source_index.find(source => typeof source.sha256 === "string");
     await expectReject(() => inspectSubject({
       planPath: coveragePlanPath,
       ledgerPath,
       checkId: "check:forged",
       sessionId: "fixture-ledger-session",
+      agentName: DOMAIN_AGENTS[firstRequiredCheck.domain],
       idempotencyKey: "fake-check",
     }), /Unknown coverage check_id/);
+    const firstInspection = await inspectSubject({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-ledger-session",
+      agentName: DOMAIN_AGENTS[firstRequiredCheck.domain],
+      idempotencyKey: "first-inspection",
+    });
     await expectReject(() => recordToolResult({
       planPath: coveragePlanPath,
       ledgerPath,
       checkId: firstRequiredCheck.check_id,
       sessionId: "fixture-ledger-session",
-      idempotencyKey: "stale-receipt",
-      sourceHashes: [{ file_id: frozenSource.file_id, sha256: "0".repeat(64) }],
-      locators: [{ path: frozenSource.path, line_start: 1 }],
+      assignmentToken: "forged-assignment-token-that-is-long-enough",
+      idempotencyKey: "forged-assignment-receipt",
+      sourceScope: "required",
+      locators: [{
+        kind: "required-source-set",
+        check_id: firstRequiredCheck.check_id,
+        source_set_id: firstRequiredCheck.required_source_set_id,
+        source_count: firstRequiredCheck.required_source_count,
+      }],
       queryOrRule: "fixture-negative-search",
       tool: "fixture",
-      resultDigest: sha256("fixture-stale"),
-      resultSummary: "stale",
-    }), /Stale or non-frozen source hash/);
+      toolVersion: "1",
+      resultPayload: "forged",
+    }), /Assignment token is missing/);
+    await expectReject(() => recordToolResult({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-ledger-session",
+      assignmentToken: firstInspection.assignment_token,
+      idempotencyKey: "mismatched-result-digest",
+      sourceScope: "required",
+      locators: [{
+        kind: "required-source-set",
+        check_id: firstRequiredCheck.check_id,
+        source_set_id: firstRequiredCheck.required_source_set_id,
+        source_count: firstRequiredCheck.required_source_count,
+      }],
+      queryOrRule: "fixture-negative-search",
+      tool: "fixture",
+      toolVersion: "1",
+      resultPayload: "server-derived-result",
+      resultDigest: "0".repeat(64),
+    }), /does not match the server-derived result attestation/);
     await expectReject(() => submitDecision({
       planPath: coveragePlanPath,
       ledgerPath,
       checkId: firstRequiredCheck.check_id,
       sessionId: "fixture-ledger-session",
+      assignmentToken: firstInspection.assignment_token,
       idempotencyKey: "missing-receipt",
       executionState: "VERIFIED",
       resultState: "NO_FINDING",
@@ -512,104 +916,462 @@ async function main() {
       ledgerPath,
       checkId: firstRequiredCheck.check_id,
       sessionId: "fixture-ledger-session",
+      assignmentToken: firstInspection.assignment_token,
       idempotencyKey: "agent-na",
       executionState: "N/A",
       resultState: "INCONCLUSIVE",
       rationale: "invalid agent N/A",
     }), /N\/A is planner-only/);
-    const multiSourceCheck = coveragePlan.checks.find(check => check.applicability === "REQUIRED" && check.required_source_file_ids.length > 1);
-    const partialSource = coveragePlan.source_index.find(source => source.file_id === multiSourceCheck.required_source_file_ids[0]);
-    const partialReceipt = await recordToolResult({
+    const delegated = await delegateAssignment({
       planPath: coveragePlanPath,
       ledgerPath,
-      checkId: multiSourceCheck.check_id,
+      checkId: firstRequiredCheck.check_id,
       sessionId: "fixture-ledger-session",
-      idempotencyKey: "partial-source-receipt",
-      sourceHashes: [{ file_id: partialSource.file_id, sha256: partialSource.sha256, link_target: partialSource.link_target }],
-      locators: [{ path: partialSource.path, line_start: 1 }],
-      queryOrRule: "fixture-incomplete-domain-search",
+      assignmentToken: firstInspection.assignment_token,
+      targetSessionId: "fixture-delegated-session",
+      idempotencyKey: "delegate-first-check",
+    });
+    await expectReject(() => recordToolResult({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-delegated-session",
+      assignmentToken: firstInspection.assignment_token,
+      idempotencyKey: "undelegated-token",
+      sourceScope: "required",
+      locators: [{
+        kind: "required-source-set",
+        check_id: firstRequiredCheck.check_id,
+        source_set_id: firstRequiredCheck.required_source_set_id,
+        source_count: firstRequiredCheck.required_source_count,
+      }],
+      queryOrRule: "fixture-delegation-negative",
       tool: "fixture",
-      resultDigest: sha256("fixture-partial-source"),
-      resultSummary: "Incomplete source universe.",
+      toolVersion: "1",
+      resultPayload: "negative",
+    }), /not authorized for this session/);
+    if (!delegated.assignment_token) throw new Error("Explicit delegation did not issue a new assignment token");
+    const delegatedReceipt = await recordToolResult({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-delegated-session",
+      assignmentToken: delegated.assignment_token,
+      idempotencyKey: "delegated-receipt",
+      sourceScope: "required",
+      locators: [{
+        kind: "required-source-set",
+        check_id: firstRequiredCheck.check_id,
+        source_set_id: firstRequiredCheck.required_source_set_id,
+        source_count: firstRequiredCheck.required_source_count,
+      }],
+      queryOrRule: "fixture-delegation-positive",
+      tool: "fixture",
+      toolVersion: "1",
+      resultPayload: "delegated-result",
+    });
+    const independentInspection = await inspectSubject({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-independent-session",
+      agentName: DOMAIN_AGENTS[firstRequiredCheck.domain],
+      idempotencyKey: "independent-inspection",
     });
     await expectReject(() => submitDecision({
       planPath: coveragePlanPath,
       ledgerPath,
-      checkId: multiSourceCheck.check_id,
-      sessionId: "fixture-ledger-session",
-      idempotencyKey: "partial-source-decision",
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-independent-session",
+      assignmentToken: independentInspection.assignment_token,
+      idempotencyKey: "cross-assignment-receipt",
       executionState: "VERIFIED",
       resultState: "NO_FINDING",
-      receiptIds: [partialReceipt.receipt.receipt_id],
-      rationale: "invalid partial source decision",
-    }), /do not cover .* frozen source files/);
+      receiptIds: [delegatedReceipt.receipt.receipt_id],
+      rationale: "A separately inspected assignment must not reuse a delegated receipt.",
+    }), /Receipt is missing, stale, unauthorized, or belongs to another check/);
+
+    const findingId = "FIND-COVERAGE-FIXTURE-001";
+    const findingArtifactPath = join(coverage, "finding-coverage-fixture-001.json");
+    const invalidFindingArtifactPath = join(coverage, "finding-coverage-fixture-invalid.json");
+    await writeFile(findingArtifactPath, `${JSON.stringify(ledgerFindingArtifact(findingId, firstRequiredCheck, coveragePlan), null, 2)}\n`, "utf8");
+    await writeFile(invalidFindingArtifactPath, `${JSON.stringify(ledgerFindingArtifact("FIND-DIFFERENT", firstRequiredCheck, coveragePlan), null, 2)}\n`, "utf8");
 
     for (const check of coveragePlan.checks.filter(item => item.applicability === "REQUIRED")) {
+      const inspection = await inspectSubject({
+        planPath: coveragePlanPath,
+        ledgerPath,
+        checkId: check.check_id,
+        sessionId: "fixture-ledger-session",
+        agentName: DOMAIN_AGENTS[check.domain],
+        idempotencyKey: `inspect-${check.check_id}`,
+      });
+      const resultPayload = `result:${check.check_id}`;
       const receipt = await recordToolResult({
         planPath: coveragePlanPath,
         ledgerPath,
         checkId: check.check_id,
         sessionId: "fixture-ledger-session",
+        assignmentToken: inspection.assignment_token,
         idempotencyKey: `receipt-${check.check_id}`,
         sourceScope: "required",
         locators: [{
           kind: "required-source-set",
-          source_count: check.required_source_file_ids.length,
+          source_set_id: check.required_source_set_id,
+          source_count: check.required_source_count,
           check_id: check.check_id,
         }],
         queryOrRule: `fixture-review:${check.vulnerability_type_id}:${check.lens}`,
         tool: "fixture-deterministic-review",
-        resultDigest: sha256(`result:${check.check_id}`),
+        toolVersion: "1.0.0",
+        resultPayload,
+        resultDigest: sha256(resultPayload),
         resultSummary: "No fixture finding.",
       });
-      if (receipt.receipt.source_hashes?.mode !== "required-source-set"
-        || receipt.receipt.source_hashes.source_count !== check.required_source_file_ids.length
-        || !/^[a-f0-9]{64}$/.test(receipt.receipt.source_hashes.source_set_sha256 ?? "")) {
+      if (receipt.receipt.source_set?.mode !== "required-source-set"
+        || receipt.receipt.source_set.source_set_id !== check.required_source_set_id
+        || receipt.receipt.source_set.source_count !== sourceFileIdsForCheck(coveragePlan, check).length
+        || !/^[a-f0-9]{64}$/.test(receipt.receipt.source_set.source_set_sha256 ?? "")
+        || receipt.receipt.result_attestation?.sha256 !== sha256(resultPayload)) {
         throw new Error("Required source universe was not represented by a compact digest-bound source set");
+      }
+      if (check.check_id === firstRequiredCheck.check_id) {
+        await expectReject(() => submitDecision({
+          planPath: coveragePlanPath,
+          ledgerPath,
+          checkId: check.check_id,
+          sessionId: "fixture-ledger-session",
+          assignmentToken: inspection.assignment_token,
+          idempotencyKey: `invalid-finding-${check.check_id}`,
+          executionState: "VERIFIED",
+          resultState: "FINDING",
+          receiptIds: [receipt.receipt.receipt_id],
+          findingIds: [findingId],
+          findingArtifacts: [{ finding_id: findingId, path: invalidFindingArtifactPath }],
+          rationale: "This forged finding artifact must be rejected.",
+        }), /Finding artifact violates v2 contract: finding-id-mismatch/);
       }
       await submitDecision({
         planPath: coveragePlanPath,
         ledgerPath,
         checkId: check.check_id,
         sessionId: "fixture-ledger-session",
+        assignmentToken: inspection.assignment_token,
         idempotencyKey: `decision-${check.check_id}`,
         executionState: "VERIFIED",
-        resultState: "NO_FINDING",
+        resultState: check.check_id === firstRequiredCheck.check_id ? "FINDING" : "NO_FINDING",
         receiptIds: [receipt.receipt.receipt_id],
+        findingIds: check.check_id === firstRequiredCheck.check_id ? [findingId] : [],
+        findingArtifacts: check.check_id === firstRequiredCheck.check_id
+          ? [{ finding_id: findingId, path: findingArtifactPath }]
+          : [],
         rationale: "Digest-bound fixture evidence reviewed.",
       });
     }
+    await expectReject(() => inspectSubject({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      checkId: firstRequiredCheck.check_id,
+      sessionId: "fixture-post-verified-session",
+      agentName: DOMAIN_AGENTS[firstRequiredCheck.domain],
+      idempotencyKey: "post-verified-inspection",
+    }), /VERIFIED decision is immutable/);
+    const checkpoint = JSON.parse(run("checkpoint-coverage-ledger.mjs", [
+      "--plan", coveragePlanPath,
+      "--ledger", ledgerPath,
+      "--idempotency-key", "fixture-checkpoint",
+      "--label", "pre-final",
+    ]).stdout);
+    if (!checkpoint.checkpointed || checkpoint.seal_state !== "PARTIAL_CHECKPOINT" || checkpoint.complete) {
+      throw new Error("Checkpoint CLI did not preserve a nonterminal ledger state");
+    }
+    const preFinalSummaryPath = join(coverage, "coverage-summary-pre-final.json");
+    const preFinalMarkdownPath = join(coverage, "coverage-summary-pre-final.md");
+    run("render-coverage-summary.mjs", [
+      "--mode", "partial",
+      "--plan", coveragePlanPath,
+      "--ledger", ledgerPath,
+      "--structural", positiveOutput,
+      "--output", preFinalSummaryPath,
+      "--markdown-output", preFinalMarkdownPath,
+    ], 2);
+    const preFinalSummary = JSON.parse(await readFile(preFinalSummaryPath, "utf8"));
+    if (preFinalSummary.complete || preFinalSummary.coverage_status !== "PARTIAL"
+      || preFinalSummary.seal_state !== "PARTIAL_CHECKPOINT") {
+      throw new Error("A bounded all-verified partial checkpoint was incorrectly reported as finalized coverage");
+    }
     await finalizeLedger({ planPath: coveragePlanPath, ledgerPath, idempotencyKey: "fixture-finalize" });
     const ledgerVerification = await verifyLedger({ planPath: coveragePlanPath, ledgerPath, requireFinalized: true });
-    if (!ledgerVerification.complete || ledgerVerification.gaps.length > 0) throw new Error("Completed Coverage Ledger v2 did not verify");
+    if (!ledgerVerification.complete || ledgerVerification.gaps.length > 0 || ledgerVerification.seal_state !== "FINALIZED_COMPLETE") {
+      throw new Error("Completed Coverage Ledger v3 did not verify");
+    }
+    if (ledgerVerification.finalization.findings !== 1) {
+      throw new Error("Artifact-bound finding was not preserved in finalized ledger accounting");
+    }
 
-    const v2Output = join(coverage, "coverage-verification-v2.json");
-    run("verify-coverage-v2.mjs", [
+    const attestedReportPath = join(positiveReports, `${DOMAIN_AGENTS[firstRequiredCheck.domain]}.${firstRequiredCheck.lens}.audit-report.json`);
+    const attestedReport = JSON.parse(await readFile(attestedReportPath, "utf8"));
+    const attestedFinding = JSON.parse(await readFile(findingArtifactPath, "utf8"));
+    const attestedCatalogRecord = attestedReport.catalog_coverage.find(record => record.catalog_id === firstRequiredCheck.vulnerability_type_id
+      && record.domain === firstRequiredCheck.domain);
+    if (!attestedCatalogRecord) throw new Error("Coverage finding fixture could not locate the report catalog record for its Ledger check");
+    attestedCatalogRecord.status = "FINDING";
+    attestedCatalogRecord.finding_ids = [findingId];
+    attestedReport.finding_schema_version = 2;
+    attestedReport.findings = [attestedFinding];
+    await writeFile(attestedReportPath, `${JSON.stringify(attestedReport, null, 2)}\n`, "utf8");
+    run("reconcile-audit-report.mjs", ["--report", attestedReportPath, "--scope", snapshotScopePath, "--catalog", snapshotCatalogPath]);
+
+    const v3Output = join(coverage, "coverage-verification-v3.json");
+    const v3StructuralOutput = join(coverage, "coverage-structural-v3.json");
+    const summaryPath = join(coverage, "coverage-summary.json");
+    const summaryMarkdownPath = join(coverage, "coverage-summary.md");
+    run("verify-coverage-v3.mjs", [
+      ...commonVerifyArgs,
+      "--reports-dir", positiveReports,
+      "--plan", coveragePlanPath,
+      "--ledger", ledgerPath,
+      "--structural-output", v3StructuralOutput,
+      "--summary-output", summaryPath,
+      "--markdown-output", summaryMarkdownPath,
+      "--output", v3Output,
+    ]);
+    const v3Verification = JSON.parse(await readFile(v3Output, "utf8"));
+    if (!v3Verification.complete
+      || v3Verification.summary.accounting.known_coverage.percentage !== 100
+      || v3Verification.summary.external_interfaces.complete_interfaces.percentage !== 100
+      || v3Verification.seal_state !== "FINALIZED_COMPLETE"
+      || v3Verification.finding_reconciliation.accepted_report_findings !== 1
+      || v3Verification.finding_reconciliation.ledger_finding_artifacts !== 1) {
+      throw new Error("Coverage v3 final gate did not derive complete ledger/interface statistics");
+    }
+
+    const adjudicationInputPath = join(coverage, "finding-input.json");
+    runAdjudication("build-adjudication-input.mjs", [
       "--audit-id", AUDIT_ID,
       "--plan", coveragePlanPath,
       "--ledger", ledgerPath,
-      "--structural", positiveOutput,
-      "--output", v2Output,
+      "--structural", v3StructuralOutput,
+      "--output", adjudicationInputPath,
     ]);
-    const v2Verification = JSON.parse(await readFile(v2Output, "utf8"));
-    if (!v2Verification.complete
-      || v2Verification.summary.accounting.known_coverage.percentage !== 100
-      || v2Verification.summary.external_interfaces.complete_interfaces.percentage !== 100) {
-      throw new Error("Coverage v2 final gate did not derive complete ledger/interface statistics");
+    const adjudicationInput = JSON.parse(await readFile(adjudicationInputPath, "utf8"));
+    if (adjudicationInput.candidates.length !== 1
+      || adjudicationInput.candidates[0].finding_id !== findingId
+      || adjudicationInput.candidates[0].primary_check_id !== firstRequiredCheck.check_id) {
+      throw new Error("Adjudication input did not preserve the structurally accepted, Ledger-attested finding");
     }
-    const summaryPath = join(coverage, "coverage-summary.json");
-    run("render-coverage-summary.mjs", [
+
+    const unattestedReports = join(work, "reports-unattested-finding");
+    await cp(positiveReports, unattestedReports, { recursive: true });
+    const unattestedReportPath = join(unattestedReports, `${DOMAIN_AGENTS[firstRequiredCheck.domain]}.${firstRequiredCheck.lens}.audit-report.json`);
+    const unattestedReport = JSON.parse(await readFile(unattestedReportPath, "utf8"));
+    const unattestedFinding = structuredClone(attestedFinding);
+    unattestedFinding.finding_id = "FIND-COVERAGE-FIXTURE-UNATTESTED";
+    const unattestedCatalogRecord = unattestedReport.catalog_coverage.find(record => record.catalog_id === firstRequiredCheck.vulnerability_type_id
+      && record.domain === firstRequiredCheck.domain);
+    unattestedCatalogRecord.finding_ids = [unattestedFinding.finding_id];
+    unattestedReport.findings = [unattestedFinding];
+    await writeFile(unattestedReportPath, `${JSON.stringify(unattestedReport, null, 2)}\n`, "utf8");
+    run("reconcile-audit-report.mjs", ["--report", unattestedReportPath, "--scope", snapshotScopePath, "--catalog", snapshotCatalogPath]);
+    const unattestedV3Output = join(coverage, "coverage-verification-unattested-finding.json");
+    run("verify-coverage-v3.mjs", [
+      ...commonVerifyArgs,
+      "--reports-dir", unattestedReports,
       "--plan", coveragePlanPath,
       "--ledger", ledgerPath,
-      "--structural", positiveOutput,
-      "--output", summaryPath,
-    ]);
+      "--structural-output", join(coverage, "coverage-structural-unattested-finding.json"),
+      "--summary-output", join(coverage, "coverage-summary-unattested-finding.json"),
+      "--markdown-output", join(coverage, "coverage-summary-unattested-finding.md"),
+      "--output", unattestedV3Output,
+    ], 2);
+    const unattestedV3 = JSON.parse(await readFile(unattestedV3Output, "utf8"));
+    if (!unattestedV3.issues.some(issue => issue.code === "UNATTESTED_REPORT_FINDING")
+      || !unattestedV3.issues.some(issue => issue.code === "ORPHAN_LEDGER_FINDING")) {
+      throw new Error("Coverage v3 did not reject the un-attested report finding and orphaned Ledger finding");
+    }
+    runAdjudication("build-adjudication-input.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--plan", coveragePlanPath,
+      "--ledger", ledgerPath,
+      "--structural", join(coverage, "coverage-structural-unattested-finding.json"),
+      "--output", join(coverage, "finding-input-unattested.json"),
+    ], 1);
     run("verify-coverage-summary.mjs", [
       "--summary", summaryPath,
+      "--markdown", summaryMarkdownPath,
       "--plan", coveragePlanPath,
       "--ledger", ledgerPath,
-      "--structural", positiveOutput,
+      "--structural", v3StructuralOutput,
     ]);
+
+    const adjudicationPath = join(coverage, "finding-adjudication.json");
+    const adjudicationCandidate = adjudicationInput.candidates[0];
+    const adjudication = {
+      schema_version: 1,
+      audit_id: AUDIT_ID,
+      scope_digest: scope.scope_digest,
+      input_manifest_digest: adjudicationInput.manifest_digest,
+      adjudicator_session_id: "coverage-fixture-adjudicator-r1",
+      decisions: [{
+        finding_id: findingId,
+        finding_object_digest: adjudicationCandidate.finding_object_digest,
+        state: "SUPPORTED_STATIC",
+        decision_rationale: "The fixture source reaches its evidence-backed security operation with no effective guard.",
+        semantic_proof: {
+          source_fact_indexes: [0],
+          sink_or_config_fact_indexes: [1],
+          framework: {
+            component: "coverage-fixture",
+            version_or_commit: "fixture",
+            api_or_configuration: "Fixture security operation",
+            evidence: ["The fixture source and sink facts were independently reviewed."],
+          },
+          path: {
+            state: "PROVEN",
+            steps: ["Fixture source reaches the fixture security operation."],
+          },
+          security_effect: {
+            state: "PROVEN",
+            rationale: "The fixture establishes a static security-relevant effect.",
+          },
+        },
+        guards: ["local", "inherited", "global", "deployment"].map(scopeName => ({
+          scope: scopeName,
+          state: "ABSENT",
+          effective_for_claim: false,
+          rationale: `Fixture has no ${scopeName} guard.`,
+          evidence: [`${scopeName} guard search completed.`],
+        })),
+        counterclaim: {
+          claim: "An effective guard prevents the fixture security effect.",
+          outcome: "REFUTED",
+          evidence: ["No effective fixture guard was found."],
+        },
+        contradiction_refs: [],
+        blocking_questions: [],
+      }],
+    };
+    adjudication.manifest_digest = candidateManifestDigest(adjudication);
+    await writeFile(adjudicationPath, `${JSON.stringify(adjudication, null, 2)}\n`, "utf8");
+    const cvssClaimsPath = join(coverage, "cvss-claims.json");
+    const cvssClaims = {
+      schema_version: 1,
+      audit_id: AUDIT_ID,
+      scope_digest: scope.scope_digest,
+      adjudication_manifest_digest: adjudication.manifest_digest,
+      assessments: [{
+        finding_id: findingId,
+        vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        rationale: "The fixture is remotely reachable without privileges or interaction and proves all three base impacts.",
+        assumptions: ["The fixture's static route is deployed as its source configuration describes."],
+        evidence_refs: ["decision:0", "fixture-source-and-sink"],
+      }],
+    };
+    await writeFile(cvssClaimsPath, `${JSON.stringify(cvssClaims, null, 2)}\n`, "utf8");
+    const cvssAssessmentPath = join(coverage, "cvss-assessment.json");
+    const cvssAssessment = buildCvssAssessmentManifest(cvssClaims, adjudication);
+    await writeFile(cvssAssessmentPath, `${JSON.stringify(cvssAssessment, null, 2)}\n`, "utf8");
+    run(resolve(ADJUDICATION_SCRIPTS, "validate-cvss-assessment.mjs"), [
+      "--adjudication", adjudicationPath,
+      "--assessment", cvssAssessmentPath,
+    ]);
+    run(resolve(ADJUDICATION_SCRIPTS, "build-empty-cvss-assessment.mjs"), [
+      "--adjudication", adjudicationPath,
+      "--output", join(coverage, "cvss-assessment-invalid-empty.json"),
+    ], 1);
+    run(resolve(ADJUDICATION_SCRIPTS, "build-empty-finding-adjudication.mjs"), [
+      "--input", adjudicationInputPath,
+      "--session-id", "invalid-nonempty-fixture",
+      "--output", join(coverage, "adjudication-invalid-empty.json"),
+    ], 1);
+    const attackChainsPath = join(coverage, "attack-chains.json");
+    const attackChains = {
+      schema_version: 2,
+      audit_id: AUDIT_ID,
+      scope_digest: scope.scope_digest,
+      adjudication_manifest_digest: adjudication.manifest_digest,
+      chains: [{
+        chain_id: "CHAIN-COVERAGE-FIXTURE-001",
+        assessment_state: "SUPPORTED_STATIC",
+        steps: [{
+          step_id: "S1",
+          claim: "The adjudicated fixture finding establishes the first security-relevant transition.",
+          evidence_state: "SUPPORTED_STATIC",
+          evidence_refs: [findingId],
+          blocking_gap_ids: [],
+        }],
+        transitions: [],
+        first_blocking_step_id: null,
+      }],
+      gaps: [],
+      chain_accounting: {
+        raw_chain_ids: ["CHAIN-COVERAGE-FIXTURE-001"],
+        accepted_chain_ids: ["CHAIN-COVERAGE-FIXTURE-001"],
+        rejected_chain_ids: [],
+      },
+    };
+    attackChains.manifest_digest = attackChainManifestDigest(attackChains);
+    await writeFile(attackChainsPath, `${JSON.stringify(attackChains, null, 2)}\n`, "utf8");
+    run(resolve(REPOSITORY, ".opencode/skills/attack-chain-subagent/system-attack-chain-hunting/scripts/build-empty-attack-chain-report.mjs"), [
+      "--adjudication", adjudicationPath,
+      "--output", join(coverage, "attack-chains-invalid-empty.json"),
+    ], 1);
+    const finalReportModelPath = join(coverage, "final-report-model.json");
+    const finalReportPath = join(coverage, "security-audit-report.fixture.md");
+    run("build-final-report-model.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--mode", "final",
+      "--coverage-summary", summaryPath,
+      "--adjudication-input", adjudicationInputPath,
+      "--adjudication", adjudicationPath,
+      "--cvss", cvssAssessmentPath,
+      "--chains", attackChainsPath,
+      "--output", finalReportModelPath,
+    ]);
+    run("build-final-report-model.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--mode", "checkpoint",
+      "--coverage-summary", summaryPath,
+      "--adjudication-input", adjudicationInputPath,
+      "--adjudication", adjudicationPath,
+      "--cvss", cvssAssessmentPath,
+      "--chains", attackChainsPath,
+      "--output", join(coverage, "checkpoint-from-complete-model.json"),
+    ], 1);
+    run("render-final-report.mjs", ["--model", finalReportModelPath, "--output", finalReportPath]);
+    run("verify-final-report.mjs", ["--model", finalReportModelPath, "--markdown", finalReportPath]);
+    const finalReportModel = JSON.parse(await readFile(finalReportModelPath, "utf8"));
+    const finalReport = await readFile(finalReportPath, "utf8");
+    if (finalReportModel.findings.length !== 1 || finalReportModel.chains.length !== 1
+      || finalReport.includes("CONFIRMED") || !finalReport.includes("GENERATED: final-report-model")) {
+      throw new Error("Final report model did not preserve only adjudicated, provenance-bound results");
+    }
+    await writeFile(finalReportPath, `${finalReport}\nCONFIRMED\n`, "utf8");
+    run("verify-final-report.mjs", ["--model", finalReportModelPath, "--markdown", finalReportPath], 1);
+    run("render-final-report.mjs", ["--model", finalReportModelPath, "--output", finalReportPath]);
+    const conflictingOutputPath = join(coverage, "coverage-conflicting-output.json");
+    run("verify-coverage-v3.mjs", [
+      ...commonVerifyArgs,
+      "--reports-dir", positiveReports,
+      "--plan", coveragePlanPath,
+      "--ledger", ledgerPath,
+      "--structural-output", join(coverage, "coverage-conflicting-structural.json"),
+      "--summary-output", conflictingOutputPath,
+      "--markdown-output", conflictingOutputPath,
+      "--output", join(coverage, "coverage-conflicting-verification.json"),
+    ], 1);
+    const findingArtifactBytes = await readFile(findingArtifactPath);
+    await writeFile(findingArtifactPath, `${findingArtifactBytes.toString("utf8")}\nmodified-after-finalization\n`, "utf8");
+    const modifiedFindingVerification = await verifyLedger({
+      planPath: coveragePlanPath,
+      ledgerPath,
+      requireFinalized: true,
+    });
+    if (modifiedFindingVerification.complete
+      || !modifiedFindingVerification.issues.some(issue => issue.code === "FINDING_ARTIFACT_INVALID")) {
+      throw new Error("Post-finalization finding artifact drift was not detected");
+    }
+    await writeFile(findingArtifactPath, findingArtifactBytes);
     const tamperedSummaryPath = join(coverage, "coverage-summary-tampered.json");
     const tamperedSummary = JSON.parse(await readFile(summaryPath, "utf8"));
     tamperedSummary.accounting.known_coverage.percentage = 99.99;
@@ -617,9 +1379,10 @@ async function main() {
     await writeFile(tamperedSummaryPath, `${JSON.stringify(tamperedSummary, null, 2)}\n`, "utf8");
     run("verify-coverage-summary.mjs", [
       "--summary", tamperedSummaryPath,
+      "--markdown", summaryMarkdownPath,
       "--plan", coveragePlanPath,
       "--ledger", ledgerPath,
-      "--structural", positiveOutput,
+      "--structural", v3StructuralOutput,
     ], 1);
 
     const tamperedLedgerPath = join(coverage, "coverage-ledger-tampered.jsonl");
@@ -627,11 +1390,149 @@ async function main() {
     const receiptEvent = ledgerLines.find(event => event.event_type === "RECEIPT");
     receiptEvent.result_summary = "tampered after sealing";
     await writeFile(tamperedLedgerPath, `${ledgerLines.map(JSON.stringify).join("\n")}\n`, "utf8");
+    await cp(`${ledgerPath}.key`, `${tamperedLedgerPath}.key`);
     await expectReject(() => verifyLedger({
       planPath: coveragePlanPath,
       ledgerPath: tamperedLedgerPath,
       requireFinalized: true,
     }), /Ledger hash mismatch/);
+    const permissiveKeyLedgerPath = join(coverage, "coverage-ledger-permissive-key.jsonl");
+    await cp(ledgerPath, permissiveKeyLedgerPath);
+    await cp(`${ledgerPath}.key`, `${permissiveKeyLedgerPath}.key`);
+    await chmod(`${permissiveKeyLedgerPath}.key`, 0o644);
+    await expectReject(() => verifyLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: permissiveKeyLedgerPath,
+      requireFinalized: true,
+    }), /key permissions must be 0600/);
+
+    run("verify-coverage-v3.mjs", [
+      ...commonVerifyArgs,
+      "--reports-dir", positiveReports,
+      "--plan", coveragePlanPath,
+      "--ledger", ledgerPath,
+      "--structural-output", join(coverage, "forged-structural-output.json"),
+      "--summary-output", join(coverage, "forged-structural-summary.json"),
+      "--markdown-output", join(coverage, "forged-structural-summary.md"),
+      "--output", join(coverage, "forged-structural-verification.json"),
+      "--structural", positiveOutput,
+    ], 1);
+
+    const zeroInterfaceManifestPath = join(coverage, "interface-manifest-zero-incomplete.json");
+    const zeroInterfaceManifest = structuredClone(interfaceManifest);
+    delete zeroInterfaceManifest.manifest_digest;
+    zeroInterfaceManifest.interfaces = [];
+    for (const row of zeroInterfaceManifest.file_coverage) row.interface_ids = [];
+    const blockedRow = zeroInterfaceManifest.file_coverage[0];
+    blockedRow.state = "INDETERMINATE";
+    blockedRow.reason = "zero-interface-inventory-regression";
+    blockedRow.gaps = [{ code: "INTERFACE_EXTRACTOR_INDETERMINATE", reason: blockedRow.reason }];
+    zeroInterfaceManifest.gaps = [{
+      file_id: blockedRow.file_id,
+      path: blockedRow.path,
+      code: "INTERFACE_EXTRACTOR_INDETERMINATE",
+      reason: blockedRow.reason,
+    }];
+    zeroInterfaceManifest.summary = {
+      ...zeroInterfaceManifest.summary,
+      inspected_files: zeroInterfaceManifest.file_coverage.filter(row => row.state === "INSPECTED").length,
+      not_applicable_files: zeroInterfaceManifest.file_coverage.filter(row => row.state === "NOT_APPLICABLE").length,
+      indeterminate_files: 1,
+      failed_files: 0,
+      interfaces: 0,
+      confirmed_interfaces: 0,
+      candidate_interfaces: 0,
+      rejected_interfaces: 0,
+      ingress: 0,
+      egress: 0,
+      bidirectional: 0,
+    };
+    zeroInterfaceManifest.complete = false;
+    zeroInterfaceManifest.inventory_bounded = false;
+    zeroInterfaceManifest.manifest_digest = objectDigest(zeroInterfaceManifest);
+    await writeFile(zeroInterfaceManifestPath, `${JSON.stringify(zeroInterfaceManifest, null, 2)}\n`, "utf8");
+    const zeroInterfaceExtractorPath = join(coverage, "interface-extractors-zero-incomplete.json");
+    run("verify-interface-extractors.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      "--interfaces", zeroInterfaceManifestPath,
+      "--output", zeroInterfaceExtractorPath,
+    ], 2);
+    const blockedSnapshotDir = join(work, "durable-snapshot-zero-interface");
+    run("snapshot-coverage-inputs.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", scopePath,
+      ...functionPaths.flatMap(path => ["--functions", path]),
+      "--interfaces", zeroInterfaceManifestPath,
+      "--interface-extractors", zeroInterfaceExtractorPath,
+      "--catalog", CATALOG,
+      "--threat-model", threatModelPath,
+      "--focus-areas", focusAreasPath,
+      "--output-dir", blockedSnapshotDir,
+    ]);
+    const blockedSnapshotIndexPath = join(blockedSnapshotDir, "snapshot-index.json");
+    const blockedSnapshot = JSON.parse(await readFile(blockedSnapshotIndexPath, "utf8"));
+    const blockedPlanPath = join(coverage, "coverage-plan-zero-interface.json");
+    run("build-coverage-plan.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--scope", blockedSnapshot.scope.path,
+      ...blockedSnapshot.functions.flatMap(item => ["--functions", item.path]),
+      "--interfaces", blockedSnapshot.interfaces.path,
+      "--interface-extractors", blockedSnapshot.interface_extractors.path,
+      "--catalog", blockedSnapshot.catalog.path,
+      "--focus-areas", blockedSnapshot.semantic.focus_areas.path,
+      "--snapshot-index", blockedSnapshotIndexPath,
+      "--output", blockedPlanPath,
+    ]);
+    const blockedPlan = JSON.parse(await readFile(blockedPlanPath, "utf8"));
+    if (blockedPlan.complete || blockedPlan.universes.interfaces !== 0 || blockedPlan.inventory.gap_files !== 1
+      || blockedPlan.inventory.bounded || blockedPlan.summary.unknown !== 0) {
+      throw new Error("Zero-interface incomplete inventory was not represented as a non-atomic blocker");
+    }
+    const blockedLedgerPath = join(coverage, "coverage-ledger-zero-interface.jsonl");
+    await initializeLedger({ planPath: blockedPlanPath, ledgerPath: blockedLedgerPath });
+    await expectReject(() => finalizeLedger({
+      planPath: blockedPlanPath,
+      ledgerPath: blockedLedgerPath,
+      idempotencyKey: "invalid-unbounded-finalize",
+    }), /unbounded inventory/);
+    await checkpointLedger({
+      planPath: blockedPlanPath,
+      ledgerPath: blockedLedgerPath,
+      idempotencyKey: "zero-interface-partial-checkpoint",
+      label: "zero-interface-blocked",
+    });
+    const blockedVerificationPath = join(coverage, "coverage-verification-zero-interface.json");
+    const blockedStructuralPath = join(coverage, "coverage-structural-zero-interface.json");
+    const blockedSummaryPath = join(coverage, "coverage-summary-zero-interface.json");
+    const blockedMarkdownPath = join(coverage, "coverage-summary-zero-interface.md");
+    run("verify-coverage-v3.mjs", [
+      "--mode", "partial",
+      "--root", root,
+      "--audit-id", AUDIT_ID,
+      "--scope", blockedSnapshot.scope.path,
+      "--interfaces", blockedSnapshot.interfaces.path,
+      "--interface-extractors", blockedSnapshot.interface_extractors.path,
+      "--snapshot-index", blockedSnapshotIndexPath,
+      ...blockedSnapshot.functions.flatMap(item => ["--functions", item.path]),
+      "--reports-dir", positiveReports,
+      "--catalog", blockedSnapshot.catalog.path,
+      "--plan", blockedPlanPath,
+      "--ledger", blockedLedgerPath,
+      "--structural-output", blockedStructuralPath,
+      "--summary-output", blockedSummaryPath,
+      "--markdown-output", blockedMarkdownPath,
+      "--output", blockedVerificationPath,
+    ], 2);
+    const blockedSummary = JSON.parse(await readFile(blockedSummaryPath, "utf8"));
+    if (blockedSummary.coverage_status !== "BLOCKED"
+      || blockedSummary.seal_state !== "PARTIAL_CHECKPOINT"
+      || blockedSummary.accounting.conservative_lower_bound.state !== "UNBOUNDED"
+      || blockedSummary.external_interfaces.state !== "BLOCKED"
+      || blockedSummary.external_interfaces.conservative_lower_bound.state !== "UNBOUNDED"
+      || blockedSummary.vulnerability_types.conservative_lower_bound.state === "UNBOUNDED") {
+      throw new Error("Unbounded zero-interface inventory produced an optimistic coverage statistic");
+    }
 
     const mixedRoundReports = join(work, "reports-mixed-round");
     await cp(positiveReports, mixedRoundReports, { recursive: true });
@@ -668,11 +1569,13 @@ async function main() {
     const caught = negative.missing.functions.some(item => item.function_id === removedFunction && item.domain === "base" && item.lens === "sink-driven");
     if (negative.complete || !caught) throw new Error("Negative coverage fixture did not catch the removed function/lens cell");
     const negativeSummaryPath = join(coverage, "coverage-summary-missing-function.json");
+    const negativeSummaryMarkdownPath = join(coverage, "coverage-summary-missing-function.md");
     run("render-coverage-summary.mjs", [
       "--plan", coveragePlanPath,
       "--ledger", ledgerPath,
       "--structural", negativeOutput,
       "--output", negativeSummaryPath,
+      "--markdown-output", negativeSummaryMarkdownPath,
     ], 2);
     const negativeSummary = JSON.parse(await readFile(negativeSummaryPath, "utf8"));
     if (negativeSummary.complete || negativeSummary.functions.complete_entities.percentage >= 100
@@ -968,7 +1871,7 @@ async function main() {
       "--output-dir", join(partialCoverage, "snapshot"),
     ], 1);
 
-    process.stdout.write(`${JSON.stringify({ complete: true, positive: positive.expected, coverage_v2: { required_checks: coveragePlan.summary.required, not_applicable_checks: coveragePlan.summary.not_applicable, focus_area_bound: true, finalized_hash_chain: true, exact_summary: true }, git_aware_scope_pruning: true, function_manifest_resume_cache: true, cache_rejects_scope_drift: true, compact_threat_routing_index: true, parser_unavailable_partial_routing: true, partial_audit_snapshot_blocked: true, focus_catalog_assignment_preflight: true, isolated_joern_workspace: true, deterministic_interface_inventory: true, dynamic_interface_gap_caught: "static/dynamic-route.js", failed_interface_extractor_caught: true, tampered_interface_manifest_caught: true, machine_reconciled_coverage_cells: true, self_reported_target_counts_rejected: true, forged_evidence_rejected: true, stale_receipt_rejected: true, incomplete_source_universe_rejected: true, receiptless_verified_rejected: true, fake_check_id_rejected: true, two_lens_plan_rejected: true, agent_declared_na_rejected: true, tampered_summary_rejected: true, tampered_ledger_chain_rejected: true, ai_initializer_requires_surface_inventory: true, targeted_gap_round_preserved_prior_coverage: true, negative_missing_function_caught: removedFunction, containing_file_completeness_reduced: true, negative_missing_ai_overlay_file_caught: removedAiFile, missing_dimension_cell_caught: "D10", tampered_scope_caught: true, tampered_function_manifest_caught: true, unsupported_function_source_caught: "Unsupported.groovy", malformed_javascript_caught: "broken.js" })}\n`);
+    process.stdout.write(`${JSON.stringify({ complete: true, positive: positive.expected, coverage_v3: { required_checks: coveragePlan.summary.required, not_applicable_checks: coveragePlan.summary.not_applicable, source_sets: coveragePlan.source_sets.length, focus_area_bound: true, snapshot_bound: true, legacy_v2_rejected: true, candidate_interfaces_non_atomic: true, artifact_bound_findings: 1, finalized_hash_chain: true, exact_summary: true }, git_aware_scope_pruning: true, function_manifest_resume_cache: true, cache_rejects_scope_drift: true, compact_threat_routing_index: true, parser_unavailable_partial_routing: true, partial_audit_snapshot_blocked: true, focus_catalog_assignment_preflight: true, isolated_joern_workspace: true, deterministic_interface_inventory: true, dynamic_interface_gap_caught: "static/dynamic-route.js", failed_interface_extractor_caught: true, tampered_interface_manifest_caught: true, machine_reconciled_coverage_cells: true, self_reported_target_counts_rejected: true, forged_evidence_rejected: true, stale_receipt_rejected: true, incomplete_source_universe_rejected: true, receiptless_verified_rejected: true, fake_check_id_rejected: true, two_lens_plan_rejected: true, agent_declared_na_rejected: true, tampered_summary_rejected: true, tampered_ledger_chain_rejected: true, ai_initializer_requires_surface_inventory: true, targeted_gap_round_preserved_prior_coverage: true, negative_missing_function_caught: removedFunction, containing_file_completeness_reduced: true, negative_missing_ai_overlay_file_caught: removedAiFile, missing_dimension_cell_caught: "D10", tampered_scope_caught: true, tampered_function_manifest_caught: true, unsupported_function_source_caught: "Unsupported.groovy", malformed_javascript_caught: "broken.js" })}\n`);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

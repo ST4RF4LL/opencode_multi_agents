@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finding Evidence Contract"
+  short_description: "Validate security finding evidence before ledger admission."
+  default_prompt: "Validate a security finding artifact and identify missing evidence or contract violations."

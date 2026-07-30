@@ -177,17 +177,38 @@ async function main() {
 
   const requiredAgents = artifactPolicy.reports.vulnerability_mining.required_for_agents;
   assert(requiredAgents.every(agent => roleAgents.includes(agent)), "artifact policy references an unknown vulnerability-mining agent");
-  for (const field of ["round", "focus_area_id", "discovery_track", "coverage_cells", "review_depth", "file_coverage", "function_coverage", "catalog_coverage"]) {
+  for (const field of ["round", "finding_schema_version", "focus_area_id", "discovery_track", "coverage_cells", "review_depth", "file_coverage", "function_coverage", "catalog_coverage"]) {
     assert(artifactPolicy.reports.vulnerability_mining.required_fields.includes(field), `artifact policy lacks required field ${field}`);
   }
   assert(artifactPolicy.reports.vulnerability_mining.path_template.endsWith(".audit-report.json"), "audit report path is not verifier-discoverable");
   assert(artifactPolicy.reports.coverage_verification.required_fields.includes("claim_boundary"), "coverage verification policy lacks claim boundary");
-  assert(artifactPolicy.reports.coverage_verification.required_fields.includes("summary"), "coverage v2 verification policy lacks machine-derived summary");
-  assert(artifactPolicy.reports.coverage_plan.required_fields.includes("checks"), "coverage plan policy lacks atomic checks");
-  assert(artifactPolicy.reports.coverage_summary.required_fields.includes("manifest_digest"), "coverage summary policy lacks digest");
+  assert(artifactPolicy.reports.coverage_verification.required_fields.includes("summary")
+    && artifactPolicy.reports.coverage_verification.required_fields.includes("seal_state"), "coverage v3 verification policy lacks sealed machine-derived summary");
+  assert(artifactPolicy.reports.coverage_plan.required_fields.includes("checks")
+    && artifactPolicy.reports.coverage_plan.required_fields.includes("source_sets")
+    && artifactPolicy.reports.coverage_plan.required_fields.includes("inventory"), "coverage plan policy lacks v3 atomic/source/inventory accounting");
+  assert(artifactPolicy.reports.coverage_summary.required_fields.includes("manifest_digest")
+    && artifactPolicy.reports.coverage_summary.required_fields.includes("coverage_status")
+    && artifactPolicy.reports.coverage_summary.required_fields.includes("inventory")
+    && artifactPolicy.reports.coverage_summary.markdown_companion, "coverage summary policy lacks v3 digest/status/inventory/Markdown contract");
+  assert(artifactPolicy.reports.coverage_ledger.required_event_types.includes("FINALIZE_COMPLETE")
+    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("PARTIAL_CHECKPOINT"), "coverage ledger policy lacks v3 seal events");
   assert(artifactPolicy.reports.semantic_coverage_verification.required_fields.includes("claim_boundary"), "semantic coverage verification policy lacks claim boundary");
   assert(artifactPolicy.reports.hypothesis_discovery.required_fields.includes("seed_inputs"), "discovery policy lacks seed provenance");
-  assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter"), "attack-chain report is not mandatory");
+  assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter")
+    && artifactPolicy.reports.attack_chain.required_fields.includes("adjudication_manifest_digest")
+    && artifactPolicy.reports.attack_chain.required_fields.includes("chain_accounting"), "attack-chain report contract is incomplete");
+  assert(roleAgents.includes("security-finding-adjudicator"), "finding adjudicator is not registered");
+  assert(artifactPolicy.reports.finding_adjudication?.required_fields.includes("input_manifest_digest")
+    && artifactPolicy.reports.finding_adjudication?.required_fields.includes("decisions"), "finding adjudication artifact contract is incomplete");
+  assert(await exists(join(OPENCODE, "tests/run-adjudication-regression-tests.mjs"))
+    && packageConfig.scripts["test:adjudication-regressions"]?.includes("run-adjudication-regression-tests.mjs"), "Mall semantic twin regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-semantic-reseed-tests.mjs"))
+    && packageConfig.scripts["test:semantic-reseed"]?.includes("run-semantic-reseed-tests.mjs"), "source-equivalent semantic reseed regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-cvss-assessment-tests.mjs"))
+    && packageConfig.scripts["test:cvss-assessment"]?.includes("run-cvss-assessment-tests.mjs"), "CVSS assessment regression suite is not enabled");
+  assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
+    && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
   const thirdPartyReview = artifactPolicy.reports.third_party_review;
   assert(thirdPartyReview?.required_invocation?.tool === "vuln_judger_judge_report", "third-party review must use vuln_judger_judge_report");
   assert(Array.isArray(thirdPartyReview?.required_invocation?.tool_aliases) && thirdPartyReview.required_invocation.tool_aliases.includes("vuln-judger_judge_report"), "third-party review must alias vuln-judger_judge_report");
@@ -195,9 +216,13 @@ async function main() {
   assert(thirdPartyReview.required_invocation.wait_for_completion === false, "third-party review must start asynchronously");
   assert(thirdPartyReview.path_templates.every(path => path.startsWith("reports/validation/")), "third-party review artifacts must be durable reports/validation companions");
   assert(artifactPolicy.work.required_recon_files.includes("threat-model.json") && artifactPolicy.work.required_recon_files.includes("focus-areas.json"), "semantic Recon artifacts are not mandatory");
-  for (const script of ["build-function-manifests.mjs", "build-interface-manifest.mjs", "verify-interface-extractors.mjs", "build-threat-routing-index.mjs", "validate-vulnerability-catalog-v2.mjs", "build-coverage-plan.mjs", "initialize-coverage-ledger.mjs", "verify-coverage-v2.mjs", "render-coverage-summary.mjs", "verify-coverage-summary.mjs", "reconcile-audit-report.mjs", "seal-semantic-manifest.mjs", "verify-semantic-coverage.mjs"]) {
+  for (const script of ["build-function-manifests.mjs", "build-interface-manifest.mjs", "build-source-anchored-interface-decisions.mjs", "resolve-interface-candidates.mjs", "verify-interface-extractors.mjs", "build-threat-routing-index.mjs", "validate-vulnerability-catalog-v2.mjs", "build-coverage-plan.mjs", "initialize-coverage-ledger.mjs", "checkpoint-coverage-ledger.mjs", "finalize-partial-coverage-ledger.mjs", "verify-coverage-v2.mjs", "verify-coverage-v3-core.mjs", "verify-coverage-v3.mjs", "render-coverage-summary.mjs", "verify-coverage-summary.mjs", "reconcile-audit-report.mjs", "seal-semantic-manifest.mjs", "reseed-semantic-manifests.mjs", "verify-semantic-coverage.mjs", "final-report-model-core.mjs", "build-final-report-model.mjs", "render-final-report.mjs", "verify-final-report.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts", script)), `semantic coverage script is missing: ${script}`);
   }
+  for (const script of ["cvss-assessment-contract.mjs", "build-cvss-assessment.mjs", "build-empty-cvss-assessment.mjs", "validate-cvss-assessment.mjs", "build-empty-finding-adjudication.mjs"]) {
+    assert(await exists(join(OPENCODE, "skills/common-subagent/finding-adjudication/scripts", script)), `CVSS assessment script is missing: ${script}`);
+  }
+  assert(await exists(join(OPENCODE, "skills/attack-chain-subagent/system-attack-chain-hunting/scripts/build-empty-attack-chain-report.mjs")), "empty attack-chain report builder is missing");
   assert(artifactPolicy.work.required_recon_files.includes("coverage/threat-routing-index.json"), "compact threat-routing index is not mandatory");
   assert(artifactPolicy.work.required_recon_files.includes("coverage/interface-manifest.json")
     && artifactPolicy.work.required_recon_files.includes("coverage/interface-extractor-coverage.json"), "deterministic external-interface artifacts are not mandatory");
@@ -245,7 +270,8 @@ async function main() {
   assert(/^\s*"vuln-judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln-judger MCP tools");
   assert((validatorText.includes("vuln_judger_judge_report") || validatorText.includes("vuln-judger_judge_report")) && validatorText.includes("engine: opencode"), "validator must submit the final report through the OpenCode vuln_judger/vuln-judger pipeline");
   assert(validatorText.includes("exactly once") && validatorText.includes("final comprehensive"), "validator must enforce one full-report submission");
-  assert(orchestratorText.indexOf("Write exactly one complete human-readable report") < orchestratorText.indexOf("Invoke `vulnerability-validator` once"), "orchestrator must write the final report before invoking vulnerability-validator");
+  assert(orchestratorText.indexOf("build-final-report-model.mjs") < orchestratorText.indexOf("Invoke `vulnerability-validator` once")
+    && orchestratorText.includes("verify-final-report.mjs"), "orchestrator must deterministically build and verify the final report before invoking vulnerability-validator");
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");
   assert(catalog.schema_version === 2 && catalog.profile_id.endsWith("-v4"), "catalog v2 profile is not active");
   assert(sameSet(catalog.coverage_model.applicability_states, ["REQUIRED", "NOT_APPLICABLE", "UNKNOWN"]), "catalog applicability states are invalid");

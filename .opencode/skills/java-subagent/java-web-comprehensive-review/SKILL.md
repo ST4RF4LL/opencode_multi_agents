@@ -40,4 +40,4 @@ If no specialized deep pack exists, perform the review directly from the catalog
 
 ## Closure records
 
-File and function records must list all `D1` through `D10` in `dimensions_reviewed`. Catalog records use the dimensions declared by that catalog entry and `domain=java`. All records cite concrete evidence and are validated by intermediate `verify-coverage.mjs`; complete claims additionally require receipt-backed Coverage Ledger packets and `verify-coverage-v2.mjs`.
+File and function records must list all `D1` through `D10` in `dimensions_reviewed`. Catalog records use the dimensions declared by that catalog entry and `domain=java`. All records cite concrete evidence and are validated in the trusted structural pass; complete claims additionally require assignment-authorized Coverage Ledger receipts and `verify-coverage-v3.mjs`.

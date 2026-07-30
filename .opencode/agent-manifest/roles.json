@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "purpose": "Role boundaries for the OpenCode threat-led, Focus-Area-partitioned Tri-Lens multi-agent source, platform, and AI system security audit workspace.",
   "agents": {
     "security-audit-orchestrator": {
@@ -86,6 +86,14 @@
       "outputs": ["System attack-chain report", "ordered chain candidates", "Focus Area/trust-boundary/asset review coverage", "chain gaps"],
       "artifacts": ["reports/attack-chains/security-attack-chain-hunter.<audit-id>.r<round>.json"],
       "must_not": ["Correlate away raw findings", "classify exploitability", "execute exploits", "invent unsupported transitions", "modify audited source"]
+    },
+    "security-finding-adjudicator": {
+      "mode": "subagent",
+      "responsibility": "Independently adjudicate each accepted Ledger-attested Finding v2 candidate for actual framework semantics, source-to-effect proof, guard effectiveness, and a tested counterclaim before attack-chain construction or final synthesis.",
+      "inputs": ["Frozen Coverage Plan and canonical Ledger", "trusted structural verification", "Finding v2 adjudication input manifest", "frozen source/config/dependency evidence"],
+      "outputs": ["One terminal semantic decision per candidate", "guard and counterclaim evidence", "blocking questions and contradictions"],
+      "artifacts": ["reports/adjudication/finding-input.<audit-id>.r<round>.json", "reports/adjudication/security-finding-adjudicator.<audit-id>.r<round>.json"],
+      "must_not": ["Close coverage", "modify candidates, Ledger, Plan, audited source, or reusable assets", "invent attack-chain transitions", "execute exploits", "assign final CVSS", "call vuln-judger"]
     },
     "vulnerability-validator": {
       "mode": "subagent",

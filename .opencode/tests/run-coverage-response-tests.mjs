@@ -4,12 +4,16 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { performance } from "node:perf_hooks";
 import { Client } from "../node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StdioClientTransport } from "../node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
 import {
+  COVERAGE_MODEL_VERSION,
+  PLAN_SCHEMA_VERSION,
   coverageCheckId,
   objectDigest,
   sha256,
+  sourceSetId,
   validatePlan,
 } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-v2-common.mjs";
 
@@ -29,8 +33,9 @@ function makePlan() {
     sha256: sha256(`source-${index}`),
     link_target: null,
     owner_agent: "web-source-auditor",
-  }));
-  const sourceIds = sourceIndex.map(source => source.file_id);
+  })).sort((left, right) => left.file_id.localeCompare(right.file_id));
+  const sourceIds = sourceIndex.map(source => source.file_id).sort();
+  const frozenSourceSetId = sourceSetId(sourceIds);
   const checks = LENSES.map(lens => ({
     check_id: coverageCheckId("catalog-domain", "domain:web", "JW-TEST-01", "web", lens),
     subject_kind: "catalog-domain",
@@ -43,30 +48,56 @@ function makePlan() {
     applicability: "REQUIRED",
     applicability_reason: "large-source-response-regression",
     negative_discovery_required: true,
-    required_source_file_ids: sourceIds,
+    required_source_set_id: frozenSourceSetId,
+    required_source_count: sourceIds.length,
     required_interface_ids: [],
     required_catalog_ids: ["JW-TEST-01"],
     evidence_contract: {
       question_field: `${lens.replace("-driven", "")}_question`,
       question: "Was the complete frozen source universe reviewed?",
-      required_receipt_fields: ["source_hashes", "locators", "query_or_rule", "tool", "result_digest"],
+      required_receipt_fields: ["source_set_id", "locators", "query_or_rule", "tool", "result_attestation"],
     },
   }));
   const plan = {
-    schema_version: 2,
+    schema_version: PLAN_SCHEMA_VERSION,
+    coverage_model_version: COVERAGE_MODEL_VERSION,
     audit_id: AUDIT_ID,
     catalog_profile_id: "response-fixture-v4",
     scope_digest: sha256("large-response-scope"),
     required_lenses: LENSES,
-    inputs: {},
+    inputs: { snapshot_digest: sha256("large-response-snapshot") },
     source_index: sourceIndex,
-    universes: {},
+    source_sets: [{ source_set_id: frozenSourceSetId, file_ids: sourceIds }],
+    universes: {
+      files: SOURCE_COUNT,
+      function_files: 0,
+      functions: 0,
+      interfaces: 0,
+      interface_anchors: 0,
+      vulnerability_types: 1,
+      active_domains: ["web"],
+    },
+    inventory: {
+      eligible_files: SOURCE_COUNT,
+      resolved_files: SOURCE_COUNT,
+      gap_files: 0,
+      gap_file_ids: [],
+      confirmed_interfaces: 0,
+      candidate_interfaces: 0,
+      candidate_interface_ids: [],
+      rejected_interfaces: 0,
+      unresolved_interfaces: 0,
+      extractor_complete: true,
+      bounded: true,
+    },
     checks,
     summary: {
       atomic_checks: checks.length,
       required: checks.length,
       not_applicable: 0,
       unknown: 0,
+      catalog_domain_required: checks.length,
+      interface_required: 0,
     },
     complete: true,
   };
@@ -121,10 +152,12 @@ async function main() {
       throw new Error("Packet response leaked the frozen source list or omitted the required source-set contract");
     }
 
+    const mutationStarted = performance.now();
     const inspection = await call("coverage_inspect_subject", {
       audit_id: AUDIT_ID,
       check_id: check.check_id,
       session_id: "large-response-session",
+      agent_name: "web-source-auditor",
       idempotency_key: "large-response-inspect",
     });
     if ("source_page" in inspection.value || inspection.text.includes(plan.source_index[0].file_id)) {
@@ -135,14 +168,19 @@ async function main() {
       audit_id: AUDIT_ID,
       check_id: check.check_id,
       session_id: "large-response-session",
+      assignment_token: inspection.value.assignment_token,
       idempotency_key: "large-response-receipt",
       source_scope: "required",
       locators: [{
         kind: "required-source-set",
+        check_id: check.check_id,
+        source_set_id: check.required_source_set_id,
         source_count: SOURCE_COUNT,
       }],
       query_or_rule: "large-response-regression",
       tool: "fixture",
+      tool_version: "1.0.0",
+      result_payload: "large-response-result",
       result_digest: sha256("large-response-result"),
       result_summary: "Complete frozen source set reviewed.",
     });
@@ -156,12 +194,14 @@ async function main() {
       audit_id: AUDIT_ID,
       check_id: check.check_id,
       session_id: "large-response-session",
+      assignment_token: inspection.value.assignment_token,
       idempotency_key: "large-response-decision",
       execution_state: "VERIFIED",
       result_state: "NO_FINDING",
       receipt_ids: [receipt.value.receipt.receipt_id],
       rationale: "Digest-bound complete source set reviewed.",
     });
+    const mutationWorkflowMs = Number((performance.now() - mutationStarted).toFixed(2));
 
     const diagnosticSources = await call("coverage_get_subject_sources", {
       audit_id: AUDIT_ID,
@@ -189,9 +229,8 @@ async function main() {
     const ledgerText = await readFile(ledgerPath, "utf8");
     const receiptEvent = ledgerText.split(/\r?\n/).filter(Boolean).map(JSON.parse)
       .find(event => event.event_type === "RECEIPT");
-    if (Array.isArray(receiptEvent?.source_hashes)
-      || receiptEvent?.source_hashes?.mode !== "required-source-set"
-      || receiptEvent.source_hashes.source_count !== SOURCE_COUNT
+    if (receiptEvent?.source_set?.mode !== "required-source-set"
+      || receiptEvent.source_set.source_count !== SOURCE_COUNT
       || Buffer.byteLength(JSON.stringify(receiptEvent)) > 2_048) {
       throw new Error("Ledger receipt expanded the full frozen source universe");
     }
@@ -199,6 +238,9 @@ async function main() {
     process.stdout.write(`${JSON.stringify({
       complete: true,
       source_count: SOURCE_COUNT,
+      plan_bytes: Buffer.byteLength(JSON.stringify(plan)),
+      normalized_source_id_references: plan.source_sets.reduce((sum, sourceSet) => sum + sourceSet.file_ids.length, 0),
+      expanded_source_id_references_avoided: SOURCE_COUNT * (plan.checks.length - 1),
       packet_bytes: packet.responseBytes,
       inspection_bytes: inspection.responseBytes,
       receipt_bytes: receipt.responseBytes,
@@ -206,6 +248,7 @@ async function main() {
       normal_workflow_bytes: normalWorkflowBytes,
       optional_source_page_bytes: diagnosticSources.responseBytes,
       receipt_event_bytes: Buffer.byteLength(JSON.stringify(receiptEvent)),
+      mutation_workflow_ms: mutationWorkflowMs,
       response_limit: RESPONSE_LIMIT,
       source_list_leaked: false,
     })}\n`);

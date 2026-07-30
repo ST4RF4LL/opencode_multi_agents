@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { attackChainManifestDigest } from "../skills/attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY = resolve(HERE, "../..");
@@ -171,24 +172,39 @@ async function writeReports(directory) {
   }
 }
 
-async function writeAttack(path, threat, focus, overrides = {}) {
-  const report = {
+async function writeAdjudication(path) {
+  const adjudication = {
     schema_version: 1,
+    audit_id: AUDIT_ID,
+    scope_digest: SCOPE_DIGEST,
+    input_manifest_digest: "f".repeat(64),
+    adjudicator_session_id: "semantic-fixture-adjudicator-r1",
+    decisions: [],
+    manifest_digest: "e".repeat(64),
+  };
+  await writeFile(path, `${JSON.stringify(adjudication, null, 2)}\n`, "utf8");
+  return adjudication;
+}
+
+async function writeAttack(path, threat, focus, adjudication, overrides = {}) {
+  const report = {
+    schema_version: 2,
     audit_id: AUDIT_ID,
     round: 1,
     agent_name: "security-attack-chain-hunter",
     scope_digest: SCOPE_DIGEST,
     threat_model_digest: threat.manifest_digest,
     focus_areas_digest: focus.manifest_digest,
-    status: "PASS",
     reviewed_focus_area_ids: ["FA-001"],
     reviewed_trust_boundary_ids: ["TB-001"],
     reviewed_asset_ids: ["ASSET-001"],
-    evidence: [{ fixture: "system-pass" }],
-    chain_candidates: [],
+    adjudication_manifest_digest: adjudication.manifest_digest,
+    chains: [],
     gaps: [],
+    chain_accounting: { raw_chain_ids: [], accepted_chain_ids: [], rejected_chain_ids: [] },
     ...overrides,
   };
+  report.manifest_digest = attackChainManifestDigest(report);
   await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 }
 
@@ -199,15 +215,17 @@ async function main() {
     const reports = join(work, "reports");
     const negativeReports = join(work, "reports-negative");
     const snapshotPath = join(work, "snapshot-index.json");
+    const adjudicationPath = join(work, "adjudication.json");
     const attackPath = join(work, "attack-chain.json");
     const outputPath = join(work, "semantic-positive.json");
     await mkdir(inputs, { recursive: true });
     const { threatPath, focusPath, threat, focus } = await writeSemanticInputs(inputs);
     await writeSnapshot(snapshotPath, threatPath, focusPath, threat, focus);
     await writeReports(reports);
-    await writeAttack(attackPath, threat, focus);
+    const adjudication = await writeAdjudication(adjudicationPath);
+    await writeAttack(attackPath, threat, focus, adjudication);
 
-    const commonArgs = ["--audit-id", AUDIT_ID, "--snapshot-index", snapshotPath, "--attack-chain-report", attackPath];
+    const commonArgs = ["--audit-id", AUDIT_ID, "--snapshot-index", snapshotPath, "--adjudication", adjudicationPath, "--attack-chain-report", attackPath];
     run("verify-semantic-coverage.mjs", [...commonArgs, "--reports-dir", reports, "--output", outputPath]);
     const positive = JSON.parse(await readFile(outputPath, "utf8"));
     if (!positive.complete || positive.expected.focus_assignment_lens_sessions !== 6 || positive.expected.primary_assignments !== 5) throw new Error("Positive semantic coverage fixture did not verify");
@@ -223,8 +241,8 @@ async function main() {
     const wrongDomainAttack = join(work, "attack-platform-domain.json");
     const wrongDomainOutput = join(work, "semantic-platform-domain.json");
     await writeSnapshot(wrongDomainSnapshot, threatPath, wrongDomainFocusPath, threat, sealedWrongDomainFocus);
-    await writeAttack(wrongDomainAttack, threat, sealedWrongDomainFocus);
-    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", wrongDomainSnapshot, "--reports-dir", reports, "--attack-chain-report", wrongDomainAttack, "--output", wrongDomainOutput], 2);
+    await writeAttack(wrongDomainAttack, threat, sealedWrongDomainFocus, adjudication);
+    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", wrongDomainSnapshot, "--reports-dir", reports, "--adjudication", adjudicationPath, "--attack-chain-report", wrongDomainAttack, "--output", wrongDomainOutput], 2);
     const wrongDomain = JSON.parse(await readFile(wrongDomainOutput, "utf8"));
     if (wrongDomain.complete || !wrongDomain.missing.primary_assignments.some(item => item.key.includes("python-source-auditor|python|catalog|JW-AUTHZ-01"))) {
       throw new Error("Python catalog domain mismatch was not detected");
@@ -238,9 +256,9 @@ async function main() {
     if (missingLens.complete || !missingLens.missing.focus_lenses.some(item => item.lens === "control-driven")) throw new Error("Missing Focus Area lens was not detected");
 
     const incompleteAttackPath = join(work, "attack-chain-incomplete.json");
-    await writeAttack(incompleteAttackPath, threat, focus, { reviewed_asset_ids: [] });
+    await writeAttack(incompleteAttackPath, threat, focus, adjudication, { reviewed_asset_ids: [] });
     const attackOutput = join(work, "semantic-attack-gap.json");
-    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", snapshotPath, "--reports-dir", reports, "--attack-chain-report", incompleteAttackPath, "--output", attackOutput], 2);
+    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", snapshotPath, "--reports-dir", reports, "--adjudication", adjudicationPath, "--attack-chain-report", incompleteAttackPath, "--output", attackOutput], 2);
     const attackGap = JSON.parse(await readFile(attackOutput, "utf8"));
     if (attackGap.complete || !attackGap.missing.attack_chain.some(item => item.field === "reviewed_asset_ids")) throw new Error("Missing attack-chain asset coverage was not detected");
 
@@ -254,9 +272,9 @@ async function main() {
     const missingPrimarySnapshot = join(work, "snapshot-missing-primary.json");
     const missingPrimaryAttack = join(work, "attack-missing-primary.json");
     await writeSnapshot(missingPrimarySnapshot, threatPath, focusMissingPath, threat, sealedFocusMissing);
-    await writeAttack(missingPrimaryAttack, threat, sealedFocusMissing);
+    await writeAttack(missingPrimaryAttack, threat, sealedFocusMissing, adjudication);
     const missingPrimaryOutput = join(work, "semantic-missing-primary.json");
-    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", missingPrimarySnapshot, "--reports-dir", reports, "--attack-chain-report", missingPrimaryAttack, "--output", missingPrimaryOutput], 2);
+    run("verify-semantic-coverage.mjs", ["--audit-id", AUDIT_ID, "--snapshot-index", missingPrimarySnapshot, "--reports-dir", reports, "--adjudication", adjudicationPath, "--attack-chain-report", missingPrimaryAttack, "--output", missingPrimaryOutput], 2);
     const missingPrimary = JSON.parse(await readFile(missingPrimaryOutput, "utf8"));
     if (missingPrimary.complete || !missingPrimary.missing.primary_assignments.some(item => item.key.includes("ai-security-auditor|ai|file|file:001"))) throw new Error("Missing AI primary Focus Area assignment was not detected");
 

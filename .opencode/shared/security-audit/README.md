@@ -15,6 +15,7 @@ Only `security-skill-optimizer` should normally modify these assets during the v
   - Java seed: 21 cases under `vulnerability-cases/java/<skill>-case-*/` with `case-summary.json` plus defensive samples.
 - `false-positive-cases/`: rejected findings and false-positive patterns.
   - Java seed: 8 pattern packs under `false-positive-cases/java/<skill>-fp.md|.yaml`.
+- `adjudication-regressions/`: paired semantic-decision fixtures. `mall-v1-semantic-twins.json` fixes the evidence boundary and expected adjudication for JWT, object storage, logging, mass assignment, Spring RBAC, Actuator, CORS, and URL/SSRF/redirect claims, plus the three historical overclaimed attack chains.
 - `rule-results/`: non-source static scan summaries used to improve rules and skills.
 
 ## Java Deep Skill Mapping

@@ -4,15 +4,11 @@ import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { deriveCoverageCells } from "./coverage-cell-accounting.mjs";
+import { DOMAIN_AGENTS, entryAppliesToDomain } from "./coverage-v2-common.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
-const DOMAIN_AGENT = new Map([
-  ["java", "java-source-auditor"],
-  ["web", "web-source-auditor"],
-  ["platform", "platform-security-auditor"],
-  ["ai", "ai-security-auditor"],
-]);
+const DOMAIN_AGENT = new Map(Object.entries(DOMAIN_AGENTS));
 const AGENT_LANGUAGE = new Map([
   ["c-cpp-source-auditor", "c-cpp"],
   ["java-source-auditor", "java"],
@@ -129,7 +125,7 @@ async function main() {
   const ownedFiles = scope.files.filter(file => file.review_required && (isAiOverlay || file.owner_agent === args.agent));
   const ownedFunctions = functions.filter(fn => isAiOverlay || fn.owner_agent === args.agent);
   const domain = [...DOMAIN_AGENT].find(([, agent]) => agent === args.agent)?.[0] ?? null;
-  const domainCatalog = domain ? catalog.entries.filter(entry => entry.applies_to.includes(domain)) : [];
+  const domainCatalog = domain ? catalog.entries.filter(entry => entryAppliesToDomain(entry, domain, catalog)) : [];
   const focusAssignments = focusArea.assignments?.filter(item => item.agent_name === args.agent) ?? [];
   if (focusAssignments.length !== 1) throw new Error(`Focus Area must contain exactly one assignment for ${args.agent}`);
   const focusAssignment = focusAssignments[0];
@@ -155,7 +151,8 @@ async function main() {
   const applicableCatalog = selectAssignment(domainCatalog, assignment.catalog_ids, "id", "catalog-id");
 
   const report = {
-    schema_version: 1,
+    schema_version: 2,
+    finding_schema_version: 2,
     audit_id: args["audit-id"],
     round: args.round,
     agent_name: args.agent,

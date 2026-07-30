@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 export const LENSES = ["sink-driven", "control-driven", "config-driven"];
 export const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
-export const MACHINE_COVERAGE_SCHEMA_VERSION = 1;
+export const MACHINE_COVERAGE_SCHEMA_VERSION = 2;
 
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -44,10 +44,20 @@ function closed(record) {
   return record?.status === "REVIEWED" || record?.status === "FINDING";
 }
 
-function findings(record) {
-  return record?.status === "FINDING" && Array.isArray(record.finding_ids)
-    ? record.finding_ids.filter(id => typeof id === "string" && id)
-    : [];
+function findingDimensions(finding) {
+  const claims = finding?.classification?.dimension_claims;
+  if (!Array.isArray(claims)) return [];
+  return [...new Set(claims
+    .map(claim => claim?.dimension)
+    .filter(dimension => DIMENSIONS.includes(dimension)))];
+}
+
+function findingsForDimension(record, findingsById, dimension) {
+  if (record?.status !== "FINDING" || !Array.isArray(record.finding_ids)) return [];
+  return record.finding_ids.filter(id => {
+    if (typeof id !== "string" || !id) return false;
+    return findingDimensions(findingsById.get(id)).includes(dimension);
+  });
 }
 
 export function deriveCoverageCells(report, catalogEntries) {
@@ -58,6 +68,9 @@ export function deriveCoverageCells(report, catalogEntries) {
   const files = recordMap(report.file_coverage, "file_id", "file");
   const functions = recordMap(report.function_coverage, "function_id", "function");
   const catalog = recordMap(report.catalog_coverage, "catalog_id", "catalog");
+  const findingsById = new Map((report.findings ?? [])
+    .filter(finding => typeof finding?.finding_id === "string" && finding.finding_id)
+    .map(finding => [finding.finding_id, finding]));
 
   return DIMENSIONS.map(dimension => {
     const targets = [
@@ -73,7 +86,7 @@ export function deriveCoverageCells(report, catalogEntries) {
     const machineTargetCount = targets.length;
     const closedTargetCount = targets.filter(target => closed(target.record)).length;
     const openTargetCount = machineTargetCount - closedTargetCount;
-    const findingIds = [...new Set(targets.flatMap(target => findings(target.record)))].sort();
+    const findingIds = [...new Set(targets.flatMap(target => findingsForDimension(target.record, findingsById, dimension)))].sort();
     const status = machineTargetCount === 0
       ? "N/A"
       : openTargetCount > 0

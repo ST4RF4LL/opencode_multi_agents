@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "suite_id": "mall-v1-semantic-twins",
+  "purpose": "Regression specifications for the historical mall-v1 report. A twin does not itself adjudicate the source; it fixes the minimum semantic evidence and the only permitted terminal outcome when that evidence is observed.",
+  "source_report": "reports/final/security-audit-report.mall-v1.md",
+  "models": [
+    {
+      "model_id": "jwt",
+      "historical_ids": ["MALL-R1-C01"],
+      "false_positive": {
+        "id": "mall-jwt-comment-does-not-select-algorithm",
+        "expected_state": "RECLASSIFIED",
+        "source_excerpt": "JwtTokenUtil comment says HS512; code invokes Hutool JWTUtil.createToken(claims, key) and JWTUtil.verify(token, key).",
+        "required_evidence": ["hutool-all resolved version", "exact createToken and verify overload semantics", "actual configured key material"],
+        "reason": "A comment cannot establish the algorithm or the effective cryptographic claim."
+      },
+      "true_positive": {
+        "id": "mall-jwt-short-source-controlled-secret",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "application.yml supplies a short source-controlled jwt.secret to JwtTokenUtil.getSigningKey().",
+        "required_evidence": ["resolved verification path uses the configured key", "key length and entropy measurement", "source-controlled secret provenance"],
+        "reason": "A weak key is supportable only after the real verification path and key semantics are resolved."
+      }
+    },
+    {
+      "model_id": "object_storage_path",
+      "historical_ids": ["MALL-R1-C08"],
+      "false_positive": {
+        "id": "mall-minio-object-key-is-not-local-path",
+        "expected_state": "REJECTED",
+        "source_excerpt": "MinioClient.removeObject(RemoveObjectArgs.builder().bucket(BUCKET_NAME).object(objectName).build()).",
+        "required_evidence": ["MinIO object-key API semantics", "no Files, Path, or local extraction sink on the claimed flow", "bucket authorization and policy analysis are separate"],
+        "reason": "A MinIO object key containing ../ is not, by itself, local filesystem traversal."
+      },
+      "true_positive": {
+        "id": "twin-object-key-reaches-local-files-sink",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "Files.newOutputStream(base.resolve(userObjectName).normalize()) is used without checking that the resolved path starts with base.",
+        "required_evidence": ["attacker-controlled name", "local Path resolution", "write/read/delete filesystem sink", "missing containment check"],
+        "reason": "A real local filesystem sink turns the path claim into an adjudicable traversal finding."
+      }
+    },
+    {
+      "model_id": "log_injection",
+      "historical_ids": ["MALL-R1-C16"],
+      "false_positive": {
+        "id": "mall-order-history-note-is-not-a-logger-sink",
+        "expected_state": "REJECTED",
+        "source_excerpt": "history.setNote(\"订单关闭:\" + note); orderOperateHistoryDao.insertList(historyList).",
+        "required_evidence": ["destination type is database history", "no logger/audit append sink on this flow", "persistence issue is considered separately"],
+        "reason": "A database note is not evidence of a log-forging sink."
+      },
+      "true_positive": {
+        "id": "twin-untrusted-value-reaches-logger-record",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "LOGGER.warn(\"payment callback failed: {}\", request.getHeader(\"X-Trace\"));",
+        "required_evidence": ["untrusted request value", "real logger API", "security-relevant record impact", "no encoding or structured-field guard"],
+        "reason": "The user value reaches a real logger record and can affect its interpretation."
+      }
+    },
+    {
+      "model_id": "mass_assignment",
+      "historical_ids": ["MALL-R1-C15"],
+      "false_positive": {
+        "id": "mall-explicit-money-dto-setters-are-not-broad-binding",
+        "expected_state": "REJECTED",
+        "source_excerpt": "OmsMoneyInfoParam is mapped to a new OmsOrder through explicit setFreightAmount and setDiscountAmount calls before updateByPrimaryKeySelective.",
+        "required_evidence": ["request DTO field inventory", "explicit mapper/setter allowlist", "sensitive fields absent from the path", "persistence write target"],
+        "reason": "An explicit DTO-to-entity allowlist breaks a broad mass-assignment claim."
+      },
+      "true_positive": {
+        "id": "twin-request-body-entity-with-sensitive-field",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "save(@RequestBody Admin entity) { adminMapper.updateByPrimaryKeySelective(entity); } where entity exposes roleId.",
+        "required_evidence": ["broad request binding", "sensitive writable field", "persistence operation", "no effective binder allowlist"],
+        "reason": "The request can bind a sensitive field directly into a persistent entity."
+      }
+    },
+    {
+      "model_id": "spring_rbac",
+      "historical_ids": ["MALL-R1-C04", "MALL-R1-C17"],
+      "false_positive": {
+        "id": "mall-registration-does-not-prove-full-admin-takeover",
+        "expected_state": "INCONCLUSIVE",
+        "source_excerpt": "A whitelisted registration route creates an account, but the historical chain omits default-role assignment, resource relations, authorities, and route decisions.",
+        "required_evidence": ["registration implementation", "default role assignment", "role-resource relations", "GrantedAuthority construction", "protected route decision"],
+        "reason": "Unauthenticated registration alone does not prove administrative authorization."
+      },
+      "true_positive": {
+        "id": "twin-default-admin-role-reaches-admin-route",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "register assigns ROLE_ADMIN; authority loading grants /order/**; the route performs updateMoneyInfo without an additional ownership control.",
+        "required_evidence": ["registration", "default role", "resource mapping", "authority construction", "route authorization and mutation"],
+        "reason": "The complete permission graph establishes the claimed privilege transition."
+      }
+    },
+    {
+      "model_id": "actuator",
+      "historical_ids": ["MALL-R1-C06"],
+      "false_positive": {
+        "id": "mall-actuator-heapdump-external-reachability-unknown",
+        "expected_state": "INCONCLUSIVE",
+        "source_excerpt": "secure.ignored.urls contains /actuator/**, while the historical report has no resolved endpoint enablement, web exposure, profile, management port, or deployment topology.",
+        "required_evidence": ["Spring Boot version", "heapdump endpoint enabled state", "web exposure include/exclude", "active profile", "management port and security chain"],
+        "reason": "A URL allowlist cannot prove that heapdump is enabled and externally reachable."
+      },
+      "true_positive": {
+        "id": "twin-enabled-exposed-unprotected-heapdump",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "management.endpoint.heapdump.enabled=true and management.endpoints.web.exposure.include=heapdump share a public management port with an explicit permitAll security matcher.",
+        "required_evidence": ["Boot version", "endpoint enablement", "web exposure", "management port", "matching permit-all security chain"],
+        "reason": "The configuration establishes an enabled, web-exposed endpoint without an applicable authentication control."
+      }
+    },
+    {
+      "model_id": "cors",
+      "historical_ids": ["MALL-R1-C05"],
+      "false_positive": {
+        "id": "mall-cors-does-not-prove-jwt-theft-chain",
+        "expected_state": "INCONCLUSIVE",
+        "source_excerpt": "GlobalCorsConfig uses addAllowedOriginPattern(\"*\") and setAllowCredentials(true), but the historical chain omits JWT storage, browser transport, SameSite, sensitive response, and deployment topology.",
+        "required_evidence": ["resolved origin-pattern semantics", "credential or bearer transport", "SameSite policy", "sensitive readable response", "actual deployment origin topology"],
+        "reason": "The CORS configuration can be a finding, but it does not alone prove a browser token-theft chain."
+      },
+      "true_positive": {
+        "id": "twin-reflected-origin-credentialed-sensitive-response",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "A credentialed endpoint reflects arbitrary Origin, session cookies are SameSite=None, and its authenticated JSON response contains account data.",
+        "required_evidence": ["origin rule", "credentials enabled", "cookie attributes or bearer delivery", "preflight/response behavior", "sensitive response and deployment origin"],
+        "reason": "The complete browser path establishes cross-origin credentialed data disclosure."
+      }
+    },
+    {
+      "model_id": "url_ssrf_redirect",
+      "historical_ids": ["MALL-R1-C10"],
+      "false_positive": {
+        "id": "mall-oss-callback-dto-url-is-not-a-network-sink",
+        "expected_state": "REJECTED",
+        "source_excerpt": "OssCallbackParam declares callbackUrl, callbackBody, and callbackBodyType; the reported filename concatenation has no HTTP client, sendRedirect, Location response, or navigation sink.",
+        "required_evidence": ["DTO field use sites", "HTTP client and redirect sink search", "server response construction", "callback configuration ownership"],
+        "reason": "A DTO string or URL-shaped concatenation is not SSRF or open redirect without a semantic sink."
+      },
+      "true_positive": {
+        "id": "twin-request-url-reaches-http-client",
+        "expected_state": "SUPPORTED_STATIC",
+        "source_excerpt": "client.newCall(new Request.Builder().url(request.getParameter(\"target\")).build()).execute().",
+        "required_evidence": ["attacker-controlled URL", "resolved HTTP client dispatch", "no allowlist or private-address guard", "reachable request handler"],
+        "reason": "The controlled destination reaches an HTTP client dispatch sink."
+      }
+    }
+  ],
+  "chain_regressions": [
+    {
+      "id": "mall-registration-admin-takeover",
+      "expected_state": "CONDITIONAL",
+      "missing_conditions": ["default role", "resource relationship", "authority construction", "admin route decision"]
+    },
+    {
+      "id": "mall-actuator-heapdump-secret-forgery",
+      "expected_state": "CONDITIONAL",
+      "missing_conditions": ["enabled endpoint", "web exposure", "deployment reachability", "heap contains usable key"]
+    },
+    {
+      "id": "mall-cors-jwt-theft",
+      "expected_state": "CONDITIONAL",
+      "missing_conditions": ["JWT storage", "credential sending", "SameSite", "sensitive readable response", "deployment topology"]
+    }
+  ]
+}

@@ -77,7 +77,7 @@ focus_area/trust_boundary/asset × system attack-chain pass
 
 ### Phase 3: PLAN
 
-8. Snapshot the sealed Focus Areas with all other frozen coverage inputs. Validate catalog v2, build `reports/coverage/coverage-plan.<audit_id>.json`, and initialize the canonical Ledger through `initialize-coverage-ledger.mjs`. The snapshot preflight must prove complete function-manifest membership and the exact primary file/function/catalog partition. The plan must have no `UNKNOWN`, every atomic check must bind to exactly one Focus Area, and every subject/type/domain group must contain all three lenses. Never edit the canonical ledger directly.
+8. Resolve every interface `CANDIDATE` to evidence-bound `CONFIRMED` or `REJECTED`, then snapshot the sealed Focus Areas with all other frozen coverage inputs. Validate catalog v2, build the snapshot-bound schema-v3 `reports/coverage/coverage-plan.<audit_id>.json`, and initialize the canonical Ledger through `initialize-coverage-ledger.mjs`. The snapshot preflight must prove complete function-manifest membership and the exact primary file/function/catalog partition. A complete plan must have no `UNKNOWN` and bounded interface inventory; candidates and extractor gaps remain separate blockers and never inflate `R`. Every atomic check must bind to one Focus Area and normalized source set, and every subject/type/domain group must contain all three lenses. Never edit the canonical ledger directly.
 9. Create one coverage work packet per `focus_area × owner/domain assignment × audit_strategy`; never combine strategies in a session. Each packet must retrieve its exact atomic checks with `coverage_get_packet(audit_id, focus_area_id, domain, lens)`.
 10. Route source packets to language specialists:
    - C/C++ or native → `c-cpp-source-auditor`.
@@ -107,7 +107,7 @@ Required session naming:
    - A transfer block for targeted follow-up.
    - Vulnerability-mining JSON and SARIF when static tools were used.
    - Exact `file_coverage`, `function_coverage`, and `catalog_coverage` arrays for the assigned lens. Aggregate counts are not accepted.
-   - For every Coverage Plan packet: an inspection event, one or more digest-bound tool receipts, and a separate execution/result decision through `coverage_ledger`. `VERIFIED` without a receipt and agent-submitted `N/A` are forbidden.
+   - For every Coverage Plan packet: an agent/session-bound inspection token, explicit delegation for cross-session work, one or more server-attested tool receipts with typed locators and tool version, and a separate execution/result decision through `coverage_ledger`. `FINDING` decisions bind exact ID-bearing artifacts. `VERIFIED` without an authorized receipt and agent-submitted `N/A` are forbidden.
 17. Require each blind/seeded session to emit actual files/functions read, hypotheses tested, findings or no-finding evidence, gaps, and seed provenance. A discovery `PASS` means the track ran; it never proves absence of vulnerabilities.
 
 ### Phase 5: SYSTEM ATTACK-CHAIN PASS
@@ -132,17 +132,18 @@ Required session naming:
 
 ### Phase 8: FINALIZE AND SEAL REPORT
 
-23. Read the threat model, Focus Areas, final correlation and attack-chain results, all coverage/discovery JSON, and SARIF. Canonical findings remain the primary audit pipeline's evidence-backed assessments; do not claim an independent verdict yet.
-24. Run `reconcile-audit-report.mjs` for every coverage report. Run legacy `verify-coverage.mjs` into `coverage-structural-v1.<audit_id>.json`, call `coverage_finalize`, then run `verify-coverage-v2.mjs` into the authoritative `coverage-verification.<audit_id>.json`. Generate and independently check `coverage-summary.<audit_id>.json` with `render-coverage-summary.mjs` and `verify-coverage-summary.mjs`. Also run `verify-semantic-coverage.mjs`. Write every durable artifact under `reports/coverage/`.
-25. Write exactly one complete human-readable report to `reports/final/security-audit-report.<audit_id>.md`. It must include every canonical finding, attack chain, coverage matrix, contradiction, residual gap, and artifact reference. Never use an intermediate report or a per-finding extract as the independent-review input.
-26. Compute the final report SHA-256 and byte size, then seal it. Do not modify the report after the third-party submission; review results are separate companion artifacts.
+23. Read the threat model, Focus Areas, final correlation and attack-chain results, all coverage/discovery JSON, and SARIF. Canonical findings remain candidates; do not claim an independent semantic verdict yet.
+24. Run `reconcile-audit-report.mjs` for every coverage report and call `coverage_finalize`. Then run `verify-coverage-v3.mjs` with frozen structural inputs; it invokes `verify-coverage.mjs` itself and emits the trusted structural artifact, authoritative verification, exact JSON summary, and Markdown companion from one in-memory state. Independently run `verify-coverage-summary.mjs` against both summary files. If work pauses, call `coverage_checkpoint` and use `--mode partial`; retain its nonzero status and nonterminal `PARTIAL_CHECKPOINT` seal. Only after an explicit budget, round-limit, or operator-stop decision may `coverage_finalize_partial` write immutable `FINALIZED_PARTIAL`, which still cannot authorize a complete claim.
+25. Build `reports/adjudication/finding-input.<audit_id>.r<round>.json` from the trusted structural artifact and Ledger, then invoke `security-finding-adjudicator`. Validate that every candidate has exactly one semantic decision. Invoke the final attack-chain pass only after adjudication; it may consume only `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` decisions and must pass `validate-attack-chains.mjs`. Re-run correlation/synthesis with the adjudication and final chain artifacts, then pass both artifacts to `verify-semantic-coverage.mjs`.
+26. For each supported decision, build and validate a CVSS 3.1 assessment with `build-cvss-assessment.mjs`; the input may state only a vector, rationale, assumptions, and evidence refs, while the script derives the number and rating. Build `reports/final/security-audit-report-model.<audit_id>.json` with `build-final-report-model.mjs --mode final` from the verified complete coverage summary, trusted adjudication input/output, CVSS assessment, and Attack-chain v2 report. Render exactly one Markdown report with `render-final-report.mjs`, then byte-verify it with `verify-final-report.mjs`. The renderer may present only adjudicated `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` findings and final synthesized chains; rejected/inconclusive candidates and contradicted chains remain explicit residual outcomes. If coverage is partial, render only a `--mode checkpoint` artifact under `reports/checkpoints/`; it is nonterminal and may not be submitted for final review. A `--mode partial-final` primary is allowed only from a `FINALIZED_PARTIAL` ledger after the explicit terminal decision. Never hand-edit the generated report, use a raw attack-chain artifact as final evidence, or use an intermediate/per-finding extract as the independent-review input.
+27. Compute the final report SHA-256 and byte size, then seal it. Do not modify the report after the third-party submission; review results are separate companion artifacts.
 
 ### Phase 9: OPENCODE THREE-PARTY REVIEW
 
-27. Invoke `vulnerability-validator` once with only `audit_id`, the absolute sealed final report path, source repository root, both verifier paths, the report SHA-256, and optional `.opencode/skills` path.
-28. Require the validator to call `vuln_judger_judge_report` (or `vuln-judger_judge_report` when the MCP server is hyphen-named) exactly once for the whole report with `engine=opencode`, digest-bound run id `<audit_id>-review-<first12(report_sha256)>`, `save=true`, and `wait_for_completion=false`. Per-finding calls, `one_round_judge`, intermediate inputs, and `builtin`/`codex` engines are forbidden.
-29. Because the review is long-running, monitor the same run with `vuln_judger_get_run` (or `vuln-judger_get_run`) instead of resubmitting. On completion, require structured and Markdown exports covering the Affirmative, Negative, and Moderator roles.
-30. Require `reports/validation/vuln-judger-review.<audit_id>.json` and `.md` to bind the run to the unchanged final-report digest. A partial, failed, stopped, or digest-invalidated review remains an explicit review gap and must never be presented as completed independent review.
+28. Invoke `vulnerability-validator` once with only `audit_id`, the absolute sealed final report path, source repository root, both verifier paths, the report SHA-256, and optional `.opencode/skills` path.
+29. Require the validator to call `vuln_judger_judge_report` (or `vuln-judger_judge_report` when the MCP server is hyphen-named) exactly once for the whole report with `engine=opencode`, digest-bound run id `<audit_id>-review-<first12(report_sha256)>`, `save=true`, and `wait_for_completion=false`. Per-finding calls, `one_round_judge`, intermediate inputs, and `builtin`/`codex` engines are forbidden.
+30. Because the review is long-running, monitor the same run with `vuln_judger_get_run` (or `vuln-judger_get_run`) instead of resubmitting. On completion, require structured and Markdown exports covering the Affirmative, Negative, and Moderator roles.
+31. Require `reports/validation/vuln-judger-review.<audit_id>.json` and `.md` to bind the run to the unchanged final-report digest. A partial, failed, stopped, or digest-invalidated review remains an explicit review gap and must never be presented as completed independent review.
 
 ### Phase 10: OPTIMIZE AND HANDOFF (NO AUTO TMP CLEANUP)
 
@@ -156,8 +157,8 @@ After step 23 runs the verifiers and before step 24 writes the final report, ver
 
 - `verify-coverage.mjs` exits zero for the intermediate file/function structural artifact.
 - `coverage_finalize` succeeds; the ledger hash chain and plan binding are valid.
-- `verify-coverage-v2.mjs` exits zero and authoritative `coverage-verification.<audit_id>.json` says `complete: true`.
-- `verify-coverage-summary.mjs` accepts every reported count and percentage; the final report copies these values exactly.
+- `verify-coverage-v3.mjs` exits zero and authoritative `coverage-verification.<audit_id>.json` says `complete: true`, `coverage_status=COMPLETE`, and `seal_state=FINALIZED_COMPLETE`.
+- `verify-coverage-summary.mjs` byte-validates the Markdown companion and accepts every reported count, percentage, and inventory state; the final report copies these values exactly.
 - `interface-extractor-coverage.json` is digest-valid and complete; no dynamic, unsupported, symlink, or failed interface source is hidden behind an aggregate percentage.
 - `verify-semantic-coverage.mjs` exits zero and its artifact says `complete: true`.
 - The current repository digest still matches the frozen scope.
@@ -169,8 +170,11 @@ After step 23 runs the verifiers and before step 24 writes the final report, ver
 - The system attack-chain pass accounts for every Focus Area, trust boundary, and asset.
 - D1, D2, and D3 have terminal three-lens coverage.
 - Every `N/A` is a reconciler-produced zero-target cell; entity rows never self-declare `N/A`.
-- Every planner `NOT_APPLICABLE` has a machine reason, every `UNKNOWN` blocks completion, and `R=0` is reported as `NOT_APPLICABLE`, never 100%.
+- Every planner `NOT_APPLICABLE` has a machine reason, every `UNKNOWN` blocks completion, candidate/extractor inventory is separately bounded, and `R=0` is reported as `NOT_APPLICABLE`, never 100%.
 - Every vulnerability type has a three-lens catalog-domain negative-discovery baseline; every applicable interface/type/lens pair is receipt-backed and verified.
+- The trusted Finding Adjudication input exactly reconciles structural accepted findings with Ledger artifacts, and the independent manifest accounts for every candidate exactly once.
+- Final findings are limited to `SUPPORTED_STATIC` or `SUPPORTED_RUNTIME`; rejected, reclassified, and inconclusive candidates remain explicit diagnostic outcomes. Raw attack-chain artifacts are never rendered as final chains.
+- `verify-final-report.mjs` accepts the exact deterministic Markdown render of a digest-valid report model; `CONFIRMED` labels and direct raw attack-chain references are rejected.
 - Every unresolved `GAP` is visible and is not masked by a finding.
 - Duplicate lens findings have one canonical ID.
 - Static-analysis and vulnerability-mining reports were consumed.
@@ -222,7 +226,7 @@ Write this markdown to `reports/final/security-audit-report.<audit_id>.md` (and 
 | Scope | Language | D# | Sink | Control | Config | Weakest State | Notes |
 |-------|----------|----|------|---------|--------|---------------|-------|
 
-## Machine-Derived Coverage v2
+## Machine-Derived Coverage v3
 Copy values exactly from the verified `coverage-summary.<audit_id>.json`; do not calculate or round them in prose.
 | Universe | Verified/Required | Known Coverage | Conservative Lower Bound | Completely Covered Entities | State |
 |----------|-------------------|----------------|--------------------------|-----------------------------|-------|
@@ -265,7 +269,7 @@ Copy values exactly from the verified `coverage-summary.<audit_id>.json`; do not
 - Coverage Plan digest:
 - Coverage Ledger chain head:
 - v1 structural coverage input:
-- Authoritative Coverage v2 verification:
+- Authoritative Coverage v3 verification:
 - Verified machine coverage summary:
 - Semantic coverage verification:
 - System attack-chain report:
