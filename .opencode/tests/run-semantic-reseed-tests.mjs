@@ -41,8 +41,33 @@ function sourceManifests() {
     schema_version: 1,
     audit_id: SOURCE_AUDIT,
     scope_digest: SOURCE_SCOPE_DIGEST,
+    mode: "bootstrap",
+    system_context: "Source-equivalent empty semantic reseed fixture.",
+    assets: [],
+    actors: [],
+    trust_boundaries: [],
     entry_points: [],
     threats: [],
+    security_invariants: [],
+    assumptions: [],
+    attacker_stories: [],
+    out_of_scope_stories: [],
+    severity_calibration: {
+      model: "contextual-four-level-v1",
+      context_notes: [],
+      evidence: [{ fixture: "empty-scope-calibration" }],
+      levels: [
+        { severity: "CRITICAL", criteria: ["Critical impact criteria."], examples: [], not_applicable_reason: "No threat exists in the empty fixture." },
+        { severity: "HIGH", criteria: ["High impact criteria."], examples: [], not_applicable_reason: "No threat exists in the empty fixture." },
+        { severity: "MEDIUM", criteria: ["Medium impact criteria."], examples: [], not_applicable_reason: "No threat exists in the empty fixture." },
+        { severity: "LOW", criteria: ["Low impact criteria."], examples: [], not_applicable_reason: "No threat exists in the empty fixture." },
+      ],
+    },
+    deprioritized: [],
+    history_clusters: [],
+    entry_point_coverage: [],
+    open_questions: [],
+    provenance: { target: "fixture", commit: "fixture", inputs: ["test"], owner: null },
   };
   threat.manifest_digest = semanticDigest(threat);
   const focus = {

@@ -59,6 +59,46 @@ function finding() {
     },
     reachability: { state: "static-reachable" },
     attacker_influence: { state: "direct" },
+    attack_surface: {
+      schema_version: 1,
+      in_scope: { state: "YES", rationale: "The Java client is in the frozen audit scope.", evidence_fact_indexes: [0] },
+      exposure: { state: "AUTHENTICATED", surface: "Java web request parameter", rationale: "A caller-controlled value reaches the client.", evidence_fact_indexes: [0] },
+      vector: { state: "NETWORK", rationale: "The claimed target is selected through a network request.", evidence_fact_indexes: [0, 1] },
+      auth_scope: { state: "AUTHENTICATED", rationale: "The fixture models an authenticated application caller.", evidence_fact_indexes: [0] },
+      preconditions: [{
+        precondition_id: "PRE-001",
+        description: "The caller can select the destination argument.",
+        feasibility: "PLAUSIBLE",
+        evidence_fact_indexes: [0],
+      }],
+      identities: {
+        attacker: "authenticated application caller",
+        victim: "internal HTTP service",
+        effective_principal: "application service credential",
+        evidence_fact_indexes: [0, 1],
+      },
+      boundary_crossing: {
+        state: "PROVEN",
+        from: "application request",
+        to: "outbound network client",
+        rationale: "Caller input reaches the HTTP client invocation.",
+        evidence_fact_indexes: [0, 1],
+      },
+      impact: {
+        types: ["CONFIDENTIALITY"],
+        outcome: "The service may issue a request to an attacker-selected destination.",
+        evidence_fact_indexes: [0, 1],
+      },
+      target_reach: {
+        state: "SINGLE_SERVICE",
+        rationale: "Static evidence proves one outbound client invocation.",
+        evidence_fact_indexes: [1],
+      },
+      controls: [],
+      counterevidence: [],
+      blindspots: ["Runtime egress policy is not represented in the fixture."],
+      confidence: { level: "medium", rationale: "Source and sink are static; deployment controls are unknown." },
+    },
     guards: [],
     contradictions: [],
     uncertainty: { level: "medium", assumptions: ["Runtime egress controls are not tested."] },
@@ -74,6 +114,13 @@ function decision(overrides = {}) {
     finding_object_digest: findingObjectDigest(finding()),
     state: "SUPPORTED_STATIC",
     decision_rationale: "The resolved client API performs the outbound request and the tested allowlist counterclaim is absent.",
+    attack_surface_review: {
+      disposition: "LIMITED",
+      reviewed_fields: ["in_scope", "exposure", "vector", "auth_scope", "preconditions", "identities", "boundary_crossing", "impact", "target_reach", "controls", "counterevidence", "blindspots", "confidence"],
+      rationale: "The static Java call path and identity transition are supported, while deployment egress remains unknown.",
+      evidence: ["Finding evidence facts 0 and 1 plus the deployment-guard search were reviewed."],
+      limitations: ["Runtime DNS resolution and egress policy were not observed."],
+    },
     semantic_proof: {
       source_fact_indexes: [0],
       sink_or_config_fact_indexes: [1],
@@ -155,6 +202,14 @@ async function main() {
   } })]);
   expectError(validateAdjudicationManifest(unsupported.output, unsupported.input), "supported-decision-counterclaim-not-refuted");
 
+  const unreviewedSurface = manifestWith([decision({
+    attack_surface_review: {
+      ...decision().attack_surface_review,
+      reviewed_fields: ["exposure"],
+    },
+  })]);
+  expectError(validateAdjudicationManifest(unreviewedSurface.output, unreviewedSurface.input), "attack-surface-review-fields-incomplete");
+
   const rejected = manifestWith([decision({
     state: "REJECTED",
     decision_rationale: "The presumed HTTP client call is only a DTO constructor.",
@@ -170,7 +225,7 @@ async function main() {
   const missing = manifestWith([]);
   expectError(validateAdjudicationManifest(missing.output, missing.input), "missing");
 
-  process.stdout.write(`${JSON.stringify({ complete: true, finding_adjudication: "v1", cases: 4 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, finding_adjudication: "v1", cases: 5 })}\n`);
 }
 
 main().catch(error => {

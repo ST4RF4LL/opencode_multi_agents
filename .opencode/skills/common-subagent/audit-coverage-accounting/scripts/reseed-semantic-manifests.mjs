@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { objectDigest } from "./coverage-v2-common.mjs";
+import { validateThreatModel } from "../../../threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs";
 
 const REGENERABLE_CACHE_PREFIXES = [".atlas/"];
 
@@ -54,9 +55,11 @@ function validateScope(scope, expectedAuditId) {
 }
 
 function validateSemanticSource(threatModel, focusAreas, sourceScope) {
-  if (threatModel?.schema_version !== 1 || threatModel.audit_id !== sourceScope.audit_id
-    || threatModel.scope_digest !== sourceScope.scope_digest || !Array.isArray(threatModel.entry_points)
-    || !Array.isArray(threatModel.threats) || threatModel.manifest_digest !== semanticDigest(threatModel)) {
+  const threatErrors = validateThreatModel(threatModel, {
+    auditId: sourceScope.audit_id,
+    scopeDigest: sourceScope.scope_digest,
+  });
+  if (threatErrors.length > 0) {
     throw new Error("Source threat model is invalid or not bound to the source scope");
   }
   if (focusAreas?.schema_version !== 1 || focusAreas.audit_id !== sourceScope.audit_id
@@ -81,6 +84,8 @@ function reseedThreatModel(source, auditId, scopeDigest) {
   };
   delete output.manifest_digest;
   output.manifest_digest = semanticDigest(output);
+  const errors = validateThreatModel(output, { auditId, scopeDigest });
+  if (errors.length > 0) throw new Error(`Reseeded threat model is invalid: ${errors.join(", ")}`);
   return output;
 }
 

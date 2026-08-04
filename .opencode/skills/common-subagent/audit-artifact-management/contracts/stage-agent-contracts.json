@@ -1,0 +1,525 @@
+{
+  "schema_version": 1,
+  "purpose": "Fixed, digest-bound input and output templates for every internal security-audit stage and agent.",
+  "stages": [
+    { "stage_id": "P00_AUDIT_INIT", "order": 0, "name": "Audit initialization" },
+    { "stage_id": "P01_RECON", "order": 1, "name": "Recon and frozen inventory" },
+    { "stage_id": "P02_THREAT_MODEL", "order": 2, "name": "Threat modeling and Focus Area partition" },
+    { "stage_id": "P03_PLAN", "order": 3, "name": "Coverage planning and Ledger initialization" },
+    { "stage_id": "P04_FOCUS_EXECUTION", "order": 4, "name": "Focus Area coverage and discovery execution" },
+    { "stage_id": "P05_SYSTEM_CHAIN_DISCOVERY", "order": 5, "name": "Preliminary system attack-chain discovery" },
+    { "stage_id": "P06_CORRELATION", "order": 6, "name": "Evidence correlation" },
+    { "stage_id": "P07_GAP_ROUND", "order": 7, "name": "Targeted gap rounds and optional threat refinement" },
+    { "stage_id": "P08_FINALIZE", "order": 8, "name": "Adjudication, post-adjudication chains, coverage seals, and final report" },
+    { "stage_id": "P09_INDEPENDENT_REVIEW", "order": 9, "name": "Independent whole-report review" },
+    { "stage_id": "P10_OPTIMIZE", "order": 10, "name": "Reusable security-audit asset optimization" }
+  ],
+  "envelope": {
+    "schema_version": 1,
+    "input_path_template": "reports/handoffs/{audit_id}/{stage_id}/{agent_name}.{agent_session_id}.input.json",
+    "output_path_template": "reports/handoffs/{audit_id}/{stage_id}/{agent_name}.{agent_session_id}.output.json",
+    "statuses": ["COMPLETE", "PARTIAL", "BLOCKED", "FAILED", "NOT_APPLICABLE"]
+  },
+  "contracts": [
+    {
+      "contract_id": "P00_AUDIT_INIT.security-audit-orchestrator",
+      "stage_id": "P00_AUDIT_INIT",
+      "agent_name": "security-audit-orchestrator",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "UNFROZEN",
+      "output_scope_state": "UNFROZEN",
+      "input": {
+        "required_artifact_types": [],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["repository_path", "user_scope", "constraints", "depth"],
+        "optional_payload_fields": ["platform_scope", "authorized_history"]
+      },
+      "output": {
+        "required_artifact_types": [],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["audit_id", "execution_profile", "stage_sequence", "initial_gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P01_RECON.security-intel-collector",
+      "stage_id": "P01_RECON",
+      "agent_name": "security-intel-collector",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "UNFROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": [],
+        "optional_artifact_types": ["architecture-document", "security-document", "authorized-history"],
+        "required_payload_fields": ["repository_path", "user_scope", "constraints", "depth"],
+        "optional_payload_fields": ["platform_scope"]
+      },
+      "output": {
+        "required_artifact_types": ["scope-manifest", "parser-capabilities", "function-manifest-set", "interface-manifest", "interface-extractor-coverage", "threat-routing-index", "recon-summary", "recon-inventory-set"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["scope_digest", "recon_state", "languages", "java_web_profile", "gaps"],
+        "optional_payload_fields": ["builder_metrics"]
+      }
+    },
+    {
+      "contract_id": "P02_THREAT_MODEL.security-threat-modeler.bootstrap",
+      "stage_id": "P02_THREAT_MODEL",
+      "agent_name": "security-threat-modeler",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["recon-summary", "threat-routing-index", "recon-inventory-set"],
+        "optional_artifact_types": ["architecture-document", "security-document", "authorized-history"],
+        "required_payload_fields": ["mode", "scope_digest", "java_web_profile", "known_gaps"],
+        "optional_payload_fields": ["owner_answers"]
+      },
+      "output": {
+        "required_artifact_types": ["threat-model", "focus-areas"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["entry_point_coverage_state", "primary_partition_state", "blocking_questions", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P03_PLAN.security-audit-orchestrator",
+      "stage_id": "P03_PLAN",
+      "agent_name": "security-audit-orchestrator",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["scope-manifest", "function-manifest-set", "interface-manifest", "interface-extractor-coverage", "threat-model", "focus-areas", "vulnerability-catalog"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["scope_digest", "required_lenses", "active_domains", "blocking_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["coverage-input-snapshot", "coverage-plan", "coverage-ledger"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["plan_digest", "required_checks", "focus_packets", "discovery_packets", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P04_FOCUS_EXECUTION.c-cpp-source-auditor",
+      "stage_id": "P04_FOCUS_EXECUTION",
+      "agent_name": "c-cpp-source-auditor",
+      "invocation": "REPEATABLE_FROM_PLAN",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-work-packet", "recon-inventory-set"],
+        "optional_artifact_types": ["build-metadata", "previous-gap-packet"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "assigned_file_ids", "assigned_function_ids", "assigned_catalog_ids", "depth"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["learning_candidates"]
+      }
+    },
+    {
+      "contract_id": "P04_FOCUS_EXECUTION.java-source-auditor",
+      "stage_id": "P04_FOCUS_EXECUTION",
+      "agent_name": "java-source-auditor",
+      "invocation": "REPEATABLE_FROM_PLAN",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-work-packet", "recon-inventory-set", "java-function-manifest"],
+        "optional_artifact_types": ["build-metadata", "previous-gap-packet"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "assigned_file_ids", "assigned_function_ids", "assigned_catalog_ids", "depth"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["learning_candidates"]
+      }
+    },
+    {
+      "contract_id": "P04_FOCUS_EXECUTION.web-source-auditor",
+      "stage_id": "P04_FOCUS_EXECUTION",
+      "agent_name": "web-source-auditor",
+      "invocation": "REPEATABLE_FROM_PLAN",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-work-packet", "recon-inventory-set", "javascript-function-manifest", "embedded-web-function-manifest"],
+        "optional_artifact_types": ["build-metadata", "previous-gap-packet"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "assigned_file_ids", "assigned_function_ids", "assigned_catalog_ids", "depth"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["learning_candidates"]
+      }
+    },
+    {
+      "contract_id": "P04_FOCUS_EXECUTION.python-source-auditor",
+      "stage_id": "P04_FOCUS_EXECUTION",
+      "agent_name": "python-source-auditor",
+      "invocation": "REPEATABLE_FROM_PLAN",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-work-packet", "recon-inventory-set"],
+        "optional_artifact_types": ["dependency-metadata", "previous-gap-packet"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "assigned_file_ids", "assigned_function_ids", "assigned_catalog_ids", "depth"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["learning_candidates"]
+      }
+    },
+    {
+      "contract_id": "P04_FOCUS_EXECUTION.platform-security-auditor",
+      "stage_id": "P04_FOCUS_EXECUTION",
+      "agent_name": "platform-security-auditor",
+      "invocation": "REPEATABLE_FROM_PLAN",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-work-packet", "recon-inventory-set"],
+        "optional_artifact_types": ["build-metadata", "deployment-metadata", "previous-gap-packet"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "assigned_file_ids", "assigned_function_ids", "assigned_catalog_ids", "depth"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["effective_state_gaps", "correlation_hints"]
+      }
+    },
+    {
+      "contract_id": "P04_FOCUS_EXECUTION.ai-security-auditor",
+      "stage_id": "P04_FOCUS_EXECUTION",
+      "agent_name": "ai-security-auditor",
+      "invocation": "REPEATABLE_FROM_PLAN",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-work-packet", "recon-inventory-set", "ai-surface-inventory"],
+        "optional_artifact_types": ["previous-gap-packet"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "assigned_file_ids", "assigned_function_ids", "assigned_catalog_ids", "depth"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["ai_absence_evidence", "learning_candidates"]
+      }
+    },
+    {
+      "contract_id": "P05_SYSTEM_CHAIN_DISCOVERY.security-attack-chain-hunter",
+      "stage_id": "P05_SYSTEM_CHAIN_DISCOVERY",
+      "agent_name": "security-attack-chain-hunter",
+      "invocation": "REQUIRED_PER_ROUND",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "focus-audit-result-set", "recon-inventory-set"],
+        "optional_artifact_types": ["finding-adjudication"],
+        "required_payload_fields": ["round", "reviewed_focus_area_ids", "reviewed_trust_boundary_ids", "reviewed_asset_ids", "known_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["preliminary-attack-chain-report"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "chain_ids", "reviewed_focus_area_ids", "reviewed_trust_boundary_ids", "reviewed_asset_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P06_CORRELATION.security-evidence-correlator",
+      "stage_id": "P06_CORRELATION",
+      "agent_name": "security-evidence-correlator",
+      "invocation": "REQUIRED_PER_ROUND",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-audit-result-set", "preliminary-attack-chain-report"],
+        "optional_artifact_types": ["sarif-set", "previous-correlation", "finding-adjudication"],
+        "required_payload_fields": ["round", "ledger_gap_cursor", "expected_sessions", "known_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["correlation-report", "follow-up-packet-set"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "canonical_finding_ids", "duplicate_map", "contradictions", "residual_gaps", "follow_up_packet_ids"],
+        "optional_payload_fields": ["attack_chain_candidate_ids"]
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.security-threat-modeler.refine",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "security-threat-modeler",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "recon-summary", "threat-routing-index"],
+        "optional_artifact_types": ["owner-answer-set", "correlation-report"],
+        "required_payload_fields": ["mode", "scope_digest", "questions_to_resolve", "known_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["threat-model", "focus-areas"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["resolved_question_ids", "remaining_blocking_questions", "partition_changes", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.c-cpp-source-auditor",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "c-cpp-source-auditor",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "follow-up-packet", "previous-focus-audit-result"],
+        "optional_artifact_types": ["correlation-report"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "gap_ids", "required_evidence"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.java-source-auditor",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "java-source-auditor",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "follow-up-packet", "previous-focus-audit-result", "java-function-manifest"],
+        "optional_artifact_types": ["correlation-report"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "gap_ids", "required_evidence"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.web-source-auditor",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "web-source-auditor",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "follow-up-packet", "previous-focus-audit-result", "javascript-function-manifest", "embedded-web-function-manifest"],
+        "optional_artifact_types": ["correlation-report"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "gap_ids", "required_evidence"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.python-source-auditor",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "python-source-auditor",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "follow-up-packet", "previous-focus-audit-result"],
+        "optional_artifact_types": ["correlation-report"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "gap_ids", "required_evidence"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.platform-security-auditor",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "platform-security-auditor",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "follow-up-packet", "previous-focus-audit-result"],
+        "optional_artifact_types": ["correlation-report", "deployment-metadata"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "gap_ids", "required_evidence"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["effective_state_gaps"]
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.ai-security-auditor",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "ai-security-auditor",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "follow-up-packet", "previous-focus-audit-result", "ai-surface-inventory"],
+        "optional_artifact_types": ["correlation-report"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "gap_ids", "required_evidence"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["focus-audit-result"],
+        "optional_artifact_types": ["sarif", "finding-artifact-set"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "optional_payload_fields": ["ai_absence_evidence"]
+      }
+    },
+    {
+      "contract_id": "P07_GAP_ROUND.security-evidence-correlator",
+      "stage_id": "P07_GAP_ROUND",
+      "agent_name": "security-evidence-correlator",
+      "invocation": "REPEATABLE_FROM_GAPS",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["previous-correlation", "follow-up-result-set", "coverage-plan"],
+        "optional_artifact_types": ["preliminary-attack-chain-report"],
+        "required_payload_fields": ["round", "previous_gap_ids", "expected_follow_up_ids", "ledger_gap_cursor"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["correlation-report", "follow-up-packet-set"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "resolved_gap_ids", "residual_gaps", "contradictions", "follow_up_packet_ids"],
+        "optional_payload_fields": ["canonical_finding_ids"]
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.security-finding-adjudicator",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "security-finding-adjudicator",
+      "invocation": "REQUIRED_ONCE_WHEN_CANDIDATES_EXIST",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "coverage-ledger", "coverage-structural", "finding-adjudication-input"],
+        "optional_artifact_types": ["dependency-metadata", "deployment-metadata"],
+        "required_payload_fields": ["round", "candidate_finding_ids", "candidate_count", "known_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["finding-adjudication"],
+        "optional_artifact_types": ["external-runtime-validation-request-set"],
+        "required_payload_fields": ["round", "decision_count", "supported_static_ids", "supported_runtime_ids", "rejected_ids", "inconclusive_ids", "reclassified_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.security-attack-chain-hunter",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "security-attack-chain-hunter",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["threat-model", "focus-areas", "finding-adjudication", "focus-audit-result-set", "correlation-report"],
+        "optional_artifact_types": ["preliminary-attack-chain-report"],
+        "required_payload_fields": ["round", "reviewed_focus_area_ids", "reviewed_trust_boundary_ids", "reviewed_asset_ids", "known_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["attack-chain-report"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "accepted_chain_ids", "rejected_chain_ids", "conditional_chain_ids", "reviewed_focus_area_ids", "reviewed_trust_boundary_ids", "reviewed_asset_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.security-audit-orchestrator",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "security-audit-orchestrator",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["coverage-plan", "coverage-ledger", "finding-adjudication", "cvss-assessment", "attack-chain-report", "correlation-report"],
+        "optional_artifact_types": ["stage-handoff-set", "external-runtime-validation-request-set"],
+        "required_payload_fields": ["report_mode", "expected_stage_contract_ids", "expected_focus_sessions", "known_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["stage-handoff-verification", "coverage-verification", "semantic-coverage-verification", "final-report-model", "final-report"],
+        "optional_artifact_types": ["external-runtime-validation-request-set"],
+        "required_payload_fields": ["report_kind", "coverage_complete", "semantic_complete", "stage_handoffs_complete", "supported_finding_ids", "attack_chain_ids", "residual_gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P09_INDEPENDENT_REVIEW.vulnerability-validator",
+      "stage_id": "P09_INDEPENDENT_REVIEW",
+      "agent_name": "vulnerability-validator",
+      "invocation": "REQUIRED_FOR_TERMINAL_REPORT",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["final-report", "coverage-verification", "semantic-coverage-verification"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["report_sha256", "source_repository_path", "review_engine", "run_id"],
+        "optional_payload_fields": ["skills_path"]
+      },
+      "output": {
+        "required_artifact_types": ["third-party-review-json", "third-party-review-markdown"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["run_id", "terminal_state", "review_complete", "finding_accounting", "residual_gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P10_OPTIMIZE.security-skill-optimizer",
+      "stage_id": "P10_OPTIMIZE",
+      "agent_name": "security-skill-optimizer",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["third-party-review-json", "final-report"],
+        "optional_artifact_types": ["source-auditor-note-set"],
+        "required_payload_fields": ["review_status", "eligible_verdict_ids", "prohibited_changes", "residual_gaps"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["optimization-change-summary"],
+        "optional_artifact_types": ["updated-skill-set", "updated-rule-set", "updated-case-set"],
+        "required_payload_fields": ["changed_assets", "skipped_verdict_ids", "validation_results", "gaps"],
+        "optional_payload_fields": []
+      }
+    }
+  ]
+}

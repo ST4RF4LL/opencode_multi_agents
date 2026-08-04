@@ -102,6 +102,55 @@ async function makeSemanticManifests(directory, scope, manifests, catalog) {
     trust_boundaries: [{ trust_boundary_id: "TB-001", from: "fixture input", to: "test code", evidence: [{ fixture: true }] }],
     entry_points: [{ entry_point_id: "EP-001", name: "fixture entry", trust_boundary_ids: ["TB-001"], reachable_asset_ids: ["ASSET-001"], inventory_ids: ["fixture-entry"], evidence: [{ fixture: true }] }],
     threats: [{ threat_id: "T-001", outcome: "Attacker-controlled fixture input compromises test integrity", actor_ids: ["ACTOR-001"], entry_point_ids: ["EP-001"], trust_boundary_ids: ["TB-001"], asset_ids: ["ASSET-001"], dimensions: ["D1"], impact: "high", likelihood: "possible", status: "unmitigated", controls: [], evidence: [{ fixture: true }], provenance_tags: ["code-verified"] }],
+    security_invariants: [{
+      invariant_id: "INV-001",
+      statement: "Untrusted fixture input must not control the fixture security operation.",
+      asset_ids: ["ASSET-001"],
+      threat_ids: ["T-001"],
+      enforcement_points: ["fixture input validation"],
+      evidence: [{ fixture: "invariant" }],
+      provenance_tags: ["code-verified"],
+    }],
+    assumptions: [{
+      assumption_id: "ASM-001",
+      statement: "The fixture route is representative of a deployed HTTP boundary.",
+      category: "deployment",
+      status: "UNVERIFIED",
+      affects_threat_ids: ["T-001"],
+      evidence: [],
+      provenance_tags: ["deployment-unknown"],
+    }],
+    attacker_stories: [{
+      story_id: "STORY-001",
+      actor_id: "ACTOR-001",
+      entry_point_id: "EP-001",
+      threat_id: "T-001",
+      affected_asset_ids: ["ASSET-001"],
+      preconditions: ["The fixture route is deployed."],
+      steps: ["Supply attacker-controlled fixture input.", "Reach the fixture security operation."],
+      outcome: "The attacker influences the fixture security operation.",
+      evidence: [{ fixture: "story" }],
+      provenance_tags: ["code-verified"],
+    }],
+    out_of_scope_stories: [{
+      story_id: "OOS-001",
+      scenario: "Compromise of infrastructure outside the fixture repository.",
+      reason: "External infrastructure is not included in the frozen fixture scope.",
+      reconsider_when: ["Infrastructure manifests are added to the frozen scope."],
+      evidence: [{ fixture: "scope" }],
+      provenance_tags: ["deployment-unknown"],
+    }],
+    severity_calibration: {
+      model: "contextual-four-level-v1",
+      context_notes: ["This calibration orders threat-model review; CVSS is derived after adjudication."],
+      evidence: [{ fixture: "severity" }],
+      levels: [
+        { severity: "CRITICAL", criteria: ["Complete fixture compromise across all targets."], examples: [{ scenario: "All fixture targets are compromised.", rationale: "Fleet-wide impact.", threat_ids: ["T-001"] }], not_applicable_reason: null },
+        { severity: "HIGH", criteria: ["Direct compromise of the primary fixture integrity asset."], examples: [{ scenario: "The primary fixture operation is attacker-controlled.", rationale: "Direct integrity loss.", threat_ids: ["T-001"] }], not_applicable_reason: null },
+        { severity: "MEDIUM", criteria: ["A constrained operation is influenced under additional preconditions."], examples: [{ scenario: "Only a noncritical fixture branch is influenced.", rationale: "Constrained impact.", threat_ids: ["T-001"] }], not_applicable_reason: null },
+        { severity: "LOW", criteria: ["The observable effect is minor and difficult to reach."], examples: [{ scenario: "Only a diagnostic fixture message changes.", rationale: "Minimal impact.", threat_ids: ["T-001"] }], not_applicable_reason: null },
+      ],
+    },
     deprioritized: [],
     history_clusters: [],
     entry_point_coverage: [{ entry_point_id: "EP-001", status: "THREAT", threat_ids: ["T-001"], reason: null, evidence: [{ fixture: true }] }],
@@ -243,6 +292,46 @@ function ledgerFindingArtifact(findingId, check, plan) {
     },
     reachability: { state: "static-reachable" },
     attacker_influence: { state: "direct" },
+    attack_surface: {
+      schema_version: 1,
+      in_scope: { state: "YES", rationale: "The fixture source is in the frozen scope.", evidence_fact_indexes: [0] },
+      exposure: { state: "PUBLIC", surface: "fixture HTTP request parameter", rationale: "The request parameter is externally supplied.", evidence_fact_indexes: [0] },
+      vector: { state: "NETWORK", rationale: "The input is modeled as a network request parameter.", evidence_fact_indexes: [0] },
+      auth_scope: { state: "UNAUTHENTICATED", rationale: "The fixture check does not require an established identity.", evidence_fact_indexes: [0] },
+      preconditions: [{
+        precondition_id: "PRE-001",
+        description: "The fixture route is deployed.",
+        feasibility: "UNPROVEN",
+        evidence_fact_indexes: [],
+      }],
+      identities: {
+        attacker: "remote fixture caller",
+        victim: "fixture application",
+        effective_principal: "unauthenticated request context",
+        evidence_fact_indexes: [0],
+      },
+      boundary_crossing: {
+        state: "PROVEN",
+        from: "fixture request",
+        to: "fixture security operation",
+        rationale: "The source reaches the semantic operation.",
+        evidence_fact_indexes: [0, 1],
+      },
+      impact: {
+        types: ["INTEGRITY"],
+        outcome: "The fixture security operation is influenced by request input.",
+        evidence_fact_indexes: [0, 1],
+      },
+      target_reach: {
+        state: "SINGLE_SERVICE",
+        rationale: "The fixture establishes one service-local operation.",
+        evidence_fact_indexes: [1],
+      },
+      controls: [],
+      counterevidence: [],
+      blindspots: ["The fixture has no runtime deployment evidence."],
+      confidence: { level: "medium", rationale: "Static source and sink facts are present; deployment is unverified." },
+    },
     guards: [],
     contradictions: [],
     uncertainty: { level: "medium", assumptions: ["Fixture has no runtime deployment."] },
@@ -1217,6 +1306,13 @@ async function main() {
         finding_object_digest: adjudicationCandidate.finding_object_digest,
         state: "SUPPORTED_STATIC",
         decision_rationale: "The fixture source reaches its evidence-backed security operation with no effective guard.",
+        attack_surface_review: {
+          disposition: "LIMITED",
+          reviewed_fields: ["in_scope", "exposure", "vector", "auth_scope", "preconditions", "identities", "boundary_crossing", "impact", "target_reach", "controls", "counterevidence", "blindspots", "confidence"],
+          rationale: "The fixture's static attack-surface facts are supported, but its deployment precondition remains unverified.",
+          evidence: ["Finding evidence facts 0 and 1 and all four guard scopes were reviewed."],
+          limitations: ["The fixture has no runtime deployment evidence."],
+        },
         semantic_proof: {
           source_fact_indexes: [0],
           sink_or_config_fact_indexes: [1],
@@ -1343,6 +1439,10 @@ async function main() {
     const finalReportModel = JSON.parse(await readFile(finalReportModelPath, "utf8"));
     const finalReport = await readFile(finalReportPath, "utf8");
     if (finalReportModel.findings.length !== 1 || finalReportModel.chains.length !== 1
+      || finalReportModel.findings[0].attack_surface?.schema_version !== 1
+      || !finalReportModel.findings[0].attack_surface_source?.json_pointer?.endsWith("/finding/attack_surface")
+      || !finalReport.includes("## Per-Finding Attack Surface")
+      || !finalReport.includes("fixture HTTP request parameter")
       || finalReport.includes("CONFIRMED") || !finalReport.includes("GENERATED: final-report-model")) {
       throw new Error("Final report model did not preserve only adjudicated, provenance-bound results");
     }

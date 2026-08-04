@@ -4,6 +4,13 @@ This directory is readable by all security audit subagents.
 
 Only `security-skill-optimizer` should normally modify these assets during the validation feedback loop.
 
+The audit profile is Java/Web-first: Java/JVM services, Java Web frameworks,
+browser code, JSP/templates, and their authentication, authorization, data,
+framework, and deployment boundaries receive the primary technical model.
+Platform, Python, C/C++, and AI agents remain available only when the frozen
+repository scope contains those surfaces; their presence does not broaden the
+default target profile.
+
 ## Directories
 
 - `catalogs/`: versioned coverage catalogs. `application-ai-vulnerability-catalog.json` maps application, platform, and AI-system risks to D1-D10, authoritative baselines, applicable domains, and all three lens questions.

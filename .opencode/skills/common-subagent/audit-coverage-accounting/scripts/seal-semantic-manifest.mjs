@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { validateThreatModel } from "../../../threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs";
 
 function parseArgs(argv) {
   const args = {};
@@ -33,10 +34,18 @@ async function main() {
   const isThreatModel = Array.isArray(manifest.entry_points) && Array.isArray(manifest.threats);
   const isFocusAreas = Array.isArray(manifest.focus_areas) && Array.isArray(manifest.required_lenses);
   if (!isThreatModel && !isFocusAreas) throw new Error("Input is neither a threat model nor a Focus Area manifest");
+  if (isThreatModel) {
+    const errors = validateThreatModel(manifest, { requireDigest: false });
+    if (errors.length > 0) throw new Error(`Threat model contract is invalid:\n- ${errors.join("\n- ")}`);
+  }
   if (isFocusAreas && (typeof manifest.threat_model_digest !== "string" || !/^[a-f0-9]{64}$/.test(manifest.threat_model_digest))) {
     throw new Error("Focus Area manifest lacks a valid threat_model_digest");
   }
   manifest.manifest_digest = manifestDigest(manifest);
+  if (isThreatModel) {
+    const errors = validateThreatModel(manifest);
+    if (errors.length > 0) throw new Error(`Sealed threat model contract is invalid:\n- ${errors.join("\n- ")}`);
+  }
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify({ output: outputPath, kind: isThreatModel ? "threat-model" : "focus-areas", audit_id: manifest.audit_id, manifest_digest: manifest.manifest_digest })}\n`);

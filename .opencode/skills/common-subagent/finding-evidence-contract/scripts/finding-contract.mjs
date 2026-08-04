@@ -13,6 +13,37 @@ export const FINDING_STATES = new Set([
 export const LENSES = new Set(["sink-driven", "control-driven", "config-driven"]);
 export const DIMENSIONS = new Set(Array.from({ length: 10 }, (_, index) => `D${index + 1}`));
 export const DISCOVERY_TRACKS = new Set(["coverage", "blind", "seeded-variant"]);
+export const ATTACK_SURFACE_SCHEMA_VERSION = 1;
+
+const IN_SCOPE_STATES = new Set(["YES", "NO", "UNKNOWN"]);
+const EXPOSURE_STATES = new Set(["PUBLIC", "AUTHENTICATED", "INTERNAL", "LOCAL", "BUILD_TIME", "NONE", "UNKNOWN"]);
+const VECTOR_STATES = new Set(["NETWORK", "ADJACENT", "LOCAL", "PHYSICAL", "SUPPLY_CHAIN", "NONE", "UNKNOWN"]);
+const AUTH_SCOPE_STATES = new Set([
+  "UNAUTHENTICATED",
+  "AUTHENTICATED",
+  "PRIVILEGED",
+  "ADMIN",
+  "OPERATOR",
+  "DEVELOPER",
+  "NOT_APPLICABLE",
+  "UNKNOWN",
+]);
+const PRECONDITION_FEASIBILITY = new Set(["PLAUSIBLE", "CONSTRAINED", "UNPROVEN"]);
+const BOUNDARY_STATES = new Set(["PROVEN", "PLAUSIBLE", "ABSENT", "UNKNOWN"]);
+const IMPACT_TYPES = new Set(["CONFIDENTIALITY", "INTEGRITY", "AVAILABILITY", "AUTHORIZATION", "PRIVACY", "SUPPLY_CHAIN", "OTHER"]);
+const TARGET_REACH_STATES = new Set([
+  "SINGLE_OBJECT",
+  "SINGLE_USER",
+  "SINGLE_SERVICE",
+  "TENANT",
+  "CROSS_TENANT",
+  "MULTI_SERVICE",
+  "FLEET",
+  "SUPPLY_CHAIN",
+  "UNKNOWN",
+]);
+const CONTROL_STATES = new Set(["EFFECTIVE", "PARTIAL", "ABSENT", "UNKNOWN"]);
+const COUNTEREVIDENCE_DISPOSITIONS = new Set(["DEFEATS", "LIMITS", "DOES_NOT_DEFEAT", "UNRESOLVED"]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -27,6 +58,10 @@ function nonEmptyUniqueStringArray(value) {
     && value.length > 0
     && value.every(nonEmptyString)
     && new Set(value).size === value.length;
+}
+
+function uniqueStringArray(value) {
+  return Array.isArray(value) && value.every(nonEmptyString) && new Set(value).size === value.length;
 }
 
 function sha256(value) {
@@ -72,6 +107,158 @@ function validateFact(fact, index, errors) {
   if (!validDigest(fact.source_digest)) errors.push(`${prefix}-source-digest-invalid`);
   if (!new Set(["high", "medium", "low"]).has(fact.confidence)) errors.push(`${prefix}-confidence-invalid`);
   validateLocation(fact.locator, `${prefix}-locator`, errors);
+}
+
+function validateFactIndexes(value, factCount, { required = false } = {}) {
+  return Array.isArray(value)
+    && (!required || value.length > 0)
+    && value.every(index => Number.isInteger(index) && index >= 0 && (factCount == null || index < factCount))
+    && new Set(value).size === value.length;
+}
+
+function assessmentHasEvidence(state) {
+  return !["UNKNOWN", "NONE", "NOT_APPLICABLE", "ABSENT"].includes(state);
+}
+
+function validateAssessment(value, {
+  label,
+  states,
+  factCount,
+  textFields = ["rationale"],
+  stateField = "state",
+}, errors) {
+  if (!isObject(value)) {
+    errors.push(`attack-surface-${label}-missing`);
+    return;
+  }
+  if (!states.has(value[stateField])) errors.push(`attack-surface-${label}-state-invalid`);
+  for (const field of textFields) {
+    if (!nonEmptyString(value[field])) errors.push(`attack-surface-${label}-${field.replaceAll("_", "-")}-missing`);
+  }
+  if (!validateFactIndexes(value.evidence_fact_indexes, factCount, {
+    required: assessmentHasEvidence(value[stateField]),
+  })) {
+    errors.push(`attack-surface-${label}-evidence-invalid`);
+  }
+}
+
+export function validateAttackSurface(attackSurface, context = {}) {
+  const errors = [];
+  const factCount = Number.isInteger(context.factCount) && context.factCount >= 0 ? context.factCount : null;
+  if (!isObject(attackSurface)) return ["attack-surface-missing"];
+  if (attackSurface.schema_version !== ATTACK_SURFACE_SCHEMA_VERSION) errors.push("attack-surface-schema-version-invalid");
+
+  validateAssessment(attackSurface.in_scope, {
+    label: "in-scope",
+    states: IN_SCOPE_STATES,
+    factCount,
+  }, errors);
+  validateAssessment(attackSurface.exposure, {
+    label: "exposure",
+    states: EXPOSURE_STATES,
+    factCount,
+    textFields: ["surface", "rationale"],
+  }, errors);
+  validateAssessment(attackSurface.vector, {
+    label: "vector",
+    states: VECTOR_STATES,
+    factCount,
+  }, errors);
+  validateAssessment(attackSurface.auth_scope, {
+    label: "auth-scope",
+    states: AUTH_SCOPE_STATES,
+    factCount,
+  }, errors);
+
+  if (!Array.isArray(attackSurface.preconditions)) {
+    errors.push("attack-surface-preconditions-missing");
+  } else {
+    const ids = new Set();
+    for (const [index, precondition] of attackSurface.preconditions.entries()) {
+      if (!isObject(precondition)
+        || !nonEmptyString(precondition.precondition_id)
+        || ids.has(precondition.precondition_id)
+        || !nonEmptyString(precondition.description)
+        || !PRECONDITION_FEASIBILITY.has(precondition.feasibility)
+        || !validateFactIndexes(precondition.evidence_fact_indexes, factCount)) {
+        errors.push(`attack-surface-precondition-${index}-invalid`);
+      } else {
+        ids.add(precondition.precondition_id);
+      }
+    }
+  }
+
+  const identities = attackSurface.identities;
+  if (!isObject(identities)
+    || !nonEmptyString(identities.attacker)
+    || !nonEmptyString(identities.victim)
+    || !nonEmptyString(identities.effective_principal)
+    || !validateFactIndexes(identities.evidence_fact_indexes, factCount, { required: true })) {
+    errors.push("attack-surface-identities-invalid");
+  }
+
+  validateAssessment(attackSurface.boundary_crossing, {
+    label: "boundary-crossing",
+    states: BOUNDARY_STATES,
+    factCount,
+    textFields: ["from", "to", "rationale"],
+  }, errors);
+
+  const impact = attackSurface.impact;
+  if (!isObject(impact)
+    || !nonEmptyUniqueStringArray(impact.types)
+    || impact.types.some(type => !IMPACT_TYPES.has(type))
+    || !nonEmptyString(impact.outcome)
+    || !validateFactIndexes(impact.evidence_fact_indexes, factCount, { required: true })) {
+    errors.push("attack-surface-impact-invalid");
+  }
+
+  validateAssessment(attackSurface.target_reach, {
+    label: "target-reach",
+    states: TARGET_REACH_STATES,
+    factCount,
+  }, errors);
+
+  if (!Array.isArray(attackSurface.controls)) {
+    errors.push("attack-surface-controls-missing");
+  } else {
+    const ids = new Set();
+    for (const [index, control] of attackSurface.controls.entries()) {
+      if (!isObject(control)
+        || !nonEmptyString(control.control_id)
+        || ids.has(control.control_id)
+        || !CONTROL_STATES.has(control.state)
+        || !nonEmptyString(control.description)
+        || !validateFactIndexes(control.evidence_fact_indexes, factCount, {
+          required: assessmentHasEvidence(control.state),
+        })) {
+        errors.push(`attack-surface-control-${index}-invalid`);
+      } else {
+        ids.add(control.control_id);
+      }
+    }
+  }
+
+  if (!Array.isArray(attackSurface.counterevidence)) {
+    errors.push("attack-surface-counterevidence-missing");
+  } else {
+    for (const [index, counterevidence] of attackSurface.counterevidence.entries()) {
+      if (!isObject(counterevidence)
+        || !nonEmptyString(counterevidence.claim)
+        || !COUNTEREVIDENCE_DISPOSITIONS.has(counterevidence.disposition)
+        || !validateFactIndexes(counterevidence.evidence_fact_indexes, factCount, { required: true })) {
+        errors.push(`attack-surface-counterevidence-${index}-invalid`);
+      }
+    }
+  }
+
+  if (!uniqueStringArray(attackSurface.blindspots)) errors.push("attack-surface-blindspots-invalid");
+  if (!isObject(attackSurface.confidence)
+    || !new Set(["high", "medium", "low"]).has(attackSurface.confidence.level)
+    || !nonEmptyString(attackSurface.confidence.rationale)) {
+    errors.push("attack-surface-confidence-invalid");
+  }
+  return [...new Set(errors)];
 }
 
 function dimensionsForFinding(finding) {
@@ -134,6 +321,9 @@ export function validateFinding(finding, context = {}) {
   }
   if (!isObject(finding.reachability) || !nonEmptyString(finding.reachability.state)) errors.push("reachability-missing");
   if (!isObject(finding.attacker_influence) || !nonEmptyString(finding.attacker_influence.state)) errors.push("attacker-influence-missing");
+  errors.push(...validateAttackSurface(finding.attack_surface, {
+    factCount: Array.isArray(facts) ? facts.length : null,
+  }));
   if (!Array.isArray(finding.guards)) errors.push("guards-missing");
   if (!Array.isArray(finding.contradictions)) errors.push("contradictions-missing");
   if (!isObject(finding.uncertainty) || !new Set(["low", "medium", "high"]).has(finding.uncertainty.level)

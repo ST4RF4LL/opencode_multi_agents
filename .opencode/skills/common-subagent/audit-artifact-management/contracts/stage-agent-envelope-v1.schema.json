@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opencode://security/stage-agent-envelope-v1.schema.json",
+  "title": "Stage Agent Envelope v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_id",
+    "stage_id",
+    "direction",
+    "audit_id",
+    "round",
+    "agent_name",
+    "agent_session_id",
+    "scope_binding",
+    "artifact_bindings",
+    "payload",
+    "envelope_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "direction": { "enum": ["INPUT", "OUTPUT"] },
+    "round": { "type": "integer", "minimum": 0 },
+    "scope_binding": {
+      "type": "object",
+      "required": ["state", "scope_digest"],
+      "properties": {
+        "state": { "enum": ["UNFROZEN", "FROZEN"] },
+        "scope_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifact_bindings": { "type": "array" },
+    "payload": { "type": "object" },
+    "envelope_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": true
+}

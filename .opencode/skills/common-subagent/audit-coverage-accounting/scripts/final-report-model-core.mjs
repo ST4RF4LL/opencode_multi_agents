@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { validateAttackSurface } from "../../finding-evidence-contract/scripts/finding-contract.mjs";
+import { validateAttackSurfaceReview } from "../../finding-adjudication/scripts/finding-adjudication-contract.mjs";
 
 const ADMITTED_FINDING_STATES = new Set(["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"]);
 const ADMITTED_CHAIN_STATES = new Set(["CONDITIONAL", "SUPPORTED_STATIC", "SUPPORTED_RUNTIME"]);
@@ -64,16 +66,24 @@ export function validateFinalReportModel(model) {
   }
   const findingIds = new Set();
   for (const finding of model.findings ?? []) {
+    const attackSurfaceErrors = validateAttackSurface(finding?.attack_surface);
+    const attackSurfaceReviewErrors = validateAttackSurfaceReview(finding?.attack_surface_review, finding?.state);
     if (!isObject(finding) || !nonEmptyString(finding.finding_id) || findingIds.has(finding.finding_id)
       || !ADMITTED_FINDING_STATES.has(finding.state) || !validDigest(finding.finding_object_digest) || !sourceValid(finding.source)
+      || attackSurfaceErrors.length > 0 || !sourceValid(finding.attack_surface_source)
+      || attackSurfaceReviewErrors.length > 0 || !sourceValid(finding.attack_surface_review_source)
       || !isObject(finding.cvss) || !nonEmptyString(finding.cvss.vector) || !Number.isFinite(finding.cvss.base_score)
       || !nonEmptyString(finding.cvss.severity) || !sourceValid(finding.cvss.source)) {
       errors.push("final-report-model-finding-invalid");
     } else findingIds.add(finding.finding_id);
   }
   for (const finding of model.excluded_findings ?? []) {
+    const attackSurfaceErrors = validateAttackSurface(finding?.attack_surface);
+    const attackSurfaceReviewErrors = validateAttackSurfaceReview(finding?.attack_surface_review, finding?.state);
     if (!isObject(finding) || !nonEmptyString(finding.finding_id) || findingIds.has(finding.finding_id)
-      || ADMITTED_FINDING_STATES.has(finding.state) || !sourceValid(finding.source)) {
+      || ADMITTED_FINDING_STATES.has(finding.state) || !sourceValid(finding.source)
+      || attackSurfaceErrors.length > 0 || !sourceValid(finding.attack_surface_source)
+      || attackSurfaceReviewErrors.length > 0 || !sourceValid(finding.attack_surface_review_source)) {
       errors.push("final-report-model-excluded-finding-invalid");
     } else findingIds.add(finding.finding_id);
   }
@@ -101,6 +111,58 @@ function displayMetric(metric) {
   return [fraction, percentage, value.state ?? "N/A"];
 }
 
+function markdownText(value) {
+  return String(value ?? "N/A").replaceAll("\r", " ").replaceAll("\n", " ").replaceAll("|", "\\|");
+}
+
+function factIndexes(value) {
+  return Array.isArray(value) && value.length > 0 ? value.join(", ") : "none";
+}
+
+function renderAttackSurfaceFinding(finding) {
+  const surface = finding.attack_surface;
+  const preconditions = surface.preconditions.length === 0
+    ? ["- Preconditions: none recorded."]
+    : surface.preconditions.map(item => `- Precondition \`${markdownText(item.precondition_id)}\` (${item.feasibility}; facts ${factIndexes(item.evidence_fact_indexes)}): ${markdownText(item.description)}`);
+  const controls = surface.controls.length === 0
+    ? ["- Controls: none identified."]
+    : surface.controls.map(item => `- Control \`${markdownText(item.control_id)}\` (${item.state}; facts ${factIndexes(item.evidence_fact_indexes)}): ${markdownText(item.description)}`);
+  const counterevidence = surface.counterevidence.length === 0
+    ? ["- Counterevidence: none identified."]
+    : surface.counterevidence.map(item => `- Counterevidence (${item.disposition}; facts ${factIndexes(item.evidence_fact_indexes)}): ${markdownText(item.claim)}`);
+  const blindspots = surface.blindspots.length === 0
+    ? ["- Blind spots: none recorded."]
+    : surface.blindspots.map(item => `- Blind spot: ${markdownText(item)}`);
+  const reviewLimitations = finding.attack_surface_review.limitations.length === 0
+    ? ["- Adjudication limitations: none."]
+    : finding.attack_surface_review.limitations.map(item => `- Adjudication limitation: ${markdownText(item)}`);
+  return [
+    `### ${markdownText(finding.finding_id)}`,
+    "",
+    "| Fact | Assessment | Evidence facts |",
+    "|---|---|---|",
+    `| In scope | ${surface.in_scope.state}: ${markdownText(surface.in_scope.rationale)} | ${factIndexes(surface.in_scope.evidence_fact_indexes)} |`,
+    `| Exposure | ${surface.exposure.state} — ${markdownText(surface.exposure.surface)}: ${markdownText(surface.exposure.rationale)} | ${factIndexes(surface.exposure.evidence_fact_indexes)} |`,
+    `| Vector | ${surface.vector.state}: ${markdownText(surface.vector.rationale)} | ${factIndexes(surface.vector.evidence_fact_indexes)} |`,
+    `| Authentication scope | ${surface.auth_scope.state}: ${markdownText(surface.auth_scope.rationale)} | ${factIndexes(surface.auth_scope.evidence_fact_indexes)} |`,
+    `| Identities | attacker=${markdownText(surface.identities.attacker)}; victim=${markdownText(surface.identities.victim)}; principal=${markdownText(surface.identities.effective_principal)} | ${factIndexes(surface.identities.evidence_fact_indexes)} |`,
+    `| Boundary | ${surface.boundary_crossing.state}; ${markdownText(surface.boundary_crossing.from)} → ${markdownText(surface.boundary_crossing.to)}: ${markdownText(surface.boundary_crossing.rationale)} | ${factIndexes(surface.boundary_crossing.evidence_fact_indexes)} |`,
+    `| Impact | ${surface.impact.types.join(", ")}: ${markdownText(surface.impact.outcome)} | ${factIndexes(surface.impact.evidence_fact_indexes)} |`,
+    `| Target reach | ${surface.target_reach.state}: ${markdownText(surface.target_reach.rationale)} | ${factIndexes(surface.target_reach.evidence_fact_indexes)} |`,
+    "",
+    ...preconditions,
+    ...controls,
+    ...counterevidence,
+    ...blindspots,
+    `- Confidence: ${surface.confidence.level} — ${markdownText(surface.confidence.rationale)}`,
+    `- Independent attack-surface review: ${finding.attack_surface_review.disposition} — ${markdownText(finding.attack_surface_review.rationale)}`,
+    ...reviewLimitations,
+    `- Source binding: \`${finding.attack_surface_source.digest}\`${markdownText(finding.attack_surface_source.json_pointer)}.`,
+    `- Review binding: \`${finding.attack_surface_review_source.digest}\`${markdownText(finding.attack_surface_review_source.json_pointer)}.`,
+    "",
+  ];
+}
+
 export function renderFinalReport(model) {
   const metricRows = (model.coverage.metrics ?? []).map(metric => {
     const [fraction, percentage, state] = displayMetric(metric);
@@ -118,6 +180,9 @@ export function renderFinalReport(model) {
   const rejectedChainRows = model.rejected_chains.length === 0
     ? ["| _None_ | N/A |"]
     : model.rejected_chains.map(chain => `| ${chain.chain_id} | ${chain.assessment_state} |`);
+  const attackSurfaceSections = model.findings.length === 0
+    ? ["_No supported findings._", ""]
+    : model.findings.flatMap(renderAttackSurfaceFinding);
   return [
     `<!-- GENERATED: final-report-model ${model.manifest_digest} -->`,
     model.report_kind === "FINAL" ? "# Security Audit Report" : model.report_kind === "PARTIAL_FINAL" ? "# Security Audit Report (Partial)" : "# Security Audit Checkpoint",
@@ -143,6 +208,9 @@ export function renderFinalReport(model) {
     "|---|---|---:|---|",
     ...findingRows,
     "",
+    "## Per-Finding Attack Surface",
+    "",
+    ...attackSurfaceSections,
     "## Attack Chains",
     "",
     "| ID | Assessment | First Blocking Step |",

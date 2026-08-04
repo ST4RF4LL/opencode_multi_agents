@@ -21,6 +21,49 @@ const CHECK = {
   dimensions: ["D2"],
 };
 
+function attackSurface() {
+  return {
+    schema_version: 1,
+    in_scope: { state: "YES", rationale: "The affected Java source is in the frozen audit scope.", evidence_fact_indexes: [0] },
+    exposure: { state: "PUBLIC", surface: "HTTP Authorization header", rationale: "The value enters through a public request boundary.", evidence_fact_indexes: [0] },
+    vector: { state: "NETWORK", rationale: "The request can be supplied over the application network interface.", evidence_fact_indexes: [0] },
+    auth_scope: { state: "UNAUTHENTICATED", rationale: "The token is parsed before an authenticated identity is established.", evidence_fact_indexes: [0, 1] },
+    preconditions: [{
+      precondition_id: "PRE-001",
+      description: "The HTTP authentication endpoint is deployed and reachable.",
+      feasibility: "UNPROVEN",
+      evidence_fact_indexes: [],
+    }],
+    identities: {
+      attacker: "remote unauthenticated caller",
+      victim: "application user",
+      effective_principal: "identity derived from the supplied token",
+      evidence_fact_indexes: [0, 1],
+    },
+    boundary_crossing: {
+      state: "PROVEN",
+      from: "untrusted HTTP request",
+      to: "authentication identity context",
+      rationale: "The supplied header reaches the token parser.",
+      evidence_fact_indexes: [0, 1],
+    },
+    impact: {
+      types: ["AUTHORIZATION", "INTEGRITY"],
+      outcome: "An invalid token may establish an attacker-selected identity.",
+      evidence_fact_indexes: [0, 1],
+    },
+    target_reach: {
+      state: "SINGLE_USER",
+      rationale: "The static evidence supports one forged identity per request.",
+      evidence_fact_indexes: [1],
+    },
+    controls: [],
+    counterevidence: [],
+    blindspots: ["Runtime gateway and deployment controls were not tested."],
+    confidence: { level: "medium", rationale: "The source path is proven, while deployment exposure remains unverified." },
+  };
+}
+
 function candidate(overrides = {}) {
   return {
     finding_schema_version: 2,
@@ -65,6 +108,7 @@ function candidate(overrides = {}) {
     },
     reachability: { state: "static-reachable" },
     attacker_influence: { state: "direct" },
+    attack_surface: attackSurface(),
     guards: [],
     contradictions: [],
     uncertainty: { level: "medium", assumptions: ["Runtime deployment has not been tested."] },
@@ -98,6 +142,17 @@ async function main() {
 
   const missingSemanticAnchor = candidate({ evidence: { facts: [valid.evidence.facts[0]] } });
   expectError(validateFinding(missingSemanticAnchor), "evidence-semantic-anchor-missing");
+
+  const missingAttackSurface = candidate({ attack_surface: undefined });
+  expectError(validateFinding(missingAttackSurface), "attack-surface-missing");
+
+  const outOfRangeAttackSurface = candidate({
+    attack_surface: {
+      ...attackSurface(),
+      impact: { ...attackSurface().impact, evidence_fact_indexes: [99] },
+    },
+  });
+  expectError(validateFinding(outOfRangeAttackSurface), "attack-surface-impact-invalid");
 
   const rejectedState = candidate({ state: "REJECTED" });
   expectError(validateFinding(rejectedState, { check: CHECK }), "finding-state-not-admissible-for-ledger");
@@ -144,7 +199,7 @@ async function main() {
   assert.equal(cells.get("D1")?.status, "PASS");
   assert.deepEqual(cells.get("D1")?.finding_ids, []);
 
-  process.stdout.write(`${JSON.stringify({ complete: true, finding_contract: "v2", cases: 8 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, finding_contract: "v2+attack-surface-v1", cases: 10 })}\n`);
 }
 
 main().catch(error => {

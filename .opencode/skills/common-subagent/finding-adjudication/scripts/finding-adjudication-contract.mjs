@@ -11,6 +11,22 @@ export const ADJUDICATION_STATES = new Set([
 ]);
 
 const TERMINAL_GUARD_STATES = new Set(["PRESENT", "ABSENT", "NOT_APPLICABLE"]);
+const ATTACK_SURFACE_REVIEW_DISPOSITIONS = new Set(["ACCEPTED", "LIMITED", "CONTRADICTED", "UNRESOLVED"]);
+const ATTACK_SURFACE_REVIEW_FIELDS = [
+  "in_scope",
+  "exposure",
+  "vector",
+  "auth_scope",
+  "preconditions",
+  "identities",
+  "boundary_crossing",
+  "impact",
+  "target_reach",
+  "controls",
+  "counterevidence",
+  "blindspots",
+  "confidence",
+];
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -156,6 +172,34 @@ function validateCounterclaim(decision, errors) {
   return counterclaim;
 }
 
+export function validateAttackSurfaceReview(review, decisionState = null) {
+  const errors = [];
+  if (!isObject(review)) return ["attack-surface-review-missing"];
+  if (!ATTACK_SURFACE_REVIEW_DISPOSITIONS.has(review.disposition)) errors.push("attack-surface-review-disposition-invalid");
+  if (!Array.isArray(review.reviewed_fields)
+    || review.reviewed_fields.length !== ATTACK_SURFACE_REVIEW_FIELDS.length
+    || new Set(review.reviewed_fields).size !== review.reviewed_fields.length
+    || ATTACK_SURFACE_REVIEW_FIELDS.some(field => !review.reviewed_fields.includes(field))) {
+    errors.push("attack-surface-review-fields-incomplete");
+  }
+  if (!nonEmptyString(review.rationale)) errors.push("attack-surface-review-rationale-missing");
+  if (!uniqueNonEmptyStrings(review.evidence)) errors.push("attack-surface-review-evidence-invalid");
+  if (!Array.isArray(review.limitations) || review.limitations.some(value => !nonEmptyString(value))) {
+    errors.push("attack-surface-review-limitations-invalid");
+  }
+  if (review.disposition === "LIMITED" && Array.isArray(review.limitations) && review.limitations.length === 0) {
+    errors.push("attack-surface-review-limited-without-limitations");
+  }
+  if (["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"].includes(decisionState)
+    && !["ACCEPTED", "LIMITED"].includes(review.disposition)) {
+    errors.push("supported-decision-attack-surface-not-admitted");
+  }
+  if (decisionState === "INCONCLUSIVE" && review.disposition !== "UNRESOLVED") {
+    errors.push("inconclusive-decision-attack-surface-not-unresolved");
+  }
+  return [...new Set(errors)];
+}
+
 function validateDecision(decision, candidate) {
   const errors = [];
   if (!isObject(decision)) return ["decision-not-object"];
@@ -169,6 +213,7 @@ function validateDecision(decision, candidate) {
   const guards = validateGuards(decision, errors);
   const counterclaim = validateCounterclaim(decision, errors);
   const proof = decision.semantic_proof;
+  errors.push(...validateAttackSurfaceReview(decision.attack_surface_review, decision.state));
 
   if (["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"].includes(decision.state)) {
     if (counterclaim?.outcome !== "REFUTED") errors.push("supported-decision-counterclaim-not-refuted");

@@ -4,6 +4,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
+import { validateStageContractRegistry } from "../skills/common-subagent/audit-artifact-management/scripts/stage-agent-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -60,6 +61,7 @@ async function main() {
   const coverageServerText = await readFile(join(OPENCODE, "mcp/coverage-ledger-server.mjs"), "utf8");
   const coverageCoreText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs"), "utf8");
   const packageConfig = await json(join(OPENCODE, "package.json"));
+  const stageContractRegistry = await json(join(OPENCODE, "skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json"));
 
   const roleAgents = Object.keys(roles.agents).sort();
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
@@ -87,6 +89,10 @@ async function main() {
   assert(roleAgents.includes("ai-security-auditor"), "AI security auditor is not registered");
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");
+  assert(validateStageContractRegistry(stageContractRegistry, roles).length === 0, "stage/agent contract registry or role bindings are invalid");
+  assert(stageContractRegistry.stages.length === 11
+    && new Set(stageContractRegistry.contracts.map(contract => contract.agent_name)).size === roleAgents.length,
+  "stage/agent contracts do not cover every phase and agent");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
   assert(/^\s*"\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
   assert(/^\s*"coverage_\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must auto-allow Coverage Ledger MCP tools");
@@ -195,6 +201,12 @@ async function main() {
     && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("PARTIAL_CHECKPOINT"), "coverage ledger policy lacks v3 seal events");
   assert(artifactPolicy.reports.semantic_coverage_verification.required_fields.includes("claim_boundary"), "semantic coverage verification policy lacks claim boundary");
   assert(artifactPolicy.reports.hypothesis_discovery.required_fields.includes("seed_inputs"), "discovery policy lacks seed provenance");
+  assert(artifactPolicy.reports.stage_handoff?.registry?.endsWith("stage-agent-contracts.json")
+    && artifactPolicy.reports.stage_handoff?.path_templates?.some(path => path.includes("stage-handoff-verification")),
+  "stage handoff artifact policy is incomplete");
+  assert(artifactPolicy.reports.external_runtime_validation_handoff?.required_request_fields?.includes("attack_surface")
+    && artifactPolicy.reports.external_runtime_validation_handoff?.required_result_fields?.includes("safety_attestation"),
+  "external runtime-validation handoff policy is incomplete");
   assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter")
     && artifactPolicy.reports.attack_chain.required_fields.includes("adjudication_manifest_digest")
     && artifactPolicy.reports.attack_chain.required_fields.includes("chain_accounting"), "attack-chain report contract is incomplete");
@@ -207,6 +219,15 @@ async function main() {
     && packageConfig.scripts["test:semantic-reseed"]?.includes("run-semantic-reseed-tests.mjs"), "source-equivalent semantic reseed regression suite is not enabled");
   assert(await exists(join(OPENCODE, "tests/run-cvss-assessment-tests.mjs"))
     && packageConfig.scripts["test:cvss-assessment"]?.includes("run-cvss-assessment-tests.mjs"), "CVSS assessment regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-stage-agent-contract-tests.mjs"))
+    && packageConfig.scripts["test:stage-agent-contract"]?.includes("run-stage-agent-contract-tests.mjs"),
+  "stage/agent contract regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-threat-model-contract-tests.mjs"))
+    && packageConfig.scripts["test:threat-model-contract"]?.includes("run-threat-model-contract-tests.mjs"),
+  "rich threat-model contract regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-external-runtime-validation-contract-tests.mjs"))
+    && packageConfig.scripts["test:external-runtime-validation-contract"]?.includes("run-external-runtime-validation-contract-tests.mjs"),
+  "external runtime-validation handoff regression suite is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
   const thirdPartyReview = artifactPolicy.reports.third_party_review;
@@ -218,6 +239,15 @@ async function main() {
   assert(artifactPolicy.work.required_recon_files.includes("threat-model.json") && artifactPolicy.work.required_recon_files.includes("focus-areas.json"), "semantic Recon artifacts are not mandatory");
   for (const script of ["build-function-manifests.mjs", "build-interface-manifest.mjs", "build-source-anchored-interface-decisions.mjs", "resolve-interface-candidates.mjs", "verify-interface-extractors.mjs", "build-threat-routing-index.mjs", "validate-vulnerability-catalog-v2.mjs", "build-coverage-plan.mjs", "initialize-coverage-ledger.mjs", "checkpoint-coverage-ledger.mjs", "finalize-partial-coverage-ledger.mjs", "verify-coverage-v2.mjs", "verify-coverage-v3-core.mjs", "verify-coverage-v3.mjs", "render-coverage-summary.mjs", "verify-coverage-summary.mjs", "reconcile-audit-report.mjs", "seal-semantic-manifest.mjs", "reseed-semantic-manifests.mjs", "verify-semantic-coverage.mjs", "final-report-model-core.mjs", "build-final-report-model.mjs", "render-final-report.mjs", "verify-final-report.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts", script)), `semantic coverage script is missing: ${script}`);
+  }
+  for (const script of ["stage-agent-contract.mjs", "seal-stage-agent-envelope.mjs", "validate-stage-agent-envelope.mjs", "verify-stage-agent-handoffs.mjs"]) {
+    assert(await exists(join(OPENCODE, "skills/common-subagent/audit-artifact-management/scripts", script)), `stage/agent contract script is missing: ${script}`);
+  }
+  assert(await exists(join(OPENCODE, "skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs")),
+    "rich threat-model contract script is missing");
+  for (const script of ["external-runtime-validation-contract.mjs", "build-external-runtime-validation-request.mjs", "validate-external-runtime-validation-packet.mjs"]) {
+    assert(await exists(join(OPENCODE, "skills/common-subagent/finding-evidence-contract/scripts", script)),
+      `external runtime-validation handoff script is missing: ${script}`);
   }
   for (const script of ["cvss-assessment-contract.mjs", "build-cvss-assessment.mjs", "build-empty-cvss-assessment.mjs", "validate-cvss-assessment.mjs", "build-empty-finding-adjudication.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/finding-adjudication/scripts", script)), `CVSS assessment script is missing: ${script}`);

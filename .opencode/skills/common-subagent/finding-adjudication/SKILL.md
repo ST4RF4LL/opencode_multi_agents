@@ -46,10 +46,15 @@ For every candidate:
 3. Establish source to semantic sink/configuration to security effect, or
    explicitly state why that path fails.
 4. Evaluate local, inherited, global, and deployment guards separately.
-5. Test a counterclaim. A supporting decision requires that counterclaim to be
+5. Review all 13 fixed attack-surface fields. Record the exact field set,
+   evidence, rationale, limitations, and one disposition: `ACCEPTED`,
+   `LIMITED`, `CONTRADICTED`, or `UNRESOLVED`. A supported decision permits only
+   `ACCEPTED` or evidence-backed `LIMITED`; an inconclusive decision requires
+   `UNRESOLVED`.
+6. Test a counterclaim. A supporting decision requires that counterclaim to be
    refuted; a rejection requires it to be supported; uncertainty requires an
    explicit unresolved question.
-6. Do not assign a final CVSS score here. Record evidence and outcome; later
+7. Do not assign a final CVSS score here. Record evidence and outcome; later
    scoring is a separate deterministic step. For `SUPPORTED_*` results, the
    orchestrator supplies a vector, rationale, assumptions, and evidence refs to
    `build-cvss-assessment.mjs`; the script, not an agent, derives the score and

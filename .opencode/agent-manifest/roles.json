@@ -1,9 +1,10 @@
 {
-  "version": 9,
-  "purpose": "Role boundaries for the OpenCode threat-led, Focus-Area-partitioned Tri-Lens multi-agent source, platform, and AI system security audit workspace.",
+  "version": 10,
+  "purpose": "Role boundaries for a Java/Web-first OpenCode threat-led, Focus-Area-partitioned Tri-Lens security audit workspace, with platform and other language/AI agents activated only when frozen scope requires them.",
   "agents": {
     "security-audit-orchestrator": {
       "mode": "primary",
+      "stage_contract_ids": ["P00_AUDIT_INIT.security-audit-orchestrator", "P03_PLAN.security-audit-orchestrator", "P08_FINALIZE.security-audit-orchestrator"],
       "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, build the sparse Coverage Plan, route service-owned Ledger packets, plan base-owner plus AI-overlay File × Function × Catalog × Interface × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural/v2/semantic gates, write the sealed comprehensive report, and request one report-level independent vuln-judger review. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
       "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "OpenCode three-party review companion under reports/validation/", "Coverage Plan, service-owned Ledger, v1 structural, v2 authoritative, machine summary, and semantic artifacts", "base-plus-AI file/function/catalog/interface coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
@@ -11,6 +12,7 @@
     },
     "security-intel-collector": {
       "mode": "subagent",
+      "stage_contract_ids": ["P01_RECON.security-intel-collector"],
       "responsibility": "Freeze the deterministic Git-aware scope, build digest-cached language function manifests from scoped source projections, emit a compact threat-routing index, collect evidence-backed project and attack-surface context, and produce normalized entry-point, sink, sensitive-operation, config-surface, and AI-surface inventories.",
       "inputs": ["Repository path", "user scope", "audit_id"],
       "outputs": ["scope manifest and digest", "complete function manifests", "compact threat-routing index", "builder timing and cache state", "Five-layer Attack Surface Map", "Language and Platform Routing", "five normalized inventories including AI surfaces", "D1-D10 applicability", "recon gaps"],
@@ -18,6 +20,7 @@
     },
     "security-threat-modeler": {
       "mode": "subagent",
+      "stage_contract_ids": ["P02_THREAT_MODEL.security-threat-modeler.bootstrap", "P07_GAP_ROUND.security-threat-modeler.refine"],
       "responsibility": "Build and optionally owner-refine a durable threat model, generalize authorized security history into project-specific threat classes, enforce entry-point threat coverage, and partition the complete audit universe into deterministic Focus Areas.",
       "inputs": ["Recon summary", "compact threat-routing index", "Recon inventories", "architecture and security documents", "authorized history/advisories", "owner answers when already available"],
       "outputs": ["sealed threat-model.json", "sealed focus-areas.json", "entry-point threat coverage", "history clusters and sibling leads", "blocking open questions"],
@@ -25,6 +28,7 @@
     },
     "c-cpp-source-auditor": {
       "mode": "subagent",
+      "stage_contract_ids": ["P04_FOCUS_EXECUTION.c-cpp-source-auditor", "P07_GAP_ROUND.c-cpp-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for C/C++ and native source; only coverage packets close one Tri-Lens strategy across D1-D10.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "C/C++ scope", "build metadata", "recon inventories", "single-track work packet"],
       "outputs": ["Focus-scoped D1-D10 coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
@@ -33,6 +37,7 @@
     },
     "java-source-auditor": {
       "mode": "subagent",
+      "stage_contract_ids": ["P04_FOCUS_EXECUTION.java-source-auditor", "P07_GAP_ROUND.java-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for Java/JVM source; only coverage packets close one Tri-Lens strategy across D1-D10.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Java/JVM scope", "complete Java/JVM function manifests", "unified application/AI vulnerability catalog", "build metadata", "recon inventories", "single-track work packet"],
       "outputs": ["exact Java file/function/catalog coverage for one lens", "Coverage Ledger receipts and decisions", "D1-D10 coverage cells for one lens", "candidate findings", "transfer block", "validation requests"],
@@ -41,6 +46,7 @@
     },
     "web-source-auditor": {
       "mode": "subagent",
+      "stage_contract_ids": ["P04_FOCUS_EXECUTION.web-source-auditor", "P07_GAP_ROUND.web-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for browser JavaScript/TypeScript, HTML, JSP, templates, service workers, and browser security behavior.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Web source scope", "JavaScript and embedded-Web function manifests", "recon inventories", "unified application/AI vulnerability catalog", "single-track Focus packet"],
       "outputs": ["Focus-scoped Web coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
@@ -49,6 +55,7 @@
     },
     "python-source-auditor": {
       "mode": "subagent",
+      "stage_contract_ids": ["P04_FOCUS_EXECUTION.python-source-auditor", "P07_GAP_ROUND.python-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for Python source and framework configuration.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Python scope", "dependency metadata", "recon inventories", "single-track Focus packet"],
       "outputs": ["Focus-scoped Python coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
@@ -57,6 +64,7 @@
     },
     "platform-security-auditor": {
       "mode": "subagent",
+      "stage_contract_ids": ["P04_FOCUS_EXECUTION.platform-security-auditor", "P07_GAP_ROUND.platform-security-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for language-neutral dependencies, build, CI/CD, containers, orchestration, gateways, network, secrets, and IaC.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Platform artifact scope", "recon inventories", "single-track Focus packet"],
       "outputs": ["Focus-scoped platform coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "effective-state gaps", "source-component correlation hints"],
@@ -65,6 +73,7 @@
     },
     "ai-security-auditor": {
       "mode": "subagent",
+      "stage_contract_ids": ["P04_FOCUS_EXECUTION.ai-security-auditor", "P07_GAP_ROUND.ai-security-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet as part of the independent full-repository AI overlay for LLM, agentic, RAG, memory, MCP/tool, model-provider, training, evaluation, and model-artifact risks.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Complete frozen file/function scope", "AI surface inventory", "all common Recon inventories", "unified application/AI vulnerability catalog", "single-track Focus assignment"],
       "outputs": ["exact domain=ai file/function/catalog coverage for one lens", "Coverage Ledger receipts and decisions", "AI D1-D10 coverage cells", "candidate findings", "AI-absence evidence or gaps", "validation requests"],
@@ -73,6 +82,7 @@
     },
     "security-evidence-correlator": {
       "mode": "subagent",
+      "stage_contract_ids": ["P06_CORRELATION.security-evidence-correlator", "P07_GAP_ROUND.security-evidence-correlator"],
       "responsibility": "Preserve exact structural and semantic coverage, normalize Focus Area D1-D10/track evidence, deduplicate candidates, canonicalize supplied attack chains, expose contradictions and gaps, compute discovery routing metrics, and generate follow-up packets.",
       "inputs": ["Threat model and Focus Areas", "Coverage Plan and read-only Ledger gaps", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation results"],
       "outputs": ["Coverage cube", "canonical findings", "duplicate map", "contradictions", "residual gaps", "follow-up packets", "attack-chain candidates"],
@@ -81,6 +91,7 @@
     },
     "security-attack-chain-hunter": {
       "mode": "subagent",
+      "stage_contract_ids": ["P05_SYSTEM_CHAIN_DISCOVERY.security-attack-chain-hunter", "P08_FINALIZE.security-attack-chain-hunter"],
       "responsibility": "Perform the independent system-level discovery pass across completed Focus Areas, trust boundaries, assets, and partition findings, while accounting explicitly for every semantic surface.",
       "inputs": ["Sealed threat model", "sealed Focus Areas", "Recon inventories", "coverage audit reports", "blind and seeded-variant discovery reports", "source/config evidence"],
       "outputs": ["System attack-chain report", "ordered chain candidates", "Focus Area/trust-boundary/asset review coverage", "chain gaps"],
@@ -89,6 +100,7 @@
     },
     "security-finding-adjudicator": {
       "mode": "subagent",
+      "stage_contract_ids": ["P08_FINALIZE.security-finding-adjudicator"],
       "responsibility": "Independently adjudicate each accepted Ledger-attested Finding v2 candidate for actual framework semantics, source-to-effect proof, guard effectiveness, and a tested counterclaim before attack-chain construction or final synthesis.",
       "inputs": ["Frozen Coverage Plan and canonical Ledger", "trusted structural verification", "Finding v2 adjudication input manifest", "frozen source/config/dependency evidence"],
       "outputs": ["One terminal semantic decision per candidate", "guard and counterclaim evidence", "blocking questions and contradictions"],
@@ -97,6 +109,7 @@
     },
     "vulnerability-validator": {
       "mode": "subagent",
+      "stage_contract_ids": ["P09_INDEPENDENT_REVIEW.vulnerability-validator"],
       "responsibility": "Submit exactly one sealed final comprehensive audit report to vuln-judger, force the OpenCode execution engine, monitor the asynchronous Affirmative/Negative/Moderator review, and persist report-digest-bound companion artifacts.",
       "inputs": ["audit_id", "sealed final report path", "source repository root", "final report SHA-256", "optional project skills path"],
       "outputs": ["vuln-judger run id and terminal state", "structured OpenCode three-party review JSON", "exported review Markdown", "source-report integrity binding", "review gaps or failure state"],
@@ -105,6 +118,7 @@
     },
     "security-skill-optimizer": {
       "mode": "subagent",
+      "stage_contract_ids": ["P10_OPTIMIZE.security-skill-optimizer"],
       "responsibility": "Improve audit skills, Joern rules, vulnerability cases, and false-positive cases from completed final-report-bound vuln-judger feedback, tagged by dimension and lens.",
       "inputs": ["Digest-bound vuln-judger review results", "canonical findings", "source auditor notes", "existing skill/rule/case assets"],
       "outputs": ["Updated SKILL.md files", "updated Joern rules", "updated cases", "dimension-and-lens change summary"],

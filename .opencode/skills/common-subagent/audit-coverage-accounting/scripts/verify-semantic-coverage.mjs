@@ -5,6 +5,7 @@ import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { DOMAIN_AGENTS, activeDomains, entryAppliesToDomain } from "./coverage-v2-common.mjs";
 import { validateAttackChainManifest } from "../../../attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
+import { validateThreatModel } from "../../../threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs";
 
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
@@ -98,6 +99,17 @@ async function main() {
   if (snapshot.semantic.focus_areas.sha256 !== digestBytes(focusBytes)) issues.push({ code: "FOCUS_AREAS_SNAPSHOT_HASH_MISMATCH" });
   const threatModel = JSON.parse(threatBytes.toString("utf8"));
   const focusManifest = JSON.parse(focusBytes.toString("utf8"));
+  const threatModelErrors = validateThreatModel(threatModel, {
+    auditId: args["audit-id"],
+    scopeDigest: snapshot.scope_digest,
+  });
+  if (threatModelErrors.length > 0) {
+    issues.push({
+      code: "THREAT_MODEL_CONTRACT_INVALID",
+      message: "Threat model violates the evidence-backed technical contract",
+      errors: threatModelErrors,
+    });
+  }
   if (threatModel.audit_id !== args["audit-id"] || threatModel.scope_digest !== snapshot.scope_digest || threatModel.manifest_digest !== digestObject(threatModel)) {
     issues.push({ code: "THREAT_MODEL_INVALID", message: "Threat model is modified, incomplete, or scope-mismatched" });
   }

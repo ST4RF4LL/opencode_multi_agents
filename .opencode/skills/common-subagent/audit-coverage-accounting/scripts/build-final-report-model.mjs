@@ -54,6 +54,8 @@ async function main() {
     throw new Error("Attack-chain report is bound to a different audit or scope");
   }
   const decisionSource = index => source(resolve(args.adjudication), adjudication.manifest_digest, `/decisions/${index}`);
+  const attackSurfaceReviewSource = index => source(resolve(args.adjudication), adjudication.manifest_digest, `/decisions/${index}/attack_surface_review`);
+  const candidateSource = index => source(resolve(args["adjudication-input"]), input.manifest_digest, `/candidates/${index}/finding/attack_surface`);
   const cvssSource = index => source(resolve(args.cvss), cvss.manifest_digest, `/assessments/${index}`);
   const chainSource = index => source(resolve(args.chains), chains.manifest_digest, `/chains/${index}`);
   const metrics = [
@@ -70,12 +72,19 @@ async function main() {
   const findings = [];
   const excludedFindings = [];
   const cvssByFindingId = new Map(cvss.assessments.map((assessment, index) => [assessment.finding_id, { assessment, index }]));
+  const candidatesByFindingId = new Map(input.candidates.map((candidate, index) => [candidate.finding_id, { candidate, index }]));
   adjudication.decisions.forEach((decision, index) => {
+    const candidateRecord = candidatesByFindingId.get(decision.finding_id);
+    if (!candidateRecord) throw new Error(`Adjudication decision has no bound candidate: ${decision.finding_id}`);
     const row = {
       finding_id: decision.finding_id,
       state: decision.state,
       finding_object_digest: decision.finding_object_digest,
       source: decisionSource(index),
+      attack_surface: structuredClone(candidateRecord.candidate.finding.attack_surface),
+      attack_surface_source: candidateSource(candidateRecord.index),
+      attack_surface_review: structuredClone(decision.attack_surface_review),
+      attack_surface_review_source: attackSurfaceReviewSource(index),
     };
     if (["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"].includes(decision.state)) {
       const score = cvssByFindingId.get(decision.finding_id);
