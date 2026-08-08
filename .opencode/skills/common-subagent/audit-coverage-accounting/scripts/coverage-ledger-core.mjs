@@ -23,7 +23,14 @@ const PLAN_CACHE = new Map();
 const LEDGER_CACHE = new Map();
 const KEY_CACHE = new Map();
 const CHECK_MAP_CACHE = new WeakMap();
+const UNIT_MAP_CACHE = new WeakMap();
 const STATE_CACHE = new Map();
+const TERMINAL_EVENT_TYPES = new Set([
+  "FINALIZE_COMPLETE",
+  "FINALIZE_OBSERVED",
+  "FINALIZE_RELEASE",
+  "FINALIZE_PARTIAL",
+]);
 
 export function canonicalCoveragePaths(workspaceRoot, auditId) {
   if (!/^[a-z0-9][a-z0-9._-]{2,127}$/i.test(auditId)) throw new Error(`Invalid audit_id: ${auditId}`);
@@ -344,7 +351,7 @@ function findIdempotent(events, eventType, body) {
 }
 
 function requireMutable(events) {
-  if (events.some(event => ["FINALIZE_COMPLETE", "FINALIZE_PARTIAL"].includes(event.event_type))) {
+  if (events.some(event => TERMINAL_EVENT_TYPES.has(event.event_type))) {
     throw new Error("Coverage ledger is finalized and immutable");
   }
 }
@@ -432,6 +439,21 @@ function requireRequiredCheck(plan, checkId) {
   return check;
 }
 
+function unitMap(plan) {
+  let value = UNIT_MAP_CACHE.get(plan);
+  if (!value) {
+    value = new Map((plan.coverage_units ?? []).map(unit => [unit.unit_id, unit]));
+    UNIT_MAP_CACHE.set(plan, value);
+  }
+  return value;
+}
+
+function requireCoverageUnit(plan, unitId) {
+  const unit = unitMap(plan).get(unitId);
+  if (!unit) throw new Error(`Unknown coverage unit_id: ${unitId}`);
+  return unit;
+}
+
 function decodeCursor(cursor) {
   if (cursor == null || cursor === "") return 0;
   const match = /^offset:(\d+)$/.exec(cursor);
@@ -480,6 +502,16 @@ function requireAssignment(events, check, sessionId, token) {
   return event;
 }
 
+function requireUnitAssignment(events, unit, sessionId, token) {
+  const tokenDigest = assignmentTokenDigest(token);
+  const event = events.find(candidate => candidate.event_type === "UNIT_BEGIN"
+    && candidate.unit_id === unit.unit_id
+    && candidate.assignment_token_sha256 === tokenDigest);
+  if (!event) throw new Error("Assignment token is missing, stale, or belongs to another coverage unit");
+  if (event.authorized_session_id !== sessionId) throw new Error("Assignment token is not authorized for this session");
+  return event;
+}
+
 export function deriveLedgerState(plan, events) {
   const cacheKey = `${plan.manifest_digest}:${events.at(-1)?.event_hash ?? "empty"}`;
   const cached = STATE_CACHE.get(cacheKey);
@@ -493,6 +525,29 @@ export function deriveLedgerState(plan, events) {
     decision_sequence: null,
   }]));
   for (const event of events) {
+    if (event.event_type === "UNIT_ATTESTATION") {
+      const unit = unitMap(plan).get(event.unit_id);
+      if (!unit) continue;
+      const completedLenses = new Set(event.completed_lenses ?? []);
+      const gapCheckIds = new Set(event.gap_check_ids ?? []);
+      for (const checkId of unit.check_ids) {
+        const current = state.get(checkId);
+        if (!current || !completedLenses.has(current.check.lens)) continue;
+        if (current.result_state === "FINDING") continue;
+        if (gapCheckIds.has(checkId)) {
+          if (current.execution_state !== "VERIFIED") {
+            current.execution_state = "GAP";
+            current.result_state = "INCONCLUSIVE";
+          }
+        } else if (current.execution_state !== "VERIFIED") {
+          current.execution_state = "VERIFIED";
+          current.result_state = null;
+        }
+        if (!current.receipt_ids.includes(event.attestation_id)) current.receipt_ids.push(event.attestation_id);
+        current.unit_attestation_sequence = event.sequence;
+      }
+      continue;
+    }
     const current = state.get(event.check_id);
     if (!current) continue;
     if (event.event_type === "INSPECT" && current.execution_state !== "VERIFIED") current.execution_state = "INSPECTED";
@@ -511,8 +566,37 @@ export function deriveLedgerState(plan, events) {
   return state;
 }
 
+export function deriveCoverageUnitState(plan, events) {
+  const checks = deriveLedgerState(plan, events);
+  const completedLensesByUnit = new Map();
+  for (const event of events) {
+    if (event.event_type !== "UNIT_ATTESTATION") continue;
+    const completed = completedLensesByUnit.get(event.unit_id) ?? new Set();
+    for (const lens of event.completed_lenses ?? []) completed.add(lens);
+    completedLensesByUnit.set(event.unit_id, completed);
+  }
+  return new Map((plan.coverage_units ?? []).map(unit => {
+    const values = unit.check_ids.map(checkId => checks.get(checkId)).filter(Boolean);
+    const verified = values.filter(item => item.execution_state === "VERIFIED").length;
+    const gaps = values.filter(item => ["GAP", "INVALIDATED"].includes(item.execution_state)).length;
+    const touched = values.filter(item => item.execution_state !== "PLANNED").length;
+    const executionState = verified === values.length && values.length > 0
+      ? "COMPLETE"
+      : touched > 0 ? "PARTIAL" : "PLANNED";
+    return [unit.unit_id, {
+      unit,
+      execution_state: executionState,
+      required_check_count: values.length,
+      verified_check_count: verified,
+      gap_check_count: gaps,
+      completed_lenses: [...(completedLensesByUnit.get(unit.unit_id) ?? [])].sort(),
+    }];
+  }));
+}
+
 function requireUnverified(plan, events, checkId) {
-  if (deriveLedgerState(plan, events).get(checkId)?.execution_state === "VERIFIED") {
+  const current = deriveLedgerState(plan, events).get(checkId);
+  if (current?.execution_state === "VERIFIED" && current.decision_sequence !== null) {
     throw new Error(`VERIFIED decision is immutable: ${checkId}`);
   }
 }
@@ -546,6 +630,37 @@ export async function inspectSubject({ planPath, ledgerPath, checkId, sessionId,
     const prior = findIdempotent(events, "INSPECT", body);
     const event = prior ?? await appendEvent(ledgerPath, events, "INSPECT", body);
     return { check, event, assignment_token: token, idempotent_replay: Boolean(prior) };
+  });
+}
+
+export async function beginCoverageUnit({ planPath, ledgerPath, unitId, sessionId, agentName, idempotencyKey }) {
+  validateSessionId(sessionId);
+  return withMutation(planPath, ledgerPath, async (plan, events) => {
+    const unit = requireCoverageUnit(plan, unitId);
+    if (agentName !== unit.agent_name) {
+      throw new Error(`Agent is not authorized for ${unit.domain}: ${agentName ?? "missing"}; expected ${unit.agent_name}`);
+    }
+    const secret = await ledgerSecret(ledgerPath);
+    const token = assignmentToken(secret, [plan.manifest_digest, unitId, sessionId, agentName, idempotencyKey]);
+    const body = {
+      audit_id: plan.audit_id,
+      plan_digest: plan.manifest_digest,
+      unit_id: unitId,
+      assignment_id: unit.assignment_id,
+      focus_area_id: unit.focus_area_id,
+      domain: unit.domain,
+      agent_name: agentName,
+      authorized_session_id: sessionId,
+      idempotency_key: idempotencyKey,
+      assignment_token_sha256: assignmentTokenDigest(token),
+    };
+    const prior = findIdempotent(events, "UNIT_BEGIN", body);
+    const current = deriveCoverageUnitState(plan, events).get(unitId);
+    if (!prior && current?.execution_state === "COMPLETE") {
+      throw new Error(`Coverage unit is already complete: ${unitId}`);
+    }
+    const event = prior ?? await appendEvent(ledgerPath, events, "UNIT_BEGIN", body);
+    return { unit, event, assignment_token: token, idempotent_replay: Boolean(prior) };
   });
 }
 
@@ -610,6 +725,18 @@ function requiredSourceSet(plan, check) {
   return {
     mode: "required-source-set",
     source_set_id: check.required_source_set_id,
+    source_count: frozenHashes.length,
+    source_set_sha256: sha256(JSON.stringify(frozenHashes)),
+  };
+}
+
+function requiredUnitSourceSet(plan, unit) {
+  const sourceSet = (plan.source_sets ?? []).find(candidate => candidate.source_set_id === unit.required_source_set_id);
+  if (!sourceSet) throw new Error(`Coverage unit references an unknown frozen source set: ${unit.unit_id}`);
+  const frozenHashes = sourceHashesForIds(plan, sourceSet.file_ids);
+  return {
+    mode: "required-source-set",
+    source_set_id: unit.required_source_set_id,
     source_count: frozenHashes.length,
     source_set_sha256: sha256(JSON.stringify(frozenHashes)),
   };
@@ -692,6 +819,101 @@ async function attestResult({ resultPayload, resultArtifactPath, expectedResultD
     throw new Error("Client result_digest does not match the server-derived result attestation");
   }
   return attestation;
+}
+
+async function preflightUnitAssignment(planPath, ledgerPath, unitId, sessionId, token) {
+  const { plan, events } = await boundState(planPath, ledgerPath);
+  const unit = requireCoverageUnit(plan, unitId);
+  requireUnitAssignment(events, unit, sessionId, token);
+}
+
+export async function submitCoverageUnitAttestation({
+  planPath,
+  ledgerPath,
+  unitId,
+  sessionId,
+  assignmentToken: token,
+  idempotencyKey,
+  completedLenses,
+  state,
+  gapCheckIds = [],
+  sourceScope,
+  queryOrRule,
+  tool,
+  toolVersion,
+  resultPayload,
+  resultArtifactPath,
+  resultDigest,
+  resultSummary,
+}) {
+  validateSessionId(sessionId);
+  if (!["COMPLETE", "PARTIAL"].includes(state)) throw new Error("Coverage unit state must be COMPLETE or PARTIAL");
+  if (resultArtifactPath !== undefined) {
+    await preflightUnitAssignment(planPath, ledgerPath, unitId, sessionId, token);
+  }
+  const resultAttestation = await attestResult({
+    resultPayload,
+    resultArtifactPath,
+    expectedResultDigest: resultDigest,
+  });
+  return withMutation(planPath, ledgerPath, async (plan, events) => {
+    const unit = requireCoverageUnit(plan, unitId);
+    const assignment = requireUnitAssignment(events, unit, sessionId, token);
+    if (sourceScope !== "required") throw new Error("Coverage unit attestations require source_scope=required");
+    if (!Array.isArray(completedLenses) || completedLenses.length === 0
+      || new Set(completedLenses).size !== completedLenses.length
+      || completedLenses.some(lens => !unit.required_lenses.includes(lens))) {
+      throw new Error("completed_lenses must be a non-empty unique subset of the unit's required lenses");
+    }
+    const normalizedLenses = [...completedLenses].sort();
+    const normalizedGapIds = [...gapCheckIds].sort();
+    if (new Set(normalizedGapIds).size !== normalizedGapIds.length) throw new Error("gap_check_ids must be unique");
+    const unitChecks = new Map(unit.check_ids.map(checkId => [checkId, requireRequiredCheck(plan, checkId)]));
+    for (const checkId of normalizedGapIds) {
+      const check = unitChecks.get(checkId);
+      if (!check) throw new Error(`Gap check does not belong to coverage unit: ${checkId}`);
+      if (!normalizedLenses.includes(check.lens)) throw new Error(`Gap check lens is not completed in this attestation: ${checkId}`);
+    }
+    const allLensesCompleted = unit.required_lenses.every(lens => normalizedLenses.includes(lens));
+    if (state === "COMPLETE" && (!allLensesCompleted || normalizedGapIds.length > 0)) {
+      throw new Error("COMPLETE requires every unit lens and no gap_check_ids");
+    }
+    if (state === "PARTIAL" && allLensesCompleted && normalizedGapIds.length === 0) {
+      throw new Error("Use COMPLETE when every required lens is covered without gaps");
+    }
+    if (typeof queryOrRule !== "string" || queryOrRule.trim() === "") throw new Error("query_or_rule is required");
+    if (typeof tool !== "string" || tool.trim() === "") throw new Error("tool is required");
+    if (typeof toolVersion !== "string" || toolVersion.trim() === "") throw new Error("tool_version is required");
+    const attestationId = `attestation:${sha256([plan.manifest_digest, unitId, assignment.assignment_id, idempotencyKey].join("\n")).slice(0, 32)}`;
+    const body = {
+      audit_id: plan.audit_id,
+      plan_digest: plan.manifest_digest,
+      unit_id: unitId,
+      assignment_id: assignment.assignment_id,
+      focus_area_id: unit.focus_area_id,
+      domain: unit.domain,
+      session_id: sessionId,
+      idempotency_key: idempotencyKey,
+      attestation_id: attestationId,
+      state,
+      completed_lenses: normalizedLenses,
+      gap_check_ids: normalizedGapIds,
+      source_set: requiredUnitSourceSet(plan, unit),
+      query_or_rule: queryOrRule,
+      tool,
+      tool_version: toolVersion,
+      result_attestation: resultAttestation,
+      result_digest: resultAttestation.sha256,
+      result_summary: resultSummary ?? null,
+    };
+    const prior = findIdempotent(events, "UNIT_ATTESTATION", body);
+    const current = deriveCoverageUnitState(plan, events).get(unitId);
+    if (!prior && current?.execution_state === "COMPLETE") {
+      throw new Error(`Coverage unit is already complete: ${unitId}`);
+    }
+    const event = prior ?? await appendEvent(ledgerPath, events, "UNIT_ATTESTATION", body);
+    return { attestation: event, idempotent_replay: Boolean(prior) };
+  });
 }
 
 export async function recordToolResult({
@@ -909,12 +1131,57 @@ export async function submitDecision({
     };
     const prior = findIdempotent(events, "DECISION", body);
     const latestState = deriveLedgerState(plan, events).get(checkId);
-    if (!prior && latestState?.execution_state === "VERIFIED") {
+    if (!prior && latestState?.execution_state === "VERIFIED" && latestState.decision_sequence !== null) {
       throw new Error(`VERIFIED decision is immutable; submit follow-up evidence under a different unresolved check: ${checkId}`);
     }
     const event = prior ?? await appendEvent(ledgerPath, events, "DECISION", body);
     return { decision: event, idempotent_replay: Boolean(prior) };
   });
+}
+
+export async function getCoverageUnits({
+  planPath,
+  ledgerPath,
+  focusAreaId,
+  domain,
+  assignmentId,
+  cursor,
+  limit = 10,
+  includeComplete = false,
+}) {
+  const { plan, events } = await boundState(planPath, ledgerPath);
+  const state = deriveCoverageUnitState(plan, events);
+  const matching = [...state.values()]
+    .filter(item => !focusAreaId || item.unit.focus_area_id === focusAreaId)
+    .filter(item => !domain || item.unit.domain === domain)
+    .filter(item => !assignmentId || item.unit.assignment_id === assignmentId)
+    .filter(item => includeComplete || item.execution_state !== "COMPLETE")
+    .sort((left, right) => left.unit.unit_id.localeCompare(right.unit.unit_id));
+  const result = page(matching, cursor, limit, 100);
+  return {
+    audit_id: plan.audit_id,
+    plan_digest: plan.manifest_digest,
+    policy_mode: plan.coverage_policy?.mode ?? "assurance",
+    total: result.total,
+    next_cursor: result.next_cursor,
+    units: result.values,
+  };
+}
+
+export async function getCoverageUnitChecks({ planPath, ledgerPath, unitId, cursor, limit = 25 }) {
+  const { plan, events } = await boundState(planPath, ledgerPath);
+  const unit = requireCoverageUnit(plan, unitId);
+  const state = deriveLedgerState(plan, events);
+  const checks = unit.check_ids.map(checkId => state.get(checkId)).filter(Boolean);
+  const result = page(checks, cursor, limit, 100);
+  return {
+    audit_id: plan.audit_id,
+    plan_digest: plan.manifest_digest,
+    unit_id: unitId,
+    total_checks: result.total,
+    next_cursor: result.next_cursor,
+    checks: result.values,
+  };
 }
 
 export async function getPackets({ planPath, ledgerPath, focusAreaId, domain, lens, subjectKind, cursor, limit = 25 }) {
@@ -974,6 +1241,37 @@ export async function getSubjectSources({ planPath, ledgerPath, checkId, cursor,
   };
 }
 
+export async function getSubjectInterfaces({ planPath, ledgerPath, checkId, cursor, limit = 25 }) {
+  const { plan } = await boundState(planPath, ledgerPath);
+  const check = requireRequiredCheck(plan, checkId);
+  const interfaceIndex = new Map((plan.interface_index ?? []).map(item => [item.interface_id, item]));
+  const interfaceIds = check.required_interface_ids
+    ?? (check.subject_kind === "interface" ? [check.subject_id] : []);
+  const interfaces = interfaceIds.map(interfaceId => {
+    const item = interfaceIndex.get(interfaceId);
+    if (item) return item;
+    if ((plan.interface_index?.length ?? 0) > 0) {
+      throw new Error(`Coverage check references an unknown frozen interface: ${interfaceId}`);
+    }
+    return {
+      interface_id: interfaceId,
+      file_id: check.source_file_id ?? null,
+      direction: check.interface_direction ?? null,
+      kind: check.interface_kind ?? null,
+      dimensions: check.dimensions,
+    };
+  });
+  const result = page(interfaces, cursor, limit, 100);
+  return {
+    audit_id: plan.audit_id,
+    plan_digest: plan.manifest_digest,
+    check_id: check.check_id,
+    total_interfaces: result.total,
+    next_cursor: result.next_cursor,
+    interfaces: result.values,
+  };
+}
+
 function ledgerCounts(plan, events) {
   const state = deriveLedgerState(plan, events);
   return {
@@ -981,6 +1279,21 @@ function ledgerCounts(plan, events) {
     required: state.size,
     verified: [...state.values()].filter(item => item.execution_state === "VERIFIED").length,
     findings: [...state.values()].filter(item => item.result_state === "FINDING").length,
+  };
+}
+
+function policyMode(plan) {
+  return plan.coverage_policy?.mode ?? "assurance";
+}
+
+function releaseUnitCounts(plan, events) {
+  const unitState = deriveCoverageUnitState(plan, events);
+  const requiredIds = plan.coverage_policy?.release_required_unit_ids ?? [];
+  const complete = requiredIds.filter(unitId => unitState.get(unitId)?.execution_state === "COMPLETE");
+  return {
+    required: requiredIds.length,
+    complete: complete.length,
+    incomplete_unit_ids: requiredIds.filter(unitId => !complete.includes(unitId)),
   };
 }
 
@@ -1011,31 +1324,60 @@ export async function finalizeLedger({ planPath, ledgerPath, idempotencyKey }) {
   const plan = await loadPlan(planPath);
   return withLedgerLock(ledgerPath, async () => {
     const { events } = await initializeEvents(plan, ledgerPath);
-    const prior = events.find(event => event.event_type === "FINALIZE_COMPLETE");
+    const terminal = events.find(event => TERMINAL_EVENT_TYPES.has(event.event_type));
     const findingIssues = await findingArtifactIssues(events);
     if (findingIssues.length > 0) {
       throw new Error(`Finding artifact verification failed: ${findingIssues.map(issue => `${issue.finding_id ?? issue.check_id}:${issue.reason ?? issue.code}`).join(", ")}`);
     }
-    if (prior) {
-      if (prior.idempotency_key !== idempotencyKey) throw new Error("Coverage ledger is already finalized");
-      return { finalization: prior, idempotent_replay: true };
-    }
-    if (plan.summary.unknown > 0 || !plan.complete || !plan.inventory.bounded) {
-      throw new Error("Coverage plan contains UNKNOWN applicability or unbounded inventory and cannot be finalized");
+    if (terminal) {
+      if (terminal.idempotency_key !== idempotencyKey || terminal.event_type === "FINALIZE_PARTIAL") {
+        throw new Error("Coverage ledger is already finalized");
+      }
+      return { finalization: terminal, idempotent_replay: true };
     }
     const counts = ledgerCounts(plan, events);
-    if (counts.verified !== counts.required) throw new Error(`Coverage ledger has ${counts.required - counts.verified} unverified REQUIRED checks`);
+    const strictCoverageComplete = plan.summary.unknown === 0 && plan.complete && plan.inventory.bounded
+      && counts.verified === counts.required;
+    const mode = policyMode(plan);
+    const release = releaseUnitCounts(plan, events);
+    let eventType;
+    let sealState;
+    if (strictCoverageComplete) {
+      eventType = "FINALIZE_COMPLETE";
+      sealState = "FINALIZED_COMPLETE";
+    } else if (mode === "observe") {
+      eventType = "FINALIZE_OBSERVED";
+      sealState = "FINALIZED_OBSERVED";
+    } else if (mode === "release") {
+      if (plan.summary.unknown > 0 || !plan.inventory.bounded) {
+        throw new Error("Release policy requires bounded inventory and no UNKNOWN applicability");
+      }
+      if (release.complete !== release.required) {
+        throw new Error(`Release policy has ${release.required - release.complete} incomplete policy-tagged coverage units`);
+      }
+      eventType = "FINALIZE_RELEASE";
+      sealState = "FINALIZED_RELEASE";
+    } else {
+      if (plan.summary.unknown > 0 || !plan.complete || !plan.inventory.bounded) {
+        throw new Error("Coverage plan contains UNKNOWN applicability or unbounded inventory and cannot be finalized under assurance policy");
+      }
+      throw new Error(`Coverage ledger has ${counts.required - counts.verified} unverified REQUIRED checks`);
+    }
     const body = {
       audit_id: plan.audit_id,
       plan_digest: plan.manifest_digest,
       idempotency_key: idempotencyKey,
-      seal_state: "FINALIZED_COMPLETE",
+      coverage_policy_mode: mode,
+      seal_state: sealState,
       required: counts.required,
       verified: counts.verified,
       findings: counts.findings,
+      release_required_units: release.required,
+      release_complete_units: release.complete,
+      strict_coverage_complete: strictCoverageComplete,
       chain_head_before_finalize: events.at(-1).event_hash,
     };
-    const event = await appendEvent(ledgerPath, events, "FINALIZE_COMPLETE", body);
+    const event = await appendEvent(ledgerPath, events, eventType, body);
     return { finalization: event, idempotent_replay: false };
   });
 }
@@ -1047,7 +1389,7 @@ export async function finalizePartialLedger({ planPath, ledgerPath, idempotencyK
   const plan = await loadPlan(planPath);
   return withLedgerLock(ledgerPath, async () => {
     const { events } = await initializeEvents(plan, ledgerPath);
-    const terminal = events.find(event => ["FINALIZE_COMPLETE", "FINALIZE_PARTIAL"].includes(event.event_type));
+    const terminal = events.find(event => TERMINAL_EVENT_TYPES.has(event.event_type));
     if (terminal) {
       const body = {
         audit_id: plan.audit_id,
@@ -1085,41 +1427,70 @@ export async function finalizePartialLedger({ planPath, ledgerPath, idempotencyK
   });
 }
 
-export async function verifyLedger({ planPath, ledgerPath, requireFinalized = true }) {
+export async function verifyLedger({ planPath, ledgerPath, requireFinalized = true, requirePolicyFinalized = false }) {
   const plan = await loadPlan(planPath);
   const events = await readLedger(ledgerPath);
   validateLedgerBinding(events, plan);
   const state = deriveLedgerState(plan, events);
   const completeFinalization = events.find(event => event.event_type === "FINALIZE_COMPLETE") ?? null;
+  const observedFinalization = events.find(event => event.event_type === "FINALIZE_OBSERVED") ?? null;
+  const releaseFinalization = events.find(event => event.event_type === "FINALIZE_RELEASE") ?? null;
   const partialFinalization = events.find(event => event.event_type === "FINALIZE_PARTIAL") ?? null;
-  const finalization = completeFinalization ?? partialFinalization;
+  const finalization = completeFinalization ?? observedFinalization ?? releaseFinalization ?? partialFinalization;
   const checkpoint = [...events].reverse().find(event => event.event_type === "PARTIAL_CHECKPOINT") ?? null;
   const gaps = [...state.values()].filter(item => item.execution_state !== "VERIFIED");
-  const issues = await findingArtifactIssues(events);
-  if (plan.summary.unknown > 0) issues.push({ code: "UNKNOWN_APPLICABILITY", count: plan.summary.unknown });
+  const integrityIssues = await findingArtifactIssues(events);
+  const coverageIssues = [];
+  if (plan.summary.unknown > 0) coverageIssues.push({ code: "UNKNOWN_APPLICABILITY", count: plan.summary.unknown });
   if (!plan.inventory.bounded) {
-    issues.push({
+    coverageIssues.push({
       code: "UNBOUNDED_INTERFACE_INVENTORY",
       gap_files: plan.inventory.gap_files,
       candidate_interfaces: plan.inventory.candidate_interfaces,
       unresolved_interfaces: plan.inventory.unresolved_interfaces,
     });
   }
-  if (gaps.length > 0) issues.push({ code: "UNVERIFIED_REQUIRED_CHECKS", count: gaps.length });
-  if (requireFinalized && !completeFinalization) issues.push({ code: "LEDGER_NOT_FINALIZED_COMPLETE" });
-  if (completeFinalization && completeFinalization.chain_head_before_finalize !== events.at(-2)?.event_hash) issues.push({ code: "FINALIZATION_CHAIN_HEAD_MISMATCH" });
-  if (partialFinalization && partialFinalization.chain_head_before_terminal !== events.at(-2)?.event_hash) issues.push({ code: "FINALIZATION_CHAIN_HEAD_MISMATCH" });
-  if (finalization && events.at(-1) !== finalization) issues.push({ code: "EVENT_AFTER_FINALIZATION" });
+  if (gaps.length > 0) coverageIssues.push({ code: "UNVERIFIED_REQUIRED_CHECKS", count: gaps.length });
+  const mode = policyMode(plan);
+  const policyFinalization = mode === "observe"
+    ? completeFinalization ?? observedFinalization ?? releaseFinalization
+    : mode === "release" ? completeFinalization ?? releaseFinalization : completeFinalization;
+  const release = releaseUnitCounts(plan, events);
+  if (releaseFinalization && release.complete !== release.required) {
+    integrityIssues.push({ code: "RELEASE_POLICY_UNIT_MISMATCH", count: release.required - release.complete });
+  }
+  if (requireFinalized && !completeFinalization) coverageIssues.push({ code: "LEDGER_NOT_FINALIZED_COMPLETE" });
+  if (requirePolicyFinalized && !policyFinalization) integrityIssues.push({ code: "LEDGER_NOT_FINALIZED_FOR_POLICY", policy_mode: mode });
+  if (finalization?.event_type === "FINALIZE_PARTIAL"
+    && finalization.chain_head_before_terminal !== events.at(-2)?.event_hash) {
+    integrityIssues.push({ code: "FINALIZATION_CHAIN_HEAD_MISMATCH" });
+  }
+  if (finalization && finalization.event_type !== "FINALIZE_PARTIAL"
+    && finalization.chain_head_before_finalize !== events.at(-2)?.event_hash) {
+    integrityIssues.push({ code: "FINALIZATION_CHAIN_HEAD_MISMATCH" });
+  }
+  if (finalization && events.at(-1) !== finalization) integrityIssues.push({ code: "EVENT_AFTER_FINALIZATION" });
+  const strictComplete = integrityIssues.length === 0 && coverageIssues.length === 0;
+  const policySatisfied = Boolean(policyFinalization) && integrityIssues.length === 0;
   return {
     plan,
     events,
     state,
     finalization,
     checkpoint,
-    seal_state: completeFinalization ? "FINALIZED_COMPLETE" : partialFinalization ? "FINALIZED_PARTIAL" : checkpoint ? "PARTIAL_CHECKPOINT" : "OPEN",
+    seal_state: completeFinalization ? "FINALIZED_COMPLETE"
+      : releaseFinalization ? "FINALIZED_RELEASE"
+        : observedFinalization ? "FINALIZED_OBSERVED"
+          : partialFinalization ? "FINALIZED_PARTIAL" : checkpoint ? "PARTIAL_CHECKPOINT" : "OPEN",
+    policy_mode: mode,
+    policy_satisfied: policySatisfied,
+    release_units: release,
     gaps,
-    issues,
-    complete: issues.length === 0,
+    coverage_issues: coverageIssues,
+    integrity_issues: integrityIssues,
+    issues: [...integrityIssues, ...coverageIssues],
+    coverage_complete: strictComplete,
+    complete: strictComplete,
   };
 }
 

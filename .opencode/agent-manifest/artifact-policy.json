@@ -33,7 +33,7 @@
       "producer": "security-audit-orchestrator via deterministic final-report renderer",
       "model_path_template": "reports/final/security-audit-report-model.{audit_id}.json",
       "model_required_fields": ["schema_version", "audit_id", "scope_digest", "coverage", "inputs", "findings", "excluded_findings", "chains", "rejected_chains", "manifest_digest"],
-      "notes": "Build the digest-bound report model from the verified coverage summary, trusted adjudication input/output, and Attack-chain v2 manifest with build-final-report-model.mjs. Every supported finding preserves its Finding v2 attack_surface block and immutable source pointer, and the deterministic Markdown renderer emits those facts. Render the Markdown only with render-final-report.mjs, byte-verify it with verify-final-report.mjs, and never write conclusion text by hand. The human-readable final audit report is a durable deliverable. Write it only under reports/final/. Once its SHA-256 is submitted to vuln-judger, keep it immutable and publish review results as companion artifacts."
+      "notes": "Build the digest-bound report model from the verified coverage summary, trusted adjudication input/output, and Attack-chain v2 manifest. FINAL requires strict complete coverage; POLICY_FINAL accepts a satisfied observe/release policy and renders a mandatory incomplete-coverage disclaimer when gaps remain. Render and byte-verify deterministically, then keep the reviewed digest immutable."
     },
     "stage_handoff": {
       "format": "digest-bound JSON input/output envelopes plus one aggregate verification",
@@ -105,15 +105,17 @@
     },
     "external_runtime_validation_handoff": {
       "format": "digest-bound JSON request/result packets",
-      "cardinality": "zero or one request per finding object digest; a downstream validation project may return zero or one bound result",
+      "cardinality": "zero or one request per finding object digest; an explicitly invoked localhost dynamic validator may return zero or one bound result",
       "path_templates": [
         "reports/validation-handoff/runtime/{audit_id}/{finding_id}.request.json",
-        "reports/validation-handoff/runtime/{audit_id}/{finding_id}.result.json"
+        "reports/validation-handoff/runtime/{audit_id}/{finding_id}.target.json",
+        "reports/validation-handoff/runtime/{audit_id}/{finding_id}.result.json",
+        "reports/validation-handoff/runtime/{audit_id}/{finding_id}/evidence/"
       ],
-      "producer": "request: security-finding-adjudicator or security-audit-orchestrator; result: separately authorized downstream runtime-validation project",
+      "producer": "request: security-finding-adjudicator or security-audit-orchestrator; localhost Web-XSS result: dynamic-vulnerability-validator after explicit user authorization",
       "required_request_fields": ["schema_version", "packet_type", "request_id", "audit_id", "scope_digest", "finding_id", "finding_object_digest", "static_assessment", "source_binding", "attack_surface", "claim", "proof_gaps", "validation_policy", "provenance", "packet_digest"],
       "required_result_fields": ["schema_version", "packet_type", "request_id", "request_packet_digest", "audit_id", "scope_digest", "finding_id", "finding_object_digest", "validator", "outcome", "methods", "observations", "evidence_artifacts", "counterevidence", "residual_gaps", "safety_attestation", "packet_digest"],
-      "notes": "This repository exports and validates the contract only. It never runs PoC, browser, container, network, or target code as part of this handoff. Requests require isolated-test-only policy and forbid production/third-party targets, real credentials, persistence, and data destruction. A returned result is not automatically promoted into adjudication or the final report; a later explicitly authorized project must define that import workflow."
+      "notes": "The normal static workflow exports requests and never auto-executes them. Only an explicit user request may invoke dynamic-vulnerability-validator, currently for JW-INJECT-06 on loopback with two test accounts and visible isolated Chrome DevTools MCP. The request's PERSISTENCE prohibition forbids backdoors or durable footholds; a bounded safe marker stored as authorized test data is permitted solely to prove stored XSS and must be cleaned up or reported when cleanup fails. Results remain companions and are never automatically promoted into adjudication or the final report."
     },
     "third_party_review": {
       "format": "json+markdown",
@@ -129,26 +131,26 @@
       "cardinality": "one final artifact per audit_id; intermediate failed artifacts may be retained by round",
       "path_template": "reports/coverage/coverage-verification.{audit_id}.json",
       "producer": "security-audit-orchestrator via verify-coverage-v3.mjs",
-      "required_fields": ["schema_version", "coverage_model_version", "audit_id", "scope_digest", "snapshot_digest", "catalog_profile", "required_lenses", "active_domains", "seal_state", "coverage_status", "inputs", "expected", "observed", "gaps", "invalid", "issues", "summary", "complete", "claim_boundary", "manifest_digest"],
+      "required_fields": ["schema_version", "coverage_model_version", "audit_id", "scope_digest", "snapshot_digest", "catalog_profile", "required_lenses", "active_domains", "seal_state", "policy_mode", "policy_satisfied", "coverage_status", "inputs", "expected", "observed", "gaps", "invalid", "issues", "summary", "complete", "claim_boundary", "manifest_digest"],
       "durable_input_snapshot": "reports/coverage/{audit_id}/inputs/{snapshot-index,scope-manifest,functions-*,interface-manifest,interface-extractor-coverage,application-ai-vulnerability-catalog,threat-model,focus-areas}.json",
-      "notes": "Authoritative v3 gate. It runs the structural verifier itself against the exact snapshot, persists that trusted artifact, derives JSON and Markdown from the same in-memory summary, and rejects caller-supplied structural claims. Complete mode requires a bounded frozen plan, a valid FINALIZED_COMPLETE ledger, and every REQUIRED atomic check in VERIFIED state. Partial mode requires PARTIAL_CHECKPOINT and remains explicitly incomplete."
+      "notes": "Authoritative v3 gate. Policy mode accepts a policy-finalized observe/release ledger without converting remaining gaps into complete coverage; complete mode still requires FINALIZED_COMPLETE and every REQUIRED check VERIFIED. Partial mode remains non-accepting diagnostic output."
     },
     "coverage_plan": {
       "format": "json",
       "cardinality": "one immutable plan per audit_id",
       "path_template": "reports/coverage/coverage-plan.{audit_id}.json",
       "producer": "security-audit-orchestrator via build-coverage-plan.mjs",
-      "required_fields": ["schema_version", "coverage_model_version", "audit_id", "catalog_profile_id", "scope_digest", "required_lenses", "inputs", "source_index", "source_sets", "universes", "inventory", "checks", "summary", "complete", "manifest_digest"],
-      "notes": "Schema v3 is byte-bound to one snapshot index. Every atomic check is bound to one Focus Area and one normalized source_set_id. Only explicitly CONFIRMED interfaces enter the check matrix; CANDIDATE interfaces and extractor gaps are separate unbounded-inventory blockers. NOT_APPLICABLE is planner-only and UNKNOWN blocks completion."
+      "required_fields": ["schema_version", "coverage_model_version", "execution_model", "coverage_policy", "coverage_units", "audit_id", "catalog_profile_id", "scope_digest", "required_lenses", "inputs", "source_index", "source_sets", "universes", "inventory", "checks", "summary", "complete", "manifest_digest"],
+      "notes": "Schema v3 remains byte-bound to one snapshot index and keeps exact atomic checks for statistics/finding binding. Assignment-unit-v1 is the default execution model; observe, release, and assurance policy are frozen in the Plan."
     },
     "coverage_ledger": {
       "format": "jsonl",
       "cardinality": "one service-owned append-only ledger per audit_id",
       "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
       "producer": "coverage_ledger MCP service",
-      "required_event_types": ["GENESIS", "INSPECT", "RECEIPT", "DECISION", "FINALIZE_COMPLETE"],
-      "optional_event_types": ["DELEGATE", "PARTIAL_CHECKPOINT"],
-      "notes": "Schema v3 uses a cross-process lock, continuous sequence/hash chain, and service-held HMAC key sidecar. INSPECT issues a check/session/agent-bound assignment token; cross-session work requires DELEGATE. RECEIPT binds normalized source-set evidence, typed locators, tool version, and a server-derived inline/artifact hash. FINDING decisions require exact ID-bearing artifacts. PARTIAL_CHECKPOINT is nonterminal and cannot authorize a complete claim."
+      "required_event_types": ["GENESIS"],
+      "optional_event_types": ["UNIT_BEGIN", "UNIT_ATTESTATION", "INSPECT", "DELEGATE", "RECEIPT", "DECISION", "PARTIAL_CHECKPOINT", "FINALIZE_OBSERVED", "FINALIZE_RELEASE", "FINALIZE_COMPLETE", "FINALIZE_PARTIAL"],
+      "notes": "Normal execution uses compact UNIT_BEGIN/UNIT_ATTESTATION events and all-minus-gaps expansion. Check-scoped events remain a compatible finding/repair fallback. All terminal modes preserve the authenticated append-only chain."
     },
     "coverage_structural_v1": {
       "format": "json",
@@ -163,8 +165,8 @@
       "path_template": "reports/coverage/coverage-summary.{audit_id}.json",
       "markdown_companion": "reports/coverage/coverage-summary.{audit_id}.md",
       "producer": "security-audit-orchestrator via verify-coverage-v3.mjs or render-coverage-summary.mjs",
-      "required_fields": ["schema_version", "coverage_model_version", "audit_id", "plan_digest", "scope_digest", "snapshot_digest", "structural_digest", "seal_state", "coverage_status", "accounting", "inventory", "vulnerability_types", "external_interfaces", "files", "functions", "complete", "manifest_digest"],
-      "notes": "R/V/U/N count only materialized atomic checks. Interface candidates and extractor gaps are reported in a separate bounded/unbounded inventory state; an unbounded universe has no numeric conservative percentage. R=0 renders NOT_APPLICABLE, never 100%. The verifier regenerates and byte-compares both JSON semantics and Markdown."
+      "required_fields": ["schema_version", "coverage_model_version", "audit_id", "plan_digest", "scope_digest", "snapshot_digest", "structural_digest", "seal_state", "policy_mode", "policy_satisfied", "workflow_status", "coverage_status", "execution", "evidence", "accounting", "inventory", "vulnerability_types", "external_interfaces", "files", "functions", "complete", "manifest_digest"],
+      "notes": "Workflow policy acceptance is separate from strict R/V/U/N completeness. The summary reports assignment-unit execution, attested evidence, lens/type/interface relationships, and bounded inventory independently; policy acceptance never masks gaps."
     },
     "semantic_coverage_verification": {
       "format": "json",

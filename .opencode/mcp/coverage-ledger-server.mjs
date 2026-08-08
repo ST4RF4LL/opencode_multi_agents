@@ -5,17 +5,22 @@ import { StdioServerTransport } from "../node_modules/@modelcontextprotocol/sdk/
 import { z } from "../node_modules/zod/index.js";
 import { resolve } from "node:path";
 import {
+  beginCoverageUnit,
   canonicalCoveragePaths,
   checkpointLedger,
   delegateAssignment,
   ensureWithinWorkspace,
   finalizePartialLedger,
   finalizeLedger,
+  getCoverageUnitChecks,
+  getCoverageUnits,
   getGaps,
   getPackets,
+  getSubjectInterfaces,
   getSubjectSources,
   inspectSubject,
   recordToolResult,
+  submitCoverageUnitAttestation,
   submitDecision,
 } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs";
 
@@ -112,8 +117,8 @@ function compactCheck(check) {
     negative_discovery_required: check.negative_discovery_required,
     required_source_set_id: check.required_source_set_id,
     required_source_count: check.required_source_count ?? 0,
-    required_interface_count: check.required_interface_ids?.length ?? 0,
-    required_catalog_count: check.required_catalog_ids?.length ?? 0,
+    required_interface_count: check.required_interface_ids?.length ?? (check.subject_kind === "interface" ? 1 : 0),
+    required_catalog_count: check.required_catalog_ids?.length ?? 1,
     receipt_source_scope: "required",
     evidence_contract: {
       question_field: contract.question_field,
@@ -133,6 +138,27 @@ function compactPacket(packet) {
   };
 }
 
+function compactUnit(packet) {
+  const unit = packet.unit;
+  return {
+    unit_id: unit.unit_id,
+    assignment_id: unit.assignment_id,
+    focus_area_id: unit.focus_area_id,
+    domain: unit.domain,
+    agent_name: unit.agent_name,
+    required_lenses: unit.required_lenses,
+    required_check_count: packet.required_check_count,
+    required_source_count: unit.required_source_count,
+    required_catalog_count: unit.required_catalog_count,
+    required_interface_count: unit.required_interface_count,
+    policy_tags: unit.policy_tags,
+    execution_state: packet.execution_state,
+    verified_check_count: packet.verified_check_count,
+    gap_check_count: packet.gap_check_count,
+    completed_lenses: packet.completed_lenses,
+  };
+}
+
 function compactGap(packet) {
   const check = packet.check;
   return {
@@ -147,6 +173,8 @@ function compactGap(packet) {
     execution_state: packet.execution_state,
     result_state: packet.result_state,
     required_source_count: check.required_source_count ?? 0,
+    required_interface_count: check.required_interface_ids?.length ?? (check.subject_kind === "interface" ? 1 : 0),
+    required_catalog_count: check.required_catalog_ids?.length ?? 1,
   };
 }
 
@@ -183,15 +211,181 @@ function compactSource(source) {
   };
 }
 
+function compactInterface(item) {
+  return {
+    interface_id: item.interface_id,
+    file_id: item.file_id,
+    direction: item.direction,
+    kind: item.kind,
+    protocol: item.protocol,
+    operation: item.operation,
+    address: item.address,
+    line_start: item.line_start,
+    dimensions: item.dimensions,
+  };
+}
+
 const server = new McpServer({
   name: "coverage_ledger",
-  version: "3.0.0",
+  version: "4.0.0",
 }, {
   capabilities: { tools: {} },
 });
 
+server.registerTool("coverage_get_unit", {
+  description: "Return compact assignment-level coverage units. This is the default work queue; member checks stay hidden unless targeted diagnostics are needed.",
+  inputSchema: {
+    audit_id: auditIdSchema,
+    focus_area_id: z.string().max(255).optional(),
+    domain: z.string().max(255).optional(),
+    assignment_id: z.string().max(255).optional(),
+    include_complete: z.boolean().optional(),
+    cursor: cursorSchema.optional(),
+    limit: z.number().int().min(1).max(10).optional(),
+  },
+}, async ({ audit_id, focus_area_id, domain, assignment_id, include_complete, cursor, limit }) => {
+  const { planPath, ledgerPath } = paths(audit_id);
+  const result = await serialized(audit_id, () => getCoverageUnits({
+    planPath,
+    ledgerPath,
+    focusAreaId: focus_area_id,
+    domain,
+    assignmentId: assignment_id,
+    includeComplete: include_complete ?? false,
+    cursor,
+    limit: limit ?? 5,
+  }));
+  return textResult({
+    audit_id: result.audit_id,
+    plan_digest: result.plan_digest,
+    policy_mode: result.policy_mode,
+    total: result.total,
+    returned: result.units.length,
+    next_cursor: result.next_cursor,
+    units: result.units.map(compactUnit),
+  });
+});
+
+server.registerTool("coverage_begin_unit", {
+  description: "Begin one assignment-level coverage unit and return a unit-scoped token for a single compact attestation.",
+  inputSchema: {
+    audit_id: auditIdSchema,
+    unit_id: z.string().min(1).max(255),
+    session_id: sessionIdSchema,
+    agent_name: z.string().min(1).max(255),
+    idempotency_key: idempotencyKeySchema,
+  },
+}, async ({ audit_id, unit_id, session_id, agent_name, idempotency_key }) => {
+  const { planPath, ledgerPath } = paths(audit_id);
+  const result = await serialized(audit_id, () => beginCoverageUnit({
+    planPath,
+    ledgerPath,
+    unitId: unit_id,
+    sessionId: session_id,
+    agentName: agent_name,
+    idempotencyKey: idempotency_key,
+  }));
+  return textResult({
+    audit_id,
+    unit: compactUnit({
+      unit: result.unit,
+      execution_state: "PLANNED",
+      required_check_count: result.unit.required_check_count,
+      verified_check_count: 0,
+      gap_check_count: 0,
+      completed_lenses: [],
+    }),
+    assignment: compactEvent(result.event),
+    assignment_token: result.assignment_token,
+    idempotent_replay: result.idempotent_replay,
+  });
+});
+
+server.registerTool("coverage_get_unit_checks", {
+  description: "Return a small member-check page for targeted gap classification or finding binding. Normal no-finding execution should submit a unit attestation without enumerating every check.",
+  inputSchema: {
+    audit_id: auditIdSchema,
+    unit_id: z.string().min(1).max(255),
+    cursor: cursorSchema.optional(),
+    limit: z.number().int().min(1).max(25).optional(),
+  },
+}, async ({ audit_id, unit_id, cursor, limit }) => {
+  const { planPath, ledgerPath } = paths(audit_id);
+  const result = await serialized(audit_id, () => getCoverageUnitChecks({
+    planPath,
+    ledgerPath,
+    unitId: unit_id,
+    cursor,
+    limit: limit ?? 10,
+  }));
+  return textResult({
+    audit_id: result.audit_id,
+    plan_digest: result.plan_digest,
+    unit_id: result.unit_id,
+    total_checks: result.total_checks,
+    returned: result.checks.length,
+    next_cursor: result.next_cursor,
+    checks: result.checks.map(compactPacket),
+  });
+});
+
+server.registerTool("coverage_submit_attestation", {
+  description: "Submit one exception-first attestation for a coverage unit. All checks under completed lenses become VERIFIED except explicitly listed gap_check_ids.",
+  inputSchema: {
+    audit_id: auditIdSchema,
+    unit_id: z.string().min(1).max(255),
+    session_id: sessionIdSchema,
+    assignment_token: assignmentTokenSchema,
+    idempotency_key: idempotencyKeySchema,
+    completed_lenses: z.array(z.enum(["sink-driven", "control-driven", "config-driven"])).min(1).max(3),
+    state: z.enum(["COMPLETE", "PARTIAL"]),
+    gap_check_ids: z.array(checkIdSchema).max(MAX_BATCH_ITEMS).optional(),
+    source_scope: z.literal("required"),
+    query_or_rule: z.string().min(1).max(8192),
+    tool: z.string().min(1).max(256),
+    tool_version: z.string().min(1).max(256),
+    result_payload: z.string().max(64 * 1024).optional(),
+    result_artifact_path: z.string().min(1).max(4096).optional(),
+    result_digest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    result_summary: z.string().max(4096).optional(),
+  },
+}, async input => {
+  if ([input.result_payload, input.result_artifact_path].filter(value => value !== undefined).length !== 1) {
+    throw new Error("Provide exactly one of result_payload or result_artifact_path");
+  }
+  if (input.gap_check_ids) assertJsonSize(input.gap_check_ids, "gap_check_ids", MAX_ID_LIST_BYTES);
+  const { planPath, ledgerPath } = paths(input.audit_id);
+  const result = await serialized(input.audit_id, () => submitCoverageUnitAttestation({
+    planPath,
+    ledgerPath,
+    unitId: input.unit_id,
+    sessionId: input.session_id,
+    assignmentToken: input.assignment_token,
+    idempotencyKey: input.idempotency_key,
+    completedLenses: input.completed_lenses,
+    state: input.state,
+    gapCheckIds: input.gap_check_ids ?? [],
+    sourceScope: input.source_scope,
+    queryOrRule: input.query_or_rule,
+    tool: input.tool,
+    toolVersion: input.tool_version,
+    resultPayload: input.result_payload,
+    resultArtifactPath: input.result_artifact_path
+      ? ensureWithinWorkspace(WORKSPACE_ROOT, input.result_artifact_path)
+      : undefined,
+    resultDigest: input.result_digest,
+    resultSummary: input.result_summary,
+  }));
+  return textResult({
+    audit_id: input.audit_id,
+    unit_id: input.unit_id,
+    attestation: compactEvent(result.attestation, "attestation_id"),
+    idempotent_replay: result.idempotent_replay,
+  });
+});
+
 server.registerTool("coverage_get_packet", {
-  description: "Return one small page of unresolved REQUIRED coverage-check summaries. Use coverage_inspect_subject for one check's detail and coverage_get_subject_sources for its paginated frozen sources.",
+  description: "Legacy/targeted fallback: return unresolved REQUIRED check summaries. Prefer coverage_get_unit for normal execution.",
   inputSchema: {
     audit_id: auditIdSchema,
     focus_area_id: z.string().max(255).optional(),
@@ -306,6 +500,34 @@ server.registerTool("coverage_get_subject_sources", {
     returned: result.sources.length,
     next_cursor: result.next_cursor,
     sources: result.sources.map(compactSource),
+  });
+});
+
+server.registerTool("coverage_get_subject_interfaces", {
+  description: "Return one small cursor-paginated page of frozen interface metadata for a grouped interface check. This is a targeted diagnostic; normal receipts remain bound through source_scope=required.",
+  inputSchema: {
+    audit_id: auditIdSchema,
+    check_id: checkIdSchema,
+    cursor: cursorSchema.optional(),
+    limit: z.number().int().min(1).max(25).optional(),
+  },
+}, async ({ audit_id, check_id, cursor, limit }) => {
+  const { planPath, ledgerPath } = paths(audit_id);
+  const result = await serialized(audit_id, () => getSubjectInterfaces({
+    planPath,
+    ledgerPath,
+    checkId: check_id,
+    cursor,
+    limit,
+  }));
+  return textResult({
+    audit_id: result.audit_id,
+    plan_digest: result.plan_digest,
+    check_id: result.check_id,
+    total_interfaces: result.total_interfaces,
+    returned: result.interfaces.length,
+    next_cursor: result.next_cursor,
+    interfaces: result.interfaces.map(compactInterface),
   });
 });
 
@@ -450,7 +672,7 @@ server.registerTool("coverage_checkpoint", {
 });
 
 server.registerTool("coverage_finalize", {
-  description: "Finalize and seal the ledger only when the frozen plan has no UNKNOWN applicability and every REQUIRED check is VERIFIED.",
+  description: "Finalize according to the plan policy: observe records telemetry, release gates tagged units, and assurance requires strict complete coverage.",
   inputSchema: {
     audit_id: auditIdSchema,
     idempotency_key: idempotencyKeySchema,

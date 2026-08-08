@@ -196,6 +196,7 @@ const configPath = process.argv[2];
 const config = JSON.parse(await readFile(configPath, "utf8"));
 const probes = [
   { name: "coverage_ledger", requiredTools: ["coverage_get_packet", "coverage_finalize"] },
+  { name: "chrome-devtools", requiredTools: ["list_pages", "new_page", "evaluate_script", "take_snapshot", "take_screenshot"] },
 ];
 let failed = false;
 

@@ -19,7 +19,9 @@ function parseArgs(argv) {
   for (const key of ["audit-id", "mode", "coverage-summary", "adjudication-input", "adjudication", "cvss", "chains", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
-  if (!new Set(["final", "partial-final", "checkpoint"]).has(args.mode)) throw new Error("--mode must be final, partial-final, or checkpoint");
+  if (!new Set(["final", "policy-final", "partial-final", "checkpoint"]).has(args.mode)) {
+    throw new Error("--mode must be final, policy-final, partial-final, or checkpoint");
+  }
   return args;
 }
 
@@ -40,6 +42,7 @@ async function main() {
     throw new Error("Coverage summary is invalid or bound to another audit");
   }
   if ((args.mode === "final" && summary.coverage_status !== "COMPLETE")
+    || (args.mode === "policy-final" && summary.policy_satisfied !== true)
     || (args.mode === "partial-final" && (summary.coverage_status !== "PARTIAL" || summary.seal_state !== "FINALIZED_PARTIAL"))
     || (args.mode === "checkpoint" && summary.coverage_status !== "PARTIAL")) {
     throw new Error("Report mode does not match the verified coverage status");
@@ -64,6 +67,8 @@ async function main() {
     ["coverage.external_interface_checks", summary.external_interfaces.known_checks, "/external_interfaces/known_checks"],
     ["coverage.file_checks", summary.files.checks, "/files/checks"],
     ["coverage.function_checks", summary.functions.checks, "/functions/checks"],
+    ["coverage.assignment_units", summary.execution?.assignment_units, "/execution/assignment_units"],
+    ["coverage.attested_checks", summary.evidence?.attested_checks, "/evidence/attested_checks"],
   ].map(([metric_id, value, pointer]) => ({
     metric_id,
     value,
@@ -115,11 +120,15 @@ async function main() {
     schema_version: 1,
     audit_id: args["audit-id"],
     scope_digest: summary.scope_digest,
-    report_kind: args.mode === "final" ? "FINAL" : args.mode === "partial-final" ? "PARTIAL_FINAL" : "CHECKPOINT",
+    report_kind: args.mode === "final" ? "FINAL"
+      : args.mode === "policy-final" ? "POLICY_FINAL"
+        : args.mode === "partial-final" ? "PARTIAL_FINAL" : "CHECKPOINT",
     coverage: {
       summary_digest: summary.manifest_digest,
       coverage_status: summary.coverage_status,
       seal_state: summary.seal_state,
+      policy_mode: summary.policy_mode ?? "assurance",
+      policy_satisfied: summary.policy_satisfied === true,
       metrics,
     },
     inputs: {

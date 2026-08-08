@@ -39,7 +39,7 @@ export function validateFinalReportModel(model) {
   if (!isObject(model)) return ["final-report-model-not-object"];
   if (model.schema_version !== 1) errors.push("final-report-model-schema-version-invalid");
   if (!nonEmptyString(model.audit_id) || !validDigest(model.scope_digest)) errors.push("final-report-model-audit-or-scope-invalid");
-  if (!new Set(["FINAL", "PARTIAL_FINAL", "CHECKPOINT"]).has(model.report_kind)) errors.push("final-report-model-kind-invalid");
+  if (!new Set(["FINAL", "POLICY_FINAL", "PARTIAL_FINAL", "CHECKPOINT"]).has(model.report_kind)) errors.push("final-report-model-kind-invalid");
   if (!isObject(model.inputs) || !["coverage_summary", "adjudication_input", "adjudication", "cvss_assessment", "attack_chains"]
     .every(key => nonEmptyString(model.inputs?.[key]))) {
     errors.push("final-report-model-inputs-invalid");
@@ -49,6 +49,10 @@ export function validateFinalReportModel(model) {
     errors.push("final-report-model-coverage-invalid");
   }
   if (model.report_kind === "FINAL" && model.coverage?.coverage_status !== "COMPLETE") errors.push("final-report-model-final-not-complete");
+  if (model.report_kind === "POLICY_FINAL" && (model.coverage?.policy_satisfied !== true
+    || !new Set(["FINALIZED_OBSERVED", "FINALIZED_RELEASE", "FINALIZED_COMPLETE"]).has(model.coverage?.seal_state))) {
+    errors.push("final-report-model-policy-final-not-satisfied");
+  }
   if (model.report_kind === "PARTIAL_FINAL" && (model.coverage?.coverage_status !== "PARTIAL" || model.coverage?.seal_state !== "FINALIZED_PARTIAL")) {
     errors.push("final-report-model-partial-final-not-terminal");
   }
@@ -185,15 +189,19 @@ export function renderFinalReport(model) {
     : model.findings.flatMap(renderAttackSurfaceFinding);
   return [
     `<!-- GENERATED: final-report-model ${model.manifest_digest} -->`,
-    model.report_kind === "FINAL" ? "# Security Audit Report" : model.report_kind === "PARTIAL_FINAL" ? "# Security Audit Report (Partial)" : "# Security Audit Checkpoint",
+    model.report_kind === "FINAL" ? "# Security Audit Report"
+      : model.report_kind === "POLICY_FINAL" ? "# Security Audit Report (Policy Accepted)"
+        : model.report_kind === "PARTIAL_FINAL" ? "# Security Audit Report (Partial)" : "# Security Audit Checkpoint",
     "",
     "## Report State",
     "",
-    `Audit: \`${model.audit_id}\`. Coverage status: **${model.coverage.coverage_status}**.`,
+    `Audit: \`${model.audit_id}\`. Coverage status: **${model.coverage.coverage_status}**. Policy: **${model.coverage.policy_mode ?? "assurance"}** (${model.coverage.policy_satisfied ? "SATISFIED" : "NOT SATISFIED"}).`,
     ...(model.report_kind === "CHECKPOINT"
       ? ["", "This is a nonterminal checkpoint. Unverified checks remain gaps; it is not eligible for final-report review or a complete-audit claim."]
       : model.report_kind === "PARTIAL_FINAL"
         ? ["", "This is a terminal partial report. Unverified checks remain explicit gaps; it must not be presented as a complete-audit claim."]
+        : model.report_kind === "POLICY_FINAL" && model.coverage.coverage_status !== "COMPLETE"
+          ? ["", "This report satisfies the configured workflow policy, while unverified checks remain explicit coverage gaps. It must not be presented as a complete-coverage claim."]
       : []),
     "",
     "## Machine-Derived Coverage",

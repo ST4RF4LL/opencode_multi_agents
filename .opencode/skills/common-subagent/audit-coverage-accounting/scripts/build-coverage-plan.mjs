@@ -3,16 +3,20 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
+  COVERAGE_EXECUTION_MODEL,
   COVERAGE_MODEL_VERSION,
+  COVERAGE_POLICY_MODES,
   LENSES,
   DOMAIN_AGENTS,
   PLAN_SCHEMA_VERSION,
   activeDomains,
   coverageCheckId,
+  coverageUnitId,
   entryAppliesToDomain,
   functionManifestMembership,
   interfaceApplicability,
   interfaceDomains,
+  interfaceGroupId,
   objectDigest,
   sha256,
   sourceSetId,
@@ -22,7 +26,7 @@ import {
 } from "./coverage-v2-common.mjs";
 
 function parseArgs(argv) {
-  const args = { functions: [] };
+  const args = { functions: [], "coverage-mode": "observe" };
   for (let index = 0; index < argv.length; index += 2) {
     const token = argv[index];
     const value = argv[index + 1];
@@ -35,6 +39,9 @@ function parseArgs(argv) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
   if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
+  if (!COVERAGE_POLICY_MODES.includes(args["coverage-mode"])) {
+    throw new Error(`--coverage-mode must be one of: ${COVERAGE_POLICY_MODES.join(", ")}`);
+  }
   return args;
 }
 
@@ -178,6 +185,8 @@ async function main() {
       for (const lens of LENSES) checks.push(requiredCheck("catalog-domain", `domain:${domain}`, entry, domain, lens, catalog, focusAreaId, {
         required_source_set_id: bindSourceSet(domainSourceIds.get(domain)),
         required_source_count: domainSourceIds.get(domain).length,
+        required_catalog_ids: [entry.id],
+        required_interface_ids: [],
       }));
     }
   }
@@ -197,48 +206,101 @@ async function main() {
   const inventoryBounded = extractorComplete && gapFiles.length === 0
     && candidateInterfaces.length === 0 && unresolvedInterfaces.length === 0;
 
+  const interfaceGroups = new Map();
   for (const item of confirmedInterfaces) {
+    const itemDimensions = new Set(item.dimensions ?? []);
     for (const domain of interfaceDomains(item).filter(candidate => domains.includes(candidate))) {
       const focusAreaId = fileFocus.get(`${domain}|${item.file_id}`);
       if (!focusAreaId) throw new Error(`Interface source lacks a unique primary Focus Area assignment: ${domain}|${item.file_id}`);
       for (const entry of catalog.entries.filter(candidate => entryAppliesToDomain(candidate, domain, catalog))) {
         const applicability = interfaceApplicability(entry, domain, item, catalog);
+        const intersects = entry.dimensions.some(dimension => itemDimensions.has(dimension));
         for (const lens of LENSES) {
-          if (applicability.applicability === "REQUIRED") {
-            checks.push(requiredCheck("interface", item.interface_id, entry, domain, lens, catalog, focusAreaId, {
-              applicability_reason: applicability.reason,
-              applicability_rule_id: applicability.rule_id,
-              interface_direction: item.direction,
-              interface_kind: item.kind,
-              source_file_id: item.file_id,
-              required_source_set_id: bindSourceSet([item.file_id]),
-              required_source_count: 1,
-            }));
-          } else {
-            checks.push({
-              check_id: coverageCheckId("interface", item.interface_id, entry.id, domain, lens),
-              subject_kind: "interface",
-              subject_id: item.interface_id,
-              vulnerability_type_id: entry.id,
-              domain,
-              lens,
-              focus_area_id: focusAreaId,
-              dimensions: entry.dimensions,
-              applicability: applicability.applicability,
-              applicability_reason: applicability.reason,
-              applicability_rule_id: applicability.rule_id,
-              negative_discovery_required: false,
-              interface_direction: item.direction,
-              interface_kind: item.kind,
-              source_file_id: item.file_id,
-            });
-          }
+          if (applicability.applicability !== "REQUIRED" || !intersects) continue;
+          const groupKey = [focusAreaId, domain, entry.id, lens].join("|");
+          const group = interfaceGroups.get(groupKey) ?? {
+            focus_area_id: focusAreaId,
+            domain,
+            entry,
+            lens,
+            interfaces: new Map(),
+            rule_ids: new Set(),
+          };
+          group.interfaces.set(item.interface_id, item);
+          if (applicability.rule_id) group.rule_ids.add(applicability.rule_id);
+          interfaceGroups.set(groupKey, group);
         }
       }
     }
   }
 
+  for (const group of interfaceGroups.values()) {
+    const items = [...group.interfaces.values()].sort((left, right) => left.interface_id.localeCompare(right.interface_id));
+    const interfaceIds = items.map(item => item.interface_id);
+    const sourceFileIds = [...new Set(items.map(item => item.file_id))].sort();
+    const subjectId = interfaceGroupId(group.focus_area_id, group.domain, group.entry.id, interfaceIds);
+    checks.push(requiredCheck("interface", subjectId, group.entry, group.domain, group.lens, catalog, group.focus_area_id, {
+      applicability_reason: "explicit-interface-rule-and-dimension-intersection",
+      applicability_rule_ids: [...group.rule_ids].sort(),
+      interface_directions: [...new Set(items.map(item => item.direction))].sort(),
+      interface_kinds: [...new Set(items.map(item => item.kind))].sort(),
+      required_source_set_id: bindSourceSet(sourceFileIds),
+      required_source_count: sourceFileIds.length,
+      required_catalog_ids: [group.entry.id],
+      required_interface_ids: interfaceIds,
+    }));
+  }
+
   checks.sort((left, right) => left.check_id.localeCompare(right.check_id));
+  const coverageUnits = [];
+  for (const focusArea of focusAreas.focus_areas ?? []) {
+    for (const assignment of focusArea.assignments ?? []) {
+      const domain = assignment.catalog_domain;
+      if (!domains.includes(domain)) continue;
+      const unitChecks = checks.filter(check => check.applicability === "REQUIRED"
+        && check.focus_area_id === focusArea.focus_area_id && check.domain === domain);
+      if (unitChecks.length === 0) continue;
+      const checkIds = unitChecks.map(check => check.check_id).sort();
+      const sourceFileIds = [...new Set(unitChecks.flatMap(check => {
+        const sourceSet = sourceSets.get(check.required_source_set_id);
+        if (!sourceSet) throw new Error(`Coverage unit check references an unknown source set: ${check.check_id}`);
+        return sourceSet.file_ids;
+      }))].sort();
+      const catalogIds = new Set(unitChecks.map(check => check.vulnerability_type_id));
+      const interfaceIds = new Set(unitChecks.flatMap(check => check.required_interface_ids ?? []));
+      const policyTags = new Set();
+      if (domain === "ai") policyTags.add("ai-boundary");
+      if (unitChecks.some(check => check.subject_kind === "interface"
+        && (check.interface_directions ?? [check.interface_direction]).some(direction => ["ingress", "bidirectional"].includes(direction)))) {
+        policyTags.add("external-interface");
+      }
+      if (unitChecks.some(check => /^(?:JW-(?:ACCESS|AUTHN)-|AI-(?:ACCESS|IDENTITY|TOOL)-)/.test(check.vulnerability_type_id))) {
+        policyTags.add("identity-or-privilege");
+      }
+      const unitId = coverageUnitId(assignment.assignment_id, focusArea.focus_area_id, domain, checkIds);
+      coverageUnits.push({
+        unit_id: unitId,
+        assignment_id: assignment.assignment_id,
+        focus_area_id: focusArea.focus_area_id,
+        domain,
+        agent_name: assignment.agent_name,
+        required_lenses: LENSES,
+        check_ids: checkIds,
+        check_set_sha256: sha256(JSON.stringify(checkIds)),
+        required_check_count: checkIds.length,
+        required_source_set_id: bindSourceSet(sourceFileIds),
+        required_source_count: sourceFileIds.length,
+        required_catalog_count: catalogIds.size,
+        required_interface_count: interfaceIds.size,
+        policy_tags: [...policyTags].sort(),
+      });
+    }
+  }
+  coverageUnits.sort((left, right) => left.unit_id.localeCompare(right.unit_id));
+  const releaseRequiredUnitIds = coverageUnits
+    .filter(unit => unit.policy_tags.length > 0)
+    .map(unit => unit.unit_id)
+    .sort();
   const counts = Object.fromEntries(["REQUIRED", "NOT_APPLICABLE", "UNKNOWN"].map(state => [
     state,
     checks.filter(check => check.applicability === state).length,
@@ -246,6 +308,12 @@ async function main() {
   const plan = {
     schema_version: PLAN_SCHEMA_VERSION,
     coverage_model_version: COVERAGE_MODEL_VERSION,
+    execution_model: COVERAGE_EXECUTION_MODEL,
+    coverage_policy: {
+      mode: args["coverage-mode"],
+      release_required_unit_ids: releaseRequiredUnitIds,
+      assurance_requires_all_checks: true,
+    },
     audit_id: args["audit-id"],
     catalog_profile_id: catalog.profile_id,
     scope_digest: scope.scope_digest,
@@ -268,6 +336,17 @@ async function main() {
       owner_agent: file.owner_agent,
     })).sort((a, b) => a.file_id.localeCompare(b.file_id)),
     source_sets: [...sourceSets.values()].sort((a, b) => a.source_set_id.localeCompare(b.source_set_id)),
+    interface_index: confirmedInterfaces.map(item => ({
+      interface_id: item.interface_id,
+      file_id: item.file_id,
+      direction: item.direction,
+      kind: item.kind,
+      protocol: item.protocol,
+      operation: item.operation,
+      address: item.address,
+      line_start: item.line_start,
+      dimensions: [...item.dimensions].sort(),
+    })).sort((left, right) => left.interface_id.localeCompare(right.interface_id)),
     universes: {
       files: (scope.files ?? []).filter(file => file.review_required).length,
       function_files: expectedFiles.size,
@@ -291,6 +370,7 @@ async function main() {
       bounded: inventoryBounded,
     },
     checks,
+    coverage_units: coverageUnits,
     summary: {
       atomic_checks: checks.length,
       required: counts.REQUIRED,
@@ -298,6 +378,10 @@ async function main() {
       unknown: counts.UNKNOWN,
       catalog_domain_required: checks.filter(check => check.subject_kind === "catalog-domain" && check.applicability === "REQUIRED").length,
       interface_required: checks.filter(check => check.subject_kind === "interface" && check.applicability === "REQUIRED").length,
+      interface_memberships_required: checks
+        .filter(check => check.subject_kind === "interface" && check.applicability === "REQUIRED")
+        .reduce((sum, check) => sum + check.required_interface_ids.length, 0),
+      coverage_units: coverageUnits.length,
     },
     complete: counts.UNKNOWN === 0 && inventoryBounded,
     claim_boundary: catalog.coverage_model.claim_boundary,

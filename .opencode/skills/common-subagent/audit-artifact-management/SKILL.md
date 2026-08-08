@@ -133,19 +133,27 @@ Persist the structured and Markdown review exports under `reports/validation/`. 
 
 ## External Runtime-Validation Handoff
 
-This project does not execute runtime validation. When static adjudication
+The normal static workflow does not execute runtime validation. When static adjudication
 needs a later Java/Web runtime check, export
 `external-runtime-validation-request-v1` with the shared
 `finding-evidence-contract` builder/validator. The request binds the immutable
 finding object, source location, adjudication decision, attack-surface facts,
 proof gap, and isolated-test-only policy.
 
-A downstream project may return
+A separately authorized downstream project may return
 `external-runtime-validation-result-v1`. Validate it against the exact request
 digest. The result must attest that it did not contact production or third-party
 targets, use real credentials, persist, or perform destructive actions. Do not
 auto-promote a returned outcome into this project's adjudication or final
 report; that import belongs to the later project.
+
+On explicit user request, this workspace may instead invoke
+`dynamic-vulnerability-validator` for `JW-INJECT-06` against a user-supplied
+loopback application. It uses visible isolated Chrome DevTools MCP, two distinct
+test accounts, a bounded safe stored marker, and a sanitized target binding.
+This conditional sidecar is not part of the default audit and has the same
+non-promotion boundary. Credential values remain in the active prompt/session
+and never enter a durable artifact.
 See `references/external-runtime-validation-handoff.md` for the producer and
 consumer boundary.
 

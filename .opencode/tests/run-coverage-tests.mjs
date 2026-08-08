@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { catalogQuestionDigest, deriveCoverageCells } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-cell-accounting.mjs";
 import {
+  beginCoverageUnit,
   checkpointLedger,
   delegateAssignment,
   finalizePartialLedger,
@@ -14,6 +15,7 @@ import {
   initializeLedger,
   inspectSubject,
   recordToolResult,
+  submitCoverageUnitAttestation,
   submitDecision,
   verifyLedger,
 } from "../skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs";
@@ -857,8 +859,253 @@ async function main() {
     const coveragePlan = JSON.parse(await readFile(coveragePlanPath, "utf8"));
     if (!coveragePlan.complete || coveragePlan.summary.required === 0
       || coveragePlan.summary.catalog_domain_required === 0 || coveragePlan.summary.interface_required === 0
+      || coveragePlan.execution_model !== "assignment-unit-v1"
+      || coveragePlan.coverage_policy?.mode !== "observe"
+      || coveragePlan.coverage_units?.length === 0
       || validatePlan(coveragePlan).length > 0) {
       throw new Error("Coverage Plan v3 did not produce a complete sparse catalog/interface check universe");
+    }
+    if (coveragePlan.coverage_units.reduce((sum, unit) => sum + unit.required_check_count, 0)
+      !== coveragePlan.summary.required) {
+      throw new Error("Assignment coverage units do not partition the required check universe exactly once");
+    }
+    const unitLedgerPath = join(coverage, "coverage-ledger-unit-observe.jsonl");
+    await initializeLedger({ planPath: coveragePlanPath, ledgerPath: unitLedgerPath });
+    const unit = coveragePlan.coverage_units[0];
+    await expectReject(() => beginCoverageUnit({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      unitId: unit.unit_id,
+      sessionId: "fixture-unit-unauthorized-session",
+      agentName: unit.agent_name === "ai-security-auditor" ? "web-source-auditor" : "ai-security-auditor",
+      idempotencyKey: "fixture-unit-unauthorized",
+    }), /not authorized/);
+    const unitAssignment = await beginCoverageUnit({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      unitId: unit.unit_id,
+      sessionId: "fixture-unit-session",
+      agentName: unit.agent_name,
+      idempotencyKey: "fixture-unit-begin",
+    });
+    const sinkGapId = unit.check_ids.find(checkId => coveragePlan.checks.find(check => check.check_id === checkId)?.lens === "sink-driven");
+    await submitCoverageUnitAttestation({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      unitId: unit.unit_id,
+      sessionId: "fixture-unit-session",
+      assignmentToken: unitAssignment.assignment_token,
+      idempotencyKey: "fixture-unit-partial",
+      completedLenses: ["sink-driven"],
+      state: "PARTIAL",
+      gapCheckIds: [sinkGapId],
+      sourceScope: "required",
+      queryOrRule: "fixture-unit-sink-pass",
+      tool: "fixture-unit-review",
+      toolVersion: "1.0.0",
+      resultPayload: "fixture-unit-partial-result",
+      resultDigest: sha256("fixture-unit-partial-result"),
+      resultSummary: "Sink lens complete except one explicit gap.",
+    });
+    const partialUnitVerification = await verifyLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      requireFinalized: false,
+    });
+    if (partialUnitVerification.state.get(sinkGapId)?.execution_state !== "GAP"
+      || !unit.check_ids.some(checkId => partialUnitVerification.state.get(checkId)?.execution_state === "VERIFIED")
+      || !unit.check_ids.some(checkId => partialUnitVerification.state.get(checkId)?.execution_state === "PLANNED")) {
+      throw new Error("Partial unit attestation did not preserve all-minus-gaps lens state");
+    }
+    await submitCoverageUnitAttestation({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      unitId: unit.unit_id,
+      sessionId: "fixture-unit-session",
+      assignmentToken: unitAssignment.assignment_token,
+      idempotencyKey: "fixture-unit-other-lenses",
+      completedLenses: ["control-driven", "config-driven"],
+      state: "PARTIAL",
+      gapCheckIds: [],
+      sourceScope: "required",
+      queryOrRule: "fixture-unit-other-lenses",
+      tool: "fixture-unit-review",
+      toolVersion: "1.0.0",
+      resultPayload: "fixture-unit-other-lenses-result",
+      resultDigest: sha256("fixture-unit-other-lenses-result"),
+      resultSummary: "Control and config lenses complete.",
+    });
+    await submitCoverageUnitAttestation({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      unitId: unit.unit_id,
+      sessionId: "fixture-unit-session",
+      assignmentToken: unitAssignment.assignment_token,
+      idempotencyKey: "fixture-unit-gap-repair",
+      completedLenses: ["sink-driven"],
+      state: "PARTIAL",
+      gapCheckIds: [],
+      sourceScope: "required",
+      queryOrRule: "fixture-unit-sink-repair",
+      tool: "fixture-unit-review",
+      toolVersion: "1.0.0",
+      resultPayload: "fixture-unit-gap-repair-result",
+      resultDigest: sha256("fixture-unit-gap-repair-result"),
+      resultSummary: "The prior sink gap was repaired.",
+    });
+    const postUnitInspection = await inspectSubject({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      checkId: sinkGapId,
+      sessionId: "fixture-post-unit-finding-session",
+      agentName: unit.agent_name,
+      idempotencyKey: "fixture-post-unit-inspect",
+    });
+    const postUnitReceipt = await recordToolResult({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      checkId: sinkGapId,
+      sessionId: "fixture-post-unit-finding-session",
+      assignmentToken: postUnitInspection.assignment_token,
+      idempotencyKey: "fixture-post-unit-receipt",
+      sourceScope: "required",
+      locators: [{
+        kind: "required-source-set",
+        check_id: sinkGapId,
+        source_set_id: coveragePlan.checks.find(check => check.check_id === sinkGapId).required_source_set_id,
+        source_count: coveragePlan.checks.find(check => check.check_id === sinkGapId).required_source_count,
+      }],
+      queryOrRule: "fixture-post-unit-exact-result",
+      tool: "fixture-unit-review",
+      toolVersion: "1.0.0",
+      resultPayload: "fixture-post-unit-exact-result",
+    });
+    await submitDecision({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      checkId: sinkGapId,
+      sessionId: "fixture-post-unit-finding-session",
+      assignmentToken: postUnitInspection.assignment_token,
+      idempotencyKey: "fixture-post-unit-decision",
+      executionState: "VERIFIED",
+      resultState: "NO_FINDING",
+      receiptIds: [postUnitReceipt.receipt.receipt_id],
+      rationale: "Coverage execution and exact result binding remain independently writable.",
+    });
+    await finalizeLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      idempotencyKey: "fixture-unit-observe-finalize",
+    });
+    const observedVerification = await verifyLedger({
+      planPath: coveragePlanPath,
+      ledgerPath: unitLedgerPath,
+      requireFinalized: false,
+      requirePolicyFinalized: true,
+    });
+    if (!observedVerification.policy_satisfied || observedVerification.complete
+      || observedVerification.seal_state !== "FINALIZED_OBSERVED"
+      || unit.check_ids.some(checkId => observedVerification.state.get(checkId)?.execution_state !== "VERIFIED")) {
+      throw new Error("Observe policy did not finish independently from strict coverage completion");
+    }
+    const observedSummaryPath = join(coverage, "coverage-summary-unit-observe.json");
+    run("render-coverage-summary.mjs", [
+      "--mode", "policy",
+      "--plan", coveragePlanPath,
+      "--ledger", unitLedgerPath,
+      "--structural", positiveOutput,
+      "--output", observedSummaryPath,
+      "--markdown-output", join(coverage, "coverage-summary-unit-observe.md"),
+    ]);
+    const observedSummary = JSON.parse(await readFile(observedSummaryPath, "utf8"));
+    if (!observedSummary.policy_satisfied || observedSummary.complete
+      || observedSummary.policy_mode !== "observe"
+      || observedSummary.execution.complete_units !== 1) {
+      throw new Error("Policy summary did not separate workflow acceptance from strict coverage completeness");
+    }
+    const observedGatePath = join(coverage, "coverage-verification-unit-observe.json");
+    run("verify-coverage-v3.mjs", [
+      "--mode", "policy",
+      ...commonVerifyArgs,
+      "--reports-dir", positiveReports,
+      "--plan", coveragePlanPath,
+      "--ledger", unitLedgerPath,
+      "--structural-output", join(coverage, "coverage-structural-unit-observe.json"),
+      "--summary-output", join(coverage, "coverage-summary-unit-observe-gate.json"),
+      "--markdown-output", join(coverage, "coverage-summary-unit-observe-gate.md"),
+      "--output", observedGatePath,
+    ]);
+    const observedGate = JSON.parse(await readFile(observedGatePath, "utf8"));
+    if (!observedGate.policy_satisfied || observedGate.complete
+      || observedGate.seal_state !== "FINALIZED_OBSERVED" || observedGate.gaps.length === 0) {
+      throw new Error("Policy gate did not accept observe mode while retaining strict coverage gaps");
+    }
+    const releasePlan = structuredClone(coveragePlan);
+    releasePlan.coverage_policy.mode = "release";
+    if (releasePlan.coverage_policy.release_required_unit_ids.length === releasePlan.coverage_units.length) {
+      releasePlan.coverage_units.at(-1).policy_tags = [];
+      releasePlan.coverage_policy.release_required_unit_ids = releasePlan.coverage_units
+        .filter(item => item.policy_tags.length > 0).map(item => item.unit_id).sort();
+    }
+    if (releasePlan.coverage_policy.release_required_unit_ids.length === 0) {
+      releasePlan.coverage_units[0].policy_tags = ["identity-or-privilege"];
+      releasePlan.coverage_policy.release_required_unit_ids = [releasePlan.coverage_units[0].unit_id];
+    }
+    releasePlan.manifest_digest = objectDigest(releasePlan);
+    const releasePlanPath = join(coverage, "coverage-plan-release.json");
+    const releaseLedgerPath = join(coverage, "coverage-ledger-release.jsonl");
+    await writeFile(releasePlanPath, `${JSON.stringify(releasePlan, null, 2)}\n`, "utf8");
+    await initializeLedger({ planPath: releasePlanPath, ledgerPath: releaseLedgerPath });
+    for (const releaseUnitId of releasePlan.coverage_policy.release_required_unit_ids) {
+      const releaseUnit = releasePlan.coverage_units.find(item => item.unit_id === releaseUnitId);
+      const assignment = await beginCoverageUnit({
+        planPath: releasePlanPath,
+        ledgerPath: releaseLedgerPath,
+        unitId: releaseUnitId,
+        sessionId: "fixture-release-session",
+        agentName: releaseUnit.agent_name,
+        idempotencyKey: `release-begin-${releaseUnitId}`,
+      });
+      await submitCoverageUnitAttestation({
+        planPath: releasePlanPath,
+        ledgerPath: releaseLedgerPath,
+        unitId: releaseUnitId,
+        sessionId: "fixture-release-session",
+        assignmentToken: assignment.assignment_token,
+        idempotencyKey: `release-attest-${releaseUnitId}`,
+        completedLenses: LENSES,
+        state: "COMPLETE",
+        gapCheckIds: [],
+        sourceScope: "required",
+        queryOrRule: "fixture-release-policy-review",
+        tool: "fixture-unit-review",
+        toolVersion: "1.0.0",
+        resultPayload: `release:${releaseUnitId}`,
+        resultSummary: "Policy-tagged unit complete.",
+      });
+    }
+    await finalizeLedger({
+      planPath: releasePlanPath,
+      ledgerPath: releaseLedgerPath,
+      idempotencyKey: "fixture-release-finalize",
+    });
+    const releaseVerification = await verifyLedger({
+      planPath: releasePlanPath,
+      ledgerPath: releaseLedgerPath,
+      requireFinalized: false,
+      requirePolicyFinalized: true,
+    });
+    if (!releaseVerification.policy_satisfied || releaseVerification.complete
+      || releaseVerification.seal_state !== "FINALIZED_RELEASE" || releaseVerification.gaps.length === 0) {
+      throw new Error("Release policy did not gate only its policy-tagged coverage units");
+    }
+    const groupedInterfaceChecks = coveragePlan.checks.filter(check => check.subject_kind === "interface" && check.applicability === "REQUIRED");
+    if (coveragePlan.summary.not_applicable !== 0
+      || groupedInterfaceChecks.some(check => !check.subject_id.startsWith("interface-group:")
+        || !Array.isArray(check.required_interface_ids) || check.required_interface_ids.length === 0)
+      || coveragePlan.summary.interface_memberships_required
+        !== groupedInterfaceChecks.reduce((sum, check) => sum + check.required_interface_ids.length, 0)) {
+      throw new Error("Coverage Plan expanded sparse grouped interface work back into per-interface applicability rows");
     }
     const requiredChecks = coveragePlan.checks.filter(check => check.applicability === "REQUIRED");
     if (coveragePlan.checks.some(check => Object.hasOwn(check, "required_source_file_ids"))
@@ -1424,6 +1671,24 @@ async function main() {
       "--chains", attackChainsPath,
       "--output", finalReportModelPath,
     ]);
+    const policyFinalReportModelPath = join(coverage, "policy-final-report-model.json");
+    const policyFinalReportPath = join(coverage, "security-audit-report-policy.fixture.md");
+    run("build-final-report-model.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--mode", "policy-final",
+      "--coverage-summary", summaryPath,
+      "--adjudication-input", adjudicationInputPath,
+      "--adjudication", adjudicationPath,
+      "--cvss", cvssAssessmentPath,
+      "--chains", attackChainsPath,
+      "--output", policyFinalReportModelPath,
+    ]);
+    run("render-final-report.mjs", ["--model", policyFinalReportModelPath, "--output", policyFinalReportPath]);
+    run("verify-final-report.mjs", ["--model", policyFinalReportModelPath, "--markdown", policyFinalReportPath]);
+    const policyFinalReportModel = JSON.parse(await readFile(policyFinalReportModelPath, "utf8"));
+    if (policyFinalReportModel.report_kind !== "POLICY_FINAL" || !policyFinalReportModel.coverage.policy_satisfied) {
+      throw new Error("Policy-final report did not preserve policy acceptance independently from report rendering");
+    }
     run("build-final-report-model.mjs", [
       "--audit-id", AUDIT_ID,
       "--mode", "checkpoint",
@@ -1575,6 +1840,7 @@ async function main() {
     const blockedPlanPath = join(coverage, "coverage-plan-zero-interface.json");
     run("build-coverage-plan.mjs", [
       "--audit-id", AUDIT_ID,
+      "--coverage-mode", "assurance",
       "--scope", blockedSnapshot.scope.path,
       ...blockedSnapshot.functions.flatMap(item => ["--functions", item.path]),
       "--interfaces", blockedSnapshot.interfaces.path,
@@ -1632,6 +1898,61 @@ async function main() {
       || blockedSummary.external_interfaces.conservative_lower_bound.state !== "UNBOUNDED"
       || blockedSummary.vulnerability_types.conservative_lower_bound.state === "UNBOUNDED") {
       throw new Error("Unbounded zero-interface inventory produced an optimistic coverage statistic");
+    }
+    const observedBlockedPlan = structuredClone(blockedPlan);
+    observedBlockedPlan.coverage_policy.mode = "observe";
+    observedBlockedPlan.manifest_digest = objectDigest(observedBlockedPlan);
+    const observedBlockedPlanPath = join(coverage, "coverage-plan-zero-interface-observe.json");
+    const observedBlockedLedgerPath = join(coverage, "coverage-ledger-zero-interface-observe.jsonl");
+    await writeFile(observedBlockedPlanPath, `${JSON.stringify(observedBlockedPlan, null, 2)}\n`, "utf8");
+    await initializeLedger({ planPath: observedBlockedPlanPath, ledgerPath: observedBlockedLedgerPath });
+    await finalizeLedger({
+      planPath: observedBlockedPlanPath,
+      ledgerPath: observedBlockedLedgerPath,
+      idempotencyKey: "observe-unbounded-finalize",
+    });
+    const observedBlockedReports = join(work, "reports-observe-unbounded");
+    await cp(positiveReports, observedBlockedReports, { recursive: true });
+    const observedBlockedFindingReportPath = join(
+      observedBlockedReports,
+      `${DOMAIN_AGENTS[firstRequiredCheck.domain]}.${firstRequiredCheck.lens}.audit-report.json`,
+    );
+    const observedBlockedFindingReport = JSON.parse(await readFile(observedBlockedFindingReportPath, "utf8"));
+    const observedBlockedFindingRecord = observedBlockedFindingReport.catalog_coverage.find(record =>
+      record.catalog_id === firstRequiredCheck.vulnerability_type_id && record.domain === firstRequiredCheck.domain);
+    observedBlockedFindingRecord.status = "REVIEWED";
+    observedBlockedFindingRecord.finding_ids = [];
+    observedBlockedFindingReport.findings = [];
+    await writeFile(observedBlockedFindingReportPath, `${JSON.stringify(observedBlockedFindingReport, null, 2)}\n`, "utf8");
+    run("reconcile-audit-report.mjs", [
+      "--report", observedBlockedFindingReportPath,
+      "--scope", blockedSnapshot.scope.path,
+      "--catalog", blockedSnapshot.catalog.path,
+    ]);
+    const observedBlockedVerificationPath = join(coverage, "coverage-verification-zero-interface-observe.json");
+    run("verify-coverage-v3.mjs", [
+      "--mode", "policy",
+      "--root", root,
+      "--audit-id", AUDIT_ID,
+      "--scope", blockedSnapshot.scope.path,
+      "--interfaces", blockedSnapshot.interfaces.path,
+      "--interface-extractors", blockedSnapshot.interface_extractors.path,
+      "--snapshot-index", blockedSnapshotIndexPath,
+      ...blockedSnapshot.functions.flatMap(item => ["--functions", item.path]),
+      "--reports-dir", observedBlockedReports,
+      "--catalog", blockedSnapshot.catalog.path,
+      "--plan", observedBlockedPlanPath,
+      "--ledger", observedBlockedLedgerPath,
+      "--structural-output", join(coverage, "coverage-structural-zero-interface-observe.json"),
+      "--summary-output", join(coverage, "coverage-summary-zero-interface-observe.json"),
+      "--markdown-output", join(coverage, "coverage-summary-zero-interface-observe.md"),
+      "--output", observedBlockedVerificationPath,
+    ]);
+    const observedBlockedVerification = JSON.parse(await readFile(observedBlockedVerificationPath, "utf8"));
+    if (!observedBlockedVerification.policy_satisfied || observedBlockedVerification.complete
+      || observedBlockedVerification.coverage_status !== "BLOCKED"
+      || observedBlockedVerification.seal_state !== "FINALIZED_OBSERVED") {
+      throw new Error("Observe policy did not remain non-blocking for an explicitly unbounded inventory");
     }
 
     const mixedRoundReports = join(work, "reports-mixed-round");

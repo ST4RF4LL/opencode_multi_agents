@@ -11,8 +11,9 @@
     { "stage_id": "P06_CORRELATION", "order": 6, "name": "Evidence correlation" },
     { "stage_id": "P07_GAP_ROUND", "order": 7, "name": "Targeted gap rounds and optional threat refinement" },
     { "stage_id": "P08_FINALIZE", "order": 8, "name": "Adjudication, post-adjudication chains, coverage seals, and final report" },
-    { "stage_id": "P09_INDEPENDENT_REVIEW", "order": 9, "name": "Independent whole-report review" },
-    { "stage_id": "P10_OPTIMIZE", "order": 10, "name": "Reusable security-audit asset optimization" }
+    { "stage_id": "P08_RUNTIME_VALIDATION", "order": 9, "name": "Explicit localhost dynamic runtime validation sidecar" },
+    { "stage_id": "P09_INDEPENDENT_REVIEW", "order": 10, "name": "Independent whole-report review" },
+    { "stage_id": "P10_OPTIMIZE", "order": 11, "name": "Reusable security-audit asset optimization" }
   ],
   "envelope": {
     "schema_version": 1,
@@ -478,6 +479,26 @@
         "required_artifact_types": ["stage-handoff-verification", "coverage-verification", "semantic-coverage-verification", "final-report-model", "final-report"],
         "optional_artifact_types": ["external-runtime-validation-request-set"],
         "required_payload_fields": ["report_kind", "coverage_complete", "semantic_complete", "stage_handoffs_complete", "supported_finding_ids", "attack_chain_ids", "residual_gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_RUNTIME_VALIDATION.dynamic-vulnerability-validator",
+      "stage_id": "P08_RUNTIME_VALIDATION",
+      "agent_name": "dynamic-vulnerability-validator",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["external-runtime-validation-request"],
+        "optional_artifact_types": ["environment-login-skill"],
+        "required_payload_fields": ["explicit_user_request", "localhost_target", "attacker_account_supplied", "victim_account_supplied", "login_instructions_supplied", "cleanup_instructions_supplied"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["localhost-target-binding", "external-runtime-validation-result"],
+        "optional_artifact_types": ["sanitized-runtime-evidence-set"],
+        "required_payload_fields": ["outcome", "xss_verification_level", "preferred_goal_met", "cleanup_status", "residual_gaps"],
         "optional_payload_fields": []
       }
     },

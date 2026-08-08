@@ -8,9 +8,12 @@ import { performance } from "node:perf_hooks";
 import { Client } from "../node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StdioClientTransport } from "../node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
 import {
+  COVERAGE_EXECUTION_MODEL,
   COVERAGE_MODEL_VERSION,
   PLAN_SCHEMA_VERSION,
   coverageCheckId,
+  coverageUnitId,
+  interfaceGroupId,
   objectDigest,
   sha256,
   sourceSetId,
@@ -35,11 +38,24 @@ function makePlan() {
     owner_agent: "web-source-auditor",
   })).sort((left, right) => left.file_id.localeCompare(right.file_id));
   const sourceIds = sourceIndex.map(source => source.file_id).sort();
+  const interfaceIndex = sourceIndex.map((source, index) => ({
+    interface_id: `interface:${sha256(`interface-${index}`).slice(0, 24)}`,
+    file_id: source.file_id,
+    direction: "ingress",
+    kind: "http",
+    protocol: "http",
+    operation: "GET",
+    address: `/generated/${index}`,
+    line_start: 1,
+    dimensions: ["D1"],
+  })).sort((left, right) => left.interface_id.localeCompare(right.interface_id));
+  const interfaceIds = interfaceIndex.map(item => item.interface_id);
+  const subjectId = interfaceGroupId("FA-LARGE", "web", "JW-TEST-01", interfaceIds);
   const frozenSourceSetId = sourceSetId(sourceIds);
   const checks = LENSES.map(lens => ({
-    check_id: coverageCheckId("catalog-domain", "domain:web", "JW-TEST-01", "web", lens),
-    subject_kind: "catalog-domain",
-    subject_id: "domain:web",
+    check_id: coverageCheckId("interface", subjectId, "JW-TEST-01", "web", lens),
+    subject_kind: "interface",
+    subject_id: subjectId,
     vulnerability_type_id: "JW-TEST-01",
     domain: "web",
     lens,
@@ -47,10 +63,10 @@ function makePlan() {
     dimensions: ["D1"],
     applicability: "REQUIRED",
     applicability_reason: "large-source-response-regression",
-    negative_discovery_required: true,
+    negative_discovery_required: false,
     required_source_set_id: frozenSourceSetId,
     required_source_count: sourceIds.length,
-    required_interface_ids: [],
+    required_interface_ids: interfaceIds,
     required_catalog_ids: ["JW-TEST-01"],
     evidence_contract: {
       question_field: `${lens.replace("-driven", "")}_question`,
@@ -58,9 +74,34 @@ function makePlan() {
       required_receipt_fields: ["source_set_id", "locators", "query_or_rule", "tool", "result_attestation"],
     },
   }));
+  checks.sort((left, right) => left.check_id.localeCompare(right.check_id));
+  const assignmentId = "assignment:large-response-fixture";
+  const unitId = coverageUnitId(assignmentId, "FA-LARGE", "web", checks.map(check => check.check_id));
+  const coverageUnits = [{
+    unit_id: unitId,
+    assignment_id: assignmentId,
+    focus_area_id: "FA-LARGE",
+    domain: "web",
+    agent_name: "web-source-auditor",
+    required_lenses: LENSES,
+    check_ids: checks.map(check => check.check_id),
+    check_set_sha256: sha256(JSON.stringify(checks.map(check => check.check_id))),
+    required_check_count: checks.length,
+    required_source_set_id: frozenSourceSetId,
+    required_source_count: sourceIds.length,
+    required_catalog_count: 1,
+    required_interface_count: interfaceIds.length,
+    policy_tags: ["external-interface"],
+  }];
   const plan = {
     schema_version: PLAN_SCHEMA_VERSION,
     coverage_model_version: COVERAGE_MODEL_VERSION,
+    execution_model: COVERAGE_EXECUTION_MODEL,
+    coverage_policy: {
+      mode: "observe",
+      release_required_unit_ids: [unitId],
+      assurance_requires_all_checks: true,
+    },
     audit_id: AUDIT_ID,
     catalog_profile_id: "response-fixture-v4",
     scope_digest: sha256("large-response-scope"),
@@ -68,12 +109,13 @@ function makePlan() {
     inputs: { snapshot_digest: sha256("large-response-snapshot") },
     source_index: sourceIndex,
     source_sets: [{ source_set_id: frozenSourceSetId, file_ids: sourceIds }],
+    interface_index: interfaceIndex,
     universes: {
       files: SOURCE_COUNT,
       function_files: 0,
       functions: 0,
-      interfaces: 0,
-      interface_anchors: 0,
+      interfaces: SOURCE_COUNT,
+      interface_anchors: SOURCE_COUNT,
       vulnerability_types: 1,
       active_domains: ["web"],
     },
@@ -82,7 +124,7 @@ function makePlan() {
       resolved_files: SOURCE_COUNT,
       gap_files: 0,
       gap_file_ids: [],
-      confirmed_interfaces: 0,
+      confirmed_interfaces: SOURCE_COUNT,
       candidate_interfaces: 0,
       candidate_interface_ids: [],
       rejected_interfaces: 0,
@@ -91,13 +133,16 @@ function makePlan() {
       bounded: true,
     },
     checks,
+    coverage_units: coverageUnits,
     summary: {
       atomic_checks: checks.length,
       required: checks.length,
       not_applicable: 0,
       unknown: 0,
-      catalog_domain_required: checks.length,
-      interface_required: 0,
+      catalog_domain_required: 0,
+      interface_required: checks.length,
+      interface_memberships_required: checks.length * SOURCE_COUNT,
+      coverage_units: coverageUnits.length,
     },
     complete: true,
   };
@@ -141,42 +186,41 @@ async function main() {
       return { value: JSON.parse(text), responseBytes, text };
     }
 
-    const packet = await call("coverage_get_packet", {
+    const unitPage = await call("coverage_get_unit", {
       audit_id: AUDIT_ID,
       limit: 10,
     });
-    const check = packet.value.packets[0];
-    if (packet.text.includes(plan.source_index[0].file_id)
-      || check.required_source_count !== SOURCE_COUNT
-      || check.receipt_source_scope !== "required") {
-      throw new Error("Packet response leaked the frozen source list or omitted the required source-set contract");
+    const unit = unitPage.value.units[0];
+    if (unitPage.text.includes(plan.source_index[0].file_id)
+      || unitPage.text.includes(plan.interface_index[0].interface_id)
+      || unit.required_source_count !== SOURCE_COUNT
+      || unit.required_interface_count !== SOURCE_COUNT
+      || unit.required_check_count !== LENSES.length) {
+      throw new Error("Coverage unit response leaked a frozen member list or omitted compact member counts");
     }
 
     const mutationStarted = performance.now();
-    const inspection = await call("coverage_inspect_subject", {
+    const assignment = await call("coverage_begin_unit", {
       audit_id: AUDIT_ID,
-      check_id: check.check_id,
+      unit_id: unit.unit_id,
       session_id: "large-response-session",
       agent_name: "web-source-auditor",
-      idempotency_key: "large-response-inspect",
+      idempotency_key: "large-response-unit-begin",
     });
-    if ("source_page" in inspection.value || inspection.text.includes(plan.source_index[0].file_id)) {
-      throw new Error("Subject inspection leaked source metadata into the normal workflow");
+    if (assignment.text.includes(plan.source_index[0].file_id)) {
+      throw new Error("Coverage unit assignment leaked source metadata into the normal workflow");
     }
 
-    const receipt = await call("coverage_record_tool_result", {
+    const attestation = await call("coverage_submit_attestation", {
       audit_id: AUDIT_ID,
-      check_id: check.check_id,
+      unit_id: unit.unit_id,
       session_id: "large-response-session",
-      assignment_token: inspection.value.assignment_token,
-      idempotency_key: "large-response-receipt",
+      assignment_token: assignment.value.assignment_token,
+      idempotency_key: "large-response-attestation",
+      completed_lenses: LENSES,
+      state: "COMPLETE",
+      gap_check_ids: [],
       source_scope: "required",
-      locators: [{
-        kind: "required-source-set",
-        check_id: check.check_id,
-        source_set_id: check.required_source_set_id,
-        source_count: SOURCE_COUNT,
-      }],
       query_or_rule: "large-response-regression",
       tool: "fixture",
       tool_version: "1.0.0",
@@ -184,24 +228,23 @@ async function main() {
       result_digest: sha256("large-response-result"),
       result_summary: "Complete frozen source set reviewed.",
     });
-    if (receipt.value.receipt.source_scope !== "required"
-      || receipt.value.receipt.source_count !== SOURCE_COUNT
-      || !/^[a-f0-9]{64}$/.test(receipt.value.receipt.source_set_sha256 ?? "")) {
-      throw new Error("Receipt response lacks the compact digest-bound source-set proof");
+    if (!attestation.value.attestation.attestation_id) {
+      throw new Error("Coverage unit attestation response omitted its compact identifier");
     }
-
-    const decision = await call("coverage_submit_decision", {
+    const gaps = await call("coverage_get_gaps", {
       audit_id: AUDIT_ID,
-      check_id: check.check_id,
-      session_id: "large-response-session",
-      assignment_token: inspection.value.assignment_token,
-      idempotency_key: "large-response-decision",
-      execution_state: "VERIFIED",
-      result_state: "NO_FINDING",
-      receipt_ids: [receipt.value.receipt.receipt_id],
-      rationale: "Digest-bound complete source set reviewed.",
     });
+    if (gaps.value.total_gaps !== 0 || gaps.value.verified !== plan.checks.length) {
+      throw new Error("One complete unit attestation did not verify all internal member checks");
+    }
     const mutationWorkflowMs = Number((performance.now() - mutationStarted).toFixed(2));
+
+    const unitChecks = await call("coverage_get_unit_checks", {
+      audit_id: AUDIT_ID,
+      unit_id: unit.unit_id,
+      limit: 10,
+    });
+    const check = unitChecks.value.checks[0];
 
     const diagnosticSources = await call("coverage_get_subject_sources", {
       audit_id: AUDIT_ID,
@@ -211,11 +254,20 @@ async function main() {
     if (diagnosticSources.value.returned !== 25 || diagnosticSources.value.total_sources !== SOURCE_COUNT) {
       throw new Error("Targeted source diagnostics did not remain cursor-paginated");
     }
+    const diagnosticInterfaces = await call("coverage_get_subject_interfaces", {
+      audit_id: AUDIT_ID,
+      check_id: check.check_id,
+      limit: 25,
+    });
+    if (diagnosticInterfaces.value.returned !== 25
+      || diagnosticInterfaces.value.total_interfaces !== SOURCE_COUNT
+      || diagnosticInterfaces.text.includes(plan.interface_index[25].interface_id)) {
+      throw new Error("Targeted interface diagnostics did not remain cursor-paginated");
+    }
 
-    const normalWorkflowBytes = packet.responseBytes
-      + inspection.responseBytes
-      + receipt.responseBytes
-      + decision.responseBytes;
+    const normalWorkflowBytes = unitPage.responseBytes
+      + assignment.responseBytes
+      + attestation.responseBytes;
     if (normalWorkflowBytes > RESPONSE_LIMIT) {
       throw new Error(`Normal source-set workflow returned ${normalWorkflowBytes} cumulative bytes`);
     }
@@ -227,12 +279,12 @@ async function main() {
       "coverage-ledger.jsonl",
     );
     const ledgerText = await readFile(ledgerPath, "utf8");
-    const receiptEvent = ledgerText.split(/\r?\n/).filter(Boolean).map(JSON.parse)
-      .find(event => event.event_type === "RECEIPT");
-    if (receiptEvent?.source_set?.mode !== "required-source-set"
-      || receiptEvent.source_set.source_count !== SOURCE_COUNT
-      || Buffer.byteLength(JSON.stringify(receiptEvent)) > 2_048) {
-      throw new Error("Ledger receipt expanded the full frozen source universe");
+    const attestationEvent = ledgerText.split(/\r?\n/).filter(Boolean).map(JSON.parse)
+      .find(event => event.event_type === "UNIT_ATTESTATION");
+    if (attestationEvent?.source_set?.mode !== "required-source-set"
+      || attestationEvent.source_set.source_count !== SOURCE_COUNT
+      || Buffer.byteLength(JSON.stringify(attestationEvent)) > 2_048) {
+      throw new Error("Ledger unit attestation expanded the full frozen source universe");
     }
 
     process.stdout.write(`${JSON.stringify({
@@ -241,13 +293,13 @@ async function main() {
       plan_bytes: Buffer.byteLength(JSON.stringify(plan)),
       normalized_source_id_references: plan.source_sets.reduce((sum, sourceSet) => sum + sourceSet.file_ids.length, 0),
       expanded_source_id_references_avoided: SOURCE_COUNT * (plan.checks.length - 1),
-      packet_bytes: packet.responseBytes,
-      inspection_bytes: inspection.responseBytes,
-      receipt_bytes: receipt.responseBytes,
-      decision_bytes: decision.responseBytes,
+      unit_bytes: unitPage.responseBytes,
+      assignment_bytes: assignment.responseBytes,
+      attestation_bytes: attestation.responseBytes,
       normal_workflow_bytes: normalWorkflowBytes,
       optional_source_page_bytes: diagnosticSources.responseBytes,
-      receipt_event_bytes: Buffer.byteLength(JSON.stringify(receiptEvent)),
+      optional_interface_page_bytes: diagnosticInterfaces.responseBytes,
+      attestation_event_bytes: Buffer.byteLength(JSON.stringify(attestationEvent)),
       mutation_workflow_ms: mutationWorkflowMs,
       response_limit: RESPONSE_LIMIT,
       source_list_leaked: false,

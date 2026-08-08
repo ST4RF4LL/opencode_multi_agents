@@ -16,7 +16,7 @@ function parseArgs(argv) {
     args[token.slice(2)] = value;
   }
   for (const key of ["summary", "markdown", "plan", "ledger", "structural"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
-  if (!["complete", "partial"].includes(args.mode)) throw new Error("--mode must be complete or partial");
+  if (!["complete", "policy", "partial"].includes(args.mode)) throw new Error("--mode must be complete, policy, or partial");
   return args;
 }
 
@@ -37,6 +37,7 @@ async function main() {
     planPath: resolve(args.plan),
     ledgerPath: resolve(args.ledger),
     requireFinalized: args.mode === "complete",
+    requirePolicyFinalized: args.mode === "policy",
   });
   if (args.mode === "partial" && ledger.seal_state === "OPEN") {
     throw new Error("Partial summary is not bound to a sealed checkpoint or terminal partial ledger");
@@ -46,6 +47,8 @@ async function main() {
     ledgerState: ledger.state,
     structural,
     ledgerComplete: ledger.complete,
+    ledgerPolicySatisfied: ledger.policy_satisfied,
+    policyMode: ledger.policy_mode,
     sealState: ledger.seal_state,
   });
   if (!isDeepStrictEqual(claimed, expected)) throw new Error("Claimed coverage percentages or counts do not equal machine-derived values");

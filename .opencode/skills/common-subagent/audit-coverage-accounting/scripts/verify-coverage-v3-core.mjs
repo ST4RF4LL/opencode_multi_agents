@@ -37,7 +37,7 @@ function parseArgs(argv) {
     "output",
   ]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
-  if (!["complete", "partial"].includes(args.mode)) throw new Error("--mode must be complete or partial");
+  if (!["complete", "policy", "partial"].includes(args.mode)) throw new Error("--mode must be complete, policy, or partial");
   if (args.structural) throw new Error("Coverage v3 does not accept caller-supplied structural verification");
   return args;
 }
@@ -203,27 +203,35 @@ export async function main() {
     planPath: resolve(args.plan),
     ledgerPath: resolve(args.ledger),
     requireFinalized: args.mode === "complete",
+    requirePolicyFinalized: args.mode === "policy",
   });
   if (args.mode === "partial" && ledger.seal_state === "OPEN") {
     throw new Error("Partial final gate requires a PARTIAL_CHECKPOINT");
   }
   const findings = findingReconciliation(ledger, structural);
-  const issues = [...ledger.issues, ...universeIssues(ledger.plan, structural), ...findings.issues];
+  const ledgerIssues = args.mode === "policy" ? ledger.integrity_issues : ledger.issues;
+  const issues = [...ledgerIssues, ...universeIssues(ledger.plan, structural), ...findings.issues];
   if (ledger.plan.audit_id !== args["audit-id"]) issues.push({ code: "AUDIT_ID_MISMATCH" });
   if (ledger.plan.inputs.snapshot_digest !== snapshot.snapshot_digest) issues.push({ code: "PLAN_SNAPSHOT_BINDING_MISMATCH" });
   if (structural.audit_id !== args["audit-id"] || structural.scope_digest !== ledger.plan.scope_digest) {
     issues.push({ code: "STRUCTURAL_VERIFICATION_BINDING_MISMATCH" });
   }
-  if (structuralStatus !== 0 || structural.complete !== true) issues.push({ code: "STRUCTURAL_VERIFICATION_INCOMPLETE" });
+  if ((args.mode !== "policy" || ledger.policy_mode === "assurance")
+    && (structuralStatus !== 0 || structural.complete !== true)) {
+    issues.push({ code: "STRUCTURAL_VERIFICATION_INCOMPLETE" });
+  }
   const summary = buildCoverageSummary({
     plan: ledger.plan,
     ledgerState: ledger.state,
     structural,
     ledgerComplete: ledger.complete,
+    ledgerPolicySatisfied: ledger.policy_satisfied,
+    policyMode: ledger.policy_mode,
     sealState: ledger.seal_state,
   });
   const markdown = renderCoverageMarkdown(summary);
   const complete = args.mode === "complete" && issues.length === 0 && summary.complete;
+  const policySatisfied = issues.length === 0 && summary.policy_satisfied;
   const verification = {
     schema_version: 3,
     coverage_model_version: ledger.plan.coverage_model_version,
@@ -234,6 +242,8 @@ export async function main() {
     required_lenses: ledger.plan.required_lenses,
     active_domains: ledger.plan.universes.active_domains,
     seal_state: ledger.seal_state,
+    policy_mode: ledger.policy_mode,
+    policy_satisfied: policySatisfied,
     coverage_status: summary.coverage_status,
     inputs: {
       coverage_plan: resolve(args.plan),
@@ -278,7 +288,7 @@ export async function main() {
     issues,
     summary,
     complete,
-    claim_boundary: "Coverage v3 proves trusted structural accounting and receipt-backed execution only for a frozen, bounded plan. Partial checkpoints remain explicitly incomplete. It does not prove absence of vulnerabilities.",
+    claim_boundary: "Coverage v3 proves trusted structural accounting and attested execution for a frozen plan. Policy acceptance is not a complete-coverage claim; remaining gaps and inventory blockers stay explicit. It does not prove absence of vulnerabilities.",
   };
   verification.manifest_digest = objectDigest(verification);
   await Promise.all([
@@ -289,6 +299,8 @@ export async function main() {
   process.stdout.write(`${JSON.stringify({
     output: resolve(args.output),
     complete,
+    policy_satisfied: policySatisfied,
+    policy_mode: ledger.policy_mode,
     coverage_status: verification.coverage_status,
     seal_state: verification.seal_state,
     expected: verification.expected,
@@ -296,7 +308,8 @@ export async function main() {
     gaps: verification.gaps.length,
     issues: issues.length,
   })}\n`);
-  if (!complete) process.exitCode = 2;
+  const accepted = args.mode === "complete" ? complete : args.mode === "policy" ? policySatisfied : false;
+  if (!accepted) process.exitCode = 2;
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {

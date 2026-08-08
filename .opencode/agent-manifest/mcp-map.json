@@ -1,11 +1,11 @@
 {
-  "version": 16,
+  "version": 17,
   "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
   "servers": {
     "coverage_ledger": {
       "status": "enabled-local",
       "type": "custom",
-      "purpose": "Bounded canonical Coverage Plan packet delivery, compact server-derived required-source-set receipts, append-only hash-chained decisions, paginated gap queries, and finalization."
+      "purpose": "Compact assignment-unit delivery, exception-first attestations, targeted check/finding fallback, append-only authenticated coverage telemetry, paginated gaps, and policy-aware finalization."
     },
     "cpp_index": {
       "status": "placeholder",
@@ -27,6 +27,11 @@
       "type": "custom",
       "purpose": "Safe local validation and proof-of-concept assistance."
     },
+    "chrome-devtools": {
+      "status": "enabled-local",
+      "type": "external",
+      "purpose": "Visible isolated Chrome control for explicitly requested localhost Web-XSS runtime validation. Uses chrome-devtools-mcp@latest and is exposed only to dynamic-vulnerability-validator."
+    },
     "vuln_judger": {
       "status": "global-config",
       "type": "external",
@@ -46,6 +51,7 @@
     "security-evidence-correlator": ["coverage_*"],
     "security-attack-chain-hunter": [],
     "security-finding-adjudicator": [],
+    "dynamic-vulnerability-validator": ["chrome-devtools_*"],
     "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
     "security-skill-optimizer": [],
     "security-audit-orchestrator": ["coverage_*"]

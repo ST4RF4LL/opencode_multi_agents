@@ -72,6 +72,39 @@ function checkMetric(checks, ledgerState, zeroState = "NOT_APPLICABLE") {
   return ratio(checks.filter(check => stateForCheck(ledgerState, check.check_id) === "VERIFIED").length, checks.length, zeroState);
 }
 
+function interfaceIdsForCheck(check) {
+  return Array.isArray(check.required_interface_ids) && check.required_interface_ids.length > 0
+    ? check.required_interface_ids
+    : [check.subject_id];
+}
+
+function interfaceMembershipMetric(checks, ledgerState, memberPredicate = () => true, zeroState = "NOT_APPLICABLE") {
+  let required = 0;
+  let verified = 0;
+  for (const check of checks) {
+    for (const interfaceId of interfaceIdsForCheck(check)) {
+      if (!memberPredicate(interfaceId, check)) continue;
+      required += 1;
+      if (stateForCheck(ledgerState, check.check_id) === "VERIFIED") verified += 1;
+    }
+  }
+  return ratio(verified, required, zeroState);
+}
+
+function completeInterfaces(checks, ledgerState, memberPredicate = () => true, zeroState = "NOT_APPLICABLE") {
+  const groups = new Map();
+  for (const check of checks) {
+    for (const interfaceId of interfaceIdsForCheck(check)) {
+      if (!memberPredicate(interfaceId, check)) continue;
+      const group = groups.get(interfaceId) ?? [];
+      group.push(check);
+      groups.set(interfaceId, group);
+    }
+  }
+  const complete = [...groups.values()].filter(group => group.every(check => stateForCheck(ledgerState, check.check_id) === "VERIFIED")).length;
+  return ratio(complete, groups.size, zeroState);
+}
+
 function lensMetrics(plan, ledgerState, lens) {
   const required = plan.checks.filter(check => check.applicability === "REQUIRED" && check.lens === lens);
   const catalogChecks = required.filter(check => check.subject_kind === "catalog-domain");
@@ -80,8 +113,9 @@ function lensMetrics(plan, ledgerState, lens) {
     all_checks: checkMetric(required, ledgerState),
     vulnerability_type_checks: checkMetric(catalogChecks, ledgerState),
     fully_checked_vulnerability_types: groupedCompleteness(catalogChecks, ledgerState, check => `${check.domain}|${check.vulnerability_type_id}`),
-    interface_checks: checkMetric(interfaceChecks, ledgerState),
-    fully_checked_interfaces: groupedCompleteness(interfaceChecks, ledgerState, check => check.subject_id),
+    interface_checks: interfaceMembershipMetric(interfaceChecks, ledgerState),
+    interface_work_packets: checkMetric(interfaceChecks, ledgerState),
+    fully_checked_interfaces: completeInterfaces(interfaceChecks, ledgerState),
   };
 }
 
@@ -102,7 +136,15 @@ function conservativeMetric({ verified, required, unknown, bounded, reason }) {
   };
 }
 
-export function buildCoverageSummary({ plan, ledgerState, structural, ledgerComplete, sealState = "OPEN" }) {
+export function buildCoverageSummary({
+  plan,
+  ledgerState,
+  structural,
+  ledgerComplete,
+  ledgerPolicySatisfied = false,
+  policyMode = plan.coverage_policy?.mode ?? "assurance",
+  sealState = "OPEN",
+}) {
   const required = plan.checks.filter(check => check.applicability === "REQUIRED");
   const catalogRequired = required.filter(check => check.subject_kind === "catalog-domain");
   const interfaceRequired = required.filter(check => check.subject_kind === "interface");
@@ -120,18 +162,23 @@ export function buildCoverageSummary({ plan, ledgerState, structural, ledgerComp
     reason: "Interface extraction gaps or unresolved candidates make the total atomic-check universe unbounded.",
   });
   const verifiedCatalog = catalogRequired.filter(check => stateForCheck(ledgerState, check.check_id) === "VERIFIED").length;
-  const verifiedInterfaces = interfaceRequired.filter(check => stateForCheck(ledgerState, check.check_id) === "VERIFIED").length;
+  const interfaceIndex = new Map((plan.interface_index ?? []).map(item => [item.interface_id, item]));
+  const interfaceMemberships = interfaceRequired.reduce((sum, check) => sum + interfaceIdsForCheck(check).length, 0);
+  const verifiedInterfaces = interfaceRequired.reduce((sum, check) => (
+    sum + (stateForCheck(ledgerState, check.check_id) === "VERIFIED" ? interfaceIdsForCheck(check).length : 0)
+  ), 0);
+  const unknownInterfaceMemberships = unknownInterfaceChecks.reduce((sum, check) => sum + interfaceIdsForCheck(check).length, 0);
   const directions = {};
   for (const direction of ["ingress", "egress", "bidirectional"]) {
-    const checks = interfaceRequired.filter(check => check.interface_direction === direction);
-    const knownChecks = checkMetric(checks, ledgerState);
+    const memberMatches = (interfaceId, check) => (interfaceIndex.get(interfaceId)?.direction ?? check.interface_direction) === direction;
+    const knownChecks = interfaceMembershipMetric(interfaceRequired, ledgerState, memberMatches);
     directions[direction] = {
       state: interfaceState(plan, knownChecks),
       known_checks: knownChecks,
-      complete_interfaces: groupedCompleteness(checks, ledgerState, check => check.subject_id),
+      complete_interfaces: completeInterfaces(interfaceRequired, ledgerState, memberMatches),
     };
   }
-  const interfaceChecks = checkMetric(interfaceRequired, ledgerState);
+  const interfaceChecks = interfaceMembershipMetric(interfaceRequired, ledgerState);
   const summaryComplete = sealState === "FINALIZED_COMPLETE"
     && ledgerComplete && structural.complete === true && plan.complete
     && plan.inventory.bounded && unknownChecks.length === 0 && verified === required.length;
@@ -140,6 +187,12 @@ export function buildCoverageSummary({ plan, ledgerState, structural, ledgerComp
     : !plan.inventory.bounded || unknownChecks.length > 0
       ? "BLOCKED"
       : "PARTIAL";
+  const unitChecks = (plan.coverage_units ?? []).map(unit => unit.check_ids.map(checkId => ledgerState.get(checkId)).filter(Boolean));
+  const completeUnits = unitChecks.filter(checks => checks.length > 0
+    && checks.every(item => item.execution_state === "VERIFIED")).length;
+  const attestedChecks = required.filter(check => (ledgerState.get(check.check_id)?.receipt_ids?.length ?? 0) > 0).length;
+  const policySatisfied = ledgerPolicySatisfied
+    && (policyMode !== "assurance" || structural.complete === true);
   const summary = {
     schema_version: 3,
     coverage_model_version: plan.coverage_model_version,
@@ -149,7 +202,18 @@ export function buildCoverageSummary({ plan, ledgerState, structural, ledgerComp
     snapshot_digest: plan.inputs.snapshot_digest,
     structural_digest: objectDigest(structural, []),
     seal_state: sealState,
+    policy_mode: policyMode,
+    policy_satisfied: policySatisfied,
+    workflow_status: policySatisfied ? "POLICY_SATISFIED" : sealState === "OPEN" ? "OPEN" : "INCOMPLETE",
     coverage_status: coverageStatus,
+    execution: {
+      assignment_units: ratio(completeUnits, unitChecks.length, "NOT_AVAILABLE"),
+      required_units: unitChecks.length,
+      complete_units: completeUnits,
+    },
+    evidence: {
+      attested_checks: ratio(attestedChecks, required.length),
+    },
     accounting: {
       required: required.length,
       verified,
@@ -187,14 +251,15 @@ export function buildCoverageSummary({ plan, ledgerState, structural, ledgerComp
     external_interfaces: {
       state: interfaceState(plan, interfaceChecks),
       known_checks: interfaceChecks,
+      work_packets: checkMetric(interfaceRequired, ledgerState),
       conservative_lower_bound: conservativeMetric({
         verified: verifiedInterfaces,
-        required: interfaceRequired.length,
-        unknown: unknownInterfaceChecks.length,
+        required: interfaceMemberships,
+        unknown: unknownInterfaceMemberships,
         bounded: plan.inventory.bounded,
         reason: "Interface extraction gaps or unresolved candidates make the external-interface check universe unbounded.",
       }),
-      complete_interfaces: groupedCompleteness(interfaceRequired, ledgerState, check => check.subject_id),
+      complete_interfaces: completeInterfaces(interfaceRequired, ledgerState),
       confirmed_interfaces: plan.inventory.confirmed_interfaces,
       candidate_interfaces: plan.inventory.candidate_interfaces,
       by_direction: directions,
@@ -232,7 +297,7 @@ export function renderCoverageMarkdown(summary) {
     `<!-- GENERATED: coverage-v3 ${summary.manifest_digest} -->`,
     "## Machine-Derived Coverage v3",
     "",
-    `Coverage status: **${summary.coverage_status}**. Ledger seal: **${summary.seal_state}**. Interface inventory: **${summary.inventory.state}**.`,
+    `Coverage status: **${summary.coverage_status}**. Policy: **${summary.policy_mode}** (${summary.policy_satisfied ? "SATISFIED" : "NOT SATISFIED"}). Ledger seal: **${summary.seal_state}**. Interface inventory: **${summary.inventory.state}**.`,
     "",
     "| Universe | Verified/Required | Known Coverage | Conservative Lower Bound | State |",
     "|---|---:|---:|---:|---|",
@@ -256,7 +321,7 @@ function parseArgs(argv) {
     args[token.slice(2)] = value;
   }
   for (const key of ["plan", "ledger", "structural", "output", "markdown-output"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
-  if (!["complete", "partial"].includes(args.mode)) throw new Error("--mode must be complete or partial");
+  if (!["complete", "policy", "partial"].includes(args.mode)) throw new Error("--mode must be complete, policy, or partial");
   return args;
 }
 
@@ -276,6 +341,7 @@ async function main() {
     planPath: resolve(args.plan),
     ledgerPath: resolve(args.ledger),
     requireFinalized: args.mode === "complete",
+    requirePolicyFinalized: args.mode === "policy",
   });
   if (args.mode === "partial" && ledger.seal_state === "OPEN") {
     throw new Error("Partial coverage output requires a sealed checkpoint or terminal partial ledger");
@@ -285,6 +351,8 @@ async function main() {
     ledgerState: ledger.state,
     structural,
     ledgerComplete: ledger.complete,
+    ledgerPolicySatisfied: ledger.policy_satisfied,
+    policyMode: ledger.policy_mode,
     sealState: ledger.seal_state,
   });
   await Promise.all([
@@ -303,7 +371,9 @@ async function main() {
     accounting: summary.accounting,
     manifest_digest: summary.manifest_digest,
   })}\n`);
-  if (!summary.complete) process.exitCode = 2;
+  const accepted = args.mode === "complete" ? summary.complete
+    : args.mode === "policy" ? summary.policy_satisfied : false;
+  if (!accepted) process.exitCode = 2;
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {

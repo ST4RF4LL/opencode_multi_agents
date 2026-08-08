@@ -7,6 +7,8 @@ export const EXECUTION_STATES = ["PLANNED", "INSPECTED", "VERIFIED", "GAP", "INV
 export const RESULT_STATES = ["NO_FINDING", "FINDING", "INCONCLUSIVE"];
 export const COVERAGE_MODEL_VERSION = "coverage-v3";
 export const PLAN_SCHEMA_VERSION = 3;
+export const COVERAGE_EXECUTION_MODEL = "assignment-unit-v1";
+export const COVERAGE_POLICY_MODES = ["observe", "release", "assurance"];
 export const DOMAIN_AGENTS = {
   java: "java-source-auditor",
   web: "web-source-auditor",
@@ -164,6 +166,26 @@ export function coverageCheckId(subjectKind, subjectId, vulnerabilityTypeId, dom
   return `check:${sha256([subjectKind, subjectId, vulnerabilityTypeId, domain, lens].join("\n")).slice(0, 32)}`;
 }
 
+export function interfaceGroupId(focusAreaId, domain, vulnerabilityTypeId, interfaceIds) {
+  const canonical = [...new Set(interfaceIds ?? [])].sort();
+  return `interface-group:${sha256(JSON.stringify([
+    focusAreaId,
+    domain,
+    vulnerabilityTypeId,
+    canonical,
+  ])).slice(0, 32)}`;
+}
+
+export function coverageUnitId(assignmentId, focusAreaId, domain, checkIds) {
+  const canonical = [...new Set(checkIds ?? [])].sort();
+  return `coverage-unit:${sha256(JSON.stringify([
+    assignmentId,
+    focusAreaId,
+    domain,
+    canonical,
+  ])).slice(0, 32)}`;
+}
+
 export function sourceSetId(fileIds) {
   const canonical = [...fileIds].sort();
   return `source-set:${sha256(JSON.stringify(canonical)).slice(0, 32)}`;
@@ -295,6 +317,24 @@ export function validatePlan(plan) {
   }
   const sourceSetIds = [...sourceSets.keys()];
   if (JSON.stringify(sourceSetIds) !== JSON.stringify([...sourceSetIds].sort())) errors.push("plan source_sets must be sorted by source set ID");
+  const interfaceIndexRows = plan?.interface_index ?? [];
+  const interfaceIndex = new Map();
+  for (const item of interfaceIndexRows) {
+    if (typeof item?.interface_id !== "string" || interfaceIndex.has(item.interface_id)
+      || typeof item.file_id !== "string" || !sourceIds.has(item.file_id)
+      || !["ingress", "egress", "bidirectional"].includes(item.direction)
+      || typeof item.kind !== "string" || item.kind.trim() === ""
+      || !Array.isArray(item.dimensions) || item.dimensions.length === 0
+      || item.dimensions.some(dimension => !DIMENSIONS.includes(dimension))) {
+      errors.push(`invalid frozen interface index row: ${item?.interface_id ?? "<missing>"}`);
+      continue;
+    }
+    interfaceIndex.set(item.interface_id, item);
+  }
+  const interfaceIndexIds = [...interfaceIndex.keys()];
+  if (JSON.stringify(interfaceIndexIds) !== JSON.stringify([...interfaceIndexIds].sort())) {
+    errors.push("plan interface_index must be sorted by interface ID");
+  }
   const checkIds = new Set();
   const lensGroups = new Map();
   for (const check of plan?.checks ?? []) {
@@ -314,6 +354,38 @@ export function validatePlan(plan) {
       if (!sourceSet || !Number.isInteger(check.required_source_count) || check.required_source_count < 1
         || check.required_source_count !== sourceSet.file_ids.length) {
         errors.push(`required source universe missing or duplicated: ${check.check_id}`);
+      }
+    }
+    if (check.required_catalog_ids !== undefined) {
+      if (!Array.isArray(check.required_catalog_ids) || check.required_catalog_ids.length === 0
+        || new Set(check.required_catalog_ids).size !== check.required_catalog_ids.length
+        || JSON.stringify(check.required_catalog_ids) !== JSON.stringify([...check.required_catalog_ids].sort())
+        || !check.required_catalog_ids.includes(check.vulnerability_type_id)) {
+        errors.push(`invalid required catalog set: ${check.check_id}`);
+      }
+    }
+    if (check.subject_kind === "interface" && check.applicability === "REQUIRED") {
+      const requiredInterfaceIds = check.required_interface_ids;
+      if (requiredInterfaceIds === undefined && interfaceIndexRows.length === 0) {
+        // Compatibility for already-frozen v3 plans that used one check per interface.
+      } else if (!Array.isArray(requiredInterfaceIds) || requiredInterfaceIds.length === 0
+        || new Set(requiredInterfaceIds).size !== requiredInterfaceIds.length
+        || JSON.stringify(requiredInterfaceIds) !== JSON.stringify([...requiredInterfaceIds].sort())
+        || requiredInterfaceIds.some(interfaceId => !interfaceIndex.has(interfaceId))) {
+        errors.push(`invalid required interface set: ${check.check_id}`);
+      } else {
+        const expectedSubjectId = interfaceGroupId(
+          check.focus_area_id,
+          check.domain,
+          check.vulnerability_type_id,
+          requiredInterfaceIds,
+        );
+        if (check.subject_id !== expectedSubjectId) errors.push(`invalid interface group id: ${check.check_id}`);
+        const expectedSourceIds = [...new Set(requiredInterfaceIds.map(interfaceId => interfaceIndex.get(interfaceId).file_id))].sort();
+        const sourceSet = sourceSets.get(check.required_source_set_id);
+        if (!sourceSet || JSON.stringify(sourceSet.file_ids) !== JSON.stringify(expectedSourceIds)) {
+          errors.push(`interface group source set mismatch: ${check.check_id}`);
+        }
       }
     }
     if (check.required_source_file_ids !== undefined) errors.push(`v2 expanded source set is not allowed: ${check.check_id}`);
@@ -362,6 +434,9 @@ export function validatePlan(plan) {
   if (inventory?.gap_files !== gapFileIds.length) errors.push("interface inventory gap file count mismatch");
   if (inventory?.candidate_interfaces !== candidateInterfaceIds.length) errors.push("interface inventory candidate count mismatch");
   if (inventory?.confirmed_interfaces !== plan?.universes?.interfaces) errors.push("confirmed interface universe mismatch");
+  if (interfaceIndexRows.length > 0 && interfaceIndex.size !== inventory?.confirmed_interfaces) {
+    errors.push("frozen interface index count mismatch");
+  }
   if ((inventory?.confirmed_interfaces ?? -1) + (inventory?.candidate_interfaces ?? -1)
     + (inventory?.rejected_interfaces ?? -1) + (inventory?.unresolved_interfaces ?? -1)
     !== plan?.universes?.interface_anchors) {
@@ -373,6 +448,88 @@ export function validatePlan(plan) {
   if (inventory?.eligible_files !== (plan?.universes?.files ?? -1)) errors.push("interface inventory eligible file count mismatch");
   if ((inventory?.resolved_files ?? -1) + (inventory?.gap_files ?? -1) !== inventory?.eligible_files) errors.push("interface inventory file accounting mismatch");
   if (plan?.complete !== (counts.UNKNOWN === 0 && expectedBounded)) errors.push("plan completeness mismatch");
+  if (plan?.summary?.interface_memberships_required !== undefined) {
+    const interfaceMemberships = (plan?.checks ?? [])
+      .filter(check => check.subject_kind === "interface" && check.applicability === "REQUIRED")
+      .reduce((sum, check) => sum + (check.required_interface_ids?.length ?? 0), 0);
+    if (plan.summary.interface_memberships_required !== interfaceMemberships) {
+      errors.push("plan interface membership count mismatch");
+    }
+  }
+  if (plan?.execution_model !== undefined) {
+    if (plan.execution_model !== COVERAGE_EXECUTION_MODEL) errors.push("invalid coverage execution model");
+    if (!COVERAGE_POLICY_MODES.includes(plan?.coverage_policy?.mode)) errors.push("invalid coverage policy mode");
+    if (plan?.coverage_policy?.assurance_requires_all_checks !== true) errors.push("coverage assurance policy must require all checks");
+    const requiredChecks = new Map((plan?.checks ?? [])
+      .filter(check => check.applicability === "REQUIRED")
+      .map(check => [check.check_id, check]));
+    const observedCheckIds = new Set();
+    const unitIds = new Set();
+    const units = plan?.coverage_units ?? [];
+    for (const unit of units) {
+      const checkIds = unit?.check_ids;
+      if (typeof unit?.unit_id !== "string" || unitIds.has(unit.unit_id)
+        || typeof unit.assignment_id !== "string" || typeof unit.focus_area_id !== "string"
+        || !Object.hasOwn(DOMAIN_AGENTS, unit.domain) || unit.agent_name !== DOMAIN_AGENTS[unit.domain]
+        || !exactArray(unit.required_lenses, LENSES)
+        || !Array.isArray(checkIds) || checkIds.length === 0
+        || new Set(checkIds).size !== checkIds.length
+        || JSON.stringify(checkIds) !== JSON.stringify([...checkIds].sort())) {
+        errors.push(`invalid coverage unit: ${unit?.unit_id ?? "<missing>"}`);
+        continue;
+      }
+      unitIds.add(unit.unit_id);
+      if (!Array.isArray(unit.policy_tags) || new Set(unit.policy_tags).size !== unit.policy_tags.length
+        || JSON.stringify(unit.policy_tags) !== JSON.stringify([...unit.policy_tags].sort())
+        || unit.policy_tags.some(tag => !["ai-boundary", "external-interface", "identity-or-privilege"].includes(tag))) {
+        errors.push(`coverage unit policy tags are invalid: ${unit.unit_id}`);
+      }
+      const expectedUnitId = coverageUnitId(unit.assignment_id, unit.focus_area_id, unit.domain, checkIds);
+      if (unit.unit_id !== expectedUnitId) errors.push(`invalid coverage unit id: ${unit.unit_id}`);
+      if (unit.check_set_sha256 !== sha256(JSON.stringify(checkIds))) errors.push(`invalid coverage unit check digest: ${unit.unit_id}`);
+      if (unit.required_check_count !== checkIds.length) errors.push(`coverage unit check count mismatch: ${unit.unit_id}`);
+      const unitChecks = checkIds.map(checkId => requiredChecks.get(checkId));
+      if (unitChecks.some(check => !check)) errors.push(`coverage unit references unknown required check: ${unit.unit_id}`);
+      if (unitChecks.some(check => check && (check.focus_area_id !== unit.focus_area_id || check.domain !== unit.domain))) {
+        errors.push(`coverage unit check scope mismatch: ${unit.unit_id}`);
+      }
+      for (const checkId of checkIds) {
+        if (observedCheckIds.has(checkId)) errors.push(`coverage check belongs to multiple units: ${checkId}`);
+        observedCheckIds.add(checkId);
+      }
+      const expectedSourceIds = [...new Set(unitChecks.filter(Boolean)
+        .flatMap(check => sourceFileIdsForCheck(plan, check)))].sort();
+      const unitSourceSet = sourceSets.get(unit.required_source_set_id);
+      if (!unitSourceSet || unit.required_source_count !== expectedSourceIds.length
+        || JSON.stringify(unitSourceSet.file_ids) !== JSON.stringify(expectedSourceIds)) {
+        errors.push(`coverage unit source set mismatch: ${unit.unit_id}`);
+      }
+      const expectedCatalogCount = new Set(unitChecks.filter(Boolean).map(check => check.vulnerability_type_id)).size;
+      const expectedInterfaceCount = new Set(unitChecks.filter(Boolean)
+        .flatMap(check => check.required_interface_ids ?? (check.subject_kind === "interface" ? [check.subject_id] : []))).size;
+      if (unit.required_catalog_count !== expectedCatalogCount || unit.required_interface_count !== expectedInterfaceCount) {
+        errors.push(`coverage unit member count mismatch: ${unit.unit_id}`);
+      }
+    }
+    if (units.length === 0) errors.push("coverage units must be non-empty");
+    if (JSON.stringify(units.map(unit => unit.unit_id)) !== JSON.stringify(units.map(unit => unit.unit_id).sort())) {
+      errors.push("coverage units must be sorted by unit ID");
+    }
+    for (const checkId of requiredChecks.keys()) {
+      if (!observedCheckIds.has(checkId)) errors.push(`required check is not assigned to a coverage unit: ${checkId}`);
+    }
+    if (plan?.summary?.coverage_units !== units.length) errors.push("plan coverage unit count mismatch");
+    const releaseUnits = plan?.coverage_policy?.release_required_unit_ids ?? [];
+    if (!Array.isArray(releaseUnits) || new Set(releaseUnits).size !== releaseUnits.length
+      || JSON.stringify(releaseUnits) !== JSON.stringify([...releaseUnits].sort())
+      || releaseUnits.some(unitId => !unitIds.has(unitId))) {
+      errors.push("coverage policy release unit set is invalid");
+    }
+    const expectedReleaseUnits = units.filter(unit => unit.policy_tags?.length > 0).map(unit => unit.unit_id).sort();
+    if (JSON.stringify(releaseUnits) !== JSON.stringify(expectedReleaseUnits)) {
+      errors.push("coverage policy release unit set does not match policy-tagged units");
+    }
+  }
   if (plan?.manifest_digest !== objectDigest(plan)) errors.push("plan manifest digest mismatch");
   return [...new Set(errors)];
 }

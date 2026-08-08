@@ -22,6 +22,7 @@
     "jvm_index_*": "deny",
     "python_index_*": "deny",
     "audit_lab_*": "deny",
+    "chrome-devtools_*": "deny",
     "vuln_judger_*": "deny",
     "vuln-judger_*": "deny"
   },
@@ -29,6 +30,21 @@
     "coverage_ledger": {
       "type": "local",
       "command": ["node", ".opencode/mcp/coverage-ledger-server.mjs"],
+      "cwd": ".",
+      "timeout": 300000,
+      "enabled": true
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--isolated=true",
+        "--redact-network-headers=true",
+        "--no-usage-statistics",
+        "--no-performance-crux"
+      ],
       "cwd": ".",
       "timeout": 300000,
       "enabled": true

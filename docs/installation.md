@@ -7,6 +7,7 @@
 需要：
 
 - Git、Node.js 20+ 与 npm。
+- 当前稳定版 Google Chrome。动态 Web-XSS 验证会启动一个可见的隔离 Chrome；不会连接日常浏览器 profile。
 - OpenCode。可按[官方安装说明](https://opencode.ai/docs/)执行：
 
   ```sh
@@ -90,6 +91,8 @@ export JOERN_GNUBIN=""
 - 如需长期使用，将这些导出写入你的 Shell 配置或专用启动脚本；不要再创建 `mcp.joern` 配置。
 
 `vuln_judger` 不在项目模板中定义；如需最终三方复核，请在用户全局 `~/.config/opencode/opencode.json` 中配置。OpenCode 的全局与自定义配置规则见[官方配置文档](https://opencode.ai/docs/config/)。
+
+项目模板已配置 `npx -y chrome-devtools-mcp@latest --isolated=true`。它仅在调用浏览器工具时启动可见 Chrome，因此首次动态验证需要 npm 网络访问或已有 npx 缓存。不要添加 `--headless`、`--autoConnect`、`--browser-url`、持久化 `--user-data-dir` 或 `agent-browser` 回退。当前目标只允许 `localhost`、`127.0.0.1` 和 `[::1]`。
 
 ## 3. 验证并启动
 

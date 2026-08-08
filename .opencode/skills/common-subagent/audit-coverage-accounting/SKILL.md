@@ -11,7 +11,7 @@ metadata:
 
 Use the bundled scripts as the source of truth for coverage. Do not replace their outputs with manually estimated counts.
 
-Structural, Coverage Plan/Ledger v3, and semantic completion are separate gates. None can substitute for another.
+Structural accounting, Coverage Plan/Ledger telemetry, and semantic completion are separate signals. The frozen `observe`/`release`/`assurance` policy decides which signals gate workflow acceptance; none may be rewritten to substitute for another.
 
 ## Build the scope
 
@@ -162,6 +162,7 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/validate
 
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-coverage-plan.mjs \
   --audit-id <audit-id> \
+  --coverage-mode observe \
   --scope reports/coverage/<audit-id>/inputs/scope-manifest.json \
   --functions reports/coverage/<audit-id>/inputs/functions-java.json \
   --functions reports/coverage/<audit-id>/inputs/functions-javascript.json \
@@ -182,6 +183,9 @@ Repeat `--functions` for every frozen language manifest. The Plan builder accept
 - normalized `source_sets`, referenced by ID instead of repeating source arrays on every check;
 - separate inventory counts and blocker IDs for candidates, unresolved interfaces, and extractor gap files;
 - a unique `focus_area_id` on every atomic check.
+- one content-addressed `coverage_unit` for each Focus Area assignment/domain; lenses and atomic checks are internal dimensions of that unit.
+
+`--coverage-mode` accepts `observe` (default), `release`, or `assurance`. `observe` records honest telemetry without making unfinished checks a workflow blocker. `release` requires all policy-tagged AI, external-interface, and identity/privilege units. `assurance` preserves the strict all-required-checks gate. The selected mode is frozen in the Plan; changing it requires a new Plan and Ledger.
 
 Python and C/C++ use the same shared catalog selector as the structural verifier; AI uses `AI-*`; Java, Web, and Platform use their direct catalog selectors. Every atomic subject/type/domain group must contain all three lenses. A plan is complete only when `U=0` and its interface inventory is bounded; candidates and extractor gaps do not inflate `R`, but they still block complete finalization.
 
@@ -220,17 +224,15 @@ Allowed termination reasons are `budget-exhausted`, `round-limit-reached`, and
 `operator-stop`. `FINALIZED_PARTIAL` never authorizes complete coverage; it is
 immutable, unlike `PARTIAL_CHECKPOINT`.
 
-Coverage sessions never edit the plan or canonical ledger. The `coverage_ledger` MCP is intentionally paginated: do not request or paste a full plan, ledger, or all gaps into model context. Use the tools in this order:
+Coverage sessions never edit the plan or canonical ledger. The `coverage_ledger` MCP is intentionally paginated: do not request or paste a full plan, ledger, member list, or all gaps into model context. Use the tools in this order:
 
-1. `coverage_get_packet` filtered by exact `audit_id`, `focus_area_id`, domain, and lens. It returns compact check summaries in pages of at most 10; follow `next_cursor` only while the assignment remains unresolved.
-2. `coverage_inspect_subject` for each assigned check with the exact expected agent and session. It returns a compact immutable packet plus a scoped `assignment_token`; it never returns the check's source universe.
-3. If another session must continue the check, call `coverage_delegate_assignment` and give that session only the returned token. Tokens are bound to the audit, plan, check, expected agent, and session.
-4. Call `coverage_record_tool_result` with the assignment token, `source_scope: "required"`, typed locators, tool name/version, and exactly one inline result payload or workspace artifact. The service resolves the source set and computes the result hash itself; a client digest is only an optional equality assertion. Inline payloads are capped at 64 KiB and result artifacts at 64 MiB.
-5. Use `coverage_get_subject_sources` only for a small, targeted diagnostic page when a particular file's metadata is needed. Never page through the full source universe as part of the normal receipt workflow.
-6. `coverage_submit_decision` with the same assignment token and separate execution/result states. A `FINDING` includes one unique, standalone Finding v2 JSON artifact of at most 4 MiB per finding ID; validate it first with `finding-evidence-contract/scripts/validate-finding-artifact.mjs`. Every finding includes the fixed attack-surface v1 fact block (scope, exposure, vector, auth scope, preconditions, identities, boundary crossing, impact, target reach, controls, counterevidence, blind spots, and confidence) with evidence-fact indexes. The service binds its canonical-object digest to the audit, scope, Ledger check, Focus Area, domain, vulnerability type, lens, and claimed dimensions.
-7. `coverage_get_gaps` for follow-up routing. It is paginated and intentionally returns compact summaries; retrieve a subject only when it is selected for rework.
-8. Use `coverage_checkpoint` when work must stop with unresolved checks or unbounded inventory. It seals a nonterminal `PARTIAL_CHECKPOINT`; it never authorizes a complete claim.
-9. `coverage_finalize` only after the plan is bounded and every required check is verified.
+1. `coverage_get_unit` filtered by exact `audit_id`, `focus_area_id`, domain, or assignment. It returns compact assignment-unit counts and state without atomic member IDs.
+2. `coverage_begin_unit` once per executing session. It returns a session-bound, unit-scoped `assignment_token`.
+3. Treat lenses as internal unit dimensions. A lens-specific session calls `coverage_submit_attestation(state: "PARTIAL")` once for its completed lens; a combined session may use `state=COMPLETE` only when all required lenses are covered and the gap list is empty. Include `source_scope: "required"`, tool/version, a bounded result payload or artifact, and only exceptional `gap_check_ids`. The service merges lens attestations and expands each all-minus-gaps proof into exact check state without returning the frozen member universe.
+4. Use `coverage_get_unit_checks`, `coverage_get_subject_sources`, or `coverage_get_subject_interfaces` only for targeted gap classification, finding binding, or diagnostics. Do not enumerate them in a no-finding path.
+5. Coverage execution and finding adjudication are independent. A unit attestation does not assert `NO_FINDING`; before or after it, bind a finding or exact result through the check-scoped fallback: `coverage_get_packet`/`coverage_get_unit_checks` → `coverage_inspect_subject` → `coverage_record_tool_result` → `coverage_submit_decision`. A `FINDING` includes one unique standalone Finding v2 JSON artifact per ID and closes only its bound atomic check. `coverage_delegate_assignment` remains available only for this fallback.
+6. `coverage_get_gaps` routes exceptional follow-up work. It remains check-exact and cursor-paginated.
+7. `coverage_checkpoint` creates a nonterminal diagnostic checkpoint. `coverage_finalize` seals according to the frozen policy: `FINALIZED_OBSERVED`, `FINALIZED_RELEASE`, or strict `FINALIZED_COMPLETE`.
 
 Execution states are `PLANNED → INSPECTED → VERIFIED`, or terminally incomplete `GAP`/`INVALIDATED`. Result states are independently `NO_FINDING`, `FINDING`, or `INCONCLUSIVE`. `VERIFIED` requires a valid receipt from the active assignment. `FINDING` closes only its atomic check; it never closes other types, interfaces, or lenses. Agents cannot submit `N/A`. Direct writes to `reports/coverage/<audit-id>/ledger/` are denied. The service serializes mutations across processes, fsyncs each event, and authenticates the public hash chain with a mode-0600 HMAC key sidecar.
 
@@ -265,10 +267,11 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/reseed-s
   --focus-output tmp/<new-audit-id>/recon/focus-areas.json
 ```
 
-After `coverage_finalize`, run the v3 gate. It invokes the structural verifier itself from frozen arguments, persists that trusted artifact, derives the JSON summary and Markdown from the same state, and emits the authoritative verification. It rejects a caller-supplied `--structural` artifact:
+After `coverage_finalize`, run the v3 gate. Use `--mode policy` for `observe`/`release`, or `--mode complete` for an assurance/full-coverage claim. Policy mode may exit zero while `coverage_status` remains `PARTIAL` or `BLOCKED`; it reports `policy_satisfied=true` and never relabels that state as complete coverage. The gate invokes the structural verifier itself from frozen arguments, persists that trusted artifact, derives the JSON summary and Markdown from the same state, and emits the authoritative verification. It rejects a caller-supplied `--structural` artifact:
 
 ```sh
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3.mjs \
+  --mode policy \
   --root . \
   --audit-id <audit-id> \
   --scope reports/coverage/<audit-id>/inputs/scope-manifest.json \
@@ -288,6 +291,7 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-c
   --output reports/coverage/coverage-verification.<audit-id>.json
 
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-summary.mjs \
+  --mode policy \
   --summary reports/coverage/coverage-summary.<audit-id>.json \
   --markdown reports/coverage/coverage-summary.<audit-id>.md \
   --plan reports/coverage/coverage-plan.<audit-id>.json \
@@ -295,7 +299,7 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-c
   --structural reports/coverage/coverage-structural-v1.<audit-id>.json
 ```
 
-Repeat `--functions` for every snapshotted language. For an incomplete run, call `coverage_checkpoint`, then pass `--mode partial` to both v3 verification commands. Partial mode writes sealed diagnostic artifacts, exits nonzero, and never produces `complete=true`.
+Repeat `--functions` for every snapshotted language. A policy-accepted non-complete report uses `build-final-report-model.mjs --mode policy-final`; its visible disclaimer preserves all remaining gaps. For an interrupted, non-final run, call `coverage_checkpoint`, then pass `--mode partial` to both v3 verification commands. Partial mode writes sealed diagnostic artifacts, exits nonzero, and never produces `complete=true`.
 
 `verify-coverage-v2.mjs` remains only as a caller-compatible wrapper around the v3 core. It does not accept or migrate v2 plans or ledgers.
 

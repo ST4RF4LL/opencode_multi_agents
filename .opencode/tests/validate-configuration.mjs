@@ -54,6 +54,8 @@ async function main() {
   const catalog = await json(join(OPENCODE, "shared/security-audit/catalogs/application-ai-vulnerability-catalog.json"));
   const orchestratorText = await readFile(join(OPENCODE, "agents/security-audit-orchestrator.md"), "utf8");
   const validatorText = await readFile(join(OPENCODE, "agents/vulnerability-validator.md"), "utf8");
+  const dynamicValidatorText = await readFile(join(OPENCODE, "agents/dynamic-vulnerability-validator.md"), "utf8");
+  const rootAgentsText = await readFile(join(ROOT, "AGENTS.md"), "utf8");
   const joernManifestBuilderText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-joern-function-manifest.mjs"), "utf8");
   const parserCapabilitiesText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-parser-capabilities.mjs"), "utf8");
   const semgrepCliText = await readFile(join(OPENCODE, "scripts/semgrep-scan.mjs"), "utf8");
@@ -90,7 +92,7 @@ async function main() {
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");
   assert(validateStageContractRegistry(stageContractRegistry, roles).length === 0, "stage/agent contract registry or role bindings are invalid");
-  assert(stageContractRegistry.stages.length === 11
+  assert(stageContractRegistry.stages.length === 12
     && new Set(stageContractRegistry.contracts.map(contract => contract.agent_name)).size === roleAgents.length,
   "stage/agent contracts do not cover every phase and agent");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
@@ -192,13 +194,20 @@ async function main() {
     && artifactPolicy.reports.coverage_verification.required_fields.includes("seal_state"), "coverage v3 verification policy lacks sealed machine-derived summary");
   assert(artifactPolicy.reports.coverage_plan.required_fields.includes("checks")
     && artifactPolicy.reports.coverage_plan.required_fields.includes("source_sets")
-    && artifactPolicy.reports.coverage_plan.required_fields.includes("inventory"), "coverage plan policy lacks v3 atomic/source/inventory accounting");
+    && artifactPolicy.reports.coverage_plan.required_fields.includes("inventory")
+    && artifactPolicy.reports.coverage_plan.required_fields.includes("coverage_units")
+    && artifactPolicy.reports.coverage_plan.required_fields.includes("coverage_policy"), "coverage plan policy lacks unit/atomic/source/inventory accounting");
   assert(artifactPolicy.reports.coverage_summary.required_fields.includes("manifest_digest")
     && artifactPolicy.reports.coverage_summary.required_fields.includes("coverage_status")
+    && artifactPolicy.reports.coverage_summary.required_fields.includes("policy_satisfied")
+    && artifactPolicy.reports.coverage_summary.required_fields.includes("execution")
     && artifactPolicy.reports.coverage_summary.required_fields.includes("inventory")
     && artifactPolicy.reports.coverage_summary.markdown_companion, "coverage summary policy lacks v3 digest/status/inventory/Markdown contract");
-  assert(artifactPolicy.reports.coverage_ledger.required_event_types.includes("FINALIZE_COMPLETE")
-    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("PARTIAL_CHECKPOINT"), "coverage ledger policy lacks v3 seal events");
+  assert(artifactPolicy.reports.coverage_ledger.optional_event_types.includes("UNIT_ATTESTATION")
+    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("FINALIZE_OBSERVED")
+    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("FINALIZE_RELEASE")
+    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("FINALIZE_COMPLETE")
+    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("PARTIAL_CHECKPOINT"), "coverage ledger policy lacks unit and policy seal events");
   assert(artifactPolicy.reports.semantic_coverage_verification.required_fields.includes("claim_boundary"), "semantic coverage verification policy lacks claim boundary");
   assert(artifactPolicy.reports.hypothesis_discovery.required_fields.includes("seed_inputs"), "discovery policy lacks seed provenance");
   assert(artifactPolicy.reports.stage_handoff?.registry?.endsWith("stage-agent-contracts.json")
@@ -211,6 +220,7 @@ async function main() {
     && artifactPolicy.reports.attack_chain.required_fields.includes("adjudication_manifest_digest")
     && artifactPolicy.reports.attack_chain.required_fields.includes("chain_accounting"), "attack-chain report contract is incomplete");
   assert(roleAgents.includes("security-finding-adjudicator"), "finding adjudicator is not registered");
+  assert(roleAgents.includes("dynamic-vulnerability-validator"), "dynamic vulnerability validator is not registered");
   assert(artifactPolicy.reports.finding_adjudication?.required_fields.includes("input_manifest_digest")
     && artifactPolicy.reports.finding_adjudication?.required_fields.includes("decisions"), "finding adjudication artifact contract is incomplete");
   assert(await exists(join(OPENCODE, "tests/run-adjudication-regression-tests.mjs"))
@@ -228,6 +238,9 @@ async function main() {
   assert(await exists(join(OPENCODE, "tests/run-external-runtime-validation-contract-tests.mjs"))
     && packageConfig.scripts["test:external-runtime-validation-contract"]?.includes("run-external-runtime-validation-contract-tests.mjs"),
   "external runtime-validation handoff regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-dynamic-validation-contract-tests.mjs"))
+    && packageConfig.scripts["test:dynamic-validation-contract"]?.includes("run-dynamic-validation-contract-tests.mjs"),
+  "dynamic runtime-validation regression suite is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
   const thirdPartyReview = artifactPolicy.reports.third_party_review;
@@ -293,6 +306,20 @@ async function main() {
   assert(!("vuln_judger" in config.mcp), "project config must not shadow the globally configured vuln_judger server");
   assert(!("vuln-judger" in config.mcp), "project config must not shadow the globally configured vuln-judger alias");
   assert(mcpMap.servers.vuln_judger?.status === "global-config", "mcp-map must identify vuln_judger as supplied by global config");
+  const chromeMcp = config.mcp["chrome-devtools"];
+  assert(chromeMcp?.enabled === true && chromeMcp.type === "local", "Chrome DevTools MCP must be enabled locally");
+  assert(sameSet(chromeMcp.command, ["npx", "-y", "chrome-devtools-mcp@latest", "--isolated=true", "--redact-network-headers=true", "--no-usage-statistics", "--no-performance-crux"]),
+    "Chrome DevTools MCP command must use latest, isolation, redaction, and visible Chrome defaults");
+  assert(!chromeMcp.command.some(argument => /headless|agent-browser|browser-url|ws-endpoint|auto-?connect|user-data-dir/i.test(argument)),
+    "Chrome DevTools MCP must not use headless, agent-browser, an existing browser endpoint, or a persistent profile");
+  assert(config.permission["chrome-devtools_*"] === "deny", "global permissions must deny Chrome DevTools tools");
+  assert(mcpMap.servers["chrome-devtools"]?.status === "enabled-local", "mcp-map must register Chrome DevTools MCP");
+  assert(sameSet(mcpMap.agents["dynamic-vulnerability-validator"], ["chrome-devtools_*"]), "dynamic validator must receive only Chrome DevTools MCP tools");
+  assert(/^\s*"chrome-devtools_\*": allow\s*$/m.test(dynamicValidatorText), "dynamic validator must allow Chrome DevTools MCP tools");
+  assert(dynamicValidatorText.includes("DOM_PROBE_ONLY") && dynamicValidatorText.includes("STORED_CROSS_USER"), "dynamic validator must enforce XSS evidence levels");
+  assert(rootAgentsText.includes("Never reset browser state by killing Chrome")
+    && rootAgentsText.includes("stored XSS")
+    && rootAgentsText.includes("localhost"), "root AGENTS.md lacks dynamic-validation safety boundaries");
   assert(!("vuln-judger" in mcpMap.servers), "mcp-map must not retain a separate vuln-judger placeholder");
   assert(Array.isArray(mcpMap.servers.vuln_judger?.aliases) && mcpMap.servers.vuln_judger.aliases.includes("vuln-judger"), "vuln_judger must declare vuln-judger alias");
   assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*", "vuln-judger_*"]), "vulnerability-validator must receive both vuln_judger and vuln-judger MCP tool prefixes");

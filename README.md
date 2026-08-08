@@ -1,6 +1,6 @@
 # OpenCode Multi-Agent Source Security Audit
 
-这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都必须经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。可信结构 verifier 对文件/函数做精确差分；Coverage Plan/Ledger v3 对快照绑定的漏洞类型和已确认外部接口做授权回执、服务认证哈希链和有界库存记账；语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
+这是一套项目级 OpenCode 配置，用于对源码、平台配置以及 AI/LLM/Agent/RAG/MCP 系统做多 agent 安全审计。系统先从代码、文档、历史漏洞和 Owner 知识构建可追溯威胁模型，再按入口点、信任边界、资产和业务/AI 工作流划分 Focus Area。每个 Focus Area 的适用 D1-D10 维度都经过 `sink-driven`、`control-driven`、`config-driven` 三个视角，并补充 checklist-light Blind、历史/案例驱动的 Seeded Variant 和独立系统攻击链发现。可信结构 verifier 对文件/函数做精确差分；Coverage Telemetry 以 Assignment Unit 接收 exception-first 证明，在 Ledger 内部保留精确 check 状态和认证哈希链；语义 verifier 对入口点/威胁/Focus/发现轨道/攻击链面做精确差分。
 
 首次使用请先完成[初始化与安装](docs/installation.md)，生成仅保存在本机的 `.opencode/opencode.json`。
 
@@ -17,6 +17,7 @@
 - `ai-security-auditor`: 对全部冻结文件和函数执行 AI 专项第二覆盖层，审计 LLM、Agent、RAG、Memory、MCP/Tool、模型/数据供应链、训练评测和模型制品。
 - `security-evidence-correlator`: 归一化覆盖、合并跨视角证据、去重、暴露矛盾/GAP 并生成补充任务。
 - `security-attack-chain-hunter`: 在分区审计后执行独立系统级发现，覆盖全部 Focus Area、信任边界和资产。
+- `dynamic-vulnerability-validator`: 仅在用户显式要求时，使用可见、隔离的 Chrome DevTools MCP 对 localhost 上的 `JW-INJECT-06` Web-XSS 做动态验证，优先证明刷新后仍存在且影响第二测试账号的 stored XSS。
 - `vulnerability-validator`: 在最终综合报告封存后，将整份报告一次性交给 `vuln_judger`，监控 OpenCode 驱动的正方/反方/主持人三方复核并保存伴随制品。
 - `security-skill-optimizer`: 根据已完成的三方复核结果优化审计 skill、Joern 规则、漏洞案例和误报案例。
 
@@ -30,9 +31,9 @@
 - `control-driven`: 枚举敏感操作并验证应该存在的安全控制。
 - `config-driven`: 确定实际生效的配置、依赖和部署选择并对照基线。
 
-Orchestrator 为每个 `Focus Area × owner/domain assignment` 分别调用三次 coverage agent，并保证所有 Focus Area 的 AI assignments 合集仍覆盖全部冻结文件、函数和 AI catalog。Recon 额外生成并验证冻结的外部接口清单，区分 `CONFIRMED` 与 `CANDIDATE`，任何动态、未知或失败提取都会阻止完整声明。目录 v2 为每个适用漏洞类型建立三视角负向发现基线，并仅对维度相交的接口/类型组合建立 REQUIRED 检查；所有检查绑定唯一 Focus Area。subagent 通过 `coverage_ledger` MCP 领取紧凑 packet，并以 `source_scope: "required"` 让服务端登记完整冻结源集合的数量与摘要，再提交定位/query/tool/result 回执以及执行与结果双状态；完整 source 列表不会进入正常 MCP 响应，subagent 也不能直接修改 canonical ledger。每个 Focus Area 还执行 Blind，映射到历史/确认案例时执行 Seeded Variant；这些轨道只贡献候选证据，不能关闭 accounting。
+Orchestrator 为每个 `Focus Area × owner/domain assignment` 建立一个内容寻址的 Coverage Unit；三个 lens 是 unit 内部维度，仍可由独立 session 执行。目录和接口关系保留为 unit 内部精确 check，但正常路径只调用 `coverage_get_unit`、`coverage_begin_unit` 和一次 all-minus-gaps attestation，不再逐 check 领取、回执、决策。Attestation 只证明执行覆盖，不声明 `NO_FINDING`；真实 finding、gap 分类或定点返工可在前后独立绑定精确 check。完整成员列表不会进入正常 MCP 响应，subagent 也不能直接修改 canonical Ledger。
 
-最终要求 v1 文件/函数结构账本、v2 漏洞类型/接口 Ledger、机器统计摘要和语义发现账本全部闭合。覆盖率中的 `R/V/U/N`、漏洞类型完全覆盖率、接口完全覆盖率（分 ingress/egress）以及文件/函数完全覆盖率只由脚本计算；`R=0` 显示 `NOT_APPLICABLE` 而不是 100%。这些门禁不覆盖仓库中不存在的运行时生成代码、远端模型/工具真实行为或未提供的部署配置，也不等价于数学意义上证明不存在未知威胁或漏洞。
+Coverage policy 分为 `observe`（默认，只记录不阻塞）、`release`（仅门禁带策略标签的 AI/外部接口/身份权限 unit）和 `assurance`（严格全覆盖）。策略验收与完整覆盖声明分离：即使 observe 流程完成，剩余 gap 仍以 `PARTIAL`/`BLOCKED` 和精确 `R/V/U/N` 呈现，绝不会伪装成 `COMPLETE`。统计同时给出 unit 执行率、lens/关系覆盖、证据覆盖和 inventory 状态。
 
 ## Skill management
 
@@ -115,6 +116,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - 语义覆盖验收结果：`reports/coverage/semantic-coverage-verification.<audit-id>.json`
 - vuln-judger 结构化三方复核：`reports/validation/vuln-judger-review.<audit-id>.json`
 - vuln-judger 可读三方复核：`reports/validation/vuln-judger-review.<audit-id>.md`
+- localhost 动态验证绑定/结果：`reports/validation-handoff/runtime/<audit-id>/<finding-id>.{target,result}.json`
 - 可复核覆盖输入快照：`reports/coverage/<audit_id>/inputs/{snapshot-index,scope-manifest,functions-*,interface-manifest,interface-extractor-coverage,application-ai-vulnerability-catalog,threat-model,focus-areas}.json`
 - 侦察/威胁清单：`tmp/<audit-id>/recon/{entry-points,sinks,sensitive-operations,config-surfaces,ai-surfaces,recon-summary,threat-model,focus-areas}.json`
 - 冻结范围、函数全集、外部接口全集、接口提取验证和威胁路由索引：`tmp/<audit-id>/recon/coverage/{scope-manifest,functions-*,interface-manifest,interface-extractor-coverage,threat-routing-index}.json`
@@ -147,6 +149,7 @@ Orchestrator 在可信结构、v3 Ledger/统计和语义门禁后把最终 Markd
 @ai-security-auditor 使用 sink-driven 策略对全部冻结文件和函数执行 AI 专项覆盖。
 @security-attack-chain-hunter 对已完成的 Focus Area 结果执行系统级跨边界攻击链挖掘。
 @security-evidence-correlator 关联当前 audit_id 的三视角结果并生成覆盖缺口。
+@dynamic-vulnerability-validator 使用当前 prompt 提供的 localhost 测试环境、两个测试账号和登录/清理步骤，对一个已封存的 JW-INJECT-06 runtime-validation request 做可见浏览器动态验证。
 @vulnerability-validator 将 reports/final/security-audit-report.<audit_id>.md 整份提交给 vuln_judger，使用 OpenCode 三方执行引擎复核并保存伴随报告。
 @security-skill-optimizer 根据已完成的 vuln-judger 三方复核结果优化 skill、Joern 规则和案例库。
 ```
@@ -157,7 +160,7 @@ Semgrep/OpenGrep 不再注册为 MCP。Agent 通过 `node .opencode/scripts/semg
 
 Joern 不再注册为 MCP。函数清单构建器和审计命令直接调用 `joern-parse` 与 `joern`；默认从 `PATH` 解析，也可在启动 OpenCode 前通过 `JOERN_BIN`、`JOERN_PARSE_BIN`、`JOERN_JAVA_BIN` 和 `JOERN_GNUBIN` 指定本机工具链。Joern 查询应把完整 stdout/stderr 写入 `tmp/`，只把有界摘要带回 agent 上下文。
 
-配置模板目前只默认启用 `coverage_ledger` 本地 MCP；它暴露 `coverage_*` 工具并串行生成带哈希链的覆盖回执和决策。正常流程只交换紧凑检查、事件元数据和服务端派生的冻结 source-set 摘要，单次响应硬限制为 16 KiB；完整 source 元数据仅允许按小页做定向诊断。
+配置模板默认启用 `coverage_ledger` 和 `chrome-devtools`。后者使用 `npx -y chrome-devtools-mcp@latest` 启动可见、隔离的本机 Chrome，只对 `dynamic-vulnerability-validator` 开放；当前不支持远程、容器域名、headless 或 `agent-browser` 回退。`coverage_ledger` 暴露 Assignment Unit、attestation 和兼容的 check 级工具，串行生成认证哈希链。正常 unit 工作流仅交换计数、事件元数据和服务端派生的冻结 source-set 摘要，单次响应硬限制为 16 KiB；完整 source/接口元数据仅允许按小页做定向诊断。
 
 `context7`、`gh_grep`、CodeQL 以及 `vuln_judger` / `vuln-judger` MCP 占位均已从项目配置中删除。历史 CodeQL 规则文件仅作为离线知识资产保留，不会被 agent 调用。`vuln_judger` 服务完全由用户的全局 OpenCode 配置提供；项目只保留 validator 的工具前缀权限与路由契约，`judge_report` 必须传 `engine=opencode` 且异步轮询。`cpp_index`、`jvm_index`、`python_index` 和 `audit_lab` 仍是可替换占位。
 
@@ -174,4 +177,4 @@ Joern 不再注册为 MCP。函数清单构建器和审计命令直接调用 `jo
 - `external_directory: allow`, `webfetch: allow`, `websearch: allow` — 允许外部目录访问和网络操作。
 - `skill: "*": allow` — 所有 agent 可使用任意发现的 skill，skill 通过目录约定自动映射。
 - `pwd`、`ls`、`find`、`rg`、`git status/log/grep/ls-files`、`mkdir` 等既有细粒度规则继续保留，便于描述各角色的常规命令集；未命中的 Bash 命令也自动允许。
-- 漏洞验证 agent 不再运行本地逐条验证工具，只允许把封存的最终报告交给 `vuln_judger` 做 OpenCode 三方复核；不允许真实攻击、持久化、外连利用或数据窃取。
+- `vulnerability-validator` 只负责封存报告的 vuln-judger 三方复核；独立的 `dynamic-vulnerability-validator` 只在显式授权后验证 localhost Web-XSS，并禁止生产/第三方目标、全局 Chrome 进程终止、凭证持久化、外连利用或数据窃取。
