@@ -102,6 +102,14 @@ export OPENCODE_CONFIG="$PWD/.opencode/opencode.json"
 opencode
 ```
 
+需要查看已生成的动态验证证据时，另开一个终端启动只读观测台：
+
+```sh
+npm --prefix .opencode run start:dynamic-validation-web
+```
+
+然后访问 `http://127.0.0.1:4173`。服务只允许监听 loopback 地址，不会启动或操作浏览器，也不会执行新的动态验证。
+
 `initial.sh` 会直接解析并检查 OpenGrep/Semgrep、`joern`、`joern-parse`、Java 及可选 GNU coreutils，同时检查核心 CLI、项目依赖、本地和全局 OpenCode 配置，以及 Coverage Ledger MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
 
 ```sh

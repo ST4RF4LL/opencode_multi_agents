@@ -496,8 +496,8 @@
         "optional_payload_fields": []
       },
       "output": {
-        "required_artifact_types": ["localhost-target-binding", "external-runtime-validation-result"],
-        "optional_artifact_types": ["sanitized-runtime-evidence-set"],
+        "required_artifact_types": ["localhost-target-binding", "external-runtime-validation-result", "sanitized-runtime-evidence-set"],
+        "optional_artifact_types": [],
         "required_payload_fields": ["outcome", "xss_verification_level", "preferred_goal_met", "cleanup_status", "residual_gaps"],
         "optional_payload_fields": []
       }

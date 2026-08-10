@@ -154,6 +154,22 @@ Orchestrator 在可信结构、v3 Ledger/统计和语义门禁后把最终 Markd
 @security-skill-optimizer 根据已完成的 vuln-judger 三方复核结果优化 skill、Joern 规则和案例库。
 ```
 
+### 动态验证观测台
+
+动态验证结果可以通过本机只读 Web 页面查看：
+
+```sh
+npm --prefix .opencode run start:dynamic-validation-web
+```
+
+默认监听 `http://127.0.0.1:4173`，读取 `reports/validation-handoff/runtime/`。页面按运行展示执行 subagent、授权 loopback 环境、源码版本、隔离浏览器上下文、Bug 结论、运行观察、清理状态，以及 extension-v2 结果封存的脱敏 HTTP 请求/响应证据链。历史 v1 结果没有持久化完整 HTTP exchange 时，页面会明确标记为“未捕获”，不会根据方法描述伪造请求或响应。
+
+可使用 `--port` 或 `DYNAMIC_VALIDATION_WEB_PORT` 修改端口；服务拒绝监听非 loopback 地址：
+
+```sh
+npm --prefix .opencode run start:dynamic-validation-web -- --port 4180
+```
+
 ## Local analysis and MCP defaults
 
 Semgrep/OpenGrep 不再注册为 MCP。Agent 通过 `node .opencode/scripts/semgrep-scan.mjs` 直接调用受控扫描入口：`health` 检查本地引擎，`scan` 自动优先使用 `opengrep` 并回退 `semgrep`，只接受工作区内本地 YAML 规则。完整 JSON 与 stderr 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`，终端只输出不超过 16 KiB 的摘要。扫描器的异常 JSON 也有 64 MiB 硬上限。

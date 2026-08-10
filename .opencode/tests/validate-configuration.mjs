@@ -214,7 +214,8 @@ async function main() {
     && artifactPolicy.reports.stage_handoff?.path_templates?.some(path => path.includes("stage-handoff-verification")),
   "stage handoff artifact policy is incomplete");
   assert(artifactPolicy.reports.external_runtime_validation_handoff?.required_request_fields?.includes("attack_surface")
-    && artifactPolicy.reports.external_runtime_validation_handoff?.required_result_fields?.includes("safety_attestation"),
+    && artifactPolicy.reports.external_runtime_validation_handoff?.required_result_fields?.includes("safety_attestation")
+    && artifactPolicy.reports.external_runtime_validation_handoff?.web_xss_extension_v2_required_fields?.includes("network_trace"),
   "external runtime-validation handoff policy is incomplete");
   assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter")
     && artifactPolicy.reports.attack_chain.required_fields.includes("adjudication_manifest_digest")
@@ -241,6 +242,11 @@ async function main() {
   assert(await exists(join(OPENCODE, "tests/run-dynamic-validation-contract-tests.mjs"))
     && packageConfig.scripts["test:dynamic-validation-contract"]?.includes("run-dynamic-validation-contract-tests.mjs"),
   "dynamic runtime-validation regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-dynamic-validation-observatory-tests.mjs"))
+    && await exists(join(OPENCODE, "web/dynamic-validation-observatory/server.mjs"))
+    && packageConfig.scripts["test:dynamic-validation-web"]?.includes("run-dynamic-validation-observatory-tests.mjs")
+    && packageConfig.scripts["start:dynamic-validation-web"]?.includes("dynamic-validation-observatory/server.mjs"),
+  "dynamic validation observatory is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
   const thirdPartyReview = artifactPolicy.reports.third_party_review;

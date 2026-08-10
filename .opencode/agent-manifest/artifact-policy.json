@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "tmp_root": "tmp",
   "reports_root": "reports",
   "cleanup_owner": "human",
@@ -115,7 +115,8 @@
       "producer": "request: security-finding-adjudicator or security-audit-orchestrator; localhost Web-XSS result: dynamic-vulnerability-validator after explicit user authorization",
       "required_request_fields": ["schema_version", "packet_type", "request_id", "audit_id", "scope_digest", "finding_id", "finding_object_digest", "static_assessment", "source_binding", "attack_surface", "claim", "proof_gaps", "validation_policy", "provenance", "packet_digest"],
       "required_result_fields": ["schema_version", "packet_type", "request_id", "request_packet_digest", "audit_id", "scope_digest", "finding_id", "finding_object_digest", "validator", "outcome", "methods", "observations", "evidence_artifacts", "counterevidence", "residual_gaps", "safety_attestation", "packet_digest"],
-      "notes": "The normal static workflow exports requests and never auto-executes them. Only an explicit user request may invoke dynamic-vulnerability-validator, currently for JW-INJECT-06 on loopback with two test accounts and visible isolated Chrome DevTools MCP. The request's PERSISTENCE prohibition forbids backdoors or durable footholds; a bounded safe marker stored as authorized test data is permitted solely to prove stored XSS and must be cleaned up or reported when cleanup fails. Results remain companions and are never automatically promoted into adjudication or the final report."
+      "web_xss_extension_v2_required_fields": ["web_xss_extension_schema_version", "environment_binding_digest", "browser_backend", "xss_verification", "network_trace"],
+      "notes": "The normal static workflow exports requests and never auto-executes them. Only an explicit user request may invoke dynamic-vulnerability-validator, currently for JW-INJECT-06 on loopback with two test accounts and visible isolated Chrome DevTools MCP. Web-XSS extension v2 requires a chronological network_trace referencing sanitized HTTP exchange artifacts; raw credentials, tokens, cookies, unrelated response data, and non-loopback URLs are forbidden. The request's PERSISTENCE prohibition forbids backdoors or durable footholds; a bounded safe marker stored as authorized test data is permitted solely to prove stored XSS and must be cleaned up or reported when cleanup fails. Results remain companions and are never automatically promoted into adjudication or the final report."
     },
     "third_party_review": {
       "format": "json+markdown",

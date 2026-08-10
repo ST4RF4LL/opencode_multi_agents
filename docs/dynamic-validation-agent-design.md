@@ -180,6 +180,12 @@ reports/validation-handoff/runtime/<audit_id>/<finding_id>/evidence/
   实际版本、`headless=false`、`isolated=true`
 - `xss_verification`：验证等级、proof ID、应用输入/执行、刷新、attacker/victim
   context、不同账号、victim 执行和清理状态
+- `network_trace`：按时间顺序引用关键步骤的脱敏 HTTP exchange，覆盖请求方法、
+  loopback URL、浏览器上下文、耗时、请求/响应 Header、最小化 Body 和响应状态。
+
+新结果使用 `web_xss_extension_schema_version=2`。每个 exchange 独立写入
+`evidence/`，遵守 `sanitized-http-exchange.schema.json`，敏感 Header 只能保存为
+`[REDACTED]` 或摘要。历史 v1 结果保持可读，但观测台会显示网络证据未捕获。
 
 通过以下脚本进行密封和校验：
 
@@ -224,6 +230,8 @@ node .opencode/skills/dynamic-vulnerability-validator-subagent/web-xss-runtime-v
 - `.opencode/agents/security-audit-orchestrator.md`：仅在显式请求、信息完整时的
   dispatch 规则，以及缺失信息时仅主 Agent 可询问的规则。
 - `README.md`、`docs/installation.md`、`initial.sh`：安装、健康检查和使用说明。
+- `.opencode/web/dynamic-validation-observatory/`：只读本机 Web 服务，聚合 runtime
+  结果并展示环境、Bug、观察与请求/响应证据链。
 
 ## 11. 验证与验收
 

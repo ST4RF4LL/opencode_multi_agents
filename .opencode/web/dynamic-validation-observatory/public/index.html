@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>动态验证观测台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">⌁</span>
+          <div><strong>动态验证观测台</strong><span>Runtime evidence</span></div>
+        </div>
+        <div class="sidebar-heading">
+          <span>验证运行</span>
+          <span id="run-count" class="count">0</span>
+        </div>
+        <nav id="run-list" class="run-list" aria-label="验证运行列表"></nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">P08_RUNTIME_VALIDATION</div>
+            <h1 id="page-title">选择一次验证运行</h1>
+            <p id="page-subtitle">查看执行环境、Bug 结论及请求响应证据链。</p>
+          </div>
+          <div id="run-status" class="status status-neutral">等待选择</div>
+        </header>
+
+        <div id="loading" class="state-panel">正在读取验证制品…</div>
+        <div id="error" class="state-panel state-error" hidden></div>
+        <div id="empty" class="state-panel" hidden>尚未找到动态验证结果。</div>
+
+        <div id="run-detail" class="content" hidden>
+          <section class="summary-grid" aria-label="验证摘要">
+            <article class="panel">
+              <div class="panel-title"><span aria-hidden="true">▣</span><h2>验证环境</h2></div>
+              <dl id="environment-facts" class="facts"></dl>
+            </article>
+            <article class="panel">
+              <div class="panel-title"><span aria-hidden="true">◇</span><h2>验证对象</h2></div>
+              <div class="finding-heading">
+                <strong id="finding-title"></strong>
+                <span id="finding-level" class="badge"></span>
+              </div>
+              <p id="finding-summary" class="finding-summary"></p>
+              <div id="verdict" class="verdict"></div>
+            </article>
+          </section>
+
+          <section class="panel observations-panel">
+            <div class="section-heading">
+              <div><div class="eyebrow">APPLICATION EVIDENCE</div><h2>验证步骤与运行观察</h2></div>
+              <span id="observation-count" class="section-meta"></span>
+            </div>
+            <ol id="observation-list" class="observation-list"></ol>
+          </section>
+
+          <section class="panel network-panel">
+            <div class="section-heading">
+              <div><div class="eyebrow">HTTP EXCHANGES</div><h2>请求 / 响应证据链</h2></div>
+              <div id="network-summary" class="section-meta"></div>
+            </div>
+            <div id="network-warning" class="warning" hidden></div>
+            <div id="network-empty" class="network-empty" hidden>
+              <strong>这次运行没有可展示的 HTTP exchange</strong>
+              <span>旧版结果仅保存了方法描述和响应状态；新契约会为每个关键步骤封存脱敏后的请求与响应。</span>
+            </div>
+            <div id="network-workspace" class="network-workspace" hidden>
+              <nav id="exchange-list" class="exchange-list" aria-label="HTTP exchange 列表"></nav>
+              <article class="exchange-detail">
+                <div class="exchange-heading">
+                  <div><span id="exchange-method" class="method"></span><code id="exchange-url"></code></div>
+                  <span id="exchange-timing" class="section-meta"></span>
+                </div>
+                <div class="tabs" role="tablist" aria-label="请求或响应">
+                  <button id="request-tab" type="button" role="tab" aria-selected="true">请求</button>
+                  <button id="response-tab" type="button" role="tab" aria-selected="false">响应</button>
+                </div>
+                <pre id="exchange-content" class="exchange-content" tabindex="0"></pre>
+                <p class="redaction-note">敏感 Header 和凭证字段会在进入 Web API 前再次脱敏。</p>
+              </article>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

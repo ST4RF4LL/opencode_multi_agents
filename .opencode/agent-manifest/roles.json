@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "purpose": "Role boundaries for a Java/Web-first OpenCode threat-led, Focus-Area-partitioned Tri-Lens security audit workspace, with platform and other language/AI agents activated only when frozen scope requires them.",
   "agents": {
     "security-audit-orchestrator": {
@@ -119,9 +119,9 @@
     "dynamic-vulnerability-validator": {
       "mode": "subagent",
       "stage_contract_ids": ["P08_RUNTIME_VALIDATION.dynamic-vulnerability-validator"],
-      "responsibility": "On explicit user request only, validate one JW-INJECT-06 finding against an authorized localhost application through visible isolated Chrome DevTools MCP, prioritize stored cross-user proof, attempt cleanup, and persist sanitized digest-bound companion evidence.",
+      "responsibility": "On explicit user request only, validate one JW-INJECT-06 finding against an authorized localhost application through visible isolated Chrome DevTools MCP, prioritize stored cross-user proof, attempt cleanup, and persist sanitized digest-bound companion evidence including chronological key HTTP request/response exchanges.",
       "inputs": ["sealed external runtime-validation request", "user-prompt localhost target", "two distinct authorized test accounts", "login and cleanup instructions"],
-      "outputs": ["sanitized localhost target binding", "runtime-validation result", "Web-XSS verification level", "minimal evidence artifacts", "cleanup status and residual exposure"],
+      "outputs": ["sanitized localhost target binding", "runtime-validation result", "Web-XSS verification level", "minimal evidence artifacts", "sanitized key HTTP request/response exchanges", "cleanup status and residual exposure"],
       "artifacts": ["reports/validation-handoff/runtime/<audit-id>/<finding-id>.target.json", "reports/validation-handoff/runtime/<audit-id>/<finding-id>.result.json", "reports/validation-handoff/runtime/<audit-id>/<finding-id>/evidence/"],
       "must_not": ["Run without an explicit dynamic-validation request", "contact non-loopback targets", "use production, third-party, or real-user accounts", "persist credentials", "treat CDP DOM injection as vulnerability proof", "kill global Chrome processes", "use agent-browser", "auto-promote findings or edit sealed audit artifacts"]
     },

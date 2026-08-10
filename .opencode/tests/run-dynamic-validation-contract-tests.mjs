@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
 import { strict as assert } from "node:assert";
+import { createHash } from "node:crypto";
 import {
   targetBindingDigest,
   validateLocalhostTargetBinding,
+  validateNetworkTraceMetadata,
+  validateSanitizedHttpExchange,
   validateWebXssRuntimeResult,
 } from "../skills/dynamic-vulnerability-validator-subagent/web-xss-runtime-validation/scripts/validate-web-xss-runtime-result.mjs";
 
@@ -49,8 +52,19 @@ function target(overrides = {}) {
 
 function result(level = "STORED_CROSS_USER") {
   return {
+    web_xss_extension_schema_version: 2,
     outcome: "SUPPORTED_RUNTIME",
     residual_gaps: [],
+    evidence_artifacts: [
+      {
+        artifact_id: "ev-http-001",
+        path: "/fixture/http-001.json",
+        sha256: "a".repeat(64),
+        kind: "sanitized-http-exchange",
+        media_type: "application/json",
+        sanitized: true,
+      },
+    ],
     environment_binding_digest: target().binding_digest,
     browser_backend: {
       name: "chrome-devtools-mcp",
@@ -79,6 +93,65 @@ function result(level = "STORED_CROSS_USER") {
         details: "Removed and verified after refresh.",
       },
     },
+    network_trace: {
+      schema_version: 1,
+      capture_source: "chrome-devtools-mcp",
+      completeness: "KEY_EXCHANGES",
+      sensitive_headers_redacted: true,
+      exchanges: [
+        {
+          exchange_id: "http-001",
+          artifact_id: "ev-http-001",
+          sequence: 1,
+          phase: "APP_INPUT_SUBMISSION",
+          step_id: "submit-marker",
+        },
+      ],
+    },
+  };
+}
+
+function body(text, mediaType = "application/json") {
+  return {
+    media_type: mediaType,
+    text,
+    sha256: createHash("sha256").update(text).digest("hex"),
+    truncated: false,
+  };
+}
+
+function exchange() {
+  return {
+    schema_version: 1,
+    artifact_type: "SANITIZED_HTTP_EXCHANGE",
+    exchange_id: "http-001",
+    sequence: 1,
+    phase: "APP_INPUT_SUBMISSION",
+    step_id: "submit-marker",
+    started_at: "2026-08-08T14:32:06.000Z",
+    duration_ms: 184,
+    browser_context_id: "attacker-context",
+    request: {
+      method: "POST",
+      url: "http://127.0.0.1:8080/api/profile",
+      headers: [
+        { name: "Content-Type", value: "application/json" },
+        { name: "Authorization", value: "[REDACTED]" },
+      ],
+      body: body('{"marker":"XSS-PROOF-001"}'),
+    },
+    response: {
+      status: 200,
+      status_text: "OK",
+      headers: [{ name: "Content-Type", value: "application/json" }],
+      body: body('{"updated":true}'),
+      error: null,
+    },
+    capture: {
+      source: "chrome-devtools-mcp",
+      request_id: "cdp-request-001",
+      sanitized: true,
+    },
   };
 }
 
@@ -89,6 +162,8 @@ function has(errors, expected) {
 const validTarget = target();
 assert.deepEqual(validateLocalhostTargetBinding(validTarget, REQUEST), []);
 assert.deepEqual(validateWebXssRuntimeResult(result(), validTarget), []);
+assert.deepEqual(validateNetworkTraceMetadata(result()), []);
+assert.deepEqual(validateSanitizedHttpExchange(exchange(), validTarget), []);
 
 const remote = target({ target: { base_url: "https://example.com", allowed_origins: ["https://example.com"] } });
 has(validateLocalhostTargetBinding(remote, REQUEST), "web-xss-target-base-url-not-loopback");
@@ -121,4 +196,20 @@ has(validateWebXssRuntimeResult(cleanupFailed, validTarget), "web-xss-result-cle
 cleanupFailed.residual_gaps = ["Stored payload cleanup failed; manual removal is required."];
 assert.deepEqual(validateWebXssRuntimeResult(cleanupFailed, validTarget), []);
 
-process.stdout.write(`${JSON.stringify({ complete: true, validator: "web-xss", cases: 7 })}\n`);
+const missingTrace = result();
+delete missingTrace.network_trace;
+has(validateWebXssRuntimeResult(missingTrace, validTarget), "web-xss-result-network-trace-invalid");
+
+const remoteExchange = exchange();
+remoteExchange.request.url = "https://example.com/api/profile";
+has(validateSanitizedHttpExchange(remoteExchange, validTarget), "web-xss-http-exchange-request-invalid");
+
+const rawAuthorization = exchange();
+rawAuthorization.request.headers[1].value = "Bearer secret-value";
+has(validateSanitizedHttpExchange(rawAuthorization, validTarget), "web-xss-http-exchange-request-invalid");
+
+const secretBody = exchange();
+secretBody.request.body = body('{"password":"plain-text"}');
+has(validateSanitizedHttpExchange(secretBody, validTarget), "web-xss-http-exchange-request-invalid");
+
+process.stdout.write(`${JSON.stringify({ complete: true, validator: "web-xss", cases: 13 })}\n`);
