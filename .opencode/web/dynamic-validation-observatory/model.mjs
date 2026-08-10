@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
@@ -37,6 +37,10 @@ function safeRelative(root, candidate) {
 
 async function readJson(path, root) {
   if (safeRelative(root, path) === null) throw new Error("artifact-outside-runtime-root");
+  const linkInfo = await lstat(path);
+  if (linkInfo.isSymbolicLink()) throw new Error("artifact-symlink-forbidden");
+  const [realRoot, realPath] = await Promise.all([realpath(root), realpath(path)]);
+  if (safeRelative(realRoot, realPath) === null) throw new Error("artifact-realpath-outside-runtime-root");
   const info = await stat(path);
   if (!info.isFile() || info.size > MAX_JSON_BYTES) throw new Error("artifact-size-invalid");
   return JSON.parse(await readFile(path, "utf8"));
@@ -291,4 +295,51 @@ export async function listValidationRuns(runtimeRoot) {
 
 export async function getValidationRun(runtimeRoot, id) {
   return (await listValidationRunDetails(runtimeRoot)).find(detail => detail.id === id) ?? null;
+}
+
+export async function listValidationRequests(runtimeRoot) {
+  let auditEntries = [];
+  try {
+    auditEntries = await readdir(runtimeRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  const requests = [];
+  for (const auditEntry of auditEntries) {
+    if (!auditEntry.isDirectory()) continue;
+    const auditRoot = join(runtimeRoot, auditEntry.name);
+    const files = await readdir(auditRoot, { withFileTypes: true });
+    const requestFiles = files.filter(file => file.isFile() && (file.name === "request.json" || file.name.endsWith(".request.json")));
+    for (const file of requestFiles) {
+      try {
+        const request = await readJson(join(auditRoot, file.name), runtimeRoot);
+        const findingId = request.finding_id;
+        if (!findingId) continue;
+        const resultPresent = files.some(candidate => candidate.isFile() && candidate.name === `${findingId}.result.json`);
+        const envelopeFile = files.find(candidate => candidate.isFile() && (candidate.name === "envelope-input.json" || candidate.name === `${findingId}.envelope-input.json`));
+        requests.push(sanitizeForWeb({
+          id: runId(request.audit_id ?? auditEntry.name, findingId),
+          audit_id: request.audit_id ?? auditEntry.name,
+          finding_id: findingId,
+          request_id: request.request_id ?? null,
+          request_digest: request.packet_digest ?? null,
+          vulnerability_type_id: request.claim?.vulnerability_type_id ?? null,
+          summary: request.claim?.summary ?? null,
+          expected_security_effect: request.claim?.expected_security_effect ?? null,
+          source_repository: request.source_binding?.repository_id ?? null,
+          source_commit: request.source_binding?.commit ?? null,
+          network_policy: request.validation_policy?.network_access ?? null,
+          credential_policy: request.validation_policy?.credentials ?? null,
+          request_path: publicArtifactPath(join(auditRoot, file.name), runtimeRoot),
+          envelope_path: envelopeFile ? publicArtifactPath(join(auditRoot, envelopeFile.name), runtimeRoot) : null,
+          result_present: resultPresent,
+          dispatch_ready: !resultPresent && Boolean(envelopeFile) && request.claim?.vulnerability_type_id === "JW-INJECT-06",
+        }));
+      } catch {
+        // Invalid request artifacts remain invisible to dispatch and available on disk for manual diagnosis.
+      }
+    }
+  }
+  return requests.sort((left, right) => left.id.localeCompare(right.id));
 }

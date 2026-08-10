@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "tmp_root": "tmp",
   "reports_root": "reports",
   "cleanup_owner": "human",
@@ -34,6 +34,21 @@
       "model_path_template": "reports/final/security-audit-report-model.{audit_id}.json",
       "model_required_fields": ["schema_version", "audit_id", "scope_digest", "coverage", "inputs", "findings", "excluded_findings", "chains", "rejected_chains", "manifest_digest"],
       "notes": "Build the digest-bound report model from the verified coverage summary, trusted adjudication input/output, and Attack-chain v2 manifest. FINAL requires strict complete coverage; POLICY_FINAL accepts a satisfied observe/release policy and renders a mandatory incomplete-coverage disclaimer when gaps remain. Render and byte-verify deterministically, then keep the reviewed digest immutable."
+    },
+    "audit_workbench_runtime": {
+      "format": "mode-0600 JSON and append-only JSONL",
+      "cardinality": "one run state and two bounded event/log streams per Web-created audit",
+      "path_templates": [
+        "reports/platform/audit-runs/{audit_id}/run.json",
+        "reports/platform/audit-runs/{audit_id}/events.jsonl",
+        "reports/platform/audit-runs/{audit_id}/runner.log.jsonl",
+        "reports/platform/dynamic-validation-runs/{validation_run_hash}/run.json",
+        "reports/platform/dynamic-validation-runs/{validation_run_hash}/events.jsonl",
+        "reports/platform/dynamic-validation-runs/{validation_run_hash}/runner.log.jsonl"
+      ],
+      "producer": "loopback OpenCode audit workbench",
+      "required_state_fields": ["id", "repository_id", "commit", "status", "version", "event_sequence", "created_at", "updated_at"],
+      "notes": "The workbench stores only server-resolved repository identifiers, fixed-argument runner state, ordered events, and redacted bounded log lines. Browser-supplied paths and shell commands are forbidden. Dynamic-validation credentials are never stored here: the isolated OpenCode session uses an ephemeral data directory that is removed after completion or safely reconciled after restart. These records coordinate execution but do not replace stage handoffs, coverage gates, findings, validation evidence, or the sealed final report as authoritative audit artifacts."
     },
     "stage_handoff": {
       "format": "digest-bound JSON input/output envelopes plus one aggregate verification",

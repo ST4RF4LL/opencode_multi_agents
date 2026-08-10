@@ -217,6 +217,10 @@ async function main() {
     && artifactPolicy.reports.external_runtime_validation_handoff?.required_result_fields?.includes("safety_attestation")
     && artifactPolicy.reports.external_runtime_validation_handoff?.web_xss_extension_v2_required_fields?.includes("network_trace"),
   "external runtime-validation handoff policy is incomplete");
+  assert(artifactPolicy.reports.audit_workbench_runtime?.path_templates?.includes("reports/platform/audit-runs/{audit_id}/events.jsonl")
+    && artifactPolicy.reports.audit_workbench_runtime?.path_templates?.includes("reports/platform/dynamic-validation-runs/{validation_run_hash}/run.json")
+    && artifactPolicy.reports.audit_workbench_runtime?.required_state_fields?.includes("event_sequence"),
+  "audit workbench runtime artifact policy is incomplete");
   assert(artifactPolicy.reports.attack_chain.required_for_agents.includes("security-attack-chain-hunter")
     && artifactPolicy.reports.attack_chain.required_fields.includes("adjudication_manifest_digest")
     && artifactPolicy.reports.attack_chain.required_fields.includes("chain_accounting"), "attack-chain report contract is incomplete");
@@ -247,6 +251,13 @@ async function main() {
     && packageConfig.scripts["test:dynamic-validation-web"]?.includes("run-dynamic-validation-observatory-tests.mjs")
     && packageConfig.scripts["start:dynamic-validation-web"]?.includes("dynamic-validation-observatory/server.mjs"),
   "dynamic validation observatory is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-audit-workbench-tests.mjs"))
+    && await exists(join(OPENCODE, "web/dynamic-validation-observatory/audit-runner.mjs"))
+    && await exists(join(OPENCODE, "web/dynamic-validation-observatory/validation-runner.mjs"))
+    && await exists(join(OPENCODE, "web/dynamic-validation-observatory/workspace-model.mjs"))
+    && packageConfig.scripts["test:audit-workbench"]?.includes("run-audit-workbench-tests.mjs")
+    && packageConfig.scripts["start:audit-workbench"]?.includes("dynamic-validation-observatory/server.mjs"),
+  "OpenCode audit workbench is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
   const thirdPartyReview = artifactPolicy.reports.third_party_review;

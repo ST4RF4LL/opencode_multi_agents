@@ -134,7 +134,7 @@ try {
 
     const indexResponse = await fetch(`http://127.0.0.1:${address.port}/`);
     assert.equal(indexResponse.status, 200);
-    assert.match(await indexResponse.text(), /动态验证观测台/);
+    assert.match(await indexResponse.text(), /OpenCode 安全审计工作台/);
 
     const postResponse = await fetch(`http://127.0.0.1:${address.port}/api/runs`, { method: "POST" });
     assert.equal(postResponse.status, 405);

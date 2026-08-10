@@ -3,92 +3,88 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
-    <title>动态验证观测台</title>
+    <meta name="color-scheme" content="light">
+    <title>OpenCode 安全审计工作台</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark" aria-hidden="true">⌁</span>
-          <div><strong>动态验证观测台</strong><span>Runtime evidence</span></div>
-        </div>
-        <div class="sidebar-heading">
-          <span>验证运行</span>
-          <span id="run-count" class="count">0</span>
-        </div>
-        <nav id="run-list" class="run-list" aria-label="验证运行列表"></nav>
+        <div class="brand"><div class="brand-mark">S<span>/</span></div><div><strong>SENTINEL</strong><small>OPENCODE AUDIT</small></div></div>
+        <div class="workspace-card"><span>当前工作空间</span><strong>源码安全工程中心</strong><small id="engine-caption">正在连接运行时…</small></div>
+        <nav class="nav" aria-label="主导航">
+          <button class="active" data-view="dashboard"><span>⌁</span>工作台</button>
+          <button data-view="projects"><span>◇</span>审计项目</button>
+          <button data-view="audits"><span>▷</span>审计任务 <em id="active-audit-badge">0</em></button>
+          <button data-view="findings"><span>!</span>漏洞发现 <em id="finding-badge">0</em></button>
+          <button data-view="reports"><span>▤</span>审计报告</button>
+          <p>验证与运行</p>
+          <button data-view="validation"><span>⌘</span>动态验证</button>
+          <button data-view="runtime"><span>◉</span>Agent 运行时</button>
+        </nav>
+        <div class="runner-card"><div><i id="runner-pulse"></i><strong id="runner-state">读取中</strong></div><p>OpenCode 本地受控运行驱动</p><small>仅允许服务端登记仓库</small></div>
       </aside>
 
-      <main class="main">
+      <div class="workspace">
         <header class="topbar">
-          <div>
-            <div class="eyebrow">P08_RUNTIME_VALIDATION</div>
-            <h1 id="page-title">选择一次验证运行</h1>
-            <p id="page-subtitle">查看执行环境、Bug 结论及请求响应证据链。</p>
-          </div>
-          <div id="run-status" class="status status-neutral">等待选择</div>
+          <div><p id="breadcrumb">安全态势 / 概览</p><h1 id="page-title">源码审计工作台</h1></div>
+          <div class="topbar-actions"><button id="refresh" class="button secondary">刷新制品</button><button id="new-audit" class="button primary">＋ 新建审计</button></div>
         </header>
 
-        <div id="loading" class="state-panel">正在读取验证制品…</div>
-        <div id="error" class="state-panel state-error" hidden></div>
-        <div id="empty" class="state-panel" hidden>尚未找到动态验证结果。</div>
-
-        <div id="run-detail" class="content" hidden>
-          <section class="summary-grid" aria-label="验证摘要">
-            <article class="panel">
-              <div class="panel-title"><span aria-hidden="true">▣</span><h2>验证环境</h2></div>
-              <dl id="environment-facts" class="facts"></dl>
-            </article>
-            <article class="panel">
-              <div class="panel-title"><span aria-hidden="true">◇</span><h2>验证对象</h2></div>
-              <div class="finding-heading">
-                <strong id="finding-title"></strong>
-                <span id="finding-level" class="badge"></span>
-              </div>
-              <p id="finding-summary" class="finding-summary"></p>
-              <div id="verdict" class="verdict"></div>
-            </article>
-          </section>
-
-          <section class="panel observations-panel">
-            <div class="section-heading">
-              <div><div class="eyebrow">APPLICATION EVIDENCE</div><h2>验证步骤与运行观察</h2></div>
-              <span id="observation-count" class="section-meta"></span>
-            </div>
-            <ol id="observation-list" class="observation-list"></ol>
-          </section>
-
-          <section class="panel network-panel">
-            <div class="section-heading">
-              <div><div class="eyebrow">HTTP EXCHANGES</div><h2>请求 / 响应证据链</h2></div>
-              <div id="network-summary" class="section-meta"></div>
-            </div>
-            <div id="network-warning" class="warning" hidden></div>
-            <div id="network-empty" class="network-empty" hidden>
-              <strong>这次运行没有可展示的 HTTP exchange</strong>
-              <span>旧版结果仅保存了方法描述和响应状态；新契约会为每个关键步骤封存脱敏后的请求与响应。</span>
-            </div>
-            <div id="network-workspace" class="network-workspace" hidden>
-              <nav id="exchange-list" class="exchange-list" aria-label="HTTP exchange 列表"></nav>
-              <article class="exchange-detail">
-                <div class="exchange-heading">
-                  <div><span id="exchange-method" class="method"></span><code id="exchange-url"></code></div>
-                  <span id="exchange-timing" class="section-meta"></span>
-                </div>
-                <div class="tabs" role="tablist" aria-label="请求或响应">
-                  <button id="request-tab" type="button" role="tab" aria-selected="true">请求</button>
-                  <button id="response-tab" type="button" role="tab" aria-selected="false">响应</button>
-                </div>
-                <pre id="exchange-content" class="exchange-content" tabindex="0"></pre>
-                <p class="redaction-note">敏感 Header 和凭证字段会在进入 Web API 前再次脱敏。</p>
-              </article>
+        <main>
+          <div id="global-error" class="notice error" hidden></div>
+          <section id="view-dashboard" class="view active">
+            <div class="hero"><div><p class="eyebrow">SECURITY OPERATIONS</p><h2>统一审计交付面板</h2><p>从仓库目标、OpenCode Agent 执行、漏洞证据、动态验证到最终封存报告，均由同一审计 ID 串联。</p></div><button class="button light" data-open-audit>创建 repo 级审计</button></div>
+            <div id="metric-grid" class="metric-grid"></div>
+            <div class="dashboard-grid">
+              <article class="panel wide"><div class="section-title"><div><p class="eyebrow">AUDIT PIPELINE</p><h2>最近审计任务</h2></div><button class="text-button" data-go="audits">查看全部 →</button></div><div id="recent-audits" class="audit-list"></div></article>
+              <article class="panel"><div class="section-title"><div><p class="eyebrow">RISK POSTURE</p><h2>风险分布</h2></div></div><div id="severity-chart" class="severity-chart"></div></article>
             </div>
           </section>
-        </div>
-      </main>
+
+          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">SERVER ALLOWLIST</p><h2>审计项目</h2><p>浏览器只能选择这里登记的仓库，无法提交任意本地路径或命令。</p></div></div><article class="panel"><div id="project-table" class="data-table"></div></article></section>
+
+          <section id="view-audits" class="view"><div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div></div><div class="split"><article class="panel"><div id="audit-table" class="data-table"></div></article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div></section>
+
+          <section id="view-findings" class="view"><div class="page-heading"><div><p class="eyebrow">FINDING LEDGER</p><h2>漏洞发现</h2><p>优先展示证据关联后的 canonical finding，并保留来源制品。</p></div><label class="search"><span>⌕</span><input id="finding-query" placeholder="搜索漏洞、文件或 ID"></label></div><article class="panel"><div id="finding-table" class="data-table"></div></article></section>
+
+          <section id="view-reports" class="view"><div class="page-heading"><div><p class="eyebrow">SEALED DELIVERY</p><h2>审计报告</h2><p>最终中文 Markdown 报告及其封存记录。</p></div></div><div id="report-grid" class="report-grid"></div></section>
+
+          <section id="view-validation" class="view"><div class="page-heading"><div><p class="eyebrow">AUTHORIZED RUNTIME EVIDENCE</p><h2>动态验证</h2><p>只有密封的 JW-INJECT-06 请求、显式 localhost 授权和两个专用测试账号齐备时才能调度。</p></div></div><article class="panel request-panel"><div class="section-title"><div><p class="eyebrow">SEALED REQUESTS</p><h2>待验证请求</h2></div><span id="dynamic-runner-caption" class="status">读取中</span></div><div id="validation-request-list" class="request-list"></div></article><div class="split validation-split"><article class="panel"><div class="section-title"><div><p class="eyebrow">RESULTS</p><h2>验证结果</h2></div></div><div id="validation-list" class="audit-list"></div></article><aside id="validation-detail" class="panel detail-panel"><div class="empty-state">选择一次验证查看环境和脱敏 HTTP 证据。</div></aside></div></section>
+
+          <section id="view-runtime" class="view"><div class="page-heading"><div><p class="eyebrow">RUNTIME CONTROL</p><h2>Agent 运行时</h2><p>运行驱动默认关闭；启用后通过固定参数启动 OpenCode，不拼接 shell 命令。</p></div></div><div id="runtime-grid" class="metric-grid"></div><article class="panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>仓库路径来自服务端启动参数 <code>--repo id=/absolute/path</code>。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>动态验证仍需单独显式授权与 localhost 测试环境。</li></ul></article></section>
+        </main>
+      </div>
     </div>
+
+    <dialog id="audit-dialog">
+      <form id="audit-form" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">NEW AUDIT</p><h2>创建仓库级安全审计</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
+        <label>任务名称<input name="name" maxlength="160" placeholder="例如：支付服务发布前安全审计" required></label>
+        <label>审计项目<select name="repository_id" id="repository-select" required></select></label>
+        <div class="form-row"><label>audit_id<input name="audit_id" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,127}" placeholder="audit-2026-001" required></label><label>目标 ref<input name="ref" value="HEAD" maxlength="200" required></label></div>
+        <label class="check"><input name="allow_dirty" type="checkbox">允许审计包含未提交修改的工作树（会降低可复现性）</label>
+        <div id="audit-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-dialog>取消</button><button id="submit-audit" class="button primary" type="submit">提交 OpenCode</button></div>
+      </form>
+    </dialog>
+    <dialog id="validation-dialog">
+      <form id="validation-form" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">LOCALHOST VALIDATION</p><h2>授权动态验证</h2><p id="validation-form-subtitle"></p></div><button type="button" class="icon-button" data-close-validation>×</button></div>
+        <input name="validation_request_id" type="hidden"><input name="repository_id" type="hidden">
+        <label>授权测试 URL<input name="target_base_url" type="url" placeholder="http://127.0.0.1:8080" required></label>
+        <div class="form-row"><label>Attacker 测试账号<input name="attacker_username" autocomplete="off" required></label><label>Attacker 密码<input name="attacker_password" type="password" autocomplete="new-password" required></label></div>
+        <div class="form-row"><label>Victim 测试账号<input name="victim_username" autocomplete="off" required></label><label>Victim 密码<input name="victim_password" type="password" autocomplete="new-password" required></label></div>
+        <label>登录步骤<textarea name="login_instructions" maxlength="4000" placeholder="说明登录入口、字段和成功判据，不要填写无关数据。" required></textarea></label>
+        <label>清理步骤<textarea name="cleanup_instructions" maxlength="4000" placeholder="说明如何通过应用正常路径删除测试 payload。" required></textarea></label>
+        <label class="check"><input name="explicit_authorization" type="checkbox" required>我明确请求执行本次动态验证，并确认目标仅为 loopback。</label>
+        <label class="check"><input name="test_environment" type="checkbox" required>我确认环境和两个账号均为专用测试资产，不包含真实用户或生产数据。</label>
+        <div class="notice">凭证只传给本次隔离 OpenCode 会话；会话使用临时数据目录，结束后删除。日志和持久制品不得保存凭证值。</div>
+        <div id="validation-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-validation>取消</button><button id="submit-validation" class="button primary" type="submit">启动隔离验证</button></div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status"></div>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

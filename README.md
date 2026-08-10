@@ -154,21 +154,39 @@ Orchestrator 在可信结构、v3 Ledger/统计和语义门禁后把最终 Markd
 @security-skill-optimizer 根据已完成的 vuln-judger 三方复核结果优化 skill、Joern 规则和案例库。
 ```
 
-### 动态验证观测台
+### OpenCode 安全审计工作台
 
-动态验证结果可以通过本机只读 Web 页面查看：
-
-```sh
-npm --prefix .opencode run start:dynamic-validation-web
-```
-
-默认监听 `http://127.0.0.1:4173`，读取 `reports/validation-handoff/runtime/`。页面按运行展示执行 subagent、授权 loopback 环境、源码版本、隔离浏览器上下文、Bug 结论、运行观察、清理状态，以及 extension-v2 结果封存的脱敏 HTTP 请求/响应证据链。历史 v1 结果没有持久化完整 HTTP exchange 时，页面会明确标记为“未捕获”，不会根据方法描述伪造请求或响应。
-
-可使用 `--port` 或 `DYNAMIC_VALIDATION_WEB_PORT` 修改端口；服务拒绝监听非 loopback 地址：
+统一 Web 工作台会从 `reports/` 重建 repo 级审计任务、阶段、覆盖率、canonical findings、动态验证与最终报告视图。默认以只读模式启动，不会执行审计：
 
 ```sh
-npm --prefix .opencode run start:dynamic-validation-web -- --port 4180
+npm --prefix .opencode run start:audit-workbench
 ```
+
+默认监听 `http://127.0.0.1:4173`。页面统一展示服务端白名单仓库、审计任务、8 阶段流水线、漏洞台账、报告记录、Agent 运行时，以及动态验证的授权 loopback 环境、隔离浏览器上下文和 extension-v2 脱敏 HTTP 请求/响应证据链。历史 v1 验证结果没有持久化 HTTP exchange 时会明确标记为“未捕获”。
+
+需要由 Web 端启动 OpenCode 时，必须显式开启 Runner，并在服务端登记允许审计的仓库。仓库需要是已 checkout 的 Git 工作树，且包含生成好的 `.opencode/opencode.json`：
+
+```sh
+npm --prefix .opencode run start:audit-workbench -- \
+  --enable-runner \
+  --repo payment=/absolute/path/to/payment-service \
+  --repo iam=/absolute/path/to/iam-service
+```
+
+浏览器只提交仓库 ID、audit ID 和 Git ref；服务端不会接收任意路径或 shell 命令，也不会自动 checkout。默认拒绝脏工作树和未位于目标 ref 的仓库。运行日志、状态和有序事件写入服务端管理的 `reports/platform/audit-runs/`，SSE 用于实时刷新。暂停、恢复和取消只作用于工作台自己创建的 OpenCode 子进程。
+
+若还需要从 Web 调度动态验证，必须额外显式启用动态 Runner：
+
+```sh
+npm --prefix .opencode run start:audit-workbench -- \
+  --enable-runner \
+  --enable-dynamic-validation \
+  --repo application=/absolute/path/to/application
+```
+
+动态页面只允许调度已经密封且尚无结果的 `JW-INJECT-06` request。操作员必须在表单中再次确认 localhost 授权测试环境，提供两个不同的专用测试账号及登录/清理步骤。凭证进入独立的临时 OpenCode 数据目录；日志按实际提交值再次脱敏，进程结束后删除整个临时会话目录。服务不会杀死或重置全局 Chrome 进程。
+
+可使用 `--port` / `AUDIT_WORKBENCH_PORT` 修改端口；服务拒绝监听非 loopback 地址。原有 `start:dynamic-validation-web` 命令作为兼容别名保留。详见 [Web 工作台架构](docs/audit-workbench.md)。创建静态审计任务不会自动触发动态验证；只有操作员在动态验证表单中的单独显式提交才构成调度请求。
 
 ## Local analysis and MCP defaults
 

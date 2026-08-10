@@ -102,13 +102,25 @@ export OPENCODE_CONFIG="$PWD/.opencode/opencode.json"
 opencode
 ```
 
-需要查看已生成的动态验证证据时，另开一个终端启动只读观测台：
+需要统一查看审计任务、漏洞、报告和已生成的动态验证证据时，另开一个终端启动只读工作台：
 
 ```sh
-npm --prefix .opencode run start:dynamic-validation-web
+npm --prefix .opencode run start:audit-workbench
 ```
 
-然后访问 `http://127.0.0.1:4173`。服务只允许监听 loopback 地址，不会启动或操作浏览器，也不会执行新的动态验证。
+然后访问 `http://127.0.0.1:4173`。服务只允许监听 loopback 地址。默认不会启动 OpenCode，也不会执行新的动态验证。
+
+允许通过 Web 创建静态审计任务时，使用 `--enable-runner` 并通过一个或多个 `--repo id=/absolute/path` 登记仓库。每个仓库必须包含 `.opencode/opencode.json`，且默认要求 Git 工作树干净：
+
+```sh
+npm --prefix .opencode run start:audit-workbench -- \
+  --enable-runner \
+  --repo application=/absolute/path/to/application
+```
+
+动态验证不会随静态审计自动运行；仍需用户单独明确授权，并提供符合安全边界的 localhost 环境和测试账号。
+
+需要通过 Web 提交上述显式授权时，再加入 `--enable-dynamic-validation`。该开关不会自动执行任何 request；操作员仍需在“动态验证”页面选择一条密封且待处理的 XSS request，并逐次填写 loopback URL、两个不同测试账号、登录步骤和清理步骤。
 
 `initial.sh` 会直接解析并检查 OpenGrep/Semgrep、`joern`、`joern-parse`、Java 及可选 GNU coreutils，同时检查核心 CLI、项目依赖、本地和全局 OpenCode 配置，以及 Coverage Ledger MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
 
