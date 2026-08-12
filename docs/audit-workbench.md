@@ -24,10 +24,11 @@
 Runner 默认关闭。启用方式：
 
 ```sh
-npm --prefix .opencode run start:audit-workbench -- \
-  --enable-runner \
+npm --prefix .opencode run start:audit-workbench:runner -- \
   --repo service-a=/absolute/path/to/service-a
 ```
+
+审计当前仓库时可以省略 `--repo`，直接运行 `npm --prefix .opencode run start:audit-workbench:runner`。若仍使用基础脚本，则必须写成 `npm --prefix .opencode run start:audit-workbench -- --enable-runner`；npm 脚本名后的参数分隔符 `--` 缺失时，开关不会传给服务进程。
 
 创建审计时执行以下门禁：
 
@@ -54,8 +55,7 @@ runner.log.jsonl
 动态验证需要独立的启动开关：
 
 ```sh
-npm --prefix .opencode run start:audit-workbench -- \
-  --enable-dynamic-validation \
+npm --prefix .opencode run start:audit-workbench:full -- \
   --repo application=/absolute/path/to/application
 ```
 
@@ -81,11 +81,15 @@ npm --prefix .opencode run start:audit-workbench -- \
 - `POST /api/v1/audits/{audit_id}/actions`：按 `If-Match` 版本执行暂停、恢复或取消。
 - `GET /api/v1/audits/{audit_id}/events`：支持 `Last-Event-ID` 和 `after=<sequence>` 的 SSE 事件流。
 - `GET /api/v1/findings`、`GET /api/v1/reports`：漏洞和报告记录。
+- `GET /api/v1/reports/{report_id}`：按服务端资源 ID 校验 SHA-256 后读取最终报告正文；浏览器不能提交文件路径。
+- `GET /api/v1/reports/{report_id}/download`：下载摘要校验通过的原始 Markdown 交付件。
 - `GET /api/v1/validation-requests`：密封动态验证请求及可调度状态。
 - `POST /api/v1/validations`：在完整显式授权门禁后启动隔离动态验证。
 - `GET /api/runs`、`GET /api/runs/{id}`：兼容动态验证证据查询。
 
 前端会连接活动审计的 SSE 流并节流刷新统一快照，断线时仍可通过手工刷新从持久制品恢复。
+
+报告中心区分三种完整性状态：`verified_model` 表示报告模型通过契约与自身摘要校验，且 Markdown 与确定性渲染结果逐字节一致；`digest_only` 表示历史报告仅记录本次扫描的 SHA-256，不能冒充模型绑定封存件；`model_mismatch` 表示发现模型但契约、摘要或渲染结果不一致，需要重新生成报告后再交付。
 
 ## 6. 当前部署假设
 

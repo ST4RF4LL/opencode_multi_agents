@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { renderFinalReport, validateFinalReportModel } from "../../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 
 const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
 const MAX_ARTIFACTS = 5000;
@@ -104,9 +105,9 @@ export async function scanReportArtifacts(reportsRoot) {
     const auditId = typeof data?.audit_id === "string" ? data.audit_id : auditIdFromFileName(path.split(sep).at(-1));
     if (!auditId) continue;
     const kind = artifactKind(rel);
-    const sha256 = kind === "final" && info.size <= MAX_ARTIFACT_BYTES
-      ? createHash("sha256").update(await readFile(path)).digest("hex")
-      : null;
+    const markdownBytes = kind === "final" && extension === ".md" && info.size <= MAX_ARTIFACT_BYTES ? await readFile(path) : null;
+    const markdown = markdownBytes === null ? null : markdownBytes.toString("utf8");
+    const sha256 = markdownBytes === null ? null : createHash("sha256").update(markdownBytes).digest("hex");
     artifacts.push({
       id: createHash("sha256").update(rel).digest("hex").slice(0, 24),
       audit_id: auditId,
@@ -117,6 +118,7 @@ export async function scanReportArtifacts(reportsRoot) {
       modified_at: info.mtime.toISOString(),
       sha256,
       data,
+      markdown,
     });
   }
   return artifacts.sort((left, right) => right.modified_at.localeCompare(left.modified_at));
@@ -165,8 +167,37 @@ function severityRank(value) {
   return ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 })[String(value ?? "").toUpperCase()] ?? -1;
 }
 
+function displayText(value, limit = 4000) {
+  const text = Array.isArray(value)
+    ? value.map(item => typeof item === "string" ? item : item?.description ?? item?.summary ?? "").filter(Boolean).join("\n")
+    : typeof value === "string"
+      ? value
+      : value?.summary ?? value?.description ?? null;
+  if (!text) return null;
+  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+}
+
+function normalizedLocations(raw) {
+  let values = raw.locations ?? raw.affected_locations ?? raw.additional_locations ?? (raw.primary_location ? [raw.primary_location] : []);
+  if (!Array.isArray(values)) values = [values];
+  if (values.length === 0 && (raw.file || raw.location)) {
+    values = [typeof raw.location === "object" ? raw.location : {
+      path: raw.file,
+      line: raw.line_start ?? raw.line,
+      line_end: raw.line_end,
+      detail: typeof raw.location === "string" ? raw.location : raw.lines,
+    }];
+  }
+  return values.slice(0, 20).map(location => ({
+    path: location?.path ?? location?.file ?? null,
+    line: location?.line ?? location?.line_start ?? null,
+    line_end: location?.line_end ?? null,
+    detail: displayText(location?.detail ?? location?.description ?? location?.snippet, 1000),
+  })).filter(location => location.path || location.detail);
+}
+
 function normalizeFinding(raw, auditId, sourcePath) {
-  const locations = raw.locations ?? raw.affected_locations ?? (raw.primary_location ? [raw.primary_location] : []);
+  const locations = normalizedLocations(raw);
   const location = locations[0] ?? {};
   return {
     id: raw.canonical_id ?? raw.finding_id ?? raw.id ?? createHash("sha256").update(`${auditId}:${sourcePath}:${raw.title ?? "finding"}`).digest("hex").slice(0, 16),
@@ -177,13 +208,13 @@ function normalizeFinding(raw, auditId, sourcePath) {
     status: raw.validation_state ?? raw.status ?? "unvalidated",
     dimension: raw.dimension ?? null,
     vulnerability_type_id: raw.vulnerability_type_id ?? raw.cwe ?? null,
-    location: {
-      path: location.path ?? location.file ?? null,
-      line: location.line ?? location.line_start ?? null,
-      detail: location.detail ?? null,
-    },
-    remediation: raw.remediation ?? null,
-    residual_uncertainty: raw.residual_uncertainty ?? null,
+    description: displayText(raw.description ?? raw.summary),
+    location,
+    locations,
+    remediation: displayText(raw.remediation),
+    residual_uncertainty: displayText(raw.residual_uncertainty),
+    source_finding_ids: (raw.source_findings ?? []).slice(0, 32).map(item => item?.finding_id ?? item?.id).filter(Boolean),
+    contradiction_count: Array.isArray(raw.contradictions) ? raw.contradictions.length : 0,
     source_path: sourcePath,
   };
 }
@@ -210,7 +241,22 @@ export function findingsFromArtifacts(artifacts) {
   }).sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
 }
 
-function reportFromArtifact(artifact) {
+function reportFromArtifact(artifact, artifacts) {
+  const model = artifacts.find(item => item.path === `final/security-audit-report-model.${artifact.audit_id}.json`)?.data ?? null;
+  let integrityState = "digest_only";
+  let integrityIssues = [];
+  if (model) {
+    try {
+      integrityIssues = validateFinalReportModel(model);
+      if (model.audit_id !== artifact.audit_id) integrityIssues.push("final-report-model-audit-mismatch");
+      if (integrityIssues.length === 0 && artifact.markdown !== renderFinalReport(model)) integrityIssues.push("final-report-not-deterministic-render");
+      integrityIssues = [...new Set(integrityIssues)];
+      integrityState = integrityIssues.length === 0 ? "verified_model" : "model_mismatch";
+    } catch {
+      integrityState = "model_mismatch";
+      integrityIssues = ["final-report-model-verification-error"];
+    }
+  }
   return {
     id: artifact.id,
     audit_id: artifact.audit_id,
@@ -220,6 +266,9 @@ function reportFromArtifact(artifact) {
     sealed_at: artifact.modified_at,
     media_type: artifact.media_type,
     sha256: artifact.sha256,
+    integrity_state: integrityState,
+    integrity_issues: integrityIssues,
+    model_digest: typeof model?.manifest_digest === "string" ? model.manifest_digest : null,
   };
 }
 
@@ -239,9 +288,11 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
     const runner = runnerById.get(auditId);
     const stages = stageSnapshot(auditArtifacts, runtimeCount);
     const lastModified = auditArtifacts.map(item => item.modified_at).sort().at(-1) ?? runner?.updated_at ?? null;
-    const completed = stages.at(-1).state === "completed";
-    const lastCompletedIndex = stages.reduce((last, stage, index) => stage.state === "completed" ? index : last, -1);
-    const progress = completed ? 100 : Math.max(0, Math.round(((lastCompletedIndex + 1) / stages.length) * 100));
+    const completedCount = stages.filter(stage => stage.state === "completed").length;
+    const completed = completedCount === stages.length;
+    const progress = Math.round((completedCount / stages.length) * 100);
+    const activeStage = stages.find(stage => stage.state === "active");
+    const discontinuous = !activeStage && !completed && completedCount > 0;
     return {
       id: auditId,
       name: runner?.name ?? `仓库级安全审计 · ${auditId}`,
@@ -251,7 +302,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       status: runner?.status ?? (completed ? "completed" : "artifact_only"),
       version: runner?.version ?? 1,
       event_sequence: runner?.event_sequence ?? 0,
-      stage: stages.find(stage => stage.state === "active")?.label ?? stages.filter(stage => stage.state === "completed").at(-1)?.label ?? "等待开始",
+      stage: activeStage?.label ?? (discontinuous ? "制品不连续" : completed ? "报告封存" : "等待开始"),
       stages,
       progress,
       finding_count: findings.filter(finding => finding.audit_id === auditId).length,
@@ -270,7 +321,7 @@ export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [],
   const artifacts = await scanReportArtifacts(reportsRoot);
   const findings = findingsFromArtifacts(artifacts);
   const audits = auditsFromArtifacts(artifacts, validationRuns, runnerAudits);
-  const reports = artifacts.filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown").map(reportFromArtifact);
+  const reports = artifacts.filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown").map(artifact => reportFromArtifact(artifact, artifacts));
   const severity = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
   for (const finding of findings) {
     const key = finding.severity.toLowerCase();
@@ -290,6 +341,6 @@ export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [],
     audits,
     findings,
     reports,
-    artifacts: artifacts.map(({ data, ...metadata }) => metadata),
+    artifacts: artifacts.map(({ data, markdown, ...metadata }) => metadata),
   };
 }

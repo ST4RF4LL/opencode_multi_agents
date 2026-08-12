@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { createServer as createHttpServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuditRunner } from "./audit-runner.mjs";
 import { getValidationRun, listValidationRequests, listValidationRuns } from "./model.mjs";
@@ -18,6 +19,7 @@ const DEFAULT_STAGE_REGISTRY = join(PROJECT_ROOT, ".opencode", "skills", "common
 const DEFAULT_ROLES = join(PROJECT_ROOT, ".opencode", "agent-manifest", "roles.json");
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const MAX_REQUEST_BODY = 64 * 1024;
+const MAX_REPORT_BODY = 8 * 1024 * 1024;
 const STATIC_FILES = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
@@ -89,6 +91,23 @@ function matchAuditPath(pathname, suffix = "") {
     : /^\/api\/v1\/audits\/([^/]+)$/;
   const match = pathname.match(pattern);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function matchReportPath(pathname, suffix = "") {
+  const pattern = suffix
+    ? new RegExp(`^/api/v1/reports/([^/]+)/${suffix}$`)
+    : /^\/api\/v1\/reports\/([^/]+)$/;
+  const match = pathname.match(pattern);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function scopedResourceId(repositoryId, localId) {
+  return createHash("sha256").update(`${repositoryId}\0${localId}`).digest("hex").slice(0, 24);
+}
+
+function isWithin(root, candidate) {
+  const value = relative(root, candidate);
+  return value !== "" && !value.startsWith(`..${sep}`) && value !== ".." && !isAbsolute(value);
 }
 
 function filterFindings(findings, url) {
@@ -219,11 +238,39 @@ export function createAuditWorkbenchServer({
         repository_name: audit.repository_name ?? source.repository_name,
       }));
       value.findings = value.findings.map(finding => ({ ...finding, repository_id: source.repository_id, repository_name: source.repository_name }));
-      value.reports = value.reports.map(report => ({ ...report, repository_id: source.repository_id, repository_name: source.repository_name }));
-      value.artifacts = value.artifacts.map(artifact => ({ ...artifact, repository_id: source.repository_id }));
+      value.reports = value.reports.map(report => ({
+        ...report,
+        id: scopedResourceId(source.repository_id, report.id),
+        repository_id: source.repository_id,
+        repository_name: source.repository_name,
+      }));
+      value.artifacts = value.artifacts.map(artifact => ({
+        ...artifact,
+        id: scopedResourceId(source.repository_id, artifact.id),
+        repository_id: source.repository_id,
+      }));
       snapshots.push(value);
     }
     return mergeSnapshots(snapshots);
+  }
+
+  async function reportContent(reportId) {
+    const data = await snapshot();
+    const report = data.reports.find(item => item.id === reportId);
+    if (!report) throw Object.assign(new Error("没有找到最终报告。"), { statusCode: 404, code: "report-not-found" });
+    const source = runner.artifactSources().find(item => item.repository_id === report.repository_id);
+    if (!source) throw Object.assign(new Error("报告所属仓库不再可用。"), { statusCode: 409, code: "report-source-unavailable" });
+    const [root, candidate] = await Promise.all([
+      realpath(source.reports_root),
+      realpath(resolve(source.reports_root, report.path)),
+    ]);
+    if (!isWithin(root, candidate)) throw Object.assign(new Error("报告路径越出受控制品目录。"), { statusCode: 409, code: "report-path-invalid" });
+    const info = await stat(candidate);
+    if (!info.isFile() || info.size > MAX_REPORT_BODY) throw Object.assign(new Error("报告文件不可读取或超过大小限制。"), { statusCode: 413, code: "report-body-too-large" });
+    const bytes = await readFile(candidate);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (!report.sha256 || digest !== report.sha256) throw Object.assign(new Error("报告内容与记录摘要不一致，请刷新制品后重试。"), { statusCode: 409, code: "report-digest-mismatch" });
+    return { report, bytes, digest };
   }
 
   const server = createHttpServer(async (request, response) => {
@@ -303,6 +350,26 @@ export function createAuditWorkbenchServer({
       if (request.method === "GET" && url.pathname === "/api/v1/reports") {
         const data = await snapshot();
         json(response, 200, { items: data.reports, count: data.reports.length });
+        return;
+      }
+      const reportDownloadId = matchReportPath(url.pathname, "download");
+      if (request.method === "GET" && reportDownloadId) {
+        const { report, bytes, digest } = await reportContent(reportDownloadId);
+        const fileName = `security-audit-report.${String(report.audit_id).replaceAll(/[^A-Za-z0-9._-]/g, "-")}.md`;
+        response.writeHead(200, {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Content-Length": bytes.length,
+          "Content-Disposition": `attachment; filename="${fileName}"`,
+          "Cache-Control": "no-store",
+          ETag: `"sha256-${digest}"`,
+        });
+        response.end(bytes);
+        return;
+      }
+      const reportId = matchReportPath(url.pathname);
+      if (request.method === "GET" && reportId) {
+        const { report, bytes } = await reportContent(reportId);
+        json(response, 200, { ...report, body: bytes.toString("utf8") });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/validation-requests") {

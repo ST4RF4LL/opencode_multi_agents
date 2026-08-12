@@ -18,7 +18,7 @@ const VIEW_META = {
   projects: ["审计项目", "资产管理 / 服务端白名单"],
   audits: ["审计任务", "任务中心 / 端到端运行"],
   findings: ["漏洞发现", "风险中心 / canonical findings"],
-  reports: ["审计报告", "交付中心 / 封存报告"],
+  reports: ["审计报告", "交付中心 / 完整性记录"],
   validation: ["动态验证", "验证中心 / localhost 证据"],
   runtime: ["Agent 运行时", "平台管理 / OpenCode runner"],
 };
@@ -111,7 +111,7 @@ function renderMetrics() {
   grid.replaceChildren(
     metric("审计任务", summary.audit_count ?? 0, `${summary.active_audits ?? 0} 个运行中`),
     metric("canonical 漏洞", summary.finding_count ?? 0, `${summary.severity?.critical ?? 0} 个严重`),
-    metric("封存报告", summary.report_count ?? 0, "Markdown 交付件"),
+    metric("最终报告", summary.report_count ?? 0, "模型验证或摘要记录"),
     metric("动态验证", summary.validation_run_count ?? 0, "显式授权的 localhost 运行"),
     metric("白名单仓库", state.repositories.length, `${state.repositories.filter(repo => repo.configured).length} 个配置就绪`),
   );
@@ -251,7 +251,11 @@ function renderFindings() {
   for (const finding of findings) {
     const row = element("tr");
     cell(row, finding.severity, `severity ${finding.severity}`);
-    const identity = element("td"); identity.append(element("strong", "", finding.title), element("small", "mono", finding.id)); row.append(identity);
+    const identity = element("td");
+    const open = element("button", "finding-link", finding.title);
+    open.type = "button";
+    open.addEventListener("click", () => openFinding(finding));
+    identity.append(open, element("small", "mono", finding.id)); row.append(identity);
     cell(row, `${finding.audit_id} · ${finding.dimension ?? "—"}`);
     cell(row, `${finding.location.path ?? "—"}${finding.location.line ? `:${finding.location.line}` : ""}`, "mono");
     const stateCell = element("td"); stateCell.append(status(finding.status)); row.append(stateCell);
@@ -260,16 +264,85 @@ function renderFindings() {
   $("finding-table").replaceChildren(value);
 }
 
+function findingSection(label, value) {
+  const section = element("section", "finding-section");
+  section.append(element("h3", "", label), element("p", "", value ?? "未记录。"));
+  return section;
+}
+
+function openFinding(finding) {
+  $("finding-detail-title").textContent = finding.title;
+  $("finding-detail-subtitle").textContent = `${finding.audit_id} · ${finding.id}`;
+  const facts = $("finding-detail-facts");
+  facts.replaceChildren();
+  [["等级", finding.severity], ["CVSS", finding.cvss_score], ["维度", finding.dimension], ["漏洞类型", finding.vulnerability_type_id], ["验证状态", finding.status], ["来源制品", finding.source_path]].forEach(([label, value]) => {
+    const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
+  });
+  const locations = element("div", "finding-locations");
+  for (const location of finding.locations ?? []) {
+    locations.append(element("p", "mono", `${location.path ?? "—"}${location.line ? `:${location.line}${location.line_end ? `-${location.line_end}` : ""}` : ""}${location.detail ? ` · ${location.detail}` : ""}`));
+  }
+  if (!locations.childElementCount) locations.append(element("p", "", "未记录源码位置。"));
+  const sourceNote = finding.source_finding_ids?.length
+    ? `关联来源：${finding.source_finding_ids.join("、")}。${finding.contradiction_count ? `存在 ${finding.contradiction_count} 条矛盾记录。` : "未记录矛盾。"}`
+    : finding.contradiction_count ? `存在 ${finding.contradiction_count} 条矛盾记录。` : "未记录来源 finding 关联。";
+  $("finding-detail-body").replaceChildren(
+    findingSection("漏洞说明", finding.description),
+    findingSection("修复建议", finding.remediation),
+    findingSection("残余不确定性", finding.residual_uncertainty),
+    findingSection("证据位置", null),
+    locations,
+    findingSection("关联与矛盾", sourceNote),
+  );
+  $("finding-dialog").showModal();
+}
+
 function renderReports() {
   const cards = state.workspace.reports.map(report => {
     const card = element("article", "report-card");
-    card.append(element("p", "eyebrow", "SEALED MARKDOWN"), element("h3", "", report.name), element("p", "mono", report.path));
+    const integrity = report.integrity_state === "verified_model"
+      ? ["MODEL VERIFIED", "模型与 Markdown 已完成确定性字节校验", "verified_model"]
+      : report.integrity_state === "model_mismatch"
+        ? ["MODEL MISMATCH", "报告模型或 Markdown 校验失败", "model_mismatch"]
+        : ["DIGEST RECORD", "历史报告仅记录当前 SHA-256，未发现报告模型", "digest_only"];
+    card.append(element("p", "eyebrow", integrity[0]), element("h3", "", report.name), element("p", "mono", report.path), element("span", `status ${integrity[2]}`, integrity[1]));
     const footer = element("footer", "", `${report.repository_name ?? "—"} · SHA-256 ${short(report.sha256, 16)} · ${bytes(report.size)} · ${formatDate(report.sealed_at)}`);
-    card.append(footer);
+    const actions = element("div", "report-actions");
+    const preview = element("button", "button primary", "查看报告");
+    preview.type = "button";
+    preview.addEventListener("click", () => openReport(report));
+    const download = element("a", "button secondary", "下载 Markdown");
+    download.href = `/api/v1/reports/${encodeURIComponent(report.id)}/download`;
+    actions.append(preview, download);
+    card.append(footer, actions);
     return card;
   });
   $("report-grid").replaceChildren(...cards);
   if (!cards.length) $("report-grid").append(element("div", "panel empty-state", "尚未发现最终封存报告。"));
+}
+
+async function openReport(report) {
+  const dialog = $("report-dialog");
+  $("report-title").textContent = report.name;
+  $("report-subtitle").textContent = `${report.repository_name ?? "—"} · ${report.path}`;
+  $("report-digest").textContent = report.sha256 ?? "—";
+  const integrityLabels = { verified_model: "模型绑定并通过确定性字节校验", model_mismatch: "模型或 Markdown 校验失败", digest_only: "仅记录当前 SHA-256，未发现报告模型" };
+  $("report-integrity").textContent = integrityLabels[report.integrity_state] ?? report.integrity_state ?? "未知";
+  const note = $("report-integrity-note");
+  note.hidden = report.integrity_state === "verified_model";
+  note.textContent = report.integrity_state === "model_mismatch"
+    ? `该报告不能作为模型绑定封存件使用。校验问题：${(report.integrity_issues ?? []).join("、") || "未知"}`
+    : "该历史报告可以预览和下载，但当前只能证明本次读取内容与展示摘要一致，不能证明它来自确定性报告模型。";
+  $("report-preview").textContent = "正在校验封存摘要并读取报告…";
+  $("report-download").href = `/api/v1/reports/${encodeURIComponent(report.id)}/download`;
+  dialog.showModal();
+  try {
+    const value = await api(`/api/v1/reports/${encodeURIComponent(report.id)}`);
+    $("report-preview").textContent = value.body;
+  } catch (error) {
+    $("report-preview").textContent = `报告读取失败：${error.message}`;
+    showError(error);
+  }
 }
 
 function renderValidationList() {
@@ -345,7 +418,7 @@ function renderRuntime() {
   const runner = state.runtime?.runner ?? {};
   const dynamicRunner = state.runtime?.dynamic_runner ?? {};
   $("runtime-grid").replaceChildren(
-    metric("运行驱动", runner.enabled ? "已启用" : "只读", runner.enabled ? "可以提交 OpenCode 审计" : "使用 --enable-runner 开启"),
+    metric("运行驱动", runner.enabled ? "已启用" : "只读", runner.enabled ? "可以提交 OpenCode 审计" : "运行 start:audit-workbench:runner 开启"),
     metric("活跃进程", runner.active_processes ?? 0, "仅跟踪本服务启动的子进程"),
     metric("登记仓库", runner.registered_repositories ?? 0, "服务端白名单"),
     metric("审计制品", state.workspace.artifacts.length, "已解析的报告元数据"),
@@ -360,7 +433,7 @@ function renderAll() {
   $("runner-pulse").classList.toggle("online", enabled);
   $("engine-caption").textContent = `${state.repositories.length} 个仓库 · ${state.workspace.artifacts.length} 个制品`;
   $("new-audit").disabled = !enabled;
-  $("new-audit").title = enabled ? "创建审计" : "请使用 --enable-runner 启动服务";
+  $("new-audit").title = enabled ? "创建审计" : "请运行 npm --prefix .opencode run start:audit-workbench:runner";
 }
 
 function connectEventStream() {
@@ -462,7 +535,7 @@ async function submitValidation(event) {
 }
 
 function openAuditDialog(repositoryId = null) {
-  if (!state.runtime?.runner?.enabled) { toast("运行驱动未启用，请以 --enable-runner 启动工作台。"); return; }
+  if (!state.runtime?.runner?.enabled) { toast("运行驱动未启用，请运行 npm --prefix .opencode run start:audit-workbench:runner。"); return; }
   const select = $("repository-select");
   select.replaceChildren(...state.repositories.filter(repo => repo.configured && repo.git_repository).map(repo => {
     const option = element("option", "", `${repo.name} · ${repo.branch ?? "HEAD"}`); option.value = repo.id; return option;
@@ -505,6 +578,8 @@ document.querySelectorAll("[data-go]").forEach(button => button.addEventListener
 document.querySelectorAll("[data-open-audit]").forEach(button => button.addEventListener("click", () => openAuditDialog()));
 document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => $("audit-dialog").close()));
 document.querySelectorAll("[data-close-validation]").forEach(button => button.addEventListener("click", () => $("validation-dialog").close()));
+document.querySelectorAll("[data-close-report]").forEach(button => button.addEventListener("click", () => $("report-dialog").close()));
+document.querySelectorAll("[data-close-finding]").forEach(button => button.addEventListener("click", () => $("finding-dialog").close()));
 $("new-audit").addEventListener("click", () => openAuditDialog());
 $("refresh").addEventListener("click", () => load().then(() => toast("制品与运行状态已刷新")).catch(showError));
 $("finding-query").addEventListener("input", renderFindings);

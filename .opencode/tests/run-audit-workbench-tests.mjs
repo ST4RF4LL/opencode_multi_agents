@@ -13,6 +13,7 @@ import { AuditRunner } from "../web/dynamic-validation-observatory/audit-runner.
 import { DynamicValidationRunner } from "../web/dynamic-validation-observatory/validation-runner.mjs";
 import { buildWorkspaceSnapshot } from "../web/dynamic-validation-observatory/workspace-model.mjs";
 import { createAuditWorkbenchServer, parseArgs } from "../web/dynamic-validation-observatory/server.mjs";
+import { finalReportModelDigest, renderFinalReport } from "../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 import { buildWebXssInputEnvelope, buildWebXssRuntimeRequest } from "./fixtures/web-xss-runtime-fixture.mjs";
 
 const OPENCODE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,6 +40,36 @@ const reportsRoot = join(repositoryRoot, "reports");
 const stateRoot = join(temp, "state");
 const runtimeRoot = join(reportsRoot, "validation-handoff", "runtime");
 
+function finalReportModel(auditId) {
+  const model = {
+    schema_version: 1,
+    audit_id: auditId,
+    scope_digest: "a".repeat(64),
+    report_kind: "FINAL",
+    coverage: {
+      summary_digest: "b".repeat(64),
+      coverage_status: "COMPLETE",
+      seal_state: "FINALIZED_COMPLETE",
+      policy_mode: "assurance",
+      policy_satisfied: true,
+      metrics: [],
+    },
+    inputs: {
+      coverage_summary: "reports/coverage/summary.json",
+      adjudication_input: "reports/adjudication/input.json",
+      adjudication: "reports/adjudication/decision.json",
+      cvss_assessment: "reports/adjudication/cvss.json",
+      attack_chains: "reports/attack-chains/chains.json",
+    },
+    findings: [],
+    excluded_findings: [],
+    chains: [],
+    rejected_chains: [],
+  };
+  model.manifest_digest = finalReportModelDigest(model);
+  return model;
+}
+
 try {
   await mkdir(join(repositoryRoot, ".opencode"), { recursive: true });
   await mkdir(join(reportsRoot, "coverage"), { recursive: true });
@@ -54,9 +85,26 @@ try {
   }), "utf8");
   await writeFile(join(reportsRoot, "correlation", "correlation.audit-history.json"), JSON.stringify({
     audit_id: "audit-history",
-    canonical_findings: [{ canonical_id: "F-001", title: "越权读取测试记录", severity: "HIGH", dimension: "D1", locations: [{ path: "src/api.js", line: 12 }] }],
+    canonical_findings: [{
+      canonical_id: "F-001",
+      title: "越权读取测试记录",
+      description: "服务未校验记录归属。",
+      severity: "HIGH",
+      dimension: "D1",
+      locations: [{ path: "src/api.js", line: 12, detail: "缺少 ownership guard" }],
+      remediation: "按当前主体校验记录所有权。",
+      residual_uncertainty: ["运行时路由部署状态未确认。"],
+      source_findings: [{ finding_id: "SOURCE-001" }],
+      contradictions: [],
+    }],
   }), "utf8");
   await writeFile(join(reportsRoot, "final", "security-audit-report.audit-history.md"), "# 安全审计报告\n", "utf8");
+  const verifiedModel = finalReportModel("audit-sealed");
+  await writeFile(join(reportsRoot, "final", "security-audit-report-model.audit-sealed.json"), `${JSON.stringify(verifiedModel, null, 2)}\n`, "utf8");
+  await writeFile(join(reportsRoot, "final", "security-audit-report.audit-sealed.md"), renderFinalReport(verifiedModel), "utf8");
+  const mismatchedModel = finalReportModel("audit-mismatch");
+  await writeFile(join(reportsRoot, "final", "security-audit-report-model.audit-mismatch.json"), `${JSON.stringify(mismatchedModel, null, 2)}\n`, "utf8");
+  await writeFile(join(reportsRoot, "final", "security-audit-report.audit-mismatch.md"), `${renderFinalReport(mismatchedModel)}手工篡改\n`, "utf8");
 
   execFileSync("git", ["init", "-q", repositoryRoot]);
   execFileSync("git", ["-C", repositoryRoot, "config", "user.name", "Audit Test"]);
@@ -75,12 +123,23 @@ try {
   await writeFile(join(validationAuditRoot, "envelope-input.json"), `${JSON.stringify(validationEnvelope, null, 2)}\n`, "utf8");
 
   const snapshot = await buildWorkspaceSnapshot({ reportsRoot });
-  assert.equal(snapshot.summary.audit_count, 2);
+  assert.equal(snapshot.summary.audit_count, 4);
   assert.equal(snapshot.summary.finding_count, 1);
-  assert.equal(snapshot.summary.report_count, 1);
-  assert.match(snapshot.reports[0].sha256, /^[a-f0-9]{64}$/);
-  assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").progress, 100);
+  assert.equal(snapshot.summary.report_count, 3);
+  assert(snapshot.reports.every(report => /^[a-f0-9]{64}$/.test(report.sha256)));
+  assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").progress, 63);
+  assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").stage, "制品不连续");
+  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-history").integrity_state, "digest_only");
+  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").integrity_state, "verified_model");
+  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").model_digest, verifiedModel.manifest_digest);
+  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-mismatch").integrity_state, "model_mismatch");
+  assert(snapshot.reports.find(report => report.audit_id === "audit-mismatch").integrity_issues.includes("final-report-not-deterministic-render"));
   assert.equal(snapshot.findings[0].id, "F-001");
+  assert.equal(snapshot.findings[0].description, "服务未校验记录归属。");
+  assert.equal(snapshot.findings[0].remediation, "按当前主体校验记录所有权。");
+  assert.equal(snapshot.findings[0].residual_uncertainty, "运行时路由部署状态未确认。");
+  assert.deepEqual(snapshot.findings[0].source_finding_ids, ["SOURCE-001"]);
+  assert.equal(snapshot.findings[0].locations[0].detail, "缺少 ownership guard");
 
   let spawnCall = null;
   const child = new FakeChild();
@@ -125,6 +184,21 @@ try {
     const workspace = await workspaceResponse.json();
     assert.equal(workspace.summary.finding_count, 1);
     assert.equal(workspace.audits[0].repository_id, "fixture");
+    const historyReport = workspace.reports.find(item => item.audit_id === "audit-history");
+    assert.match(historyReport.id, /^[a-f0-9]{24}$/);
+    assert.notEqual(historyReport.id, snapshot.reports.find(item => item.audit_id === "audit-history").id);
+
+    const reportResponse = await fetch(`${base}/api/v1/reports/${historyReport.id}`);
+    assert.equal(reportResponse.status, 200);
+    const report = await reportResponse.json();
+    assert.equal(report.body, "# 安全审计报告\n");
+    assert.equal(report.sha256, historyReport.sha256);
+    assert.equal(report.integrity_state, "digest_only");
+    const reportDownload = await fetch(`${base}/api/v1/reports/${historyReport.id}/download`);
+    assert.equal(reportDownload.status, 200);
+    assert.match(reportDownload.headers.get("content-disposition"), /security-audit-report\.audit-history\.md/);
+    assert.equal(await reportDownload.text(), "# 安全审计报告\n");
+    assert.equal((await fetch(`${base}/api/v1/reports/not-found`)).status, 404);
 
     const createResponse = await fetch(`${base}/api/v1/audits`, {
       method: "POST",
@@ -259,7 +333,22 @@ try {
 
     const indexResponse = await fetch(`${base}/`);
     assert.equal(indexResponse.status, 200);
-    assert.match(await indexResponse.text(), /OpenCode 安全审计工作台/);
+    const indexHtml = await indexResponse.text();
+    assert.match(indexHtml, /OpenCode 安全审计工作台/);
+    assert.match(indexHtml, /id="report-dialog"/);
+    assert.match(indexHtml, /id="finding-dialog"/);
+    assert.doesNotMatch(indexHtml, /<script(?![^>]+src=)[^>]*>/i);
+    const appResponse = await fetch(`${base}/app.js`);
+    const stylesResponse = await fetch(`${base}/styles.css`);
+    assert.equal(appResponse.status, 200);
+    assert.equal(stylesResponse.status, 200);
+    const appSource = await appResponse.text();
+    const stylesSource = await stylesResponse.text();
+    assert.match(appSource, /npm --prefix \.opencode run start:audit-workbench:runner/);
+    const referencedIds = [...appSource.matchAll(/\$\("([A-Za-z0-9_-]+)"\)/g)].map(match => match[1]);
+    assert.deepEqual([...new Set(referencedIds)].filter(id => !indexHtml.includes(`id="${id}"`)), []);
+    assert.match(stylesSource, /@media \(max-width: 1080px\)/);
+    assert.match(stylesSource, /@media \(max-width: 760px\)/);
   } finally {
     server.close();
     await once(server, "close");
@@ -301,7 +390,7 @@ try {
   assert.equal(recoveredRunner.getRun(recoveryId).ephemeral_cleanup, "SUCCEEDED");
   await assert.rejects(stat(orphanSession), error => error.code === "ENOENT");
 
-  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: 54 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: 92 })}\n`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

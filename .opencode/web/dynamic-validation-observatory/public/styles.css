@@ -19,6 +19,7 @@
 html { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; background: var(--canvas); color: var(--ink); }
 body { margin: 0; min-width: 320px; }
 button, input, select { font: inherit; }
+a.button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 button { cursor: pointer; }
 code, .mono { font-family: "SFMono-Regular", Consolas, monospace; }
 [hidden] { display: none !important; }
@@ -91,6 +92,9 @@ main { padding: 30px 34px 48px; max-width: 1600px; margin: 0 auto; }
 .status.running, .status.completed, .status.supported_runtime { color: var(--green); background: var(--green-soft); }
 .status.failed, .status.cancelled, .status.critical { color: var(--red); background: var(--red-soft); }
 .status.paused, .status.artifact_only, .status.high { color: var(--amber); background: var(--amber-soft); }
+.status.verified_model { color: var(--green); background: var(--green-soft); }
+.status.digest_only { color: var(--amber); background: var(--amber-soft); }
+.status.model_mismatch { color: var(--red); background: var(--red-soft); }
 .severity-chart { display: grid; gap: 16px; }
 .severity-row { display: grid; grid-template-columns: 58px 1fr 30px; align-items: center; gap: 10px; font-size: 11px; }
 .severity-row .bar { height: 8px; overflow: hidden; background: #edf0ee; border-radius: 8px; }
@@ -107,6 +111,8 @@ main { padding: 30px 34px 48px; max-width: 1600px; margin: 0 auto; }
 .table tbody tr.clickable:hover { background: #f7faf8; cursor: pointer; }
 .table strong, .table small { display: block; }
 .table small { margin-top: 4px; color: var(--muted); }
+.finding-link { display: block; padding: 0; color: var(--ink); background: none; border: 0; font-weight: 700; text-align: left; }
+.finding-link:hover { color: var(--green); text-decoration: underline; }
 .health-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--red); }
 .health-dot.ok { background: var(--green); }
 .split { display: grid; grid-template-columns: minmax(520px, 1.4fr) minmax(300px, .7fr); gap: 18px; align-items: start; }
@@ -141,6 +147,21 @@ main { padding: 30px 34px 48px; max-width: 1600px; margin: 0 auto; }
 .report-card h3 { margin: 12px 0 8px; font: 700 17px/1.35 Georgia, "Songti SC", serif; }
 .report-card p { margin: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .report-card footer { margin-top: auto; padding-top: 16px; color: #79847f; border-top: 1px solid var(--line); font-size: 10px; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.report-dialog { width: min(960px, calc(100vw - 30px)); }
+.report-dialog-body { padding: 25px; }
+.report-dialog-body .dialog-heading p:last-child { max-width: 680px; margin: 7px 0 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.report-seal { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 14px; padding: 12px 14px; background: var(--green-soft); border: 1px solid #cce3d7; border-radius: 8px; }
+.report-seal dt { color: var(--muted); font-size: 9px; }
+.report-seal dd { margin: 5px 0 0; color: var(--green); font-size: 11px; overflow-wrap: anywhere; }
+.report-integrity-note { color: #76501a; background: var(--amber-soft); border: 1px solid #f0d3a7; }
+.report-preview { width: 100%; min-height: 420px; max-height: 62vh; overflow: auto; margin: 0; padding: 20px; color: #dcebe3; background: var(--night); border-radius: 9px; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-dialog { width: min(800px, calc(100vw - 30px)); }
+.finding-detail-body { display: grid; gap: 12px; }
+.finding-section { padding: 14px; background: #f7f9f7; border: 1px solid var(--line); border-radius: 8px; }
+.finding-section h3 { margin: 0 0 7px; font-size: 11px; }
+.finding-section p, .finding-locations p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-locations { display: grid; gap: 7px; margin-top: -12px; padding: 0 14px 14px; background: #f7f9f7; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; }
 
 .validation-split { grid-template-columns: minmax(360px, .7fr) minmax(500px, 1.3fr); }
 .request-panel { margin-bottom: 18px; }
@@ -198,4 +219,5 @@ dialog label.check input { width: 16px; height: 16px; }
   .page-heading { align-items: flex-start; flex-direction: column; }
   .search { width: 100%; min-width: 0; }
   .form-row { grid-template-columns: 1fr; }
+  .report-seal { grid-template-columns: 1fr; }
 }

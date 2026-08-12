@@ -256,7 +256,11 @@ async function main() {
     && await exists(join(OPENCODE, "web/dynamic-validation-observatory/validation-runner.mjs"))
     && await exists(join(OPENCODE, "web/dynamic-validation-observatory/workspace-model.mjs"))
     && packageConfig.scripts["test:audit-workbench"]?.includes("run-audit-workbench-tests.mjs")
-    && packageConfig.scripts["start:audit-workbench"]?.includes("dynamic-validation-observatory/server.mjs"),
+    && packageConfig.scripts["start:audit-workbench"]?.includes("dynamic-validation-observatory/server.mjs")
+    && packageConfig.scripts["start:audit-workbench:runner"]?.includes("--enable-runner")
+    && packageConfig.scripts["start:audit-workbench:full"]?.includes("--enable-runner --enable-dynamic-validation")
+    && packageConfig.scripts["start:dynamic-validation-web:runner"]?.includes("--enable-runner")
+    && packageConfig.scripts["start:dynamic-validation-web:full"]?.includes("--enable-runner --enable-dynamic-validation"),
   "OpenCode audit workbench is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");

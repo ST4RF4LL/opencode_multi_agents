@@ -48,7 +48,7 @@
 
           <section id="view-findings" class="view"><div class="page-heading"><div><p class="eyebrow">FINDING LEDGER</p><h2>漏洞发现</h2><p>优先展示证据关联后的 canonical finding，并保留来源制品。</p></div><label class="search"><span>⌕</span><input id="finding-query" placeholder="搜索漏洞、文件或 ID"></label></div><article class="panel"><div id="finding-table" class="data-table"></div></article></section>
 
-          <section id="view-reports" class="view"><div class="page-heading"><div><p class="eyebrow">SEALED DELIVERY</p><h2>审计报告</h2><p>最终中文 Markdown 报告及其封存记录。</p></div></div><div id="report-grid" class="report-grid"></div></section>
+          <section id="view-reports" class="view"><div class="page-heading"><div><p class="eyebrow">REPORT DELIVERY</p><h2>审计报告</h2><p>最终中文 Markdown 报告、模型绑定状态与内容摘要记录。</p></div></div><div id="report-grid" class="report-grid"></div></section>
 
           <section id="view-validation" class="view"><div class="page-heading"><div><p class="eyebrow">AUTHORIZED RUNTIME EVIDENCE</p><h2>动态验证</h2><p>只有密封的 JW-INJECT-06 请求、显式 localhost 授权和两个专用测试账号齐备时才能调度。</p></div></div><article class="panel request-panel"><div class="section-title"><div><p class="eyebrow">SEALED REQUESTS</p><h2>待验证请求</h2></div><span id="dynamic-runner-caption" class="status">读取中</span></div><div id="validation-request-list" class="request-list"></div></article><div class="split validation-split"><article class="panel"><div class="section-title"><div><p class="eyebrow">RESULTS</p><h2>验证结果</h2></div></div><div id="validation-list" class="audit-list"></div></article><aside id="validation-detail" class="panel detail-panel"><div class="empty-state">选择一次验证查看环境和脱敏 HTTP 证据。</div></aside></div></section>
 
@@ -83,6 +83,23 @@
         <div id="validation-form-error" class="notice error" hidden></div>
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-validation>取消</button><button id="submit-validation" class="button primary" type="submit">启动隔离验证</button></div>
       </form>
+    </dialog>
+    <dialog id="report-dialog" class="report-dialog">
+      <article class="report-dialog-body">
+        <div class="dialog-heading"><div><p class="eyebrow">SEALED REPORT</p><h2 id="report-title">安全审计报告</h2><p id="report-subtitle"></p></div><button type="button" class="icon-button" data-close-report aria-label="关闭报告">×</button></div>
+        <dl class="report-seal"><div><dt>SHA-256 内容摘要</dt><dd id="report-digest" class="mono">—</dd></div><div><dt>完整性状态</dt><dd id="report-integrity">—</dd></div></dl>
+        <p id="report-integrity-note" class="notice report-integrity-note" hidden></p>
+        <pre id="report-preview" class="report-preview" tabindex="0">正在读取报告…</pre>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-report>关闭</button><a id="report-download" class="button primary" href="#">下载原始 Markdown</a></div>
+      </article>
+    </dialog>
+    <dialog id="finding-dialog" class="finding-dialog">
+      <article class="report-dialog-body">
+        <div class="dialog-heading"><div><p class="eyebrow">CANONICAL FINDING</p><h2 id="finding-detail-title">漏洞详情</h2><p id="finding-detail-subtitle"></p></div><button type="button" class="icon-button" data-close-finding aria-label="关闭漏洞详情">×</button></div>
+        <dl id="finding-detail-facts" class="detail-facts"></dl>
+        <div id="finding-detail-body" class="finding-detail-body"></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-finding>关闭</button></div>
+      </article>
     </dialog>
     <div id="toast" class="toast" role="status"></div>
     <script type="module" src="/app.js"></script>

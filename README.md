@@ -167,26 +167,25 @@ npm --prefix .opencode run start:audit-workbench
 需要由 Web 端启动 OpenCode 时，必须显式开启 Runner，并在服务端登记允许审计的仓库。仓库需要是已 checkout 的 Git 工作树，且包含生成好的 `.opencode/opencode.json`：
 
 ```sh
-npm --prefix .opencode run start:audit-workbench -- \
-  --enable-runner \
+npm --prefix .opencode run start:audit-workbench:runner -- \
   --repo payment=/absolute/path/to/payment-service \
   --repo iam=/absolute/path/to/iam-service
 ```
+
+审计当前仓库、不需要额外 `--repo` 时可直接运行 `npm --prefix .opencode run start:audit-workbench:runner`。如果使用基础脚本手工追加参数，npm 的参数分隔符 `--` 不能省略：`npm ... run start:audit-workbench -- --enable-runner`；写成 `npm ... run start:audit-workbench --enable-runner` 会被 npm 当成自身配置并吞掉。
 
 浏览器只提交仓库 ID、audit ID 和 Git ref；服务端不会接收任意路径或 shell 命令，也不会自动 checkout。默认拒绝脏工作树和未位于目标 ref 的仓库。运行日志、状态和有序事件写入服务端管理的 `reports/platform/audit-runs/`，SSE 用于实时刷新。暂停、恢复和取消只作用于工作台自己创建的 OpenCode 子进程。
 
 若还需要从 Web 调度动态验证，必须额外显式启用动态 Runner：
 
 ```sh
-npm --prefix .opencode run start:audit-workbench -- \
-  --enable-runner \
-  --enable-dynamic-validation \
+npm --prefix .opencode run start:audit-workbench:full -- \
   --repo application=/absolute/path/to/application
 ```
 
 动态页面只允许调度已经密封且尚无结果的 `JW-INJECT-06` request。操作员必须在表单中再次确认 localhost 授权测试环境，提供两个不同的专用测试账号及登录/清理步骤。凭证进入独立的临时 OpenCode 数据目录；日志按实际提交值再次脱敏，进程结束后删除整个临时会话目录。服务不会杀死或重置全局 Chrome 进程。
 
-可使用 `--port` / `AUDIT_WORKBENCH_PORT` 修改端口；服务拒绝监听非 loopback 地址。原有 `start:dynamic-validation-web` 命令作为兼容别名保留。详见 [Web 工作台架构](docs/audit-workbench.md)。创建静态审计任务不会自动触发动态验证；只有操作员在动态验证表单中的单独显式提交才构成调度请求。
+可使用 `--port` / `AUDIT_WORKBENCH_PORT` 修改端口；通过 npm 追加 `--port`、`--repo` 等参数时同样要放在 `--` 之后。服务拒绝监听非 loopback 地址。原有 `start:dynamic-validation-web` 命令作为只读兼容别名保留；对应的免开关入口为 `start:dynamic-validation-web:runner` 和 `start:dynamic-validation-web:full`。详见 [Web 工作台架构](docs/audit-workbench.md)。创建静态审计任务不会自动触发动态验证；只有操作员在动态验证表单中的单独显式提交才构成调度请求。
 
 ## Local analysis and MCP defaults
 
