@@ -1,0 +1,40 @@
+id: java-resource-exhaustion
+name: Java Numeric Parameter Resource Exhaustion
+version: "1.0.0"
+language: java
+cwe:
+  - CWE-400
+  - CWE-770
+  - CWE-789
+  - CWE-190
+owasp:
+  - A04:2021-Insecure Design
+dimension: D9
+maturity: 1
+description: >
+  Detect attacker-controlled numeric values reaching allocations, pagination,
+  batches, fan-out, recursion, concurrency, queues, or expensive reads without
+  effective bounds and aggregate resource controls.
+
+components:
+  rules:
+    semgrep:
+      - java-resource-exhaustion-patterns.yaml
+  tests:
+    - positive/
+    - negative/
+    - expected-results.yaml
+
+tool_priority:
+  - rg
+  - semgrep
+  - joern
+  - llm
+
+frameworks_supported:
+  - servlet
+  - spring-mvc
+  - spring-validation
+  - spring-data
+  - java-nio
+  - java-util-concurrent

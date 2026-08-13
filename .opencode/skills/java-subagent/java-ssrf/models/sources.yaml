@@ -46,7 +46,24 @@ sources:
       - ModelAttribute
     controlled_value: object_fields
     confidence: medium
-    notes: object fields such as url/host/target require field-level taint tracking
+    notes: object fields such as url/api/endpoint/webhook/callback/baseUrl/host/port require field-level taint tracking
+
+  - id: structured-document-or-import
+    framework: serialization
+    method_full_name:
+      - ".*ObjectMapper.*readValue.*"
+      - ".*ObjectMapper.*readTree.*"
+      - ".*JsonNode.*get.*"
+      - ".*Yaml.*load.*"
+      - ".*Properties.*load.*"
+      - ".*Properties.*getProperty.*"
+      - ".*MultipartFile.*getInputStream.*"
+      - ".*MultipartFile.*getBytes.*"
+    controlled_value: parsed_field
+    confidence: medium
+    notes: >
+      Track URL-like fields from JSON/YAML/properties/uploaded or imported files.
+      Parsing alone is not evidence; require propagation into a server-side network sink.
 
   - id: uri-components
     framework: spring
@@ -76,4 +93,4 @@ sources:
       - ".*Document\\.get.*"
     controlled_value: return
     confidence: low
-    notes: only when previously stored attacker URL/host is reused for outbound fetch
+    notes: only when a previously stored attacker URL/API/endpoint/webhook/callback/host is reused for outbound fetch; close the original write-to-worker chain

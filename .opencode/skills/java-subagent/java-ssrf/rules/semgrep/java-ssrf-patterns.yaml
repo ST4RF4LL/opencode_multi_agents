@@ -1,4 +1,25 @@
 rules:
+  - id: java-ssrf-structured-destination-candidate
+    message: URL-like structured field reaches a server-side network client
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - pattern: $CLIENT.getForObject($JSON.get($FIELD).asText(), ...)
+          - pattern: $CLIENT.postForObject($JSON.get($FIELD).asText(), ...)
+          - pattern: $CLIENT.exchange($JSON.get($FIELD).asText(), ...)
+          - pattern: $BUILDER.url($JSON.get($FIELD).asText())
+          - pattern: new URL($JSON.get($FIELD).asText())
+      - metavariable-regex:
+          metavariable: $FIELD
+          regex: '\"(?i:url|api|endpoint|webhook|callback|baseurl|host)\"'
+    metadata:
+      cwe: CWE-918
+      subtype: structured-destination
+      confidence: medium
+      candidate_only: true
+      notes: Confirm external document control, deferred persistence path when present, destination influence, and missing effective network controls.
+
   - id: java-ssrf-host-concat
     message: Host or base URL built by concatenating user input
     severity: WARNING
@@ -34,12 +55,6 @@ rules:
           $URL.startsWith("https://")
       - pattern: |
           $URL.startsWith($PREFIX)
-      - pattern: |
-          if ($URL.startsWith(...)) {
-            ...
-            $CLIENT.$METHOD($URL, ...)
-            ...
-          }
     metadata:
       cwe: CWE-918
       subtype: path-confusion

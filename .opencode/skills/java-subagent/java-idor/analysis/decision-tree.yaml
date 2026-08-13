@@ -13,7 +13,18 @@ steps:
   - id: check_external_dataflow
     question: 是否存在外部可控 object id（PathVariable/RequestParam/Body 字段）到资源访问的数据流？
     no: candidate_needs_modeling
+    yes: infer_resource_scope
+
+  - id: infer_resource_scope
+    question: create/add、实体映射或数据模型是否建立了 owner/user/tenant/role/project/workspace/permission scope？
+    yes: build_operation_matrix
+    no: check_parent_child_boundary
+    unknown: candidate_needs_modeling
+
+  - id: build_operation_matrix
+    question: 是否已覆盖该资源后续 read/list/query/update/delete/export/execute/cancel/batch，且当前操作执行了与创建归属等价的服务端约束？
     yes: check_parent_child_boundary
+    no: lifecycle_authz_candidate
 
   - id: check_parent_child_boundary
     question: 资源 B 是否依赖父资源 A，且 A 是业务或授权边界（外键、聚合根、嵌套路由、账户/项目/组织范围）？
@@ -27,7 +38,7 @@ steps:
     no: parent_child_high_risk_candidate
 
   - id: classify_access
-    question: 操作是读、更新还是删除？是否跨用户、跨租户或跨角色？
+    question: 操作是只读、列表、更新、删除、导出、执行、取消还是批量？是否跨用户、跨租户或跨角色？只读是否有明确共享策略、数据是否敏感？
     next: check_object_authz
 
   - id: check_object_authz
@@ -65,6 +76,7 @@ outcomes:
   candidate_needs_modeling: Candidate
   high_risk_candidate: Candidate_or_Finding
   parent_child_high_risk_candidate: Candidate_or_Finding
+  lifecycle_authz_candidate: Candidate_or_Finding
   conditional_candidate: Candidate
   emit_finding: Finding
   emit_candidate: Candidate

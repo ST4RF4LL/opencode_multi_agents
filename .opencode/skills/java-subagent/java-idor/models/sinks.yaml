@@ -81,14 +81,14 @@ sinks:
   - id: service-layer-get-delete
     framework: custom
     method_full_name:
-      - ".*Service\\.(get|find|load|fetch|delete|remove|update|save).*"
+      - ".*Service\\.(get|find|list|query|load|fetch|delete|remove|update|save|export|execute|cancel|batch).*"
       - ".*OrderService\\..*"
       - ".*UserService\\..*"
       - ".*DocumentService\\..*"
     sensitive_arguments: []
     semantics: possible-resource-access-wrapper
     confidence: medium
-    notes: wrappers require expansion into repository/DAO sinks
+    notes: wrappers require expansion into repository/DAO sinks and comparison with the create/add ownership binding for the same resource type
 
   - id: response-return-entity
     framework: spring-mvc

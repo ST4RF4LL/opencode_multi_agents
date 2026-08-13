@@ -41,6 +41,10 @@ if (process.argv.includes("--version")) {
   process.stdout.write("OpenGrep fixture 1.0.0\\\\n");
   process.exit(0);
 }
+if (process.argv.includes("--metrics=off")) {
+  process.stderr.write("OpenGrep fixture rejects Semgrep-only --metrics=off\\\\n");
+  process.exit(2);
+}
 process.stderr.write("D".repeat(500000));
 process.stdout.write(JSON.stringify({
   version: "fixture",

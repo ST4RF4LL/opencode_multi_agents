@@ -227,7 +227,7 @@ export function validateCatalogV2(catalog) {
   const ids = new Set();
   if (!Array.isArray(catalog?.entries) || catalog.entries.length === 0) errors.push("entries must be non-empty");
   for (const entry of catalog?.entries ?? []) {
-    if (typeof entry.id !== "string" || !/^(?:JW|AI)-[A-Z0-9-]+$/.test(entry.id)) errors.push(`invalid entry id: ${entry.id}`);
+    if (typeof entry.id !== "string" || !/^(?:JW|JAVA|AI)-[A-Z0-9-]+$/.test(entry.id)) errors.push(`invalid entry id: ${entry.id}`);
     if (ids.has(entry.id)) errors.push(`duplicate entry id: ${entry.id}`);
     ids.add(entry.id);
     if (!exactArray(entry.dimensions, [...new Set(entry.dimensions ?? [])])

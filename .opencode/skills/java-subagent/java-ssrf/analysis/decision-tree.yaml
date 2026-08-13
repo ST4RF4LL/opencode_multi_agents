@@ -13,7 +13,17 @@ steps:
   - id: check_external_dataflow
     question: 是否存在外部可控输入到网络目标（URL/host/port/scheme）的数据流？
     no: candidate_needs_modeling
+    yes: classify_source_lifecycle
+
+  - id: classify_source_lifecycle
+    question: 输入是直接请求字段，还是 JSON/YAML/XML/properties/导入文件/消息/数据库中的结构化或持久化字段？
+    direct: classify_influence
+    structured_or_persisted: check_deferred_execution
+
+  - id: check_deferred_execution
+    question: 是否能闭合外部写入或导入、解析/持久化、后台读取、真实网络客户端调用的二阶执行链？
     yes: classify_influence
+    no: candidate_structured_field_only
 
   - id: classify_influence
     question: 攻击者影响的是完整 URL、host、port、scheme 还是 path？
@@ -52,6 +62,7 @@ outcomes:
   reject_unreachable: Rejected
   reject_wrong_vuln_class: Rejected
   candidate_needs_modeling: Candidate
+  candidate_structured_field_only: Candidate
   high_risk_candidate: Candidate_or_Finding
   conditional_candidate: Candidate
   emit_finding: Finding

@@ -1,0 +1,47 @@
+rules:
+  - id: java-resource-exhaustion-allocation-candidate
+    message: Numeric value reaches a memory or collection allocation; trace its origin and effective bounds
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: new $TYPE[$SIZE]
+      - pattern: java.nio.ByteBuffer.allocate($SIZE)
+      - pattern: java.nio.ByteBuffer.allocateDirect($SIZE)
+      - pattern: new java.util.ArrayList<$T>($SIZE)
+      - pattern: new java.util.HashMap<$K, $V>($SIZE)
+      - pattern: $TEXT.repeat($COUNT)
+    metadata:
+      cwe: [CWE-400, CWE-770, CWE-789]
+      confidence: low
+      candidate_only: true
+      notes: Require external numeric source, reachable sink, missing effective bounds, and credible availability impact.
+
+  - id: java-resource-exhaustion-pagination-or-loop-candidate
+    message: Numeric value controls pagination or repeated work; verify enforced upper bounds and aggregate quotas
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: org.springframework.data.domain.PageRequest.of($PAGE, $SIZE)
+      - pattern: java.util.stream.IntStream.range($START, $COUNT)
+      - pattern: java.util.stream.LongStream.range($START, $COUNT)
+      - pattern: java.util.Collections.nCopies($COUNT, $VALUE)
+    metadata:
+      cwe: [CWE-400, CWE-770]
+      confidence: low
+      candidate_only: true
+      notes: Constant or prevalidated bounds are expected false positives.
+
+  - id: java-resource-exhaustion-concurrency-candidate
+    message: Numeric value controls executor or queue capacity; verify trusted origin, upper bounds, and lifecycle cleanup
+    severity: INFO
+    languages: [java]
+    pattern-either:
+      - pattern: java.util.concurrent.Executors.newFixedThreadPool($WORKERS)
+      - pattern: java.util.concurrent.Executors.newScheduledThreadPool($WORKERS)
+      - pattern: new java.util.concurrent.ArrayBlockingQueue<$T>($CAPACITY)
+      - pattern: new java.util.concurrent.LinkedBlockingQueue<$T>($CAPACITY)
+    metadata:
+      cwe: [CWE-400, CWE-770]
+      confidence: low
+      candidate_only: true
+      notes: Do not report when capacity is trusted configuration or effectively bounded before construction.

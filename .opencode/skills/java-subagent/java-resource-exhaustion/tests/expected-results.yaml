@@ -1,0 +1,10 @@
+positive:
+  - file: positive/P01_RequestSizeAllocation.java
+    expected_candidates:
+      - java-resource-exhaustion-allocation-candidate
+    semantic_result: Finding_or_Candidate
+negative:
+  - file: negative/N01_ClampedAllocation.java
+    expected_candidates:
+      - java-resource-exhaustion-allocation-candidate
+    semantic_result: Rejected_effective_bound

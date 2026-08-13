@@ -1,0 +1,4 @@
+interface:
+  display_name: "Java Resource Exhaustion"
+  short_description: "Detect unbounded Java resource parameters"
+  default_prompt: "Use $java-resource-exhaustion to review Java request parameters for allocation, pagination, batch, fan-out, and concurrency exhaustion."

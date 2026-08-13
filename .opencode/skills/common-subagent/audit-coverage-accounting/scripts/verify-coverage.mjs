@@ -442,7 +442,7 @@ async function main() {
     if (catalogEntries.has(entry.id)) pushIssue(issues, "DUPLICATE_CATALOG_ID", "Duplicate vulnerability catalog ID", { catalog_id: entry.id });
     catalogEntries.set(entry.id, entry);
     const catalogErrors = [];
-    if (typeof entry.id !== "string" || !/^(?:JW|AI)-[A-Z]+-\d{2}$/.test(entry.id)) catalogErrors.push("invalid-id");
+    if (typeof entry.id !== "string" || !/^(?:JW|JAVA|AI)-[A-Z]+-\d{2}$/.test(entry.id)) catalogErrors.push("invalid-id");
     if (typeof entry.title !== "string" || !entry.title) catalogErrors.push("missing-title");
     if (!Array.isArray(entry.applies_to) || entry.applies_to.length === 0 || entry.applies_to.some(domain => !DOMAIN_AGENT.has(domain))) catalogErrors.push("invalid-applies-to");
     if (!Array.isArray(entry.dimensions) || entry.dimensions.length === 0 || entry.dimensions.some(dimension => !DIMENSIONS.includes(dimension))) catalogErrors.push("invalid-dimensions");

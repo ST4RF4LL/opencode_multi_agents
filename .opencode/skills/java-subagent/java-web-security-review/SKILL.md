@@ -14,8 +14,9 @@ Use this skill for Java/JVM HTTP services, API servers, admin panels, and framew
 ## Focus Areas
 
 - Spring Security filters, interceptors, method security, route matchers, and annotation coverage.
-- Object-level authorization, tenant isolation, admin-only operations, and insecure direct object access.
-- SSRF, redirects, CORS/CSRF, session flags, debug endpoints, actuator exposure, and error handling.
+- Object-level authorization, tenant isolation, admin-only operations, and insecure direct object access. Use create/add ownership bindings to build a resource-lifecycle authorization matrix across read/list/update/delete/export/execute operations.
+- SSRF, including URL-like fields parsed from structured documents or loaded from persistence and executed later by workers; redirects, CORS/CSRF, session flags, debug endpoints, actuator exposure, and error handling.
+- Resource exhaustion from unbounded numeric parameters reaching allocations, pagination, batches, fan-out, recursion, concurrency, or expensive reads. Missing validation annotations are candidates, not findings.
 - Uploads, downloads, archive extraction, path traversal, and temporary file handling.
 - Maven/Gradle dependencies and production reachability of test or debug utilities.
 - XSS / template unescape paths → progressive-load `java-xss`.
@@ -30,6 +31,7 @@ Tie each issue to an entrypoint and exact framework configuration path. Verify t
 | Signal | Load skill |
 |--------|------------|
 | SSRF / RestTemplate / WebClient / URL.openConnection | `java-ssrf` |
+| Unbounded size / limit / count / capacity / workers | `java-resource-exhaustion` |
 | Open redirect / sendRedirect / Location / redirect: | `java-open-redirect` |
 | Path traversal / Zip Slip / getOriginalFilename | `java-path-traversal` |
 | Unrestricted upload / MultipartFile | `java-file-upload` |

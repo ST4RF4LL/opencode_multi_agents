@@ -101,6 +101,7 @@ When attack surface or sink greps hit a specific weakness, **progressive-load** 
 | Path traversal / Zip Slip | `java-path-traversal` | D5 |
 | Unrestricted upload | `java-file-upload` | D5 |
 | SSRF / RestTemplate / WebClient URL | `java-ssrf` | D6 |
+| Unbounded size / limit / count / capacity / fan-out | `java-resource-exhaustion` | D9 |
 | Open redirect / Location / redirect: | `java-open-redirect` | D6 |
 | Weak crypto / ECB / static IV | `java-weak-cryptography` | D7 |
 | Hardcoded secrets / keys in source-config | `java-hardcoded-secrets` | D8 |
@@ -131,6 +132,7 @@ Deep packs include `models/`, `rules/` (grep/Semgrep-compatible YAML/Joern), `an
 ### D3: Authorization
 - **IDOR**: Load `java-idor`. `findById(id)` without user ownership check → compare with `findById(id, userId)` pattern
 - **Parent/child IDOR**: For A → B resources (for example project → issue), review B create/read/update/delete/list/export as `(principal, A, B, operation)`. Require parent A authorization plus `B.parentId == authorized A.id` (or an equivalent server-enforced scoped query); a nested route or B-only role check is not enough.
+- **Owner-bound lifecycle consistency**: When create/add binds `userId`, owner, tenant, role, project, workspace, or permission scope, enumerate every later read/list/query/update/delete/export/execute/cancel/batch operation on that resource. Each operation must derive the scope from trusted identity context and enforce an equivalent scoped lookup or object check. Read-only exposure may be lower impact only after proving intentional sharing and data sensitivity; do not infer public access from a missing check.
 - **CRUD consistency**: Same resource — `create`/`read` have `@PreAuthorize` but `delete`/`update`/`export` do not
 - **Vertical privilege**: Admin endpoints with only frontend hiding, no `@RolesAllowed`/`@PreAuthorize`
 - **Batch operations**: Loop over IDs without per-item ownership verification
@@ -153,6 +155,7 @@ Deep packs include `models/`, `rules/` (grep/Semgrep-compatible YAML/Joern), `an
 
 ### D6: SSRF / Redirect
 - Load `java-ssrf` for destination-controlled HTTP clients; load `java-open-redirect` for browser redirects (`sendRedirect` / `Location` / `redirect:`).
+- Treat `url`, `api`, `endpoint`, `webhook`, `callback`, `baseUrl`, `host`, and `port` fields in JSON/YAML/XML/properties/imported files, messages, or database records as possible second-order sources. Require a complete path to an actual server-side HTTP/RPC/messaging sink, including asynchronous workers; parsing or storing the field alone is not a finding.
 - **HTTP clients**: `RestTemplate`, `HttpURLConnection`, `OkHttp`, `WebClient` with user-controlled URLs
 - **URL validation bypass**: String prefix match (`http://evil.com@allowed.com`); IP filter missing `169.254.169.254` (cloud metadata), IPv6 `::1`, `0.0.0.0`
 - **Protocol restriction**: Missing `file://`, `gopher://`, `dict://` blocking
@@ -181,6 +184,7 @@ Deep packs include `models/`, `rules/` (grep/Semgrep-compatible YAML/Joern), `an
 
 ### D9: Business Logic
 - **IDOR** (control-driven): Load `java-idor`. Every `findById()` — check user/tenant ownership; CRUD endpoint permission consistency
+- **Resource exhaustion**: Load `java-resource-exhaustion`. Trace external numeric size/limit/count/pageSize/capacity/repeat/depth/workers/parallelism values into allocations, pagination, loops, fan-out, recursion, executors, queues, or expensive reads. Require enforced min/max and overflow-safe arithmetic at the expensive sink; missing `@Min`/`@Max` alone is only a candidate signal.
 - **Mass Assignment**: Load `java-mass-assignment`. `@ModelAttribute`/`@RequestBody` binding to entity with `role`/`isAdmin`/`status` fields without DTO isolation
 - **CSRF**: Load `java-csrf` when cookie-session state-changing endpoints lack tokens/SameSite/custom headers
 - **Race conditions**: Balance deduction without `@Lock`/`@Version`/`synchronized`; coupon/stock in concurrent requests

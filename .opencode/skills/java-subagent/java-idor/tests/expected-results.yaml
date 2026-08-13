@@ -25,6 +25,11 @@ positive:
     subtype: missing-parent-child-authorization-binding
     sink: findById
     control: nested-route-with-unscoped-child-lookup
+  P07_CreateBindsOwnerButReadIsUnscoped.java:
+    expect: candidate_or_finding
+    subtype: owner-bound-lifecycle-authorization-gap
+    sink: findById
+    baseline: create-binds-userId
 
 negative:
   N01_FindByIdAndUserId.java:
@@ -45,6 +50,9 @@ negative:
   N06_ChildCrudBoundToAuthorizedParent.java:
     expect: rejected
     reason: child_scoped_to_authorized_parent
+  N07_CreateAndReadShareTrustedOwnerScope.java:
+    expect: rejected
+    reason: lifecycle_read_scoped_to_trusted_owner
 
 regression:
   R01_PathVariableFindById.java:

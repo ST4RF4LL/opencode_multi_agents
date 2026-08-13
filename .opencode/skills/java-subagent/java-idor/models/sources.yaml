@@ -44,7 +44,7 @@ sources:
       - ModelAttribute
     controlled_value: object_fields
     confidence: medium
-    notes: DTO fields such as id, orderId, userId, tenantId require field-level taint
+    notes: DTO fields such as id, orderId, userId, tenantId, ownerId, projectId, workspaceId, roleId, and scopeId require field-level taint; client-supplied ownership is not trusted authorization context
 
   - id: security-context-trusted
     framework: spring-security
@@ -67,3 +67,17 @@ sources:
     controlled_value: return
     confidence: medium
     notes: async jobs processing attacker-influenced resource ids
+
+  - id: create-binding-baseline
+    framework: persistence
+    method_full_name:
+      - ".*setOwner(Id)?.*"
+      - ".*setUserId.*"
+      - ".*setTenantId.*"
+      - ".*setProjectId.*"
+      - ".*setWorkspaceId.*"
+      - ".*setRoleId.*"
+      - ".*setScopeId.*"
+    controlled_value: binding_argument
+    confidence: medium
+    notes: semantic baseline established by create/add; compare every later operation on the resource type against this scope

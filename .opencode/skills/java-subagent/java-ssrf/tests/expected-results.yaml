@@ -21,6 +21,16 @@ positive:
     subtype: full-url-control
     sink: Request.Builder.url
     notes: redirect-follow enabled
+  P06_PersistedJsonUrlExecutedByWorker.java:
+    expect: candidate_or_finding
+    subtype: structured-persisted-second-order-ssrf
+    sink: RestTemplate.getForObject
+    source: structured-document-or-import
+  P07_DirectJsonDestination.java:
+    expect: candidate_or_finding
+    subtype: structured-destination
+    sink: RestTemplate.getForObject
+    source: structured-document-or-import
 
 negative:
   N01_FixedDestinationMap.java:
@@ -38,6 +48,9 @@ negative:
   N05_ResolvedIpAllowlist.java:
     expect: rejected
     reason: host_allowlist_with_resolved_ip_checks
+  N06_ParsedUrlStoredButNeverExecuted.java:
+    expect: rejected
+    reason: structured_field_has_no_network_sink
 
 regression:
   R01_RestTemplateParamUrl.java:

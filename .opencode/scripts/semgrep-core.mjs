@@ -404,7 +404,9 @@ export async function runSemgrepScan({
     : await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
   await mkdir(rawDirectory, { recursive: true });
   const stderrTemporaryPath = join(rawDirectory, `.${selected.engine}.${process.pid}.${Date.now()}.stderr.log`);
-  const args = ["scan", "--json", "--metrics=off", "--jobs", String(jobs), "--timeout", String(ruleTimeoutSeconds)];
+  const args = ["scan", "--json"];
+  if (selected.engine === "semgrep") args.push("--metrics=off");
+  args.push("--jobs", String(jobs), "--timeout", String(ruleTimeoutSeconds));
   if (maxMemoryMb > 0) args.push("--max-memory", String(maxMemoryMb));
   for (const rule of rules) args.push("--config", rule);
   for (const pattern of excludes) {

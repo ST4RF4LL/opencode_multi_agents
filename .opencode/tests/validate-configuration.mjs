@@ -57,6 +57,10 @@ async function main() {
   const validatorText = await readFile(join(OPENCODE, "agents/vulnerability-validator.md"), "utf8");
   const quickValidatorText = await readFile(join(OPENCODE, "agents/quick-dynamic-validator.md"), "utf8");
   const dynamicValidatorText = await readFile(join(OPENCODE, "agents/dynamic-vulnerability-validator.md"), "utf8");
+  const javaAuditorText = await readFile(join(OPENCODE, "agents/java-source-auditor.md"), "utf8");
+  const javaIdorSkillText = await readFile(join(OPENCODE, "skills/java-subagent/java-idor/SKILL.md"), "utf8");
+  const javaSsrfSkillText = await readFile(join(OPENCODE, "skills/java-subagent/java-ssrf/SKILL.md"), "utf8");
+  const javaResourceSkillText = await readFile(join(OPENCODE, "skills/java-subagent/java-resource-exhaustion/SKILL.md"), "utf8");
   const rootAgentsText = await readFile(join(ROOT, "AGENTS.md"), "utf8");
   const joernManifestBuilderText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-joern-function-manifest.mjs"), "utf8");
   const parserCapabilitiesText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-parser-capabilities.mjs"), "utf8");
@@ -425,6 +429,19 @@ async function main() {
   assert(parentChildEntry.dimensions.includes("D3") && parentChildEntry.applies_to.includes("java") && parentChildEntry.applies_to.includes("web"), "parent-child resource authorization entry has incomplete D3 coverage");
   const aiParentChildEntry = catalog.entries.find(entry => entry.id === "AI-ACCESS-01");
   assert(aiParentChildEntry?.title === "Agent parent-child resource authorization binding" && aiParentChildEntry.applies_to.length === 1 && aiParentChildEntry.applies_to[0] === "ai", "AI parent-child resource authorization catalog entry is missing");
+  const javaLifecycleEntry = catalog.entries.find(entry => entry.id === "JAVA-ACCESS-01");
+  const javaStructuredSsrfEntry = catalog.entries.find(entry => entry.id === "JAVA-NET-01");
+  const javaResourceEntry = catalog.entries.find(entry => entry.id === "JAVA-RESILIENCE-01");
+  for (const entry of [javaLifecycleEntry, javaStructuredSsrfEntry, javaResourceEntry]) {
+    assert(entry?.applies_to.length === 1 && entry.applies_to[0] === "java", `${entry?.id ?? "JAVA entry"} must remain Java-only`);
+  }
+  assert(javaLifecycleEntry.sink_question.includes("create/add") && javaLifecycleEntry.control_question.includes("every later operation"), "Java owner-bound lifecycle authorization coverage is incomplete");
+  assert(javaStructuredSsrfEntry.sink_question.includes("JSON") && javaStructuredSsrfEntry.control_question.includes("actual server-side outbound sink"), "Java structured/persisted SSRF coverage is incomplete");
+  assert(javaResourceEntry.sink_question.includes("array or buffer allocation") && javaResourceEntry.control_question.includes("minimum and maximum"), "Java numeric resource exhaustion coverage is incomplete");
+  assert(javaAuditorText.includes("java-resource-exhaustion") && javaAuditorText.includes("Owner-bound lifecycle consistency") && javaAuditorText.includes("Treat `url`, `api`, `endpoint`"), "Java auditor does not route the three Java-specific checks");
+  assert(javaIdorSkillText.includes("create/add") && javaIdorSkillText.includes("read/list/query/update/delete/export/execute/cancel/batch"), "Java IDOR skill lacks resource lifecycle authorization analysis");
+  assert(javaSsrfSkillText.includes("JSON/YAML/XML/properties") && javaSsrfSkillText.includes("二阶 SSRF"), "Java SSRF skill lacks structured and persisted destination analysis");
+  assert(javaResourceSkillText.includes("缺少 `@Min`/`@Max`") && javaResourceSkillText.includes("source-to-sink"), "Java resource exhaustion skill lacks semantic evidence gates");
   const catalogDimensions = new Set(catalog.entries.flatMap(entry => entry.dimensions));
   assert(REQUIRED_DIMENSIONS.every(dimension => catalogDimensions.has(dimension)), "catalog does not cover every D1-D10 dimension");
   for (const entry of catalog.entries) {
