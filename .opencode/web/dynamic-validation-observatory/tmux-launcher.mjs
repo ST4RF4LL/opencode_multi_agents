@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 function fail(message) {
@@ -27,10 +27,13 @@ if (typeof spec.cwd !== "string" || !isAbsolute(spec.cwd)) fail("tmux launcher s
 if (spec.diagnostic_path !== undefined && (typeof spec.diagnostic_path !== "string" || !isAbsolute(spec.diagnostic_path))) {
   fail("tmux launcher spec 的 diagnostic_path 必须是绝对路径。");
 }
+if (spec.exit_path !== undefined && (typeof spec.exit_path !== "string" || !isAbsolute(spec.exit_path))) {
+  fail("tmux launcher spec 的 exit_path 必须是绝对路径。");
+}
 
 const environment = {};
 for (const [key, value] of Object.entries(spec.environment ?? {})) {
-  if ((!/^OPENCODE_[A-Z0-9_]+$/.test(key) && !/^AUDIT_(?:SOURCE|ENGINE|WORKSPACE|REPORTS|TMP)_ROOT$/.test(key)) || typeof value !== "string") fail(`tmux launcher 环境变量非法：${key}`);
+  if ((!/^OPENCODE_[A-Z0-9_]+$/.test(key) && !/^AUDIT_[A-Z0-9_]+$/.test(key)) || typeof value !== "string") fail(`tmux launcher 环境变量非法：${key}`);
   environment[key] = value;
 }
 
@@ -61,22 +64,29 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
 }
 
 let finished = false;
-function finish(code, signal, message) {
+function finish(code, signal, errorMessage = null) {
   if (finished) return;
   finished = true;
-  const exit = () => {
-    if (signal) process.kill(process.pid, signal);
-    else process.exit(code ?? 1);
+  const exit = async () => {
+    if (spec.exit_path) {
+      try {
+        await writeFile(spec.exit_path, `${JSON.stringify({ code: Number.isInteger(code) ? code : null, signal: signal ?? null, error: errorMessage })}\n`, { encoding: "utf8", mode: 0o600 });
+      } catch (error) {
+        process.stderr.write(`tmux launcher 无法写入退出状态：${error.message}\n`);
+      }
+    }
+    process.exit(Number.isInteger(code) ? code : 1);
   };
-  if (diagnostic) diagnostic.end(`${message}\n`, exit);
-  else exit();
+  if (diagnostic) diagnostic.end(exit);
+  else void exit();
 }
 
 child.once("error", error => {
   const message = `tmux launcher 启动失败：${error.message}`;
   process.stderr.write(`${message}\n`);
+  diagnostic?.write(`${message}\n`);
   finish(1, null, message);
 });
 child.once("close", (code, signal) => {
-  finish(code, signal, `\n[launcher] OpenCode 进程已退出（code=${code ?? "null"}, signal=${signal ?? "none"}）。`);
+  finish(code, signal);
 });

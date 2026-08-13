@@ -54,18 +54,18 @@ class FakeTerminalMonitor {
     return { available: true, tmux_version: "tmux 3.test", message: "ready" };
   }
 
-  async start({ audit, repository, executionDirectory, providerSessionId = null }) {
-    this.starts.push({ audit_id: audit.id, repository, executionDirectory, providerSessionId });
+  async start({ audit, repository, executionDirectory, providerSessionId = null, args }) {
+    this.starts.push({ audit_id: audit.id, repository, executionDirectory, providerSessionId, args });
     return {
       backend: "tmux",
-      transport: "opencode-serve+prompt-api",
+      transport: "opencode-run+terminal-multiplexer",
       supported: true,
       status: "ready",
       live: true,
       socket_name: "owa-0123456789abcdef",
       target: "audit:tui",
-      server_url: "http://127.0.0.1:41234",
       provider_session_id: providerSessionId ?? `ses_${audit.id}`,
+      relay_spec_path: join(temp, `${audit.id}-terminal-output-relay.json`),
       attach_command: "tmux -L owa-0123456789abcdef attach-session -r -t audit:tui",
       message: "fixture terminal ready",
     };
@@ -84,7 +84,7 @@ class FakeTerminalMonitor {
     return { columns, rows };
   }
 
-  async signalServer(_terminal, signal) {
+  async signalRun(_terminal, signal) {
     this.signals.push(signal);
   }
 
@@ -219,21 +219,13 @@ try {
     await writeFile(fakeOpenCode, `#!/usr/bin/env node
 import { createServer } from "node:http";
 const [mode, ...args] = process.argv.slice(2);
-if (mode === "attach" && args.includes("--help")) {
-  process.stdout.write("--dir --session --mini\\n");
+if (mode === "run" && args.includes("--help")) {
+  process.stdout.write("--format --session --agent --dir --title\\n");
   process.exit(0);
 }
-if (mode === "serve") {
-  const port = Number(args[args.indexOf("--port") + 1]);
-  const server = createServer((request, response) => {
-    response.setHeader("Content-Type", "application/json");
-    if (request.url.startsWith("/global/health")) response.end('{"healthy":true}');
-    else if (request.method === "POST" && request.url.startsWith("/session?")) response.end('{"id":"ses_tmux_fixture"}');
-    else response.end('{}');
-  });
-  server.listen(port, "127.0.0.1");
-} else if (mode === "attach") {
-  process.stdout.write("Fake OpenCode TUI\\nsecurity-audit-orchestrator\\n");
+if (mode === "run") {
+  const session = args.includes("--session") ? args[args.indexOf("--session") + 1] : "ses_tmux_fixture";
+  process.stdout.write(JSON.stringify({ type: "step_start", sessionID: session }) + "\\n");
   setInterval(() => {}, 1000);
 } else {
   process.stderr.write("unsupported fake opencode command\\n");
@@ -248,10 +240,11 @@ if (mode === "serve") {
         audit: { id: "audit-tmux-fixture", name: "tmux 集成测试" },
         repository: { path: canonicalRepositoryRoot },
         environment: { OPENCODE_CONFIG: join(canonicalRepositoryRoot, ".opencode", "opencode.json") },
+        args: ["run", "--format", "json", "--agent", "security-audit-orchestrator", "--dir", canonicalRepositoryRoot, "--title", "tmux 集成测试", "fixture prompt"],
       });
       assert.equal(terminal.live, true);
       assert.equal(terminal.provider_session_id, "ses_tmux_fixture");
-      assert.match(await realTmuxMonitor.capture(terminal), /Fake OpenCode TUI/);
+      assert.match(await realTmuxMonitor.capture(terminal), /ses_tmux_fixture/);
       assert.match(terminal.attach_command, /^tmux -L owa-/);
       assert.equal(terminal.opencode_command, "opencode -s ses_tmux_fixture");
       await realTmuxMonitor.stop(terminal);
@@ -260,6 +253,7 @@ if (mode === "serve") {
         repository: { path: canonicalRepositoryRoot },
         environment: { OPENCODE_CONFIG: join(canonicalRepositoryRoot, ".opencode", "opencode.json") },
         providerSessionId: "ses_existing_fixture",
+        args: ["run", "--format", "json", "--session", "ses_existing_fixture", "--agent", "security-audit-orchestrator", "--dir", canonicalRepositoryRoot, "--title", "tmux 恢复集成测试", "fixture recovery prompt"],
       });
       assert.equal(terminal.provider_session_id, "ses_existing_fixture");
       assert.equal(terminal.resumed, true);
@@ -268,42 +262,15 @@ if (mode === "serve") {
     }
   }
 
-  let submittedPrompt = null;
-  const promptServer = createHttpServer(async (request, response) => {
-    response.setHeader("Content-Type", "application/json");
-    if (request.method === "POST" && request.url.startsWith("/session/ses_prompt_fixture/prompt_async?")) {
-      const chunks = [];
-      for await (const chunk of request) chunks.push(chunk);
-      submittedPrompt = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      response.writeHead(204);
-      response.end();
-    } else if (request.url.startsWith("/session/ses_prompt_fixture/message?")) {
-      response.end(JSON.stringify([{ info: { role: "assistant", parentID: submittedPrompt?.messageID, finish: "stop", time: { completed: Date.now() } }, parts: [] }]));
-    } else if (request.url.startsWith("/session/status?")) response.end('{"ses_prompt_fixture":{"type":"idle"}}');
-    else { response.writeHead(404); response.end('{}'); }
-  });
-  promptServer.listen(0, "127.0.0.1");
-  await once(promptServer, "listening");
-  try {
-    const promptPort = promptServer.address().port;
-    const promptSpec = join(temp, "prompt-client-fixture.json");
-    await writeFile(promptSpec, `${JSON.stringify({
-      server_url: `http://127.0.0.1:${promptPort}`,
-      session_id: "ses_prompt_fixture",
-      directory: canonicalRepositoryRoot,
-      payload: { agent: "security-audit-orchestrator", tools: { question: false }, parts: [{ type: "text", text: "fixture prompt" }] },
-    })}\n`, "utf8");
-    const promptClient = resolve(OPENCODE, "web/dynamic-validation-observatory/opencode-prompt-client.mjs");
-    const result = await execFileAsync(process.execPath, [promptClient, promptSpec], { encoding: "utf8", timeout: 5_000 });
-    assert.equal(submittedPrompt.agent, "security-audit-orchestrator");
-    assert.equal(submittedPrompt.tools.question, false);
-    assert.match(submittedPrompt.messageID, /^msg_owa_/);
-    assert.match(result.stdout, /"state":"completed"/);
-    assert.match(result.stdout, /"type":"prompt_response"/);
-  } finally {
-    promptServer.close();
-    await once(promptServer, "close");
-  }
+  const relayOutputPath = join(temp, "terminal-relay-output.jsonl");
+  const relayExitPath = join(temp, "terminal-relay-exit.json");
+  const relaySpecPath = join(temp, "terminal-relay-spec.json");
+  await writeFile(relayOutputPath, '{"type":"step_start","sessionID":"ses_relay_fixture"}\n', "utf8");
+  await writeFile(relayExitPath, '{"code":0,"signal":null,"error":null}\n', "utf8");
+  await writeFile(relaySpecPath, `${JSON.stringify({ output_path: relayOutputPath, exit_path: relayExitPath })}\n`, "utf8");
+  const relayClient = resolve(OPENCODE, "web/dynamic-validation-observatory/terminal-output-relay.mjs");
+  const relayResult = await execFileAsync(process.execPath, [relayClient, relaySpecPath], { encoding: "utf8", timeout: 5_000 });
+  assert.match(relayResult.stdout, /ses_relay_fixture/);
 
   const validationAuditId = "web-xss-fixture";
   const validationAuditRoot = join(runtimeRoot, validationAuditId);
@@ -529,7 +496,7 @@ if (mode === "serve") {
     },
     async execute(command, args) {
       windowsMonitorCalls.push({ command, args });
-      if (/opencode\.exe$/i.test(command)) return { stdout: "--dir --session --mini\n", stderr: "" };
+      if (/opencode\.exe$/i.test(command)) return { stdout: "--format --session --agent --dir --title\n", stderr: "" };
       if (/psmux\.exe$/i.test(command) && args[0] === "-V") return { stdout: "psmux 3.test\n", stderr: "" };
       throw new Error(`unexpected command: ${command}`);
     },
@@ -542,7 +509,6 @@ if (mode === "serve") {
   assert(windowsMonitorCalls.every(call => call.command !== "opencode" && call.command !== "tmux"));
 
   const windowsStartCalls = [];
-  let windowsOpenCodeServer = null;
   const windowsStartMonitor = new OpenCodeTmuxMonitor({
     stateRoot: join(temp, "windows-psmux-start-state"),
     platform: "win32",
@@ -551,7 +517,7 @@ if (mode === "serve") {
       windowsStartCalls.push({ command, args });
       const operation = args[2];
       if (operation === "kill-server") return { stdout: "", stderr: "" };
-      if (operation === "new-session" || operation === "new-window") {
+      if (operation === "new-session") {
         const boundary = args.indexOf("--");
         assert(boundary > 0, `psmux ${operation} 缺少命令边界 --`);
         assert.equal(args[boundary + 1], process.execPath);
@@ -570,35 +536,20 @@ if (mode === "serve") {
   windowsStartMonitor.command = "C:\\tools\\opencode.exe";
   windowsStartMonitor.tmuxCommand = "C:\\tools\\psmux.exe";
   windowsStartMonitor.multiplexerBackend = "psmux";
-  windowsStartMonitor.waitForServer = async serverUrl => {
-    const port = Number(new URL(serverUrl).port);
-    windowsOpenCodeServer = createHttpServer((request, response) => {
-      response.setHeader("Content-Type", "application/json");
-      if (request.method === "POST" && request.url.startsWith("/session?")) response.end('{"id":"ses_windows_fixture"}');
-      else response.end('{"healthy":true}');
-    });
-    windowsOpenCodeServer.listen(port, "127.0.0.1");
-    await once(windowsOpenCodeServer, "listening");
-  };
   const windowsTerminal = await windowsStartMonitor.start({
     audit: { id: "audit-windows-psmux", name: "Windows psmux 集成测试" },
     repository: { path: canonicalRepositoryRoot },
     executionDirectory: canonicalRepositoryRoot,
     environment: {},
+    args: ["run", "--format", "json", "--agent", "security-audit-orchestrator", "--dir", canonicalRepositoryRoot, "--title", "Windows psmux 集成测试", "fixture prompt"],
   });
   assert.equal(windowsTerminal.backend, "psmux");
-  assert.equal(windowsTerminal.provider_session_id, "ses_windows_fixture");
-  assert.equal(windowsStartCalls.filter(call => ["new-session", "new-window"].includes(call.args[2])).length, 2);
-  windowsOpenCodeServer.close();
-  await once(windowsOpenCodeServer, "close");
-
-  const serverDiagnosticPath = join(temp, "opencode-server-diagnostic.log");
-  await writeFile(serverDiagnosticPath, "OpenCode 配置加载失败：fixture diagnostic", "utf8");
-  const diagnosticMonitor = new OpenCodeTmuxMonitor({ stateRoot: join(temp, "diagnostic-monitor-state"), readyTimeoutMs: 10 });
-  await assert.rejects(
-    diagnosticMonitor.waitForServer("http://127.0.0.1:1", { diagnostic_path: serverDiagnosticPath }),
-    /server 输出：OpenCode 配置加载失败：fixture diagnostic/,
-  );
+  assert.equal(windowsTerminal.provider_session_id, null);
+  assert.equal(windowsStartCalls.filter(call => call.args[2] === "new-session").length, 1);
+  const windowsRunSpec = JSON.parse(await readFile(join(temp, "windows-psmux-start-state", "audit-windows-psmux", "tmux-run.json"), "utf8"));
+  assert.equal(windowsRunSpec.command, "C:\\tools\\opencode.exe");
+  assert.equal(windowsRunSpec.args[0], "run");
+  assert.equal(windowsRunSpec.args.includes("serve"), false);
 
   const findingWorkflowRoot = join(temp, "finding-workflow");
   const findingWorkflow = new FindingWorkflowStore({ stateRoot: findingWorkflowRoot });
@@ -755,21 +706,21 @@ if (mode === "serve") {
     assert.equal(runtimeCoverageMcp.cwd, ".");
     assert.equal(runtimeCoverageMcp.timeout, 300000);
     assert.equal(runtimeCoverageMcp.command[1], join(canonicalRepositoryRoot, ".opencode", "mcp", "coverage-ledger-server.mjs"));
-    assert.match(spawnCall.args[0], /opencode-prompt-client\.mjs$/);
-    const promptRequest = JSON.parse(await readFile(spawnCall.args[1], "utf8"));
-    assert.equal(promptRequest.session_id, "ses_audit-live-001");
-    assert.equal(promptRequest.directory, executionWorkspace);
-    assert.equal(promptRequest.payload.agent, "security-audit-orchestrator");
-    assert.equal(promptRequest.payload.tools.question, false);
-    assert.match(promptRequest.payload.parts[0].text, /audit-live-001/);
-    assert.match(promptRequest.payload.parts[0].text, new RegExp(canonicalRepositoryRoot.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.match(promptRequest.payload.parts[0].text, /源码根目录必须只读/);
-    assert.match(promptRequest.payload.parts[0].text, /120 秒快速动态确认/);
-    assert.match(promptRequest.payload.parts[0].text, /完整动态验证仍只允许用户在工作台手动点击/);
-    assert.match(promptRequest.payload.parts[0].text, /不得调用 question 工具/);
-    assert.match(promptRequest.payload.parts[0].text, /additional-instructions\.txt/);
-    assert.match(promptRequest.payload.parts[0].text, /test-environment\.txt/);
-    assert.equal(promptRequest.payload.parts[0].text.includes("context-attacker-secret"), false);
+    assert.match(spawnCall.args[0], /terminal-output-relay\.mjs$/);
+    const monitoredRunArgs = terminalMonitor.starts[0].args;
+    assert.deepEqual(monitoredRunArgs.slice(0, 3), ["run", "--format", "json"]);
+    assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--agent") + 1], "security-audit-orchestrator");
+    assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--dir") + 1], executionWorkspace);
+    const monitoredPrompt = monitoredRunArgs.at(-1);
+    assert.match(monitoredPrompt, /audit-live-001/);
+    assert.match(monitoredPrompt, new RegExp(canonicalRepositoryRoot.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(monitoredPrompt, /源码根目录必须只读/);
+    assert.match(monitoredPrompt, /120 秒快速动态确认/);
+    assert.match(monitoredPrompt, /完整动态验证仍只允许用户在工作台手动点击/);
+    assert.match(monitoredPrompt, /不得调用 question 工具/);
+    assert.match(monitoredPrompt, /additional-instructions\.txt/);
+    assert.match(monitoredPrompt, /test-environment\.txt/);
+    assert.equal(monitoredPrompt.includes("context-attacker-secret"), false);
     assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_ENABLED, "true");
     assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS, "120");
     assert.equal(spawnCall.options.env.AUDIT_FULL_DYNAMIC_TRIGGER, "MANUAL_ONLY");
@@ -798,7 +749,7 @@ if (mode === "serve") {
     assert.equal(await realpath(join(executionWorkspace, "tmp")), await realpath(join(platformRoot, "tmp", "repositories", "fixture")));
     await assert.rejects(stat(join(canonicalRepositoryRoot, "reports")), error => error.code === "ENOENT");
     await assert.rejects(stat(join(canonicalRepositoryRoot, "tmp")), error => error.code === "ENOENT");
-    assert.equal(runner.getAudit(created.id).execution_transport, "opencode-serve+prompt-api");
+    assert.equal(runner.getAudit(created.id).execution_transport, "opencode-run+terminal-multiplexer");
     assert.equal(runner.getAudit(created.id).terminal.live, true);
 
     const activeDeleteResponse = await fetch(`${base}/api/v1/audits/${created.id}`, {
@@ -1212,12 +1163,12 @@ if (mode === "serve") {
   assert.equal(resumeTerminalMonitor.abortCalls.length, 1);
   assert.equal(resumeTerminalMonitor.starts[0].providerSessionId, "ses_resume_fixture");
   assert.equal(resumedSpawnCall.command, process.execPath);
-  const resumePrompt = JSON.parse(await readFile(join(resumableAuditDirectory, "prompt-request.json"), "utf8"));
-  assert.equal(resumePrompt.session_id, "ses_resume_fixture");
-  assert.equal(resumePrompt.payload.tools.question, false);
-  assert.match(resumePrompt.payload.parts[0].text, /第 1 次断点恢复/);
-  assert.match(resumePrompt.payload.parts[0].text, /不要删除有效制品/);
-  assert.match(resumePrompt.payload.parts[0].text, /不得调用 question 工具/);
+  assert.match(resumedSpawnCall.args[0], /terminal-output-relay\.mjs$/);
+  const resumeRunArgs = resumeTerminalMonitor.starts[0].args;
+  assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--session") + 1], "ses_resume_fixture");
+  assert.match(resumeRunArgs.at(-1), /第 1 次断点恢复/);
+  assert.match(resumeRunArgs.at(-1), /不要删除有效制品/);
+  assert.match(resumeRunArgs.at(-1), /不得调用 question 工具/);
   const duplicateResume = await resumableRunner.action(resumableAuditId, "recover", interruptedAudit.version, "resume-action-001");
   assert.equal(duplicateResume.status, "running");
   assert.equal(resumeTerminalMonitor.starts.length, 1, "同一幂等键不得重复启动恢复 Runner");

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { arch as osArch, platform as osPlatform } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,51 +10,26 @@ import { resolveExecutablePath, resolvedOpenCodeExecutables } from "./executable
 const execFileAsync = promisify(execFile);
 const LAUNCHER = fileURLToPath(new URL("./tmux-launcher.mjs", import.meta.url));
 const SAFE_SOCKET = /^owa-[a-f0-9]{16}$/;
-const SAFE_TARGET = /^audit:(?:server|tui)$/;
+const SAFE_TARGET = /^audit:tui$/;
 const SAFE_SESSION = /^[A-Za-z0-9._:-]{3,240}$/;
 const MIN_COLUMNS = 40;
 const MAX_COLUMNS = 320;
 const MIN_ROWS = 12;
 const MAX_ROWS = 120;
 
-function localPort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.unref();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : null;
-      server.close(error => error ? reject(error) : resolve(port));
-    });
-  });
-}
-
 function runtimeOverrides(environment) {
-  return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (key.startsWith("OPENCODE_") || /^AUDIT_(?:SOURCE|ENGINE|WORKSPACE|REPORTS|TMP)_ROOT$/.test(key)) && typeof value === "string"));
+  return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (key.startsWith("OPENCODE_") || /^AUDIT_[A-Z0-9_]+$/.test(key)) && typeof value === "string"));
 }
 
-function fetchFailureDetail(error) {
-  const parts = [error?.message, error?.cause?.code, error?.cause?.message].filter(Boolean);
-  return [...new Set(parts)].join(" / ") || "未知连接错误";
-}
-
-function compactDiagnostic(value, limit = 2_000) {
-  const text = String(value ?? "").replaceAll("\u0000", "").trim();
-  return text.length > limit ? `…${text.slice(-limit)}` : text;
-}
-
-async function fetchJson(url, options = {}, timeoutMs = 5_000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal, headers: { Accept: "application/json", ...(options.headers ?? {}) } });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`HTTP ${response.status}${text.trim() ? `: ${text.trim().slice(0, 500)}` : ""}`);
-    return text.trim() ? JSON.parse(text) : null;
-  } finally {
-    clearTimeout(timer);
+function sessionFromOutput(output) {
+  for (const line of String(output ?? "").split(/\r?\n/)) {
+    try {
+      const value = JSON.parse(line);
+      const sessionId = value?.sessionID ?? value?.session_id ?? value?.session?.id;
+      if (SAFE_SESSION.test(sessionId ?? "")) return sessionId;
+    } catch {}
   }
+  return null;
 }
 
 export class OpenCodeTmuxMonitor {
@@ -84,10 +58,10 @@ export class OpenCodeTmuxMonitor {
     const openCodeCandidates = await resolvedOpenCodeExecutables({ command: this.command, environment: this.environment, platform: this.platform, architecture: this.architecture, resolveCommand: this.resolveCommand });
     for (const resolved of openCodeCandidates) {
       try {
-        const attach = await this.execute(resolved, ["attach", "--help"], { encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024, env: this.environment, windowsHide: true });
-        const help = `${attach.stdout ?? ""}\n${attach.stderr ?? ""}`;
-        const missing = ["--dir", "--session", "--mini"].filter(flag => !help.includes(flag));
-        if (missing.length) throw new Error(`OpenCode attach 缺少 ${missing.join("、")}`);
+        const run = await this.execute(resolved, ["run", "--help"], { encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024, env: this.environment, windowsHide: true });
+        const help = `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
+        const missing = ["--format", "--session", "--agent", "--dir", "--title"].filter(flag => !help.includes(flag));
+        if (missing.length) throw new Error(`OpenCode run 缺少 ${missing.join("、")}`);
         openCodeCommand = resolved;
         break;
       } catch (error) {
@@ -140,7 +114,7 @@ export class OpenCodeTmuxMonitor {
       opencode_command: openCodeCommand,
       multiplexer_command: multiplexer.command,
       tmux_version: multiplexer.version,
-      message: `${multiplexer.backend === "psmux" ? "psmux" : "tmux"} 与 OpenCode attach 已就绪。`,
+      message: `${multiplexer.backend === "psmux" ? "psmux" : "tmux"} 与 OpenCode run 已就绪。`,
     };
     return this.probeResult;
   }
@@ -178,126 +152,111 @@ export class OpenCodeTmuxMonitor {
     return { columns: actualColumns, rows: actualRows };
   }
 
-  async waitForServer(serverUrl, { socket_name: socketName = null, diagnostic_path: diagnosticPath = null } = {}) {
-    const deadline = Date.now() + this.readyTimeoutMs;
-    let detail = "";
-    while (Date.now() < deadline) {
-      try {
-        await fetchJson(`${serverUrl}/global/health`, {}, 1_000);
-        return;
-      } catch (error) {
-        detail = fetchFailureDetail(error);
-      }
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-    let diagnostic = "";
-    if (diagnosticPath) {
-      try { diagnostic = compactDiagnostic(await readFile(diagnosticPath, "utf8")); } catch {}
-    }
-    if (!diagnostic && socketName) {
-      try { diagnostic = compactDiagnostic(await this.capture({ socket_name: socketName, target: "audit:server" }, 120)); } catch {}
-    }
-    throw new Error(`OpenCode server 未在超时内就绪：${detail}${diagnostic ? `；server 输出：${diagnostic}` : "；未捕获到 server 输出，请确认 psmux 可执行目标命令"}`);
-  }
-
-  async waitForTui(socketName, target) {
+  async waitForRunOutput(terminal) {
     const deadline = Date.now() + Math.min(this.readyTimeoutMs, 10_000);
     let detail = "";
     while (Date.now() < deadline) {
       try {
-        const output = await this.capture({ socket_name: socketName, target });
+        const output = await this.capture(terminal, 120);
         if (output.trim()) return output;
       } catch (error) {
         detail = error.message;
       }
-      await new Promise(resolve => setTimeout(resolve, 150));
+      try {
+        const state = JSON.parse(await readFile(terminal.exit_path, "utf8"));
+        const output = await readFile(terminal.output_path, "utf8").catch(() => "");
+        throw new Error(`OpenCode run 在生成有效输出前退出（code=${state.code ?? "null"}, signal=${state.signal ?? "none"}）：${String(output || state.error || "无输出").trim().slice(-2_000)}`);
+      } catch (error) {
+        if (error?.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
-    throw new Error(`OpenCode TUI 未在超时内生成画面：${detail}`);
+    throw new Error(`OpenCode run 未在超时内生成输出${detail ? `：${detail}` : ""}`);
   }
 
-  async start({ audit, repository, environment, executionDirectory = repository.path, providerSessionId = null }) {
+  async start({ audit, repository, environment, executionDirectory = repository.path, providerSessionId = null, args }) {
     const probe = await this.probe();
     if (!probe.available) throw Object.assign(new Error(probe.message), { code: "tmux-monitor-unavailable" });
     if (providerSessionId !== null && !SAFE_SESSION.test(providerSessionId)) throw new Error("待恢复的 OpenCode session id 非法。");
+    if (!Array.isArray(args) || args[0] !== "run" || !args.every(value => typeof value === "string")) throw new Error("OpenCode run 参数非法。");
     const socketName = this.socketName(audit.id);
     const auditStateRoot = join(this.stateRoot, audit.id);
-    const serverUrl = `http://127.0.0.1:${await localPort()}`;
     await mkdir(auditStateRoot, { recursive: true });
-    await this.stop({ socket_name: socketName, target: "audit:server" }).catch(() => {});
+    await this.stop({ socket_name: socketName, target: "audit:tui" }).catch(() => {});
 
-    const serverSpecPath = join(auditStateRoot, "tmux-server.json");
-    const serverDiagnosticPath = join(auditStateRoot, "opencode-server.log");
-    await writeFile(serverSpecPath, `${JSON.stringify({
+    const runSpecPath = join(auditStateRoot, "tmux-run.json");
+    const outputPath = join(auditStateRoot, "opencode-run.jsonl");
+    const exitPath = join(auditStateRoot, "opencode-run-exit.json");
+    const relaySpecPath = join(auditStateRoot, "terminal-output-relay.json");
+    await Promise.all([rm(outputPath, { force: true }), rm(exitPath, { force: true })]);
+    await writeFile(runSpecPath, `${JSON.stringify({
       command: this.command,
-      args: ["serve", "--hostname", "127.0.0.1", "--port", new URL(serverUrl).port],
+      args,
       cwd: executionDirectory,
       environment: runtimeOverrides(environment),
-      diagnostic_path: serverDiagnosticPath,
+      diagnostic_path: outputPath,
+      exit_path: exitPath,
     }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    await this.tmux(socketName, ["new-session", "-d", "-x", "160", "-y", "48", "-s", "audit", "-n", "server", "-c", executionDirectory, "--", process.execPath, LAUNCHER, serverSpecPath], { timeout: 30_000 });
+    await writeFile(relaySpecPath, `${JSON.stringify({ output_path: outputPath, exit_path: exitPath }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     try {
-      await this.waitForServer(serverUrl, { socket_name: socketName, diagnostic_path: serverDiagnosticPath });
-      const query = new URLSearchParams({ directory: executionDirectory });
-      const session = providerSessionId
-        ? { id: providerSessionId, resumed: true }
-        : await fetchJson(`${serverUrl}/session?${query}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: audit.name }),
-          });
-      if (!SAFE_SESSION.test(session?.id ?? "")) throw new Error("OpenCode session 响应缺少有效 id。");
       const target = "audit:tui";
-      const attachSpecPath = join(auditStateRoot, "tmux-tui.json");
-      await writeFile(attachSpecPath, `${JSON.stringify({
-        command: this.command,
-        args: ["attach", serverUrl, "--dir", executionDirectory, "--session", session.id, "--mini"],
-        cwd: executionDirectory,
-        environment: runtimeOverrides(environment),
-      }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-      await this.tmux(socketName, ["new-window", "-d", "-t", "audit", "-n", "tui", "-c", executionDirectory, "--", process.execPath, LAUNCHER, attachSpecPath]);
-      await this.waitForTui(socketName, target);
-      return {
+      await this.tmux(socketName, ["new-session", "-d", "-x", "160", "-y", "48", "-s", "audit", "-n", "tui", "-c", executionDirectory, "--", process.execPath, LAUNCHER, runSpecPath], { timeout: 30_000 });
+      const terminal = {
         backend: this.multiplexerBackend ?? "tmux",
-        transport: "opencode-serve+prompt-api",
+        transport: "opencode-run+terminal-multiplexer",
         supported: true,
         status: "ready",
         live: true,
         socket_name: socketName,
         target,
-        server_url: serverUrl,
-        provider_session_id: session.id,
+        provider_session_id: providerSessionId,
+        output_path: outputPath,
+        exit_path: exitPath,
+        relay_spec_path: relaySpecPath,
         columns: 160,
         rows: 48,
         attach_command: `${this.multiplexerBackend === "psmux" ? "psmux" : "tmux"} -L ${socketName} attach-session -r -t ${target}`,
-        opencode_command: `opencode -s ${session.id}`,
-        resumed: session.resumed === true,
-        message: session.resumed === true ? `OpenCode TUI 已续接原会话并在隔离 ${this.multiplexerBackend ?? "tmux"} 中运行。` : `OpenCode TUI 已在隔离 ${this.multiplexerBackend ?? "tmux"} 会话中运行。`,
+        opencode_command: providerSessionId ? `opencode -s ${providerSessionId}` : null,
+        resumed: providerSessionId !== null,
+        message: providerSessionId ? `OpenCode run 已续接原会话并在隔离 ${this.multiplexerBackend ?? "tmux"} 中运行。` : `OpenCode run 已在隔离 ${this.multiplexerBackend ?? "tmux"} 会话中运行。`,
       };
+      const initialOutput = await this.waitForRunOutput(terminal);
+      const discoveredSessionId = providerSessionId ?? sessionFromOutput(initialOutput);
+      if (discoveredSessionId) {
+        terminal.provider_session_id = discoveredSessionId;
+        terminal.opencode_command = `opencode -s ${discoveredSessionId}`;
+      }
+      return terminal;
     } catch (error) {
-      await this.stop({ socket_name: socketName, target: "audit:server" }).catch(() => {});
+      await this.stop({ socket_name: socketName, target: "audit:tui" }).catch(() => {});
       throw error;
     }
   }
 
   async capture(terminal, lines = 400) {
     this.validateMetadata(terminal);
-    const result = await this.tmux(terminal.socket_name, ["capture-pane", "-p", "-J", "-S", `-${Math.min(Math.max(Number(lines) || 400, 20), 2000)}`, "-t", terminal.target]);
-    return String(result.stdout ?? "").replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
+    try {
+      const result = await this.tmux(terminal.socket_name, ["capture-pane", "-p", "-J", "-S", `-${Math.min(Math.max(Number(lines) || 400, 20), 2000)}`, "-t", terminal.target]);
+      return String(result.stdout ?? "").replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
+    } catch (error) {
+      if (!terminal.output_path) throw error;
+      const output = String(await readFile(terminal.output_path, "utf8")).replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
+      return output.split(/\r?\n/).slice(-Math.min(Math.max(Number(lines) || 400, 20), 2000)).join("\n");
+    }
   }
 
-  async abort(terminal, directory) {
-    if (!terminal?.server_url || !terminal?.provider_session_id) return false;
-    const query = new URLSearchParams({ directory });
-    await fetchJson(`${terminal.server_url}/session/${encodeURIComponent(terminal.provider_session_id)}/abort?${query}`, { method: "POST" });
+  async abort(terminal) {
+    this.validateMetadata(terminal);
+    await this.tmux(terminal.socket_name, ["send-keys", "-t", terminal.target, "C-c"]);
     return true;
   }
 
-  async signalServer(terminal, signal) {
-    this.validateMetadata({ ...terminal, target: "audit:server" });
-    if (!new Set(["SIGSTOP", "SIGCONT"]).has(signal)) throw new Error("不支持的 OpenCode server 信号。");
-    const result = await this.tmux(terminal.socket_name, ["list-panes", "-t", "audit:server", "-F", "#{pane_pid}"]);
+  async signalRun(terminal, signal) {
+    this.validateMetadata(terminal);
+    if (!new Set(["SIGSTOP", "SIGCONT"]).has(signal)) throw new Error("不支持的 OpenCode run 信号。");
+    const result = await this.tmux(terminal.socket_name, ["list-panes", "-t", terminal.target, "-F", "#{pane_pid}"]);
     const pid = Number(String(result.stdout ?? "").trim().split(/\s+/)[0]);
-    if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error("无法解析 OpenCode server pane PID。");
+    if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error("无法解析 OpenCode run pane PID。");
     try {
       process.kill(-pid, signal);
     } catch (error) {

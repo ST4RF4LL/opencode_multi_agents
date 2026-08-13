@@ -25,7 +25,7 @@ const PRIVATE_CONTEXT_FILES = Object.freeze({
   additional_instructions: "additional-instructions.txt",
   test_environment: "test-environment.txt",
 });
-const PROMPT_CLIENT = fileURLToPath(new URL("./opencode-prompt-client.mjs", import.meta.url));
+const TERMINAL_OUTPUT_RELAY = fileURLToPath(new URL("./terminal-output-relay.mjs", import.meta.url));
 const STAGE_DELIVERY_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json", import.meta.url));
 const STAGE_AGENT_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json", import.meta.url));
 
@@ -918,7 +918,7 @@ export class AuditRunner extends EventEmitter {
         audit.terminal = { backend: probe.backend ?? "terminal-multiplexer", supported: false, status: "unavailable", live: false, message: probe.message };
         await this.record(audit, "audit.terminal.unavailable", { message: redact(probe.message) });
       } else {
-        audit.terminal = { backend: probe.backend ?? "tmux", supported: true, status: "starting", live: false, message: `正在通过 ${probe.backend ?? "tmux"} 启动隔离 OpenCode TUI。` };
+        audit.terminal = { backend: probe.backend ?? "tmux", supported: true, status: "starting", live: false, message: `正在通过 ${probe.backend ?? "tmux"} 启动隔离 OpenCode run。` };
         await this.record(audit, "audit.terminal.starting", {});
         audit.terminal = await this.terminalMonitor.start({
           audit,
@@ -926,18 +926,13 @@ export class AuditRunner extends EventEmitter {
           environment,
           executionDirectory: paths.workspace_root,
           providerSessionId: sessionId,
+          args,
         });
         audit.execution_transport = audit.terminal.transport;
         audit.provider_session_id = providerSessionId(audit.terminal.provider_session_id);
-        const requestPath = join(this.stateRoot, audit.id, "prompt-request.json");
-        await writeFile(requestPath, `${JSON.stringify({
-          server_url: audit.terminal.server_url,
-          session_id: audit.terminal.provider_session_id,
-          directory: paths.workspace_root,
-          payload: { agent: "security-audit-orchestrator", tools: { question: false }, parts: [{ type: "text", text: prompt }] },
-        }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+        if (!isAbsolute(audit.terminal.relay_spec_path ?? "")) throw new Error("终端输出中继配置缺失。");
         command = process.execPath;
-        args = [PROMPT_CLIENT, requestPath];
+        args = [TERMINAL_OUTPUT_RELAY, audit.terminal.relay_spec_path];
         await this.record(audit, "audit.terminal.ready", {
           backend: audit.terminal.backend,
           target: audit.terminal.target,
@@ -1042,6 +1037,10 @@ export class AuditRunner extends EventEmitter {
     const sessionId = providerSessionId(value?.sessionID ?? value?.session_id ?? value?.session?.id);
     if (!sessionId || audit.provider_session_id) return;
     audit.provider_session_id = sessionId;
+    if (audit.terminal) {
+      audit.terminal.provider_session_id = sessionId;
+      audit.terminal.opencode_command = `opencode -s ${sessionId}`;
+    }
     await this.record(audit, "audit.session.bound", { provider_session_id: sessionId });
   }
 
@@ -1065,7 +1064,7 @@ export class AuditRunner extends EventEmitter {
       } finally {
         audit.terminal.live = false;
         audit.terminal.status = captured ? "archived" : "closed";
-        audit.terminal.message = captured ? "OpenCode TUI 已结束，当前显示最终只读快照。" : "OpenCode TUI 已结束且没有可归档画面。";
+        audit.terminal.message = captured ? "OpenCode run 已结束，当前显示最终只读快照。" : "OpenCode run 已结束且没有可归档画面。";
         audit.terminal.closed_at = new Date().toISOString();
       }
     }
@@ -1186,23 +1185,23 @@ export class AuditRunner extends EventEmitter {
       await this.record(audit, "audit.pausing", {});
       if (!child.kill("SIGSTOP")) throw new Error("暂停信号发送失败。");
       try {
-        if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGSTOP");
+        if (audit.terminal?.live) await this.terminalMonitor.signalRun(audit.terminal, "SIGSTOP");
       } catch (error) {
         child.kill("SIGCONT");
         audit.status = "running";
         await this.record(audit, "audit.pause_failed", { message: redact(error.message) });
-        throw new Error(`OpenCode server 暂停失败：${error.message}`);
+        throw new Error(`OpenCode run 暂停失败：${error.message}`);
       }
       audit.status = "paused";
       await this.record(audit, "audit.paused", {});
     } else if (action === "resume" && audit.status === "paused") {
-      if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGCONT");
+      if (audit.terminal?.live) await this.terminalMonitor.signalRun(audit.terminal, "SIGCONT");
       if (!child.kill("SIGCONT")) throw new Error("恢复信号发送失败。");
       audit.status = "running";
       await this.record(audit, "audit.resumed", {});
     } else if (action === "cancel" && ACTIVE.has(audit.status)) {
       if (audit.status === "paused") {
-        if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGCONT");
+        if (audit.terminal?.live) await this.terminalMonitor.signalRun(audit.terminal, "SIGCONT");
         if (!child.kill("SIGCONT")) throw new Error("取消前恢复审计进程失败。");
       }
       audit.interruption_reason = null;
@@ -1237,7 +1236,7 @@ export class AuditRunner extends EventEmitter {
       const audit = this.audits.get(id);
       if (!audit || audit.status === "cancelling") continue;
       if (audit.status === "paused") {
-        if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGCONT").catch(() => {});
+        if (audit.terminal?.live) await this.terminalMonitor.signalRun(audit.terminal, "SIGCONT").catch(() => {});
         child.kill("SIGCONT");
       }
       audit.interruption_reason = "workbench-shutdown";

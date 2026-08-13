@@ -284,7 +284,7 @@ function setTerminalStatus(payload) {
   value.className = `status ${payload.live ? "ready" : payload.available ? "warning" : "unavailable"}`;
   value.textContent = payload.live ? "实时" : payload.available ? "已归档" : "不可用";
   const dimensions = payload.columns && payload.rows ? ` · ${payload.columns}×${payload.rows}` : "";
-  $("terminal-target").textContent = payload.target ? `${payload.target}${dimensions}` : "尚未创建 TUI 窗口";
+  $("terminal-target").textContent = payload.target ? `${payload.target}${dimensions}` : "尚未创建 OpenCode run 窗口";
   $("terminal-message").textContent = payload.message ?? "";
   $("terminal-output").textContent = payload.output || (payload.live ? "终端窗口当前没有文本输出。" : "没有可显示的终端画面。");
   const commandWrap = $("terminal-command-wrap");

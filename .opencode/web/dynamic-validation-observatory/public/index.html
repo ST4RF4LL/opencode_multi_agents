@@ -136,12 +136,12 @@
     </dialog>
     <dialog id="terminal-dialog" class="terminal-dialog">
       <article class="report-dialog-body">
-        <div class="dialog-heading"><div><p class="eyebrow">READ-ONLY TMUX MONITOR</p><h2 id="terminal-title">OpenCode 实时窗口</h2><p id="terminal-subtitle"></p></div><button type="button" class="icon-button" data-close-terminal aria-label="关闭终端监控">×</button></div>
+        <div class="dialog-heading"><div><p class="eyebrow">READ-ONLY TERMINAL MONITOR</p><h2 id="terminal-title">OpenCode 实时窗口</h2><p id="terminal-subtitle"></p></div><button type="button" class="icon-button" data-close-terminal aria-label="关闭终端监控">×</button></div>
         <div class="terminal-toolbar"><span id="terminal-live-state" class="status unavailable">正在连接</span><code id="terminal-target" class="mono">—</code></div>
         <p id="terminal-message" class="terminal-message"></p>
-        <div id="terminal-command-wrap" class="terminal-command" hidden><span>本机只读 tmux 连接</span><code id="terminal-command" class="mono"></code></div>
+        <div id="terminal-command-wrap" class="terminal-command" hidden><span>本机只读终端连接</span><code id="terminal-command" class="mono"></code></div>
         <div id="opencode-session-wrap" class="terminal-command" hidden><span>OpenCode session</span><code id="opencode-session-id" class="mono"></code><span>OpenCode 会话直连</span><code id="opencode-session-command" class="mono"></code></div>
-        <pre id="terminal-output" class="terminal-output" tabindex="0">正在读取 tmux 窗口…</pre>
+        <pre id="terminal-output" class="terminal-output" tabindex="0">正在读取 OpenCode run 窗口…</pre>
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-terminal>关闭</button><button id="refresh-terminal" type="button" class="button primary">立即刷新</button></div>
       </article>
     </dialog>

@@ -42,9 +42,9 @@ npm --prefix .opencode run start:audit-workbench:runner
 5. `audit_id` 使用有限字符集并全局去重；创建接口要求 `Idempotency-Key`。
 6. “测试目标补充说明”与“测试环境信息”分别使用独立 ENABLE。未启用的 textarea 不进入请求；启用后必须包含非空文本。补充说明作为任务要求与侧重点，但不能扩大授权范围；测试环境开关是快速动态的任务级显式授权，也是后续人工完整动态的必要前提。
 7. Runner 创建工作台侧执行目录，并设置 `AUDIT_SOURCE_ROOT`、`AUDIT_WORKSPACE_ROOT`、`AUDIT_REPORTS_ROOT` 与 `AUDIT_TMP_ROOT`。所有源码、Git 与扫描命令必须显式使用只读源码根；所有输出只允许进入工作台侧 `reports`/`tmp` 命名空间。
-8. 有 tmux/psmux 时，工作台为每个审计创建独立 `-L owa-<digest>` namespace，在执行目录的 `audit:server` 运行 `opencode serve`，创建 provider session，并在精确的 `audit:tui` 窗口运行 `opencode attach --dir ... --session ... --mini`。审计 prompt 通过该 loopback server 的 `prompt_async` API 提交给固定 `security-audit-orchestrator`。Windows 自动尝试 `tmux.exe`、`psmux.exe`、`pmux.exe`，并使用绝对 `opencode.exe` 路径。
-9. OpenCode 与 multiplexer launcher 均使用参数数组和 `shell=false`；浏览器文本不会拼接为 shell 命令。tmux/psmux 不可用或 attach 能力不足时，Runner 回退到原有参数数组形式的 `opencode run`，但仍在工作台执行目录运行；静态审计仍可执行，只是没有 TUI 监控。
-10. 暂停、恢复和取消仅操作本服务持有的 prompt client 与该审计精确 tmux socket 中的 OpenCode server。取消已暂停任务时会先恢复精确进程组、调用 session abort，再终止 client；不会扫描或全局终止其他 tmux、OpenCode 或浏览器进程。
+8. 有 tmux/psmux 时，工作台为每个审计创建独立 `-L owa-<digest>` namespace，并在精确的 `audit:tui` 窗口直接运行 `opencode run --format json`。工作台通过任务状态目录中的只读输出中继消费同一进程的 JSONL 与退出状态，不再启动 `opencode serve`、`opencode attach` 或 loopback HTTP API。Windows 自动尝试 `tmux.exe`、`psmux.exe`、`pmux.exe`，并使用绝对 `opencode.exe` 路径。
+9. OpenCode 与 multiplexer launcher 均使用参数数组和 `shell=false`；浏览器文本不会拼接为 shell 命令。tmux/psmux 不可用或 `opencode run` 能力不足时，Runner 回退到普通子进程运行同一组 `opencode run` 参数，但仍在工作台执行目录运行；静态审计仍可执行，只是没有终端监控。
+10. 暂停、恢复和取消仅操作本服务持有的输出中继与该审计精确 tmux socket 中的 OpenCode run。取消已暂停任务时会先恢复精确进程组、向目标 pane 发送中断，再终止中继；不会扫描或全局终止其他 tmux、OpenCode 或浏览器进程。
 11. 已结束任务可以从任务详情删除。前端只显示一次确认弹窗，不要求手工输入 `audit_id`；确认后由界面把当前选中 ID 与 `If-Match` 版本提交给服务端。运行中任务或仍有活动动态验证的任务会被拒绝。清理范围只包括工作台受控的任务状态、可归属报告、临时目录、执行工作区和关联验证/处置状态，不会删除或修改被审计源码目录。
 
 Runner 状态和事件写入 `reports/platform/audit-runs/<audit-id>/`：
@@ -55,13 +55,14 @@ additional-instructions.txt # 可选；0600
 test-environment.txt        # 可选；0600，可能包含敏感测试凭证
 events.jsonl
 runner.log.jsonl
-prompt-request.json       # tmux 模式；0600
-tmux-server.json          # tmux 模式；只保存 OPENCODE_* 覆盖，不复制完整进程环境
-tmux-tui.json             # tmux 模式
+tmux-run.json             # tmux 模式；OpenCode run 参数和受控环境覆盖；0600
+opencode-run.jsonl        # tmux 模式；实际进程输出；0600
+opencode-run-exit.json    # tmux 模式；实际进程退出状态；0600
+terminal-output-relay.json # tmux 模式；只读输出中继路径；0600
 terminal.txt              # 任务结束时的最终只读画面（如可捕获）
 ```
 
-两个 textarea 的原文不会进入 `run.json`、事件、日志、工作区快照或审计 API。`run.json` 只保存 enable、长度、固定文件名与 SHA-256；OpenCode prompt 只绑定私密文件路径与摘要，并要求 Agent 在需要时读取且不得复述秘密。Runner 从私密文件派生仅驻内存的精确脱敏词，用于日志、SSE 和 Web 返回的实时/归档终端画面。直接 attach 到本机 tmux 是原始 OpenCode TUI，仍应把它视为可接触测试凭证的受信操作界面。断点恢复会重新校验文件摘要后复用原上下文；缺失或被修改时拒绝恢复。删除任务会连同该任务私密状态目录一起删除这些文件。
+两个 textarea 的原文不会进入 `run.json`、事件、日志、工作区快照或审计 API。`run.json` 只保存 enable、长度、固定文件名与 SHA-256；OpenCode prompt 只绑定私密文件路径与摘要，并要求 Agent 在需要时读取且不得复述秘密。Runner 从私密文件派生仅驻内存的精确脱敏词，用于日志、SSE 和 Web 返回的实时/归档终端画面。直接 attach 到本机 tmux/psmux 可以看到未经 Web 脱敏的原始 `opencode run` 输出，仍应把它视为可接触测试凭证的受信操作界面。断点恢复会重新校验文件摘要后复用原上下文；缺失或被修改时拒绝恢复。删除任务会连同该任务私密状态目录一起删除这些文件。
 
 审计交付制品写入 `reports/repositories/<repository-id>/`，中间文件写入 `tmp/repositories/<repository-id>/`。相对路径契约仍是 `reports/final/...`、`reports/coverage/...`、`tmp/<audit-id>/...`；上述物理命名空间由执行目录链接完成。`reports/**`、`tmp/*` 和 `workspace/` 已在项目根 `.gitignore` 中忽略。动态验证 request/result 也使用同一仓库制品命名空间，不再回写测试对象目录。
 

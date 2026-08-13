@@ -118,7 +118,7 @@ npm --prefix .opencode run start:audit-workbench
 npm --prefix .opencode run start:audit-workbench:runner
 ```
 
-当 tmux/psmux 与当前 OpenCode 的 `attach --dir`、`--session`、`--mini` 能力就绪时，新任务详情会显示“监控 OpenCode”。网页只读捕获工作台创建的精确 `audit:tui` 窗口；也可复制页面给出的 `tmux -L ...` 或 `psmux -L ...` 命令，在工作台主机以只读 client 直接查看。Windows 会优先解析 `opencode.exe`，必要时可用 `OPENCODE_BIN_PATH` 指向其绝对路径。任务完成后精确 multiplexer server 会关闭，最后一屏保存为只读快照。已经在旧版本中启动的任务不会被热迁移，需在重启工作台后新建任务才能获得该窗口。
+当 tmux/psmux 与当前 OpenCode 的 `run --format json` 能力就绪时，新任务详情会显示“监控 OpenCode”。网页只读捕获工作台创建的精确 `audit:tui` 窗口；也可复制页面给出的 `tmux -L ...` 或 `psmux -L ...` 命令，在工作台主机以只读 client 直接查看。该窗口直接承载审计用的 `opencode run`，不依赖 `opencode serve`。Windows 会优先解析 `opencode.exe`，必要时可用 `OPENCODE_BIN_PATH` 指向其绝对路径。任务完成后精确 multiplexer server 会关闭，最后一屏保存为只读快照。已经在旧版本中启动的任务不会被热迁移，需在重启工作台后新建任务才能获得该窗口。
 
 新任务不会再向指定的测试对象目录写入 `reports/` 或 `tmp/`。静态与动态 Runner 都在本项目 `workspace/audit-runs/<audit-id>/` 下执行；持久制品按仓库隔离到 `reports/repositories/<repository-id>/`，中间文件隔离到 `tmp/repositories/<repository-id>/`。这三类目录已由项目根 `.gitignore` 忽略。升级前已经启动的任务仍按旧进程的目录规则运行，工作台不会在任务执行期间移动其文件；待旧任务结束并重启工作台后，新建任务才使用隔离路径。
 
