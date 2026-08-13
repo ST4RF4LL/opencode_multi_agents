@@ -2,9 +2,11 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { arch as osArch, platform as osPlatform } from "node:os";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { resolveExecutablePath, resolvedOpenCodeExecutables } from "./executable-resolution.mjs";
 
 const execFileAsync = promisify(execFile);
 const LAUNCHER = fileURLToPath(new URL("./tmux-launcher.mjs", import.meta.url));
@@ -47,13 +49,18 @@ async function fetchJson(url, options = {}, timeoutMs = 5_000) {
 }
 
 export class OpenCodeTmuxMonitor {
-  constructor({ stateRoot, command = "opencode", tmuxCommand = "tmux", execute = execFileAsync, readyTimeoutMs = 30_000 } = {}) {
+  constructor({ stateRoot, command = null, tmuxCommand = null, environment = process.env, platform = osPlatform(), architecture = osArch(), execute = execFileAsync, resolveCommand = resolveExecutablePath, readyTimeoutMs = 30_000 } = {}) {
     this.stateRoot = stateRoot;
-    this.command = command;
-    this.tmuxCommand = tmuxCommand;
+    this.environment = environment;
+    this.platform = platform;
+    this.architecture = architecture;
+    this.command = command ?? environment.OPENCODE_BIN_PATH ?? environment.OPENCODE_BIN ?? (platform === "win32" ? "opencode.exe" : "opencode");
+    this.tmuxCommand = tmuxCommand ?? environment.AUDIT_MULTIPLEXER_BIN ?? environment.PSMUX_BIN ?? environment.TMUX_BIN ?? null;
     this.execute = execute;
+    this.resolveCommand = resolveCommand;
     this.readyTimeoutMs = readyTimeoutMs;
     this.probeResult = null;
+    this.multiplexerBackend = null;
   }
 
   socketName(auditId) {
@@ -62,18 +69,69 @@ export class OpenCodeTmuxMonitor {
 
   async probe({ force = false } = {}) {
     if (this.probeResult && !force) return this.probeResult;
-    try {
-      const [tmux, attach] = await Promise.all([
-        this.execute(this.tmuxCommand, ["-V"], { encoding: "utf8", timeout: 5_000, maxBuffer: 1024 * 1024 }),
-        this.execute(this.command, ["attach", "--help"], { encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024 }),
-      ]);
-      const help = `${attach.stdout ?? ""}\n${attach.stderr ?? ""}`;
-      const missing = ["--dir", "--session", "--mini"].filter(flag => !help.includes(flag));
-      if (missing.length) throw new Error(`OpenCode attach 缺少 ${missing.join("、")}`);
-      this.probeResult = { available: true, tmux_version: String(tmux.stdout || tmux.stderr || "").trim(), message: "tmux 与 OpenCode attach 已就绪。" };
-    } catch (error) {
-      this.probeResult = { available: false, tmux_version: null, message: `tmux 监控不可用：${error.message}` };
+    let openCodeError = null;
+    let openCodeCommand = null;
+    const openCodeCandidates = await resolvedOpenCodeExecutables({ command: this.command, environment: this.environment, platform: this.platform, architecture: this.architecture, resolveCommand: this.resolveCommand });
+    for (const resolved of openCodeCandidates) {
+      try {
+        const attach = await this.execute(resolved, ["attach", "--help"], { encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024, env: this.environment, windowsHide: true });
+        const help = `${attach.stdout ?? ""}\n${attach.stderr ?? ""}`;
+        const missing = ["--dir", "--session", "--mini"].filter(flag => !help.includes(flag));
+        if (missing.length) throw new Error(`OpenCode attach 缺少 ${missing.join("、")}`);
+        openCodeCommand = resolved;
+        break;
+      } catch (error) {
+        openCodeError = error;
+      }
     }
+    if (openCodeCommand) this.command = openCodeCommand;
+
+    let multiplexer = null;
+    let multiplexerError = null;
+    const multiplexerCandidates = this.platform === "win32"
+      ? [this.tmuxCommand, "tmux.exe", "psmux.exe", "pmux.exe", "tmux", "psmux", "pmux"]
+      : [this.tmuxCommand ?? "tmux"];
+    for (const candidate of [...new Set(multiplexerCandidates.filter(Boolean))]) {
+      const resolved = await this.resolveCommand(candidate, this.environment, this.platform);
+      if (!resolved) continue;
+      try {
+        const version = await this.execute(resolved, ["-V"], { encoding: "utf8", timeout: 5_000, maxBuffer: 1024 * 1024, env: this.environment, windowsHide: true });
+        const versionText = String(version.stdout || version.stderr || "").trim();
+        const executableName = basename(resolved).toLowerCase();
+        const backend = /psmux/i.test(versionText) || /^(?:psmux|pmux)(?:\.exe)?$/.test(executableName) ? "psmux" : "tmux";
+        multiplexer = { command: resolved, backend, version: versionText };
+        break;
+      } catch (error) {
+        multiplexerError = error;
+      }
+    }
+    if (multiplexer) {
+      this.tmuxCommand = multiplexer.command;
+      this.multiplexerBackend = multiplexer.backend;
+    }
+
+    if (!openCodeCommand || !multiplexer) {
+      const blockers = [];
+      if (!openCodeCommand) blockers.push(`OpenCode CLI 不可用${openCodeError?.message ? `：${openCodeError.message}` : "；Windows 请设置 OPENCODE_BIN_PATH 指向 opencode.exe"}`);
+      if (!multiplexer) blockers.push(`${this.platform === "win32" ? "psmux/tmux" : "tmux"} 不可用${multiplexerError?.message ? `：${multiplexerError.message}` : ""}`);
+      this.probeResult = {
+        available: false,
+        backend: multiplexer?.backend ?? null,
+        opencode_command: openCodeCommand,
+        multiplexer_command: multiplexer?.command ?? null,
+        tmux_version: multiplexer?.version ?? null,
+        message: `终端监控不可用：${blockers.join("；")}`,
+      };
+      return this.probeResult;
+    }
+    this.probeResult = {
+      available: true,
+      backend: multiplexer.backend,
+      opencode_command: openCodeCommand,
+      multiplexer_command: multiplexer.command,
+      tmux_version: multiplexer.version,
+      message: `${multiplexer.backend === "psmux" ? "psmux" : "tmux"} 与 OpenCode attach 已就绪。`,
+    };
     return this.probeResult;
   }
 
@@ -180,7 +238,7 @@ export class OpenCodeTmuxMonitor {
       await this.tmux(socketName, ["new-window", "-d", "-t", "audit", "-n", "tui", "-c", executionDirectory, process.execPath, LAUNCHER, attachSpecPath]);
       await this.waitForTui(socketName, target);
       return {
-        backend: "tmux",
+        backend: this.multiplexerBackend ?? "tmux",
         transport: "opencode-serve+prompt-api",
         supported: true,
         status: "ready",
@@ -191,10 +249,10 @@ export class OpenCodeTmuxMonitor {
         provider_session_id: session.id,
         columns: 160,
         rows: 48,
-        attach_command: `tmux -L ${socketName} attach-session -r -t ${target}`,
+        attach_command: `${this.multiplexerBackend === "psmux" ? "psmux" : "tmux"} -L ${socketName} attach-session -r -t ${target}`,
         opencode_command: `opencode -s ${session.id}`,
         resumed: session.resumed === true,
-        message: session.resumed === true ? "OpenCode TUI 已续接原会话并在隔离 tmux 中运行。" : "OpenCode TUI 已在隔离 tmux 会话中运行。",
+        message: session.resumed === true ? `OpenCode TUI 已续接原会话并在隔离 ${this.multiplexerBackend ?? "tmux"} 中运行。` : `OpenCode TUI 已在隔离 ${this.multiplexerBackend ?? "tmux"} 会话中运行。`,
       };
     } catch (error) {
       await this.stop({ socket_name: socketName, target: "audit:server" }).catch(() => {});

@@ -240,7 +240,7 @@ function renderAuditDetail() {
   }
   const actions = element("div", "action-row");
   if (audit.terminal) {
-    const monitorLabel = audit.terminal.live ? "监控 OpenCode" : audit.terminal.status === "archived" ? "查看终端快照" : "tmux 监控状态";
+    const monitorLabel = audit.terminal.live ? "监控 OpenCode" : audit.terminal.status === "archived" ? "查看终端快照" : "终端监控状态";
     const monitor = element("button", "button secondary", monitorLabel);
     monitor.addEventListener("click", () => openTerminal(audit));
     actions.append(monitor);
@@ -286,7 +286,7 @@ function setTerminalStatus(payload) {
   const dimensions = payload.columns && payload.rows ? ` · ${payload.columns}×${payload.rows}` : "";
   $("terminal-target").textContent = payload.target ? `${payload.target}${dimensions}` : "尚未创建 TUI 窗口";
   $("terminal-message").textContent = payload.message ?? "";
-  $("terminal-output").textContent = payload.output || (payload.live ? "tmux 窗口当前没有文本输出。" : "没有可显示的终端画面。");
+  $("terminal-output").textContent = payload.output || (payload.live ? "终端窗口当前没有文本输出。" : "没有可显示的终端画面。");
   const commandWrap = $("terminal-command-wrap");
   commandWrap.hidden = !payload.attach_command;
   $("terminal-command").textContent = payload.attach_command ?? "";
@@ -377,8 +377,8 @@ async function refreshTerminal(auditId) {
 function openTerminal(audit) {
   state.terminalAuditId = audit.id;
   $("terminal-title").textContent = `OpenCode · ${audit.name}`;
-  $("terminal-subtitle").textContent = `${audit.id} · 只读 tmux 窗口，不向 Agent 发送键盘输入`;
-  setTerminalStatus(withTerminalSession({ available: false, live: false, status: "connecting", target: audit.terminal?.target, output: "正在读取 tmux 窗口…", message: audit.terminal?.message }, audit.id));
+  $("terminal-subtitle").textContent = `${audit.id} · 只读 ${audit.terminal?.backend === "psmux" ? "psmux" : "tmux"} 窗口，不向 Agent 发送键盘输入`;
+  setTerminalStatus(withTerminalSession({ available: false, live: false, status: "connecting", target: audit.terminal?.target, output: "正在读取终端窗口…", message: audit.terminal?.message }, audit.id));
   $("terminal-dialog").showModal();
   state.terminalGrid = null;
   observeTerminalSize();

@@ -21,7 +21,7 @@
 
 工作台把审计流水线映射为八个阶段：范围冻结、资产侦察、威胁建模、多维漏洞审计、证据关联、发现裁决、验证复核和报告封存。新任务的进度与完成状态来自 `reports/stage-deliveries/<audit-id>/` 下摘要绑定的物化阶段清单；历史无清单任务才使用带标签的制品推断。服务重启后会重新校验持久清单和文件 SHA-256，因此已完成阶段不依赖进程内存。
 
-项目中心同时检查指定目录、Git 工作树、当前分支与提交、工作树修改以及工作台自身 OpenCode 配置的 JSON 有效性，并聚合该项目的历史/活动审计。目标源码与审计执行目录解耦：被测仓库只作为绝对源码根读取；OpenCode 在本工作台 `workspace/audit-runs/<audit-id>/` 中执行，Agent、Skill、MCP 和配置仍来自工作台安装目录，且禁用目标仓库对 Runner 配置的隐式覆盖。执行目录中的受控链接把相对 `reports/**` 与 `tmp/**` 分别导向 `reports/repositories/<repository-id>/` 和 `tmp/repositories/<repository-id>/`，所以现有制品契约不变，但不会污染被测仓库。环境中心通过 `GET /api/v1/environment` 对 Node.js、npm、Git、OpenCode、tmux、Coverage Ledger MCP、Java、Joern、OpenGrep/Semgrep、Chrome 和 Chrome DevTools MCP 生成缓存的能力快照，分别给出工作台、静态漏洞挖掘、OpenCode 窗口监控和 Web 动态验证是否可用；tmux 或某个动态组件缺失不会错误地把静态审计标记为不可用。
+项目中心同时检查指定目录、Git 工作树、当前分支与提交、工作树修改以及工作台自身 OpenCode 配置的 JSON 有效性，并聚合该项目的历史/活动审计。目标源码与审计执行目录解耦：被测仓库只作为绝对源码根读取；OpenCode 在本工作台 `workspace/audit-runs/<audit-id>/` 中执行，Agent、Skill、MCP 和配置仍来自工作台安装目录，且禁用目标仓库对 Runner 配置的隐式覆盖。执行目录中的受控链接把相对 `reports/**` 与 `tmp/**` 分别导向 `reports/repositories/<repository-id>/` 和 `tmp/repositories/<repository-id>/`，所以现有制品契约不变，但不会污染被测仓库。环境中心通过 `GET /api/v1/environment` 对 Node.js、npm、Git、OpenCode、tmux/psmux、Coverage Ledger MCP、Java、Joern、OpenGrep/Semgrep、Chrome 和 Chrome DevTools MCP 生成缓存的能力快照，分别给出工作台、静态漏洞挖掘、OpenCode 窗口监控和 Web 动态验证是否可用；终端复用器或某个动态组件缺失不会错误地把静态审计标记为不可用。Windows 上只检查 Chrome 文件存在性，不执行 `chrome.exe --version`，避免环境刷新派生空白浏览器窗口。
 
 ## 3. Runner 安全模型
 
@@ -42,8 +42,8 @@ npm --prefix .opencode run start:audit-workbench:runner
 5. `audit_id` 使用有限字符集并全局去重；创建接口要求 `Idempotency-Key`。
 6. “测试目标补充说明”与“测试环境信息”分别使用独立 ENABLE。未启用的 textarea 不进入请求；启用后必须包含非空文本。补充说明作为任务要求与侧重点，但不能扩大授权范围；测试环境开关是快速动态的任务级显式授权，也是后续人工完整动态的必要前提。
 7. Runner 创建工作台侧执行目录，并设置 `AUDIT_SOURCE_ROOT`、`AUDIT_WORKSPACE_ROOT`、`AUDIT_REPORTS_ROOT` 与 `AUDIT_TMP_ROOT`。所有源码、Git 与扫描命令必须显式使用只读源码根；所有输出只允许进入工作台侧 `reports`/`tmp` 命名空间。
-8. 有 tmux 时，工作台为每个审计创建独立 `-L owa-<digest>` socket，在执行目录的 `audit:server` 运行 `opencode serve`，创建 provider session，并在精确的 `audit:tui` 窗口运行 `opencode attach --dir ... --session ... --mini`。审计 prompt 通过该 loopback server 的 `prompt_async` API 提交给固定 `security-audit-orchestrator`。
-9. OpenCode 与 tmux launcher 均使用参数数组和 `shell=false`；浏览器文本不会拼接为 shell 命令。tmux 不可用或 attach 能力不足时，Runner 回退到原有参数数组形式的 `opencode run`，但仍在工作台执行目录运行；静态审计仍可执行，只是没有 TUI 监控。
+8. 有 tmux/psmux 时，工作台为每个审计创建独立 `-L owa-<digest>` namespace，在执行目录的 `audit:server` 运行 `opencode serve`，创建 provider session，并在精确的 `audit:tui` 窗口运行 `opencode attach --dir ... --session ... --mini`。审计 prompt 通过该 loopback server 的 `prompt_async` API 提交给固定 `security-audit-orchestrator`。Windows 自动尝试 `tmux.exe`、`psmux.exe`、`pmux.exe`，并使用绝对 `opencode.exe` 路径。
+9. OpenCode 与 multiplexer launcher 均使用参数数组和 `shell=false`；浏览器文本不会拼接为 shell 命令。tmux/psmux 不可用或 attach 能力不足时，Runner 回退到原有参数数组形式的 `opencode run`，但仍在工作台执行目录运行；静态审计仍可执行，只是没有 TUI 监控。
 10. 暂停、恢复和取消仅操作本服务持有的 prompt client 与该审计精确 tmux socket 中的 OpenCode server。取消已暂停任务时会先恢复精确进程组、调用 session abort，再终止 client；不会扫描或全局终止其他 tmux、OpenCode 或浏览器进程。
 11. 已结束任务可以从任务详情删除。前端只显示一次确认弹窗，不要求手工输入 `audit_id`；确认后由界面把当前选中 ID 与 `If-Match` 版本提交给服务端。运行中任务或仍有活动动态验证的任务会被拒绝。清理范围只包括工作台受控的任务状态、可归属报告、临时目录、执行工作区和关联验证/处置状态，不会删除或修改被审计源码目录。
 
@@ -126,6 +126,6 @@ Finding 人工处理状态保存在 `reports/platform/finding-workflow/`，当�
 
 ## 6. 当前部署假设
 
-当前实现是单机、loopback、单服务进程的本地工作平台，适合个人或受控工程机。macOS 与 Linux 可以直接提供 tmux 监控；Windows 原生环境通常没有 tmux，因此静态 Runner 会回退运行但不提供实时 TUI，WSL 则按 Linux 形态工作。指定目录始终按工作台主机的文件系统解释：工作台运行在 Linux 服务器时，macOS 浏览器中填写的也必须是该 Linux 服务器可访问的路径。制品始终位于工作台项目所在主机，不会隐式写回被测仓库。
+当前实现是单机、loopback、单服务进程的本地工作平台，适合个人或受控工程机。macOS 与 Linux 使用 tmux 监控；Windows 原生环境使用 psmux 的 tmux 兼容协议，WSL 仍按 Linux 形态工作。指定目录始终按工作台主机的文件系统解释：工作台运行在 Linux 服务器时，macOS 浏览器中填写的也必须是该 Linux 服务器可访问的路径。制品始终位于工作台项目所在主机，不会隐式写回被测仓库。
 
 当前阶段建议把“统一工作台 + 静态审计 + tmux/OpenCode 会话”视为一个 Linux 主机内的高集成单元；Windows + Chrome DevTools MCP 的现有动态验证可以继续作为独立受控执行面，把契约化证据同步回对应仓库。等工作台需要真正服务团队时，再增加受认证的反向代理、OIDC/RBAC、数据库状态、签名下载和多 Runner 调度。由于当前服务仍拒绝非 loopback 监听，不能仅把它绑定到公网或局域网地址来冒充团队平台。

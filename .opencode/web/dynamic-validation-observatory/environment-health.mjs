@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { arch, homedir, platform as osPlatform } from "node:os";
-import { basename, delimiter, isAbsolute, join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
+import { resolveExecutablePath, resolvedOpenCodeExecutables } from "./executable-resolution.mjs";
 
 const execFileAsync = promisify(execFile);
 const CACHE_TTL_MS = 30_000;
@@ -13,27 +13,7 @@ function oneLine(value) {
   return String(value ?? "").split(/\r?\n/).map(line => line.trim()).find(Boolean)?.slice(0, 240) ?? null;
 }
 
-async function executablePath(command, environment, platform) {
-  if (!command) return null;
-  const suffixes = platform === "win32"
-    ? (environment.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean)
-    : [""];
-  const explicit = isAbsolute(command) || command.includes("/") || command.includes("\\");
-  const candidates = explicit
-    ? [command]
-    : (environment.PATH ?? "").split(delimiter).filter(Boolean).flatMap(directory => suffixes.map(suffix => join(directory, suffix && !command.toUpperCase().endsWith(suffix.toUpperCase()) ? `${command}${suffix}` : command)));
-  for (const candidate of candidates) {
-    try {
-      await access(candidate, platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK);
-      return candidate;
-    } catch {
-      // Continue searching PATH without exposing filesystem errors.
-    }
-  }
-  return null;
-}
-
-async function probeExecutable({ id, label, category, command, args = ["--version"], requiredFor = [], environment, platform, execute, resolveCommand = executablePath }) {
+async function probeExecutable({ id, label, category, command, args = ["--version"], requiredFor = [], environment, platform, execute, resolveCommand = resolveExecutablePath }) {
   const resolved = await resolveCommand(command, environment, platform);
   if (!resolved) {
     return { id, label, category, status: "unavailable", version: null, command: basename(command || id), required_for: requiredFor, detail: "未找到可执行文件。" };
@@ -79,13 +59,46 @@ async function chromeComponent({ environment, platform, execute, resolveCommand 
   const commands = platform === "darwin"
     ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", join(homedir(), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome")]
     : platform === "win32"
-      ? [join(environment.PROGRAMFILES ?? "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"), join(environment["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe")]
+      ? [
+          join(environment.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "Google", "Chrome", "Application", "chrome.exe"),
+          join(environment.PROGRAMFILES ?? "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
+          join(environment["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe"),
+        ]
       : ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"];
   for (const command of commands) {
+    if (platform === "win32") {
+      const resolved = await resolveCommand(command, environment, platform);
+      if (resolved) {
+        return { id: "chrome", label: "Google Chrome", category: "动态验证", status: "ready", version: null, command: basename(resolved), required_for: ["dynamic"], detail: "已检测到 Chrome；Windows 环境不会为读取版本而启动浏览器进程。" };
+      }
+      continue;
+    }
     const result = await probeExecutable({ id: "chrome", label: "Google Chrome", category: "动态验证", command, requiredFor: ["dynamic"], environment, platform, execute, resolveCommand });
     if (result.status === "ready") return result;
   }
   return { id: "chrome", label: "Google Chrome", category: "动态验证", status: "unavailable", version: null, command: "google-chrome", required_for: ["dynamic"], detail: "未找到可见 Chrome；静态审计不受影响。" };
+}
+
+async function terminalMultiplexerComponent({ environment, platform, execute, resolveCommand }) {
+  const configured = environment.AUDIT_MULTIPLEXER_BIN ?? environment.PSMUX_BIN ?? environment.TMUX_BIN;
+  const commands = platform === "win32"
+    ? [configured, "tmux.exe", "psmux.exe", "pmux.exe", "tmux", "psmux", "pmux"]
+    : [configured, "tmux"];
+  for (const command of [...new Set(commands.filter(Boolean))]) {
+    const resolved = await resolveCommand(command, environment, platform);
+    if (!resolved) continue;
+    const result = await probeExecutable({ id: "tmux", label: platform === "win32" ? "psmux / tmux" : "tmux", category: "Agent 运行时", command: resolved, args: ["-V"], requiredFor: ["terminal_monitor"], environment, platform, execute, resolveCommand: async value => value });
+    if (result.status === "ready") return { ...result, detail: platform === "win32" ? "Windows 终端复用器已就绪（支持 psmux/tmux 兼容协议）。" : result.detail };
+  }
+  return { id: "tmux", label: platform === "win32" ? "psmux / tmux" : "tmux", category: "Agent 运行时", status: "unavailable", version: null, command: platform === "win32" ? "psmux.exe" : "tmux", required_for: ["terminal_monitor"], detail: platform === "win32" ? "未找到 psmux/tmux；静态审计仍可回退普通 Runner。" : "未找到 tmux；静态审计仍可回退普通 Runner。" };
+}
+
+async function openCodeComponent({ environment, platform, architecture, execute, resolveCommand }) {
+  const commands = await resolvedOpenCodeExecutables({ command: environment.OPENCODE_BIN_PATH ?? environment.OPENCODE_BIN, environment, platform, architecture, resolveCommand });
+  if (!commands.length) {
+    return { id: "opencode", label: "OpenCode CLI", category: "Agent 运行时", status: "unavailable", version: null, command: platform === "win32" ? "opencode.exe" : "opencode", required_for: ["static", "dynamic"], detail: platform === "win32" ? "未找到可直接执行的 opencode.exe；可设置 OPENCODE_BIN_PATH。" : "未找到可执行文件。" };
+  }
+  return probeExecutable({ id: "opencode", label: "OpenCode CLI", category: "Agent 运行时", command: commands[0], requiredFor: ["static", "dynamic"], environment, platform, execute, resolveCommand: async value => value });
 }
 
 function configuredComponent(id, label, category, configured, requiredFor, detail) {
@@ -115,7 +128,7 @@ function capability(id, label, componentIds, components, { anyOf = [] } = {}) {
 }
 
 export class EnvironmentHealthService {
-  constructor({ projectRoot, configPaths = [], environment = process.env, platform = osPlatform(), architecture = arch(), nodeVersion = process.versions.node, execute = execFileAsync, resolveCommand = executablePath, cacheTtlMs = CACHE_TTL_MS } = {}) {
+  constructor({ projectRoot, configPaths = [], environment = process.env, platform = osPlatform(), architecture = arch(), nodeVersion = process.versions.node, execute = execFileAsync, resolveCommand = resolveExecutablePath, cacheTtlMs = CACHE_TTL_MS } = {}) {
     this.projectRoot = projectRoot;
     this.configPaths = configPaths;
     this.environment = environment;
@@ -150,8 +163,8 @@ export class EnvironmentHealthService {
     const [npm, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, chrome, dependencies, mcp] = await Promise.all([
       probeExecutable({ id: "npm", label: "npm", category: "基础运行时", command: platform === "win32" ? "npm.cmd" : "npm", requiredFor: ["workbench", "dynamic"], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "git", label: "Git", category: "基础运行时", command: "git", requiredFor: ["static", "dynamic"], environment, platform, execute, resolveCommand }),
-      probeExecutable({ id: "opencode", label: "OpenCode CLI", category: "Agent 运行时", command: environment.OPENCODE_BIN ?? "opencode", requiredFor: ["static", "dynamic"], environment, platform, execute, resolveCommand }),
-      probeExecutable({ id: "tmux", label: "tmux", category: "Agent 运行时", command: "tmux", requiredFor: ["terminal_monitor"], environment, platform, execute, resolveCommand }),
+      openCodeComponent({ environment, platform, architecture: this.architecture, execute, resolveCommand }),
+      terminalMultiplexerComponent({ environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "java", label: "Java", category: "静态分析", command: javaCommand, requiredFor: ["static"], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "joern", label: "Joern", category: "静态分析", command: environment.JOERN_BIN ?? "joern", args: null, requiredFor: ["static"], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "joern_parse", label: "joern-parse", category: "静态分析", command: environment.JOERN_PARSE_BIN ?? "joern-parse", args: ["--list-languages"], requiredFor: ["static"], environment, platform, execute, resolveCommand }),

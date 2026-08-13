@@ -362,7 +362,7 @@ if (mode === "serve") {
     configPath: join(repositoryRoot, ".opencode", "opencode.json"),
     enabled: true,
     terminalMonitor: {
-      async probe() { return { available: false, message: "未找到 tmux。" }; },
+      async probe() { return { available: false, message: "未找到 tmux。", opencode_command: "C:\\tools\\opencode.exe" }; },
       async stop() {},
     },
     stageDeliveryVerifier: async ({ auditId }) => ({
@@ -382,7 +382,7 @@ if (mode === "serve") {
   const fallbackAudit = await fallbackRunner.createAudit({ audit_id: "audit-fallback-001", repository_id: "fixture", ref: "HEAD", allow_dirty: true }, "fallback-request-001");
   for (let attempt = 0; attempt < 100 && !["running", "failed"].includes(fallbackRunner.getAudit(fallbackAudit.id)?.status); attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
   assert.equal(fallbackRunner.getAudit(fallbackAudit.id).status, "running", String(fallbackRunner.getAudit(fallbackAudit.id).error ?? "fallback runner 未进入运行状态"));
-  assert.equal(fallbackSpawnCall.command, "opencode");
+  assert.equal(fallbackSpawnCall.command, "C:\\tools\\opencode.exe");
   assert.deepEqual(fallbackSpawnCall.args.slice(0, 6), ["run", "--format", "json", "--agent", "security-audit-orchestrator", "--dir"]);
   assert.equal(fallbackSpawnCall.args[6], join(platformRoot, "workspace", "audit-runs", "audit-fallback-001"));
   assert.equal(fallbackSpawnCall.options.cwd, join(platformRoot, "workspace", "audit-runs", "audit-fallback-001"));
@@ -485,6 +485,61 @@ if (mode === "serve") {
   const cachedProbeCount = versionProbeCount;
   await environmentService.snapshot();
   assert.equal(versionProbeCount, cachedProbeCount);
+
+  let windowsChromeLaunches = 0;
+  const windowsHealthService = new EnvironmentHealthService({
+    projectRoot: resolve(OPENCODE, ".."),
+    configPaths: [healthConfig],
+    environment: { PATH: "C:\\tools", PATHEXT: ".EXE;.CMD", PROGRAMFILES: "C:\\Program Files" },
+    platform: "win32",
+    architecture: "x64",
+    nodeVersion: "22.12.0",
+    async resolveCommand(command) {
+      const value = String(command).toLowerCase();
+      if (value.includes("chrome.exe")) return command;
+      if (value === "tmux.exe" || value === "tmux") return null;
+      if (value === "psmux.exe") return "C:\\tools\\psmux.exe";
+      if (value === "opencode.exe") return "C:\\tools\\opencode.exe";
+      return command;
+    },
+    async execute(command) {
+      if (/chrome\.exe/i.test(command)) {
+        windowsChromeLaunches += 1;
+        throw new Error("Windows Chrome probe must not launch the browser");
+      }
+      return { stdout: /psmux/i.test(command) ? "psmux 3.test\n" : `${basename(command)} 1.0.0\n`, stderr: "" };
+    },
+  });
+  const windowsHealth = await windowsHealthService.snapshot();
+  assert.equal(windowsChromeLaunches, 0);
+  assert.equal(windowsHealth.components.find(item => item.id === "chrome").status, "ready");
+  assert.equal(windowsHealth.components.find(item => item.id === "tmux").status, "ready");
+  assert.match(windowsHealth.components.find(item => item.id === "tmux").detail, /psmux/);
+
+  const windowsMonitorCalls = [];
+  const windowsMonitor = new OpenCodeTmuxMonitor({
+    stateRoot: join(temp, "windows-psmux-state"),
+    platform: "win32",
+    environment: { PATH: "C:\\tools", PATHEXT: ".EXE" },
+    async resolveCommand(command) {
+      const value = String(command).toLowerCase();
+      if (value === "opencode.exe") return "C:\\tools\\opencode.exe";
+      if (value === "psmux.exe") return "C:\\tools\\psmux.exe";
+      return null;
+    },
+    async execute(command, args) {
+      windowsMonitorCalls.push({ command, args });
+      if (/opencode\.exe$/i.test(command)) return { stdout: "--dir --session --mini\n", stderr: "" };
+      if (/psmux\.exe$/i.test(command) && args[0] === "-V") return { stdout: "psmux 3.test\n", stderr: "" };
+      throw new Error(`unexpected command: ${command}`);
+    },
+  });
+  const windowsMonitorProbe = await windowsMonitor.probe();
+  assert.equal(windowsMonitorProbe.available, true);
+  assert.equal(windowsMonitorProbe.backend, "psmux");
+  assert.equal(windowsMonitorProbe.opencode_command, "C:\\tools\\opencode.exe");
+  assert.equal(windowsMonitorProbe.multiplexer_command, "C:\\tools\\psmux.exe");
+  assert(windowsMonitorCalls.every(call => call.command !== "opencode" && call.command !== "tmux"));
 
   const findingWorkflowRoot = join(temp, "finding-workflow");
   const findingWorkflow = new FindingWorkflowStore({ stateRoot: findingWorkflowRoot });
@@ -1204,7 +1259,7 @@ if (mode === "serve") {
   assert.equal(deletedWorkflow.status, "unreviewed");
   assert.equal(deletedWorkflow.version, 0);
 
-  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: tmuxInstalled ? 195 : 190 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: tmuxInstalled ? 197 : 192 })}\n`);
 } finally {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {

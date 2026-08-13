@@ -910,11 +910,15 @@ export class AuditRunner extends EventEmitter {
     audit.execution_transport = "opencode-run";
     try {
       const probe = await this.terminalMonitor.probe();
+      if (typeof probe.opencode_command === "string" && probe.opencode_command) {
+        this.command = probe.opencode_command;
+        command = probe.opencode_command;
+      }
       if (!probe.available) {
-        audit.terminal = { backend: "tmux", supported: false, status: "unavailable", live: false, message: probe.message };
+        audit.terminal = { backend: probe.backend ?? "terminal-multiplexer", supported: false, status: "unavailable", live: false, message: probe.message };
         await this.record(audit, "audit.terminal.unavailable", { message: redact(probe.message) });
       } else {
-        audit.terminal = { backend: "tmux", supported: true, status: "starting", live: false, message: "正在启动隔离 OpenCode TUI。" };
+        audit.terminal = { backend: probe.backend ?? "tmux", supported: true, status: "starting", live: false, message: `正在通过 ${probe.backend ?? "tmux"} 启动隔离 OpenCode TUI。` };
         await this.record(audit, "audit.terminal.starting", {});
         audit.terminal = await this.terminalMonitor.start({
           audit,
@@ -943,7 +947,7 @@ export class AuditRunner extends EventEmitter {
       }
     } catch (error) {
       await this.terminalMonitor.stop(audit.terminal).catch(() => {});
-      audit.terminal = { backend: "tmux", supported: false, status: "error", live: false, message: `tmux 监控启动失败，已回退普通 Runner：${redact(error.message)}` };
+      audit.terminal = { backend: audit.terminal?.backend ?? "terminal-multiplexer", supported: false, status: "error", live: false, message: `终端监控启动失败，已回退普通 Runner：${redact(error.message)}` };
       audit.execution_transport = "opencode-run";
       await this.record(audit, "audit.terminal.failed", { message: audit.terminal.message });
     }
@@ -1078,14 +1082,14 @@ export class AuditRunner extends EventEmitter {
       opencode_command: sessionId ? `opencode -s ${sessionId}` : null,
     };
     if (!terminal?.supported) {
-      return { available: false, live: false, status: terminal?.status ?? "unavailable", target: null, attach_command: null, ...sessionConnection, output: "", message: terminal?.message ?? "该任务未启用 tmux OpenCode 监控。" };
+      return { available: false, live: false, status: terminal?.status ?? "unavailable", target: null, attach_command: null, ...sessionConnection, output: "", message: terminal?.message ?? "该任务未启用 OpenCode 终端监控。" };
     }
     if (terminal.live) {
       try {
         const output = redactTerminalOutput(await this.terminalMonitor.capture(terminal), await this.redactionsForAudit(audit));
         return { available: true, live: true, status: terminal.status, target: terminal.target, attach_command: terminal.attach_command, ...sessionConnection, output, message: terminal.message, columns: terminal.columns ?? null, rows: terminal.rows ?? null };
       } catch (error) {
-        return { available: false, live: false, status: "disconnected", target: terminal.target, attach_command: terminal.attach_command, ...sessionConnection, output: "", message: `tmux 窗口暂时不可读：${redact(error.message)}` };
+        return { available: false, live: false, status: "disconnected", target: terminal.target, attach_command: terminal.attach_command, ...sessionConnection, output: "", message: `终端窗口暂时不可读：${redact(error.message)}` };
       }
     }
     try {
@@ -1102,7 +1106,7 @@ export class AuditRunner extends EventEmitter {
     const audit = this.audits.get(id);
     if (!audit) throw Object.assign(new Error("审计不存在。"), { statusCode: 404, code: "audit-not-found" });
     if (!audit.terminal?.supported || !audit.terminal?.live || typeof this.terminalMonitor.resize !== "function") {
-      throw Object.assign(new Error("该审计当前没有可调整的实时 tmux 窗口。"), { statusCode: 409, code: "terminal-not-live" });
+      throw Object.assign(new Error("该审计当前没有可调整的实时终端窗口。"), { statusCode: 409, code: "terminal-not-live" });
     }
     if (!Number.isInteger(columns) || columns < 40 || columns > 320 || !Number.isInteger(rows) || rows < 12 || rows > 120) {
       throw Object.assign(new Error("终端尺寸必须是 40-320 列、12-120 行范围内的整数。"), { statusCode: 422, code: "terminal-size-invalid" });

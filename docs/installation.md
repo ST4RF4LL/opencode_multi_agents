@@ -14,7 +14,7 @@
   curl -fsSL https://opencode.ai/install | bash
   ```
 
-- tmux（推荐）。它用于工作台中的只读 OpenCode 实时窗口；缺失时静态审计仍会回退到普通 Runner。macOS 可执行 `brew install tmux`，Debian/Ubuntu/WSL 可执行 `sudo apt install tmux`。Windows 原生环境若不使用 WSL，当前不提供 tmux 窗口监控。
+- 终端复用器（推荐）。macOS/Linux/WSL 使用 tmux；Windows 原生环境使用 psmux（支持 tmux CLI 协议）。它用于工作台中的只读 OpenCode 实时窗口；缺失时静态审计仍会回退到普通 Runner。macOS 可执行 `brew install tmux`，Debian/Ubuntu/WSL 可执行 `sudo apt install tmux`；Windows 安装 psmux，并确保 `psmux.exe`（或它提供的 `tmux.exe` 别名）位于 PATH。
 
 - JDK 与 Joern。Joern 官方文档以 JDK 19 为前提；如使用更新 JDK，请在本机验证兼容性。按[Joern 安装说明](https://docs.joern.io/installation/)安装最新预编译版本：
 
@@ -118,7 +118,7 @@ npm --prefix .opencode run start:audit-workbench
 npm --prefix .opencode run start:audit-workbench:runner
 ```
 
-当 `tmux` 与当前 OpenCode 的 `attach --dir`、`--session`、`--mini` 能力就绪时，新任务详情会显示“监控 OpenCode”。网页只读捕获工作台创建的精确 `audit:tui` 窗口；也可复制页面给出的 `tmux -L owa-... attach-session -r -t audit:tui` 命令，在工作台主机以只读 client 直接查看。任务完成后精确 tmux server 会关闭，最后一屏保存为只读快照。已经在旧版本中启动的任务不会被热迁移，需在重启工作台后新建任务才能获得该窗口。
+当 tmux/psmux 与当前 OpenCode 的 `attach --dir`、`--session`、`--mini` 能力就绪时，新任务详情会显示“监控 OpenCode”。网页只读捕获工作台创建的精确 `audit:tui` 窗口；也可复制页面给出的 `tmux -L ...` 或 `psmux -L ...` 命令，在工作台主机以只读 client 直接查看。Windows 会优先解析 `opencode.exe`，必要时可用 `OPENCODE_BIN_PATH` 指向其绝对路径。任务完成后精确 multiplexer server 会关闭，最后一屏保存为只读快照。已经在旧版本中启动的任务不会被热迁移，需在重启工作台后新建任务才能获得该窗口。
 
 新任务不会再向指定的测试对象目录写入 `reports/` 或 `tmp/`。静态与动态 Runner 都在本项目 `workspace/audit-runs/<audit-id>/` 下执行；持久制品按仓库隔离到 `reports/repositories/<repository-id>/`，中间文件隔离到 `tmp/repositories/<repository-id>/`。这三类目录已由项目根 `.gitignore` 忽略。升级前已经启动的任务仍按旧进程的目录规则运行，工作台不会在任务执行期间移动其文件；待旧任务结束并重启工作台后，新建任务才使用隔离路径。
 
