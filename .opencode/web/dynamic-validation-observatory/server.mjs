@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import MarkdownIt from "markdown-it";
 import { AuditRunner } from "./audit-runner.mjs";
 import { EnvironmentHealthService } from "./environment-health.mjs";
 import { FindingWorkflowStore } from "./finding-workflow.mjs";
@@ -23,6 +24,13 @@ const DEFAULT_ROLES = join(PROJECT_ROOT, ".opencode", "agent-manifest", "roles.j
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const MAX_REQUEST_BODY = 64 * 1024;
 const MAX_REPORT_BODY = 8 * 1024 * 1024;
+const markdownRenderer = new MarkdownIt({ html: false, linkify: false, typographer: false, breaks: false });
+const defaultLinkOpen = markdownRenderer.renderer.rules.link_open
+  ?? ((tokens, index, options, _environment, self) => self.renderToken(tokens, index, options));
+markdownRenderer.renderer.rules.link_open = (tokens, index, options, environment, self) => {
+  tokens[index].attrSet("rel", "noopener noreferrer");
+  return defaultLinkOpen(tokens, index, options, environment, self);
+};
 const STATIC_FILES = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
@@ -294,6 +302,7 @@ export function createAuditWorkbenchServer({
 
   async function snapshot() {
     await Promise.all([runner.ready, findingWorkflow.ready]);
+    await runner.reconcileLegacyCompletions("workspace-watchdog");
     const runnerAudits = runner.listAudits();
     const validationByRepository = new Map();
     await Promise.all(runtimeSources().map(async ({ repository, root }) => {
@@ -530,7 +539,8 @@ export function createAuditWorkbenchServer({
       const reportId = matchReportPath(url.pathname);
       if (request.method === "GET" && reportId) {
         const { report, bytes } = await reportContent(reportId);
-        json(response, 200, { ...report, body: bytes.toString("utf8") });
+        const body = bytes.toString("utf8");
+        json(response, 200, { ...report, body, rendered_html: markdownRenderer.render(body), rendering: "markdown-it-html-disabled" });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/validation-requests") {

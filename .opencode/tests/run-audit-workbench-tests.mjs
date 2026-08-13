@@ -158,6 +158,7 @@ try {
   await mkdir(join(reportsRoot, "coverage"), { recursive: true });
   await mkdir(join(reportsRoot, "correlation"), { recursive: true });
   await mkdir(join(reportsRoot, "final"), { recursive: true });
+  await mkdir(join(reportsRoot, "stage-deliveries", "audit-history", "sets"), { recursive: true });
   await mkdir(runtimeRoot, { recursive: true });
   await writeFile(join(repositoryRoot, ".opencode", "opencode.json"), `${JSON.stringify({
     mcp: { coverage_ledger: { type: "local", command: ["node", ".opencode/mcp/coverage-ledger-server.mjs"], cwd: ".", timeout: 300000, enabled: true } },
@@ -184,7 +185,12 @@ try {
       contradictions: [],
     }],
   }), "utf8");
-  await writeFile(join(reportsRoot, "final", "security-audit-report.audit-history.md"), "# 安全审计报告\n", "utf8");
+  await writeFile(join(reportsRoot, "final", "security-audit-report.audit-history.md"), "# 安全审计报告\n\n| 项目 | 状态 |\n|---|---|\n| 边界 | 通过 |\n\n<script>alert('blocked')</script>\n\n[危险链接](javascript:alert('blocked'))\n", "utf8");
+  await writeFile(join(reportsRoot, "stage-deliveries", "audit-history", "sets", "runtime-validation-requests.r1.json"), JSON.stringify({
+    schema_version: 1,
+    audit_id: "audit-history",
+    requests: [],
+  }), "utf8");
   const verifiedModel = finalReportModel("audit-sealed");
   await writeFile(join(reportsRoot, "final", "security-audit-report-model.audit-sealed.json"), `${JSON.stringify(verifiedModel, null, 2)}\n`, "utf8");
   await writeFile(join(reportsRoot, "final", "security-audit-report.audit-sealed.md"), renderFinalReport(verifiedModel), "utf8");
@@ -285,11 +291,12 @@ if (mode === "serve") {
       server_url: `http://127.0.0.1:${promptPort}`,
       session_id: "ses_prompt_fixture",
       directory: canonicalRepositoryRoot,
-      payload: { agent: "security-audit-orchestrator", parts: [{ type: "text", text: "fixture prompt" }] },
+      payload: { agent: "security-audit-orchestrator", tools: { question: false }, parts: [{ type: "text", text: "fixture prompt" }] },
     })}\n`, "utf8");
     const promptClient = resolve(OPENCODE, "web/dynamic-validation-observatory/opencode-prompt-client.mjs");
     const result = await execFileAsync(process.execPath, [promptClient, promptSpec], { encoding: "utf8", timeout: 5_000 });
     assert.equal(submittedPrompt.agent, "security-audit-orchestrator");
+    assert.equal(submittedPrompt.tools.question, false);
     assert.match(submittedPrompt.messageID, /^msg_owa_/);
     assert.match(result.stdout, /"state":"completed"/);
     assert.match(result.stdout, /"type":"prompt_response"/);
@@ -315,6 +322,7 @@ if (mode === "serve") {
   assert(snapshot.reports.every(report => /^[a-f0-9]{64}$/.test(report.sha256)));
   assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").progress, 63);
   assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").stage, "制品不连续");
+  assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").progress_source, "legacy-artifact-heuristic");
   assert.equal(snapshot.reports.find(report => report.audit_id === "audit-history").integrity_state, "digest_only");
   assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").integrity_state, "verified_model");
   assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").model_digest, verifiedModel.manifest_digest);
@@ -495,6 +503,8 @@ if (mode === "serve") {
     assert.equal(workspace.summary.finding_count, 1);
     assert.equal(workspace.audits[0].repository_id, "fixture");
     assert.match(workspace.findings[0].resource_id, /^[a-f0-9]{24}$/);
+    assert.equal(workspace.findings[0].repository_id, "fixture");
+    assert.equal(workspace.findings[0].repository_name, "测试仓库");
     assert.equal(workspace.findings[0].workflow.status, "unreviewed");
     assert.equal(workspace.findings[0].workflow.version, 0);
     const repositoryResponse = await fetch(`${base}/api/v1/repositories`);
@@ -576,13 +586,18 @@ if (mode === "serve") {
     const reportResponse = await fetch(`${base}/api/v1/reports/${historyReport.id}`);
     assert.equal(reportResponse.status, 200);
     const report = await reportResponse.json();
-    assert.equal(report.body, "# 安全审计报告\n");
+    assert.match(report.body, /^# 安全审计报告/);
+    assert.equal(report.rendering, "markdown-it-html-disabled");
+    assert.match(report.rendered_html, /<h1>安全审计报告<\/h1>/);
+    assert.match(report.rendered_html, /<table>/);
+    assert.doesNotMatch(report.rendered_html, /<script>/i);
+    assert.doesNotMatch(report.rendered_html, /href=["']javascript:/i);
     assert.equal(report.sha256, historyReport.sha256);
     assert.equal(report.integrity_state, "digest_only");
     const reportDownload = await fetch(`${base}/api/v1/reports/${historyReport.id}/download`);
     assert.equal(reportDownload.status, 200);
     assert.match(reportDownload.headers.get("content-disposition"), /security-audit-report\.audit-history\.md/);
-    assert.equal(await reportDownload.text(), "# 安全审计报告\n");
+    assert.equal(await reportDownload.text(), report.body);
     assert.equal((await fetch(`${base}/api/v1/reports/not-found`)).status, 404);
 
     const createResponse = await fetch(`${base}/api/v1/audits`, {
@@ -631,11 +646,13 @@ if (mode === "serve") {
     assert.equal(promptRequest.session_id, "ses_audit-live-001");
     assert.equal(promptRequest.directory, executionWorkspace);
     assert.equal(promptRequest.payload.agent, "security-audit-orchestrator");
+    assert.equal(promptRequest.payload.tools.question, false);
     assert.match(promptRequest.payload.parts[0].text, /audit-live-001/);
     assert.match(promptRequest.payload.parts[0].text, new RegExp(canonicalRepositoryRoot.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.match(promptRequest.payload.parts[0].text, /源码根目录必须只读/);
     assert.match(promptRequest.payload.parts[0].text, /120 秒快速动态确认/);
     assert.match(promptRequest.payload.parts[0].text, /完整动态验证仍只允许用户在工作台手动点击/);
+    assert.match(promptRequest.payload.parts[0].text, /不得调用 question 工具/);
     assert.match(promptRequest.payload.parts[0].text, /additional-instructions\.txt/);
     assert.match(promptRequest.payload.parts[0].text, /test-environment\.txt/);
     assert.equal(promptRequest.payload.parts[0].text.includes("context-attacker-secret"), false);
@@ -947,7 +964,7 @@ if (mode === "serve") {
     assert.equal(artifactOnlyDeleteResponse.status, 200, JSON.stringify(await artifactOnlyDeleteResponse.clone().json()));
     const artifactOnlyDeletion = await artifactOnlyDeleteResponse.json();
     assert.equal(artifactOnlyDeletion.removed_runner_state, false);
-    assert.equal(artifactOnlyDeletion.removed_artifact_files, 3);
+    assert.equal(artifactOnlyDeletion.removed_artifact_files, 4);
     assert.equal(artifactOnlyDeletion.removed_finding_workflows, 1);
     await assert.rejects(stat(findingWorkflow.directory(findingResourceId)), error => error.code === "ENOENT");
     assert.equal((await stat(join(reportsRoot, "final", "security-audit-report.audit-sealed.md"))).isFile(), true);
@@ -957,6 +974,7 @@ if (mode === "serve") {
     const indexHtml = await indexResponse.text();
     assert.match(indexHtml, /DeepHole·JAVA/);
     assert.match(indexHtml, /id="report-dialog"/);
+    assert.match(indexHtml, /class="report-preview markdown-body"/);
     assert.match(indexHtml, /id="finding-dialog"/);
     assert.match(indexHtml, /id="terminal-dialog"/);
     assert.match(indexHtml, /id="opencode-session-id"/);
@@ -986,6 +1004,9 @@ if (mode === "serve") {
     assert.match(appSource, /syncAuditContextControls/);
     assert.match(appSource, /task_dynamic_validation_enabled/);
     assert.match(appSource, /progress_source/);
+    assert.match(appSource, /markdown-it-html-disabled/);
+    assert.match(appSource, /关联 Repo/);
+    assert.match(appSource, /finding\.repository_name/);
     assert.doesNotMatch(appSource, /window\.confirm/);
     const referencedIds = [...appSource.matchAll(/\$\("([A-Za-z0-9_-]+)"\)/g)].map(match => match[1]);
     assert.deepEqual([...new Set(referencedIds)].filter(id => !indexHtml.includes(`id="${id}"`)), []);
@@ -1079,8 +1100,10 @@ if (mode === "serve") {
   assert.equal(resumedSpawnCall.command, process.execPath);
   const resumePrompt = JSON.parse(await readFile(join(resumableAuditDirectory, "prompt-request.json"), "utf8"));
   assert.equal(resumePrompt.session_id, "ses_resume_fixture");
+  assert.equal(resumePrompt.payload.tools.question, false);
   assert.match(resumePrompt.payload.parts[0].text, /第 1 次断点恢复/);
   assert.match(resumePrompt.payload.parts[0].text, /不要删除有效制品/);
+  assert.match(resumePrompt.payload.parts[0].text, /不得调用 question 工具/);
   const duplicateResume = await resumableRunner.action(resumableAuditId, "recover", interruptedAudit.version, "resume-action-001");
   assert.equal(duplicateResume.status, "running");
   assert.equal(resumeTerminalMonitor.starts.length, 1, "同一幂等键不得重复启动恢复 Runner");
@@ -1088,6 +1111,63 @@ if (mode === "serve") {
   for (let attempt = 0; attempt < 50 && resumableRunner.getAudit(resumableAuditId)?.status !== "completed"; attempt += 1) await new Promise(resolve => setImmediate(resolve));
   assert.equal(resumableRunner.getAudit(resumableAuditId).status, "completed");
   await resumableRunner.shutdown();
+
+  const legacyWatchdogStateRoot = join(temp, "legacy-watchdog-state");
+  const legacyWatchdogReportsRoot = join(temp, "legacy-watchdog-reports");
+  const legacyWatchdogId = "audit-legacy-watchdog";
+  const legacyWatchdogDirectory = join(legacyWatchdogStateRoot, legacyWatchdogId);
+  for (const directory of ["coverage", "vulnerability-mining", "correlation", "adjudication", "validation", "final"]) {
+    await mkdir(join(legacyWatchdogReportsRoot, directory), { recursive: true });
+  }
+  await writeFile(join(legacyWatchdogReportsRoot, "coverage", `coverage-plan.${legacyWatchdogId}.json`), JSON.stringify({ audit_id: legacyWatchdogId }), "utf8");
+  for (const directory of ["vulnerability-mining", "correlation", "adjudication", "validation"]) {
+    await writeFile(join(legacyWatchdogReportsRoot, directory, `${directory}.${legacyWatchdogId}.json`), JSON.stringify({ audit_id: legacyWatchdogId }), "utf8");
+  }
+  await writeFile(join(legacyWatchdogReportsRoot, "final", `security-audit-report.${legacyWatchdogId}.md`), "# 历史审计报告\n", "utf8");
+  await mkdir(legacyWatchdogDirectory, { recursive: true });
+  await writeFile(join(legacyWatchdogDirectory, "run.json"), `${JSON.stringify({
+    id: legacyWatchdogId,
+    name: "历史任务完成性 watchdog 测试",
+    repository_id: "fixture",
+    repository_name: "测试仓库",
+    commit: fixtureCommit,
+    branch: "main",
+    status: "interrupted",
+    version: 2,
+    event_sequence: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    finished_at: new Date().toISOString(),
+    exit_code: null,
+    error: "workbench restarted",
+    allow_dirty: false,
+    paths: { source_root: canonicalRepositoryRoot, workspace_root: join(platformRoot, "workspace", "audit-runs", legacyWatchdogId), reports_root: legacyWatchdogReportsRoot, tmp_root: join(platformRoot, "tmp", "repositories", "fixture") },
+    terminal: { backend: "tmux", supported: true, status: "disconnected", live: true, socket_name: "owa-legacy-watchdog", target: "audit:tui" },
+  }, null, 2)}\n`, "utf8");
+  const legacyWatchdogTerminal = new FakeTerminalMonitor();
+  let legacyWatchdogSpawned = false;
+  const legacyWatchdogRunner = new AuditRunner({
+    stateRoot: legacyWatchdogStateRoot,
+    platformRoot,
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    terminalMonitor: legacyWatchdogTerminal,
+    spawnProcess() { legacyWatchdogSpawned = true; return new FakeChild(); },
+  });
+  await legacyWatchdogRunner.ready;
+  const watchdogCompletedAudit = legacyWatchdogRunner.getAudit(legacyWatchdogId);
+  assert.equal(watchdogCompletedAudit.status, "completed");
+  assert.equal(watchdogCompletedAudit.completion_source, "legacy-artifact-heuristic");
+  assert.equal(watchdogCompletedAudit.error, null);
+  assert.equal(legacyWatchdogTerminal.abortCalls.length, 1);
+  assert.equal(legacyWatchdogTerminal.stopCalls, 1);
+  await assert.rejects(
+    legacyWatchdogRunner.action(legacyWatchdogId, "recover", watchdogCompletedAudit.version, "legacy-watchdog-recover"),
+    error => error.code === "audit-not-recoverable",
+  );
+  assert.equal(legacyWatchdogSpawned, false);
+  await legacyWatchdogRunner.shutdown();
 
   const orphanSession = await mkdtemp(join(tmpdir(), "opencode-dynval-"));
   const recoveryState = join(temp, "recovery-state");

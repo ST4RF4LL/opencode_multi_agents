@@ -48,5 +48,5 @@ Deep packs live under `.opencode/skills/java-subagent/` and share assets here:
 4. `security-attack-chain-hunter` performs a new system-level pass across every Focus Area, trust boundary, and asset.
 5. `security-evidence-correlator` preserves structural/semantic accounting, merges cross-track evidence, deduplicates candidates, and canonicalizes supplied attack chains.
 6. `security-audit-orchestrator` retains v1 for exact file/function structural accounting, finalizes and verifies Coverage Ledger v2 for vulnerability-type/interface checks, verifies the machine-rendered summary, and runs semantic verification. Only all terminal gates authorize a complete accounting statement.
-7. `vulnerability-validator` submits that sealed report once to vuln-judger with `engine=opencode`, monitors the Affirmative/Negative/Moderator run, and writes digest-bound review companions.
+7. `vulnerability-validator` runs the local Affirmative/Negative/Moderator chain before final report sealing and writes digest-bound review companions.
 8. `security-audit-orchestrator` sends completed review learning signals to `security-skill-optimizer`, which updates skills, rules, and cases with threat/Focus/dimension/lens/track tags. Incomplete reviews cannot promote candidates as confirmed cases.

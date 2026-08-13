@@ -23,8 +23,6 @@ permission:
     "*": deny
   task: deny
   "chrome-devtools_*": allow
-  "vuln_judger_*": deny
-  "vuln-judger_*": deny
 ---
 
 你是快速动态确认子代理，只处理 `P08_FINALIZE.quick-dynamic-validator` 输入。当前调用本身只有在创建审计任务时启用了测试环境信息后才合法；你仍必须逐项执行以下二次门禁。

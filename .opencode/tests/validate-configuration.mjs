@@ -107,8 +107,10 @@ async function main() {
   assert(orchestratorText.includes('"*coverage-ledger.jsonl*": deny'), "security-audit-orchestrator must hard-deny direct canonical ledger writes");
   assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
   assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");
-  assert(config.permission["vuln_judger_*"] === "deny", "global permission must deny vuln_judger MCP tools");
-  assert(config.permission["vuln-judger_*"] === "deny", "global permission must deny vuln-judger MCP tools");
+  assert(config.permission.question === "deny", "global permissions must disable interactive questions for unattended jobs");
+  assert(config.permission.doom_loop === "allow", "global permissions must not prompt when OpenCode detects a possible doom loop");
+  assert(config.permission.external_directory === "allow", "global permissions must not prompt for the operator-selected external source directory");
+  assert(!("vuln_judger_*" in config.permission) && !("vuln-judger_*" in config.permission), "global config must not reference the removed external truth-review MCP");
   assert(config.permission["coverage_*"] === "allow", "global permission must auto-allow Coverage Ledger MCP tools");
   assert(!("semgrep_*" in config.permission), "global config must not retain Semgrep/OpenGrep MCP permissions");
   for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
@@ -122,6 +124,7 @@ async function main() {
     assert(!/:\s*ask\s*$/m.test(frontmatter), `${agentFile} permissions must not request user confirmation`);
     assert(!frontmatter.includes("joern_*"), `${agentFile} must not retain Joern MCP permissions`);
     assert(!frontmatter.includes("semgrep_*"), `${agentFile} must not retain Semgrep/OpenGrep MCP permissions`);
+    assert(!/vuln[_-]judger/i.test(agentText), `${agentFile} must not reference the removed external truth-review MCP`);
     for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
       assert(!frontmatter.includes(`${placeholder}_*`), `${agentFile} must not retain ${placeholder} placeholder permissions`);
     }
@@ -409,8 +412,7 @@ async function main() {
   const finalModelIndex = orchestratorText.indexOf("build-final-report-model.mjs");
   assert(truthValidationIndex >= 0 && finalModelIndex > truthValidationIndex
     && orchestratorText.includes("verify-final-report.mjs")
-    && /^\s*"chrome-devtools_\*": deny\s*$/m.test(orchestratorText)
-    && /^\s*"vuln_judger_\*": deny\s*$/m.test(orchestratorText),
+    && /^\s*"chrome-devtools_\*": deny\s*$/m.test(orchestratorText),
   "orchestrator must complete truth routing before deterministically building and verifying the final report");
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");
   assert(catalog.schema_version === 2 && catalog.profile_id.endsWith("-v4"), "catalog v2 profile is not active");

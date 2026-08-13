@@ -8,6 +8,7 @@ import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } fr
 import { fileURLToPath } from "node:url";
 import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
 import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
+import { auditsFromArtifacts, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -257,6 +258,7 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     "八个工作台环节采用 ENFORCED 交付契约。每个环节完成后必须用 seal-stage-delivery.mjs 物化 reports/stage-deliveries/<audit_id>/<stage>.r<round>.json；退出前运行 verify-stage-deliveries.mjs。缺少任一文件、SHA、PASS 证据或 COMPLETE 前序时不得声称任务完成。",
     "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次全任务 120 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
+    "这是无人值守的工作台任务：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明，完成强制交付后必须正常结束本次运行。",
   ].join("\n");
 }
 
@@ -275,6 +277,7 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     ...privateContextPrompt(audit, contextPaths),
     "继续完成真实性 routing、覆盖门禁、CVSS、攻击链和最终中文报告封存。先校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复；不得重跑摘要有效的角色。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
+    "这是无人值守的断点恢复：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明，完成强制交付后必须正常结束本次运行。",
   ].join("\n");
 }
 
@@ -369,6 +372,45 @@ export class AuditRunner extends EventEmitter {
         // Ignore incomplete state directories; they remain available for operator inspection.
       }
     }
+    await this.reconcileLegacyCompletions("startup-watchdog");
+  }
+
+  async reconcileLegacyCompletion(audit, reason = "watchdog") {
+    if (!audit || audit.stage_delivery_enforcement === "ENFORCED" || audit.status === "completed") return false;
+    if (this.processes.has(audit.id) || this.completions.has(audit.id) || !audit.paths?.reports_root) return false;
+    let inferred;
+    try {
+      const artifacts = (await scanReportArtifacts(audit.paths.reports_root)).filter(artifact => artifact.audit_id === audit.id);
+      inferred = auditsFromArtifacts(artifacts, [], [audit], new Map()).find(item => item.id === audit.id);
+    } catch {
+      return false;
+    }
+    if (inferred?.progress !== 100 || inferred.progress_source !== "legacy-artifact-heuristic") return false;
+    if (audit.terminal?.live) {
+      await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(() => {});
+      await this.finalizeTerminal(audit).catch(() => {
+        audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "closed", message: "历史任务已由完成性 watchdog 收敛，终端归档失败。" };
+      });
+    }
+    audit.status = "completed";
+    audit.pid = null;
+    audit.exit_code ??= 0;
+    audit.finished_at ??= new Date().toISOString();
+    audit.interrupted_at = null;
+    audit.interruption_reason = null;
+    audit.error = null;
+    audit.completion_source = "legacy-artifact-heuristic";
+    await this.record(audit, "audit.completed", { reason, completion_source: audit.completion_source, progress: 100 });
+    return true;
+  }
+
+  async reconcileLegacyCompletions(reason = "watchdog") {
+    let completed = 0;
+    for (const audit of this.audits.values()) {
+      if (!ACTIVE.has(audit.status) && !RECOVERABLE.has(audit.status)) continue;
+      if (await this.reconcileLegacyCompletion(audit, reason)) completed += 1;
+    }
+    return completed;
   }
 
   async persistRepositories() {
@@ -888,7 +930,7 @@ export class AuditRunner extends EventEmitter {
           server_url: audit.terminal.server_url,
           session_id: audit.terminal.provider_session_id,
           directory: paths.workspace_root,
-          payload: { agent: "security-audit-orchestrator", parts: [{ type: "text", text: prompt }] },
+          payload: { agent: "security-audit-orchestrator", tools: { question: false }, parts: [{ type: "text", text: prompt }] },
         }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
         command = process.execPath;
         args = [PROMPT_CLIENT, requestPath];
@@ -1084,6 +1126,7 @@ export class AuditRunner extends EventEmitter {
     if ((audit.action_idempotency_digests ?? []).includes(actionDigest)) return publicAudit(audit);
     if (Number(expectedVersion) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
     if (action === "recover") {
+      if (await this.reconcileLegacyCompletion(audit, "recovery-preflight")) return publicAudit(audit);
       if (!this.enabled) throw Object.assign(new Error("运行驱动未启用，不能恢复审计。"), { statusCode: 503, code: "runner-disabled" });
       if (!RECOVERABLE.has(audit.status) || this.processes.has(id) || this.completions.has(id)) {
         throw Object.assign(new Error("只有已中断、失败或已取消且没有残留 Runner 的审计可以断点恢复。"), { statusCode: 409, code: "audit-not-recoverable" });

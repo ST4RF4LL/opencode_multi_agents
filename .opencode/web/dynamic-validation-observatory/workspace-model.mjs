@@ -305,7 +305,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
     const runner = runnerById.get(auditId);
     const materialized = stageDeliveriesByAudit.get(auditId);
     const useMaterialized = Boolean(materialized && (runner?.stage_delivery_enforcement === "ENFORCED"
-      || materialized.completed_count > 0 || auditArtifacts.some(artifact => artifact.kind === "stage-deliveries")));
+      || materialized.completed_count > 0));
     const stages = stageSnapshot(auditArtifacts, runtimeCount, useMaterialized ? materialized : null);
     const lastModified = auditArtifacts.map(item => item.modified_at).sort().at(-1) ?? runner?.updated_at ?? null;
     const completedCount = stages.filter(stage => stage.state === "completed").length;
@@ -326,6 +326,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       stages,
       progress,
       progress_source: useMaterialized ? "stage-delivery-manifest" : "legacy-artifact-heuristic",
+      completion_source: runner?.completion_source ?? null,
       finding_count: findings.filter(finding => finding.audit_id === auditId).length,
       runtime_validation_count: runtimeCount,
       artifact_count: auditArtifacts.length,

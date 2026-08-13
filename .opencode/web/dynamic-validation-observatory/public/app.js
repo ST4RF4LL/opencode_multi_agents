@@ -450,8 +450,8 @@ async function submitDeleteAudit(event) {
 
 function renderFindings() {
   const query = $("finding-query").value.trim().toLowerCase();
-  const findings = state.workspace.findings.filter(item => !query || `${item.id} ${item.title} ${item.location.path ?? ""}`.toLowerCase().includes(query));
-  const [value, body] = table(["等级", "漏洞发现", "审计 / 维度", "位置", "处理状态", "验证状态"]);
+  const findings = state.workspace.findings.filter(item => !query || `${item.id} ${item.title} ${item.repository_name ?? ""} ${item.repository_id ?? ""} ${item.audit_id} ${item.location.path ?? ""}`.toLowerCase().includes(query));
+  const [value, body] = table(["等级", "漏洞发现", "关联 Repo", "审计 / 维度", "位置", "处理状态", "验证状态"]);
   for (const finding of findings) {
     const row = element("tr");
     cell(row, finding.severity, `severity ${finding.severity}`);
@@ -460,6 +460,9 @@ function renderFindings() {
     open.type = "button";
     open.addEventListener("click", () => openFinding(finding));
     identity.append(open, element("small", "mono", finding.id)); row.append(identity);
+    const repository = element("td");
+    repository.append(element("strong", "", finding.repository_name ?? "未知 Repo"), element("small", "mono", finding.repository_id ?? "未记录 repository_id"));
+    row.append(repository);
     cell(row, `${finding.audit_id} · ${finding.dimension ?? "—"}`);
     cell(row, `${finding.location.path ?? "—"}${finding.location.line ? `:${finding.location.line}` : ""}`, "mono");
     const workflowCell = element("td"); workflowCell.append(status(finding.workflow?.status ?? "unreviewed")); row.append(workflowCell);
@@ -478,10 +481,10 @@ function findingSection(label, value) {
 function openFinding(finding) {
   state.selectedFindingResourceId = finding.resource_id;
   $("finding-detail-title").textContent = finding.title;
-  $("finding-detail-subtitle").textContent = `${finding.audit_id} · ${finding.id}`;
+  $("finding-detail-subtitle").textContent = `${finding.repository_name ?? "未知 Repo"} · ${finding.audit_id} · ${finding.id}`;
   const facts = $("finding-detail-facts");
   facts.replaceChildren();
-  [["等级", finding.severity], ["CVSS", finding.cvss_score], ["维度", finding.dimension], ["漏洞类型", finding.vulnerability_type_id], ["处理状态", statusText(finding.workflow?.status)], ["验证状态", finding.status], ["来源制品", finding.source_path]].forEach(([label, value]) => {
+  [["关联 Repo", finding.repository_name], ["Repository ID", finding.repository_id], ["审计 ID", finding.audit_id], ["等级", finding.severity], ["CVSS", finding.cvss_score], ["维度", finding.dimension], ["漏洞类型", finding.vulnerability_type_id], ["处理状态", statusText(finding.workflow?.status)], ["验证状态", finding.status], ["来源制品", finding.source_path]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const locations = element("div", "finding-locations");
@@ -582,7 +585,9 @@ async function openReport(report) {
   dialog.showModal();
   try {
     const value = await api(`/api/v1/reports/${encodeURIComponent(report.id)}`);
-    $("report-preview").textContent = value.body;
+    const preview = $("report-preview");
+    if (value.rendering !== "markdown-it-html-disabled" || typeof value.rendered_html !== "string") throw new Error("服务端未返回可信的 Markdown 渲染结果。");
+    preview.innerHTML = value.rendered_html;
   } catch (error) {
     $("report-preview").textContent = `报告读取失败：${error.message}`;
     showError(error);

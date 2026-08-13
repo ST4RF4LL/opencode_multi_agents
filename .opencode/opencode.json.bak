@@ -8,6 +8,8 @@
     "grep": "allow",
     "list": "allow",
     "edit": "allow",
+    "question": "deny",
+    "doom_loop": "allow",
     "external_directory": "allow",
     "todowrite": "deny",
     "bash": "allow",
@@ -22,9 +24,7 @@
     "jvm_index_*": "deny",
     "python_index_*": "deny",
     "audit_lab_*": "deny",
-    "chrome-devtools_*": "deny",
-    "vuln_judger_*": "deny",
-    "vuln-judger_*": "deny"
+    "chrome-devtools_*": "deny"
   },
   "mcp": {
     "coverage_ledger": {

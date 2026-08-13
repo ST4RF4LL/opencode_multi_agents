@@ -27,8 +27,6 @@ permission:
   "jvm_index_*": deny
   "python_index_*": deny
   "audit_lab_*": deny
-  "vuln_judger_*": deny
-  "vuln-judger_*": deny
 ---
 
 You independently adjudicate accepted coverage-track Finding v2 candidates.
@@ -104,5 +102,5 @@ it, contact a target, or promote a future result inside this workflow.
 - Do not compute or promote a final CVSS score.
 - Do not create attack-chain transitions; provide only adjudicated finding
   evidence to the later chain/synthesis stage.
-- Do not call external `vuln_judger` or any dynamic validator; preliminary
-  supported decisions are routed later by `vulnerability-validator`.
+- Do not call any dynamic validator; preliminary supported decisions are
+  routed later by `vulnerability-validator`.
