@@ -39,6 +39,8 @@ permission:
 
 You collect evidence-backed context for Tri-Lens source, platform, and AI-overlay security audits. You discover and classify the audit surface; you do not issue final vulnerability claims.
 
+When `AUDIT_SOURCE_ROOT` is set, use that absolute directory—not `.` and not the current execution workspace—as the repository root for Git inspection, scope construction, parser capability checks, function manifests, interface extraction, and evidence paths. The source root is read-only. Continue writing every declared `tmp/<audit_id>/**` output relative to the current execution workspace; never create `tmp/`, `reports/`, caches, or helper files under `AUDIT_SOURCE_ROOT`.
+
 ## Stage/Agent I/O Contract
 
 Accept only a sealed `INPUT` envelope for

@@ -1,14 +1,14 @@
 {
-  "version": 12,
+  "version": 13,
   "purpose": "Role boundaries for a Java/Web-first OpenCode threat-led, Focus-Area-partitioned Tri-Lens security audit workspace, with platform and other language/AI agents activated only when frozen scope requires them.",
   "agents": {
     "security-audit-orchestrator": {
       "mode": "primary",
       "stage_contract_ids": ["P00_AUDIT_INIT.security-audit-orchestrator", "P03_PLAN.security-audit-orchestrator", "P08_FINALIZE.security-audit-orchestrator"],
-      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, build the sparse Coverage Plan, route service-owned Ledger packets, plan base-owner plus AI-overlay File × Function × Catalog × Interface × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural/v2/semantic gates, write the sealed comprehensive report, and request one report-level independent vuln-judger review. Does not auto-delete tmp/.",
+      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, build the sparse Coverage Plan, route service-owned Ledger packets, plan base-owner plus AI-overlay File × Function × Catalog × Interface × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural/v2/semantic gates, require quick-dynamic/local-three-party truth routing before final synthesis, and write the sealed comprehensive report. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
-      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "OpenCode three-party review companion under reports/validation/", "Coverage Plan, service-owned Ledger, v1 structural, v2 authoritative, machine summary, and semantic artifacts", "base-plus-AI file/function/catalog/interface coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
-      "must_not": ["Deep-audit language-specific code directly", "run exploit validation directly", "call vuln-judger/vuln_judger directly instead of delegating to vulnerability-validator", "directly edit or write the canonical Coverage Ledger", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
+      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "digest-bound quick/static truth-validation routing under reports/validation/", "Coverage Plan, service-owned Ledger, v1 structural, v2 authoritative, machine summary, and semantic artifacts", "base-plus-AI file/function/catalog/interface coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
+      "must_not": ["Deep-audit language-specific code directly", "run browser validation directly", "bypass vulnerability-validator truth routing", "directly edit or write the canonical Coverage Ledger", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
     },
     "security-intel-collector": {
       "mode": "subagent",
@@ -109,12 +109,48 @@
     },
     "vulnerability-validator": {
       "mode": "subagent",
-      "stage_contract_ids": ["P09_INDEPENDENT_REVIEW.vulnerability-validator"],
-      "responsibility": "Submit exactly one sealed final comprehensive audit report to vuln-judger, force the OpenCode execution engine, monitor the asynchronous Affirmative/Negative/Moderator review, and persist report-digest-bound companion artifacts.",
-      "inputs": ["audit_id", "sealed final report path", "source repository root", "final report SHA-256", "optional project skills path"],
-      "outputs": ["vuln-judger run id and terminal state", "structured OpenCode three-party review JSON", "exported review Markdown", "source-report integrity binding", "review gaps or failure state"],
-      "artifacts": ["reports/validation/vuln-judger-review.<audit-id>.json", "reports/validation/vuln-judger-review.<audit-id>.md"],
-      "must_not": ["Submit individual findings or intermediate reports", "use one_round_judge", "use the builtin or codex engine", "rewrite the sealed final report", "attack third-party systems", "exfiltrate data", "perform persistence", "modify production data"]
+      "stage_contract_ids": ["P08_FINALIZE.vulnerability-validator"],
+      "responsibility": "Before final-report synthesis, run the task-gated 120-second loopback quick-dynamic router once, send every unconfirmed supported finding through local Affirmative/Negative/Moderator static challenge, and persist a complete digest-bound routing manifest.",
+      "inputs": ["audit_id", "finding adjudication input and result", "runtime-validation request set", "task-level quick-dynamic gate"],
+      "outputs": ["truth-validation intake", "quick-dynamic result set", "Affirmative review", "Negative review", "Moderator verdicts", "validation routing manifest"],
+      "artifacts": ["reports/validation/truth-validation-intake.<audit-id>.r<round>.json", "reports/validation/quick/<audit-id>.r<round>.json", "reports/validation/static/<audit-id>/{affirmative,negative,moderator}.r<round>.json", "reports/validation/validation-routing.<audit-id>.r<round>.json"],
+      "must_not": ["Call external vuln_judger/vuln-judger", "review a sealed final report", "control Chrome directly", "enable dynamic validation without the task gate", "auto-start full dynamic validation", "rewrite findings or adjudication", "persist test-environment secrets"]
+    },
+    "quick-dynamic-validator": {
+      "mode": "subagent",
+      "stage_contract_ids": ["P08_FINALIZE.quick-dynamic-validator"],
+      "responsibility": "Within one controller-enforced 120-second budget, attempt non-destructive confirmation of eligible findings only against an explicitly authorized loopback test environment through Chrome DevTools MCP.",
+      "inputs": ["truth-validation intake", "digest-verified private test-environment context", "runtime-validation request set", "hard deadline"],
+      "outputs": ["sanitized quick-dynamic result set with complete finding accounting"],
+      "artifacts": ["reports/validation/quick/<audit-id>.r<round>.json"],
+      "must_not": ["Contact non-loopback targets", "use agent-browser", "kill global Chrome processes", "persist credentials", "treat DOM injection as vulnerability evidence", "start full dynamic validation", "modify findings or reports"]
+    },
+    "vulnerability-affirmative": {
+      "mode": "subagent",
+      "stage_contract_ids": ["P08_FINALIZE.vulnerability-affirmative"],
+      "responsibility": "Independently prove source truth, entry reachability, call/data flow, attacker influence, preconditions, guard insufficiency, and direct security impact for every quick-dynamic-unconfirmed finding.",
+      "inputs": ["truth-validation intake", "quick-dynamic result set", "frozen source and finding evidence"],
+      "outputs": ["digest-bound Affirmative static truth review"],
+      "artifacts": ["reports/validation/static/<audit-id>/affirmative.r<round>.json"],
+      "must_not": ["Run dynamic validation", "invent evidence", "modify findings", "read the Negative or Moderator output before completing its own proof"]
+    },
+    "vulnerability-negative": {
+      "mode": "subagent",
+      "stage_contract_ids": ["P08_FINALIZE.vulnerability-negative"],
+      "responsibility": "Independently reconstruct each unconfirmed finding, then challenge unrelated matches, reachability, semantics, attacker control, effective guards, preconditions, and claimed impact against the Affirmative proof.",
+      "inputs": ["truth-validation intake", "quick-dynamic result set", "Affirmative review", "frozen source and finding evidence"],
+      "outputs": ["digest-bound Negative static truth review"],
+      "artifacts": ["reports/validation/static/<audit-id>/negative.r<round>.json"],
+      "must_not": ["Run dynamic validation", "invent guards or counterevidence", "modify Affirmative output or findings", "act as final Moderator"]
+    },
+    "vulnerability-moderator": {
+      "mode": "subagent",
+      "stage_contract_ids": ["P08_FINALIZE.vulnerability-moderator"],
+      "responsibility": "Independently verify frozen source plus both parties, resolve disagreements, and issue exactly one TRUE_POSITIVE, FALSE_POSITIVE, or INCONCLUSIVE verdict for every statically reviewed finding.",
+      "inputs": ["truth-validation intake", "quick-dynamic result set", "Affirmative review", "Negative review", "frozen source and finding evidence"],
+      "outputs": ["digest-bound Moderator static truth review"],
+      "artifacts": ["reports/validation/static/<audit-id>/moderator.r<round>.json"],
+      "must_not": ["Run dynamic validation", "decide by vote or upstream labels", "invent evidence", "modify either party or findings"]
     },
     "dynamic-vulnerability-validator": {
       "mode": "subagent",
@@ -128,8 +164,8 @@
     "security-skill-optimizer": {
       "mode": "subagent",
       "stage_contract_ids": ["P10_OPTIMIZE.security-skill-optimizer"],
-      "responsibility": "Improve audit skills, Joern rules, vulnerability cases, and false-positive cases from completed final-report-bound vuln-judger feedback, tagged by dimension and lens.",
-      "inputs": ["Digest-bound vuln-judger review results", "canonical findings", "source auditor notes", "existing skill/rule/case assets"],
+      "responsibility": "Improve audit skills, Joern rules, vulnerability cases, and false-positive cases from completed digest-bound local truth-validation routing, tagged by dimension and lens.",
+      "inputs": ["Digest-bound validation routing and three-party evidence", "canonical findings", "source auditor notes", "existing skill/rule/case assets"],
       "outputs": ["Updated SKILL.md files", "updated Joern rules", "updated cases", "dimension-and-lens change summary"],
       "must_not": ["Modify audited application source", "create exploit instructions beyond defensive local validation", "change agent role boundaries without explicit request"]
     }

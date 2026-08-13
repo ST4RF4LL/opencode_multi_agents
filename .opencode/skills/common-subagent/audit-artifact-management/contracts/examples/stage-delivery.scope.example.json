@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "registry_id": "workbench-stage-deliveries-v1",
+  "registry_digest": "6c02198bd5495263baa139ec21584986ceed603da44ae621104a16c7e7bc8883",
+  "template_id": "WB01_SCOPE_FREEZE",
+  "stage_id": "scope",
+  "stage_order": 1,
+  "audit_id": "audit-template-example",
+  "round": 1,
+  "status": "COMPLETE",
+  "scope_binding": {
+    "state": "FROZEN",
+    "scope_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "activated_conditions": [],
+  "predecessor_manifests": [],
+  "input_artifacts": [
+    {
+      "artifact_type": "repository-source-binding",
+      "path": "reports/platform/audit-runs/audit-template-example/source-binding.json",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "media_type": "application/json",
+      "json_pointer": null
+    },
+    {
+      "artifact_type": "audit-init-input-envelope",
+      "path": "reports/handoffs/audit-template-example/P00_AUDIT_INIT/security-audit-orchestrator.orchestrator-init-r1.input.json",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "media_type": "application/json",
+      "json_pointer": null
+    }
+  ],
+  "output_artifacts": [
+    {
+      "artifact_type": "scope-manifest",
+      "path": "reports/coverage/audit-template-example/inputs/scope-manifest.json",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "media_type": "application/json",
+      "json_pointer": null
+    },
+    {
+      "artifact_type": "parser-capabilities",
+      "path": "reports/coverage/audit-template-example/inputs/parser-capabilities.json",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "media_type": "application/json",
+      "json_pointer": null
+    }
+  ],
+  "validation_results": [
+    {
+      "validator_id": "scope-stage-handoffs",
+      "status": "PASS",
+      "checked_artifact_types": ["scope-manifest", "parser-capabilities"],
+      "evidence_refs": ["reports/handoffs/audit-template-example/P01_RECON/security-intel-collector.intel-recon-r1.output.json"],
+      "issues": []
+    }
+  ],
+  "gaps": [],
+  "producer": {
+    "agent_name": "security-audit-orchestrator",
+    "agent_session_id": "orchestrator-stage-delivery-r1",
+    "internal_stage_ids": ["P00_AUDIT_INIT", "P01_RECON"],
+    "stage_agent_contract_ids": [
+      "P00_AUDIT_INIT.security-audit-orchestrator",
+      "P01_RECON.security-intel-collector"
+    ]
+  },
+  "started_at": "2026-08-12T00:00:00.000Z",
+  "completed_at": "2026-08-12T00:10:00.000Z",
+  "completion": {
+    "required_outputs_satisfied": true,
+    "required_validators_passed": true,
+    "predecessors_complete": true,
+    "complete": true
+  },
+  "manifest_digest": "b6e2fe746ea5c13337573e71833a242b5f7f167def6805cd18bf8d0892dbda63"
+}

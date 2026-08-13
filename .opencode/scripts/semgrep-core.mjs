@@ -45,6 +45,37 @@ export async function resolveWorkspacePath(workspaceRoot, inputPath, { mustExist
   }
 }
 
+async function resolveAllowedPath(baseRoot, inputPath, allowedRoots, { mustExist = true, label = "Path" } = {}) {
+  const roots = await Promise.all(allowedRoots.map(root => realpath(resolve(root))));
+  const candidate = isAbsolute(inputPath) ? resolve(inputPath) : resolve(baseRoot, inputPath);
+  let actual;
+  if (mustExist) {
+    actual = await realpath(candidate);
+  } else {
+    let ancestor = candidate;
+    const missingSegments = [];
+    while (true) {
+      try {
+        actual = resolve(await realpath(ancestor), ...missingSegments);
+        break;
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        const parent = dirname(ancestor);
+        if (parent === ancestor) throw error;
+        missingSegments.unshift(basename(ancestor));
+        ancestor = parent;
+      }
+    }
+  }
+  if (!roots.some(root => isInside(root, actual))) throw new Error(`${label} escapes allowed audit roots: ${inputPath}`);
+  return actual;
+}
+
+function relativeArtifactPath(prefix, root, path) {
+  const value = relative(root, path).replaceAll("\\", "/");
+  return value ? `${prefix}/${value}` : prefix;
+}
+
 function truncateText(value, maxBytes) {
   const buffer = Buffer.from(String(value ?? ""), "utf8");
   if (buffer.length <= maxBytes) return buffer.toString("utf8");
@@ -352,14 +383,25 @@ export async function runSemgrepScan({
   if (!/^[a-z0-9][a-z0-9._-]{2,127}$/i.test(agentName)) throw new Error(`Invalid agent_name: ${agentName}`);
   if (!Array.isArray(rulePaths) || rulePaths.length === 0) throw new Error("At least one local rule path is required");
   const root = await realpath(resolve(workspaceRoot));
-  const target = await resolveWorkspacePath(root, targetPath);
-  const rules = await Promise.all(rulePaths.map(path => resolveWorkspacePath(root, path)));
+  const splitWorkspace = Boolean(environment.AUDIT_SOURCE_ROOT && environment.AUDIT_REPORTS_ROOT && environment.AUDIT_TMP_ROOT);
+  const sourceRoot = splitWorkspace ? await realpath(resolve(environment.AUDIT_SOURCE_ROOT)) : root;
+  const reportsRoot = splitWorkspace ? await realpath(resolve(environment.AUDIT_REPORTS_ROOT)) : null;
+  const tmpRoot = splitWorkspace ? await realpath(resolve(environment.AUDIT_TMP_ROOT)) : null;
+  const engineRoot = splitWorkspace && environment.AUDIT_ENGINE_ROOT ? await realpath(resolve(environment.AUDIT_ENGINE_ROOT)) : root;
+  const target = splitWorkspace
+    ? await resolveAllowedPath(root, targetPath, [sourceRoot], { label: "Scan target" })
+    : await resolveWorkspacePath(root, targetPath);
+  const rules = splitWorkspace
+    ? await Promise.all(rulePaths.map(path => resolveAllowedPath(root, path, [engineRoot, sourceRoot, tmpRoot], { label: "Rule path" })))
+    : await Promise.all(rulePaths.map(path => resolveWorkspacePath(root, path)));
   for (const rule of rules) {
     const info = await stat(rule);
     if (!info.isFile() && !info.isDirectory()) throw new Error(`Unsupported rule path: ${rule}`);
   }
   const selected = await selectEngine({ workspaceRoot: root, engine, environment });
-  const rawDirectory = await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
+  const rawDirectory = splitWorkspace
+    ? await resolveAllowedPath(tmpRoot, join(auditId, "semgrep", sessionId), [tmpRoot], { mustExist: false, label: "Raw output" })
+    : await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
   await mkdir(rawDirectory, { recursive: true });
   const stderrTemporaryPath = join(rawDirectory, `.${selected.engine}.${process.pid}.${Date.now()}.stderr.log`);
   const args = ["scan", "--json", "--metrics=off", "--jobs", String(jobs), "--timeout", String(ruleTimeoutSeconds)];
@@ -390,7 +432,7 @@ export async function runSemgrepScan({
     } catch (fileError) {
       if (fileError.code !== "ENOENT") throw fileError;
     }
-    const retained = retainedPath ? `; stderr retained at ${relative(root, retainedPath)}` : "";
+    const retained = retainedPath ? `; stderr retained at ${splitWorkspace ? relativeArtifactPath("tmp", tmpRoot, retainedPath) : relative(root, retainedPath)}` : "";
     throw new Error(`${truncateText(error.message, 2_000)}${retained}`);
   }
 
@@ -402,21 +444,25 @@ export async function runSemgrepScan({
     await rm(stderrTemporaryPath, { force: true });
   }
   if (![0, 1].includes(processResult.code)) {
-    const retained = stderrOutputPath ? `; stderr retained at ${relative(root, stderrOutputPath)}` : "";
+    const retained = stderrOutputPath ? `; stderr retained at ${splitWorkspace ? relativeArtifactPath("tmp", tmpRoot, stderrOutputPath) : relative(root, stderrOutputPath)}` : "";
     throw new Error(`${selected.engine} scan failed with exit ${processResult.code}${retained}`);
   }
   let payload;
   try {
     payload = JSON.parse(processResult.stdout);
   } catch (error) {
-    const retained = stderrOutputPath ? `; stderr retained at ${relative(root, stderrOutputPath)}` : "";
+    const retained = stderrOutputPath ? `; stderr retained at ${splitWorkspace ? relativeArtifactPath("tmp", tmpRoot, stderrOutputPath) : relative(root, stderrOutputPath)}` : "";
     throw new Error(`${selected.engine} returned invalid JSON: ${truncateText(error.message, 1_000)}${retained}`);
   }
   const displayArgs = args.map(argument => {
     const value = String(argument);
     if (!isAbsolute(value)) return value;
     const absolute = resolve(value);
-    return isInside(root, absolute) ? relative(root, absolute).replaceAll("\\", "/") || "." : value;
+    if (isInside(sourceRoot, absolute)) return relative(sourceRoot, absolute).replaceAll("\\", "/") || ".";
+    if (isInside(engineRoot, absolute)) return relative(engineRoot, absolute).replaceAll("\\", "/") || ".";
+    if (splitWorkspace && isInside(tmpRoot, absolute)) return relativeArtifactPath("tmp", tmpRoot, absolute);
+    if (splitWorkspace && isInside(reportsRoot, absolute)) return relativeArtifactPath("reports", reportsRoot, absolute);
+    return value;
   });
   const commandLine = [selected.engine, ...displayArgs].join(" ");
   const rawBytes = `${JSON.stringify(payload, null, 2)}\n`;
@@ -424,14 +470,27 @@ export async function runSemgrepScan({
   await writeFile(rawOutputPath, rawBytes, "utf8");
 
   const requestedSarif = sarifPath ?? join("reports", "sarif", `${agentName}.${sessionId}.sarif`);
-  const outputPath = await resolveWorkspacePath(root, requestedSarif, { mustExist: false });
-  const reportsSarifRoot = await resolveWorkspacePath(root, join("reports", "sarif"), { mustExist: false });
+  let outputPath;
+  let reportsSarifRoot;
+  if (splitWorkspace) {
+    reportsSarifRoot = await resolveAllowedPath(reportsRoot, "sarif", [reportsRoot], { mustExist: false, label: "SARIF root" });
+    await mkdir(reportsSarifRoot, { recursive: true });
+    const requested = isAbsolute(requestedSarif)
+      ? requestedSarif
+      : requestedSarif.replaceAll("\\", "/").startsWith("reports/")
+        ? resolve(reportsRoot, requestedSarif.replaceAll("\\", "/").slice("reports/".length))
+        : resolve(root, requestedSarif);
+    outputPath = await resolveAllowedPath(root, requested, [reportsSarifRoot], { mustExist: false, label: "SARIF output" });
+  } else {
+    outputPath = await resolveWorkspacePath(root, requestedSarif, { mustExist: false });
+    reportsSarifRoot = await resolveWorkspacePath(root, join("reports", "sarif"), { mustExist: false });
+  }
   if (!isInside(reportsSarifRoot, outputPath)) throw new Error("SARIF output must stay under reports/sarif/");
   const sarifRun = semgrepJsonToSarif(payload, {
     engine: selected.engine,
     version: selected.version,
     commandLine,
-    workspaceRoot: root,
+    workspaceRoot: sourceRoot,
   });
   const combinedSarif = await mergeSarif(outputPath, sarifRun);
   const sarifBytes = `${JSON.stringify(combinedSarif, null, 2)}\n`;
@@ -440,20 +499,20 @@ export async function runSemgrepScan({
     version: selected.version,
     audit_id: auditId,
     session_id: sessionId,
-    target_path: relative(root, target) || ".",
-    rule_paths: rules.map(path => relative(root, path)),
+    target_path: relative(sourceRoot, target) || ".",
+    rule_paths: rules.map(path => isInside(engineRoot, path) ? relative(engineRoot, path) : isInside(sourceRoot, path) ? relative(sourceRoot, path) : relativeArtifactPath("tmp", tmpRoot, path)),
     findings: payload.results?.length ?? 0,
     error_count: payload.errors?.length ?? 0,
     error_samples: (payload.errors ?? []).slice(0, 5).map(error => truncateText(
       typeof error === "string" ? error : JSON.stringify(error),
       500,
     )),
-    raw_output_path: relative(root, rawOutputPath),
+    raw_output_path: splitWorkspace ? relativeArtifactPath("tmp", tmpRoot, rawOutputPath) : relative(root, rawOutputPath),
     raw_output_sha256: sha256(rawBytes),
-    stderr_path: stderrOutputPath ? relative(root, stderrOutputPath) : null,
+    stderr_path: stderrOutputPath ? (splitWorkspace ? relativeArtifactPath("tmp", tmpRoot, stderrOutputPath) : relative(root, stderrOutputPath)) : null,
     stderr_sha256: processResult.stderrSha256,
     stderr_bytes: processResult.stderrBytes,
-    sarif_path: relative(root, outputPath),
+    sarif_path: splitWorkspace ? relativeArtifactPath("reports", reportsRoot, outputPath) : relative(root, outputPath),
     sarif_sha256: sha256(sarifBytes),
     sarif_runs: combinedSarif.runs.length,
   };

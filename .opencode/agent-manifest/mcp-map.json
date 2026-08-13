@@ -1,5 +1,5 @@
 {
-  "version": 17,
+  "version": 18,
   "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
   "servers": {
     "coverage_ledger": {
@@ -30,13 +30,7 @@
     "chrome-devtools": {
       "status": "enabled-local",
       "type": "external",
-      "purpose": "Visible isolated Chrome control for explicitly requested localhost Web-XSS runtime validation. Uses chrome-devtools-mcp@latest and is exposed only to dynamic-vulnerability-validator."
-    },
-    "vuln_judger": {
-      "status": "global-config",
-      "type": "external",
-      "purpose": "Review the sealed final comprehensive report once through the asynchronous OpenCode Affirmative/Negative/Moderator pipeline. The server is supplied exclusively by the user's global OpenCode configuration.",
-      "aliases": ["vuln-judger"]
+      "purpose": "Visible isolated Chrome control for task-opted-in 120-second loopback quick confirmation and explicitly requested manual localhost Web-XSS full validation. Uses chrome-devtools-mcp@latest and is exposed only to the two dynamic validators."
     }
   },
   "agents": {
@@ -51,8 +45,12 @@
     "security-evidence-correlator": ["coverage_*"],
     "security-attack-chain-hunter": [],
     "security-finding-adjudicator": [],
+    "quick-dynamic-validator": ["chrome-devtools_*"],
     "dynamic-vulnerability-validator": ["chrome-devtools_*"],
-    "vulnerability-validator": ["vuln_judger_*", "vuln-judger_*"],
+    "vulnerability-validator": [],
+    "vulnerability-affirmative": [],
+    "vulnerability-negative": [],
+    "vulnerability-moderator": [],
     "security-skill-optimizer": [],
     "security-audit-orchestrator": ["coverage_*"]
   }

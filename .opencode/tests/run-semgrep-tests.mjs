@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -112,6 +112,50 @@ process.stdout.write(JSON.stringify({
     if (commandLine.includes(workspace) || commandLine.includes(await realpath(workspace))) {
       throw new Error("SARIF command line leaked the absolute workspace path");
     }
+
+    const splitSource = join(external, "source");
+    const splitEngine = join(external, "engine");
+    const splitReports = join(external, "reports");
+    const splitTmp = join(external, "tmp");
+    const splitExecution = join(workspace, "split-execution");
+    await Promise.all([
+      mkdir(join(splitSource, "src"), { recursive: true }),
+      mkdir(join(splitEngine, ".opencode", "rules"), { recursive: true }),
+      mkdir(splitReports, { recursive: true }),
+      mkdir(splitTmp, { recursive: true }),
+      mkdir(splitExecution, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(splitSource, "src", "app.js"), "eval(input);\n", "utf8"),
+      writeFile(join(splitEngine, ".opencode", "rules", "test.yaml"), await readFile(join(workspace, "rules", "test.yaml"))),
+      symlink(splitSource, join(splitExecution, "source"), "dir"),
+      symlink(join(splitEngine, ".opencode"), join(splitExecution, ".opencode"), "dir"),
+      symlink(splitReports, join(splitExecution, "reports"), "dir"),
+      symlink(splitTmp, join(splitExecution, "tmp"), "dir"),
+    ]);
+    const splitEnvironment = {
+      ...environment,
+      AUDIT_SOURCE_ROOT: splitSource,
+      AUDIT_ENGINE_ROOT: splitEngine,
+      AUDIT_WORKSPACE_ROOT: splitExecution,
+      AUDIT_REPORTS_ROOT: splitReports,
+      AUDIT_TMP_ROOT: splitTmp,
+    };
+    const splitScan = await runSemgrepScan({
+      workspaceRoot: splitExecution,
+      auditId: "fixture-split-audit",
+      sessionId: "fixture-split-r1",
+      agentName: "web-source-auditor",
+      targetPath: join(splitSource, "src"),
+      rulePaths: [".opencode/rules/test.yaml"],
+      environment: splitEnvironment,
+    });
+    if (splitScan.target_path !== "src" || !splitScan.raw_output_path.startsWith("tmp/fixture-split-audit/")
+      || !splitScan.sarif_path.startsWith("reports/sarif/")) throw new Error("Split audit roots were not preserved in scanner output paths");
+    await access(join(splitTmp, splitScan.raw_output_path.slice("tmp/".length)));
+    await access(join(splitReports, splitScan.sarif_path.slice("reports/".length)));
+    await expectReject(() => access(join(splitSource, "reports")), /ENOENT/);
+    await expectReject(() => access(join(splitSource, "tmp")), /ENOENT/);
 
     const merged = await runSemgrepScan({
       workspaceRoot: workspace,
@@ -227,6 +271,7 @@ process.stdout.write(JSON.stringify({
       rule_symlink_escape_rejected: true,
       symlink_escape_rejected: true,
       non_durable_sarif_rejected: true,
+      split_audit_roots: true,
     })}\n`);
   } finally {
     await rm(workspace, { recursive: true, force: true });

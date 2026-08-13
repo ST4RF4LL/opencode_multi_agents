@@ -12,17 +12,18 @@ function parseArgs(argv) {
     if (!token?.startsWith("--") || value == null) throw new Error(`Invalid argument near ${token ?? "<end>"}`);
     args[token.slice(2)] = value;
   }
-  for (const key of ["adjudication", "chains"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
+  for (const key of ["adjudication", "routing", "chains"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   return args;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const [adjudication, chains] = await Promise.all([
+  const [adjudication, routing, chains] = await Promise.all([
     readFile(resolve(args.adjudication), "utf8").then(JSON.parse),
+    readFile(resolve(args.routing), "utf8").then(JSON.parse),
     readFile(resolve(args.chains), "utf8").then(JSON.parse),
   ]);
-  const errors = validateAttackChainManifest(chains, adjudication);
+  const errors = validateAttackChainManifest(chains, adjudication, routing);
   if (errors.length > 0) throw new Error(`Attack-chain manifest is invalid:\n- ${errors.join("\n- ")}`);
   process.stdout.write(`${JSON.stringify({ complete: true, audit_id: chains.audit_id, chains: chains.chains.length })}\n`);
 }

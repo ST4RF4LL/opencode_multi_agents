@@ -2,6 +2,8 @@
 
 This directory is for per-audit runtime reconnaissance and scratch artifacts.
 
+Workbench-launched audits use `tmp/repositories/<repository-id>/` as the physical namespace. Inside the per-audit execution workspace this namespace is still exposed as `tmp/`, so existing `tmp/<audit-id>/**` contracts remain unchanged and the audited source repository stays untouched.
+
 **Do not auto-delete this directory.** Agents must not remove `tmp/` or any `<audit-id>/` subdirectory at task end. Cleanup is manual-only after a human confirms durable deliverables under `reports/` are retained.
 
 Expected runtime layout:

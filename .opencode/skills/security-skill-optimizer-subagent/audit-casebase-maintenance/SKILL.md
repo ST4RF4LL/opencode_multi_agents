@@ -9,7 +9,7 @@ metadata:
 
 # Audit Casebase Maintenance
 
-Use this skill when a completed final-report-bound vuln-judger review should become reusable audit knowledge.
+Use this skill when a terminal verdict from digest-valid local truth-validation routing should become reusable audit knowledge. Bind the case decision to the routing and Moderator review digests.
 
 ## Vulnerability Cases
 
@@ -19,7 +19,7 @@ Add a vulnerability case only for a `TRUE_POSITIVE` result when it captures a re
 - Dimension and originating lens.
 - Weakness class.
 - Sink, control, config, mitigating, and guard evidence facets that apply.
-- Why the three-party review adjudicated it as `TRUE_POSITIVE`.
+- Why the local Affirmative/Negative/Moderator review routed it as `TRUE_POSITIVE`.
 - What future audits should check.
 - Fix guidance and how to validate the fix.
 

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { validateStageContractRegistry } from "../skills/common-subagent/audit-artifact-management/scripts/stage-agent-contract.mjs";
+import { validateStageDeliveryRegistry } from "../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -54,6 +55,7 @@ async function main() {
   const catalog = await json(join(OPENCODE, "shared/security-audit/catalogs/application-ai-vulnerability-catalog.json"));
   const orchestratorText = await readFile(join(OPENCODE, "agents/security-audit-orchestrator.md"), "utf8");
   const validatorText = await readFile(join(OPENCODE, "agents/vulnerability-validator.md"), "utf8");
+  const quickValidatorText = await readFile(join(OPENCODE, "agents/quick-dynamic-validator.md"), "utf8");
   const dynamicValidatorText = await readFile(join(OPENCODE, "agents/dynamic-vulnerability-validator.md"), "utf8");
   const rootAgentsText = await readFile(join(ROOT, "AGENTS.md"), "utf8");
   const joernManifestBuilderText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-joern-function-manifest.mjs"), "utf8");
@@ -64,6 +66,7 @@ async function main() {
   const coverageCoreText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs"), "utf8");
   const packageConfig = await json(join(OPENCODE, "package.json"));
   const stageContractRegistry = await json(join(OPENCODE, "skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json"));
+  const stageDeliveryRegistry = await json(join(OPENCODE, "skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json"));
 
   const roleAgents = Object.keys(roles.agents).sort();
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
@@ -91,8 +94,11 @@ async function main() {
   assert(roleAgents.includes("ai-security-auditor"), "AI security auditor is not registered");
   assert(roleAgents.includes("security-threat-modeler"), "Threat modeler is not registered");
   assert(roleAgents.includes("security-attack-chain-hunter"), "Attack-chain hunter is not registered");
+  for (const agent of ["quick-dynamic-validator", "vulnerability-affirmative", "vulnerability-negative", "vulnerability-moderator", "vulnerability-validator"]) {
+    assert(roleAgents.includes(agent), `local truth-validation agent is not registered: ${agent}`);
+  }
   assert(validateStageContractRegistry(stageContractRegistry, roles).length === 0, "stage/agent contract registry or role bindings are invalid");
-  assert(stageContractRegistry.stages.length === 12
+  assert(stageContractRegistry.stages.length === 11
     && new Set(stageContractRegistry.contracts.map(contract => contract.agent_name)).size === roleAgents.length,
   "stage/agent contracts do not cover every phase and agent");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
@@ -213,6 +219,11 @@ async function main() {
   assert(artifactPolicy.reports.stage_handoff?.registry?.endsWith("stage-agent-contracts.json")
     && artifactPolicy.reports.stage_handoff?.path_templates?.some(path => path.includes("stage-handoff-verification")),
   "stage handoff artifact policy is incomplete");
+  assert(artifactPolicy.reports.workbench_stage_delivery?.registry?.endsWith("workbench-stage-deliveries.json")
+    && artifactPolicy.reports.workbench_stage_delivery?.manifest_schema?.endsWith("stage-delivery-manifest-v1.schema.json")
+    && artifactPolicy.reports.workbench_stage_delivery?.set_schema?.endsWith("artifact-set-index-v1.schema.json")
+    && artifactPolicy.reports.workbench_stage_delivery?.path_templates?.some(path => path.includes("stage-deliveries/{audit_id}/{stage_id}")),
+  "workbench stage delivery artifact policy is incomplete");
   assert(artifactPolicy.reports.external_runtime_validation_handoff?.required_request_fields?.includes("attack_surface")
     && artifactPolicy.reports.external_runtime_validation_handoff?.required_result_fields?.includes("safety_attestation")
     && artifactPolicy.reports.external_runtime_validation_handoff?.web_xss_extension_v2_required_fields?.includes("network_trace"),
@@ -237,6 +248,12 @@ async function main() {
   assert(await exists(join(OPENCODE, "tests/run-stage-agent-contract-tests.mjs"))
     && packageConfig.scripts["test:stage-agent-contract"]?.includes("run-stage-agent-contract-tests.mjs"),
   "stage/agent contract regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-stage-delivery-contract-tests.mjs"))
+    && packageConfig.scripts["test:stage-delivery-contract"]?.includes("run-stage-delivery-contract-tests.mjs"),
+  "workbench stage delivery regression suite is not enabled");
+  assert(await exists(join(OPENCODE, "tests/run-truth-validation-contract-tests.mjs"))
+    && packageConfig.scripts["test:truth-validation-contract"]?.includes("run-truth-validation-contract-tests.mjs"),
+  "local truth-validation regression suite is not enabled");
   assert(await exists(join(OPENCODE, "tests/run-threat-model-contract-tests.mjs"))
     && packageConfig.scripts["test:threat-model-contract"]?.includes("run-threat-model-contract-tests.mjs"),
   "rich threat-model contract regression suite is not enabled");
@@ -264,18 +281,50 @@ async function main() {
   "OpenCode audit workbench is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
-  const thirdPartyReview = artifactPolicy.reports.third_party_review;
-  assert(thirdPartyReview?.required_invocation?.tool === "vuln_judger_judge_report", "third-party review must use vuln_judger_judge_report");
-  assert(Array.isArray(thirdPartyReview?.required_invocation?.tool_aliases) && thirdPartyReview.required_invocation.tool_aliases.includes("vuln-judger_judge_report"), "third-party review must alias vuln-judger_judge_report");
-  assert(thirdPartyReview.required_invocation.engine === "opencode", "third-party review must force the OpenCode engine");
-  assert(thirdPartyReview.required_invocation.wait_for_completion === false, "third-party review must start asynchronously");
-  assert(thirdPartyReview.path_templates.every(path => path.startsWith("reports/validation/")), "third-party review artifacts must be durable reports/validation companions");
+  const truthValidationPolicy = artifactPolicy.reports.finding_truth_validation;
+  assert(!Object.hasOwn(artifactPolicy.reports, "third_party_review"), "legacy external whole-report review policy must be removed");
+  assert(truthValidationPolicy?.path_templates?.length === 6
+    && truthValidationPolicy.path_templates.every(path => path.startsWith("reports/validation/"))
+    && truthValidationPolicy.required_policy?.quick_dynamic_deadline_seconds === 120
+    && truthValidationPolicy.required_policy?.quick_dynamic_target_scope === "LOOPBACK_ONLY"
+    && truthValidationPolicy.required_policy?.static_review === "AFFIRMATIVE_NEGATIVE_MODERATOR"
+    && truthValidationPolicy.required_policy?.full_dynamic_trigger === "MANUAL_ONLY",
+  "local truth-validation artifact policy is incomplete");
   assert(artifactPolicy.work.required_recon_files.includes("threat-model.json") && artifactPolicy.work.required_recon_files.includes("focus-areas.json"), "semantic Recon artifacts are not mandatory");
   for (const script of ["build-function-manifests.mjs", "build-interface-manifest.mjs", "build-source-anchored-interface-decisions.mjs", "resolve-interface-candidates.mjs", "verify-interface-extractors.mjs", "build-threat-routing-index.mjs", "validate-vulnerability-catalog-v2.mjs", "build-coverage-plan.mjs", "initialize-coverage-ledger.mjs", "checkpoint-coverage-ledger.mjs", "finalize-partial-coverage-ledger.mjs", "verify-coverage-v2.mjs", "verify-coverage-v3-core.mjs", "verify-coverage-v3.mjs", "render-coverage-summary.mjs", "verify-coverage-summary.mjs", "reconcile-audit-report.mjs", "seal-semantic-manifest.mjs", "reseed-semantic-manifests.mjs", "verify-semantic-coverage.mjs", "final-report-model-core.mjs", "build-final-report-model.mjs", "render-final-report.mjs", "verify-final-report.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts", script)), `semantic coverage script is missing: ${script}`);
   }
   for (const script of ["stage-agent-contract.mjs", "seal-stage-agent-envelope.mjs", "validate-stage-agent-envelope.mjs", "verify-stage-agent-handoffs.mjs"]) {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-artifact-management/scripts", script)), `stage/agent contract script is missing: ${script}`);
+  }
+  for (const file of [
+    "contracts/workbench-stage-deliveries.json",
+    "contracts/stage-delivery-manifest-v1.schema.json",
+    "contracts/artifact-set-index-v1.schema.json",
+    "scripts/artifact-set-contract.mjs",
+    "scripts/seal-artifact-set-index.mjs",
+    "scripts/stage-delivery-contract.mjs",
+    "scripts/validate-stage-delivery.mjs",
+    "scripts/seal-stage-delivery.mjs",
+    "scripts/stage-delivery-materialization.mjs",
+    "scripts/verify-stage-deliveries.mjs",
+  ]) {
+    assert(await exists(join(OPENCODE, "skills/common-subagent/audit-artifact-management", file)), `workbench stage delivery asset is missing: ${file}`);
+  }
+  assert(stageDeliveryRegistry.lifecycle?.state === "ACTIVE"
+    && stageDeliveryRegistry.lifecycle?.enforcement === "ENFORCED"
+    && stageDeliveryRegistry.stages?.length === 8
+    && validateStageDeliveryRegistry(stageDeliveryRegistry, stageContractRegistry).length === 0,
+  "eight-stage delivery registry must be active, enforced, and valid");
+  for (const script of [
+    "truth-validation-contract.mjs",
+    "build-truth-validation-intake.mjs",
+    "run-quick-dynamic-validation.mjs",
+    "build-validation-routing.mjs",
+    "seal-truth-validation-artifact.mjs",
+    "validate-truth-validation.mjs",
+  ]) {
+    assert(await exists(join(OPENCODE, "skills/vulnerability-validator-subagent/vulnerability-validation/scripts", script)), `truth-validation script is missing: ${script}`);
   }
   assert(await exists(join(OPENCODE, "skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs")),
     "rich threat-model contract script is missing");
@@ -324,9 +373,8 @@ async function main() {
     assert(/^\s*"coverage_\*": allow\s*$/m.test(text), `${agent} must auto-allow Coverage Ledger tools`);
     assert(text.includes('"*coverage-ledger.jsonl*": deny'), `${agent} must hard-deny direct ledger bash writes`);
   }
-  assert(!("vuln_judger" in config.mcp), "project config must not shadow the globally configured vuln_judger server");
-  assert(!("vuln-judger" in config.mcp), "project config must not shadow the globally configured vuln-judger alias");
-  assert(mcpMap.servers.vuln_judger?.status === "global-config", "mcp-map must identify vuln_judger as supplied by global config");
+  assert(!("vuln_judger" in config.mcp) && !("vuln-judger" in config.mcp), "project config must not define the removed external truth-review MCP");
+  assert(!("vuln_judger" in mcpMap.servers) && !("vuln-judger" in mcpMap.servers), "mcp-map must not retain an external truth-review server");
   const chromeMcp = config.mcp["chrome-devtools"];
   assert(chromeMcp?.enabled === true && chromeMcp.type === "local", "Chrome DevTools MCP must be enabled locally");
   assert(sameSet(chromeMcp.command, ["npx", "-y", "chrome-devtools-mcp@latest", "--isolated=true", "--redact-network-headers=true", "--no-usage-statistics", "--no-performance-crux"]),
@@ -336,20 +384,34 @@ async function main() {
   assert(config.permission["chrome-devtools_*"] === "deny", "global permissions must deny Chrome DevTools tools");
   assert(mcpMap.servers["chrome-devtools"]?.status === "enabled-local", "mcp-map must register Chrome DevTools MCP");
   assert(sameSet(mcpMap.agents["dynamic-vulnerability-validator"], ["chrome-devtools_*"]), "dynamic validator must receive only Chrome DevTools MCP tools");
+  assert(sameSet(mcpMap.agents["quick-dynamic-validator"], ["chrome-devtools_*"]), "quick dynamic validator must receive only Chrome DevTools MCP tools");
   assert(/^\s*"chrome-devtools_\*": allow\s*$/m.test(dynamicValidatorText), "dynamic validator must allow Chrome DevTools MCP tools");
+  assert(/^\s*"chrome-devtools_\*": allow\s*$/m.test(quickValidatorText)
+    && quickValidatorText.includes("120 秒") && /loopback/i.test(quickValidatorText),
+  "quick dynamic validator must enforce Chrome-only loopback execution within 120 seconds");
   assert(dynamicValidatorText.includes("DOM_PROBE_ONLY") && dynamicValidatorText.includes("STORED_CROSS_USER"), "dynamic validator must enforce XSS evidence levels");
   assert(rootAgentsText.includes("Never reset browser state by killing Chrome")
     && rootAgentsText.includes("stored XSS")
     && rootAgentsText.includes("localhost"), "root AGENTS.md lacks dynamic-validation safety boundaries");
-  assert(!("vuln-judger" in mcpMap.servers), "mcp-map must not retain a separate vuln-judger placeholder");
-  assert(Array.isArray(mcpMap.servers.vuln_judger?.aliases) && mcpMap.servers.vuln_judger.aliases.includes("vuln-judger"), "vuln_judger must declare vuln-judger alias");
-  assert(sameSet(mcpMap.agents["vulnerability-validator"], ["vuln_judger_*", "vuln-judger_*"]), "vulnerability-validator must receive both vuln_judger and vuln-judger MCP tool prefixes");
-  assert(/^\s*"vuln_judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln_judger MCP tools");
-  assert(/^\s*"vuln-judger_\*": allow\s*$/m.test(validatorText), "vulnerability-validator must allow vuln-judger MCP tools");
-  assert((validatorText.includes("vuln_judger_judge_report") || validatorText.includes("vuln-judger_judge_report")) && validatorText.includes("engine: opencode"), "validator must submit the final report through the OpenCode vuln_judger/vuln-judger pipeline");
-  assert(validatorText.includes("exactly once") && validatorText.includes("final comprehensive"), "validator must enforce one full-report submission");
-  assert(orchestratorText.indexOf("build-final-report-model.mjs") < orchestratorText.indexOf("Invoke `vulnerability-validator` once")
-    && orchestratorText.includes("verify-final-report.mjs"), "orchestrator must deterministically build and verify the final report before invoking vulnerability-validator");
+  for (const agent of ["vulnerability-validator", "vulnerability-affirmative", "vulnerability-negative", "vulnerability-moderator"]) {
+    assert(sameSet(mcpMap.agents[agent], []), `${agent} must not receive an MCP server`);
+    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
+    assert(text.includes('permission:\n  "*": deny\n'), `${agent} must deny inherited tools before allowing its local workflow tools`);
+  }
+  assert(quickValidatorText.includes('permission:\n  "*": deny\n'), "quick dynamic validator must deny inherited tools before allowing Chrome DevTools");
+  assert(/^\s*"chrome-devtools_\*": deny\s*$/m.test(validatorText)
+    && validatorText.includes("vulnerability-affirmative")
+    && validatorText.includes("vulnerability-negative")
+    && validatorText.includes("vulnerability-moderator")
+    && validatorText.includes("MANUAL_ONLY"),
+  "truth-validation coordinator must use the local three-party chain and keep full dynamic manual-only");
+  const truthValidationIndex = orchestratorText.indexOf("Invoke `vulnerability-validator` exactly once");
+  const finalModelIndex = orchestratorText.indexOf("build-final-report-model.mjs");
+  assert(truthValidationIndex >= 0 && finalModelIndex > truthValidationIndex
+    && orchestratorText.includes("verify-final-report.mjs")
+    && /^\s*"chrome-devtools_\*": deny\s*$/m.test(orchestratorText)
+    && /^\s*"vuln_judger_\*": deny\s*$/m.test(orchestratorText),
+  "orchestrator must complete truth routing before deterministically building and verifying the final report");
   assert(sameSet(catalog.required_lenses, REQUIRED_LENSES), "catalog does not require the canonical three lenses");
   assert(catalog.schema_version === 2 && catalog.profile_id.endsWith("-v4"), "catalog v2 profile is not active");
   assert(sameSet(catalog.coverage_model.applicability_states, ["REQUIRED", "NOT_APPLICABLE", "UNKNOWN"]), "catalog applicability states are invalid");
@@ -379,7 +441,7 @@ async function main() {
   assert(artifactPolicy.reports.vulnerability_mining.required_for_agents.includes("ai-security-auditor"), "AI auditor report is not mandatory");
   assert(artifactPolicy.work.required_recon_files.includes("ai-surfaces.json"), "Recon policy does not require ai-surfaces.json");
 
-  process.stdout.write(`${JSON.stringify({ complete: true, agents: roleAgents.length, collections: actualCollections.length, skills: skillCount, semantic_agents: ["security-threat-modeler", "security-attack-chain-hunter"], semantic_verifier: true, third_party_review: { server: "vuln_judger", engine: "opencode", input: "sealed-final-report", asynchronous: true }, catalog_entries: catalog.entries.length, ai_catalog_entries: aiEntries.length, owasp_ai_agent_controls: requiredAiAgentControls, catalog_dimensions: [...catalogDimensions].sort(), ai_catalog_dimensions: [...aiDimensions].sort() })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, agents: roleAgents.length, collections: actualCollections.length, skills: skillCount, semantic_agents: ["security-threat-modeler", "security-attack-chain-hunter"], semantic_verifier: true, truth_validation: { quick_dynamic_deadline_seconds: 120, quick_dynamic_scope: "LOOPBACK_ONLY", static_roles: ["AFFIRMATIVE", "NEGATIVE", "MODERATOR"], full_dynamic_trigger: "MANUAL_ONLY" }, stage_delivery: { stages: 8, state: "ACTIVE", enforcement: "ENFORCED" }, catalog_entries: catalog.entries.length, ai_catalog_entries: aiEntries.length, owasp_ai_agent_controls: requiredAiAgentControls, catalog_dimensions: [...catalogDimensions].sort(), ai_catalog_dimensions: [...aiDimensions].sort() })}\n`);
 }
 
 main().catch(error => {

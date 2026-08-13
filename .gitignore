@@ -1,7 +1,10 @@
+# Workbench-generated audit scratch and repository namespaces.
 tmp/*
 !tmp/.gitkeep
 !tmp/README.md
+# Workbench-generated durable audit artifacts and platform state.
 reports/**
+# Per-audit execution directories contain only controlled links and metadata.
 workspace/
 DESIGN_NOW.md
 update_plan.md

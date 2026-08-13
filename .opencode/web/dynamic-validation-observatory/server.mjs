@@ -6,7 +6,9 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuditRunner } from "./audit-runner.mjs";
-import { getValidationRun, listValidationRequests, listValidationRuns } from "./model.mjs";
+import { EnvironmentHealthService } from "./environment-health.mjs";
+import { FindingWorkflowStore } from "./finding-workflow.mjs";
+import { listValidationRequests, listValidationRunDetails, listValidationRuns } from "./model.mjs";
 import { buildWorkspaceSnapshot } from "./workspace-model.mjs";
 import { DynamicValidationRunner } from "./validation-runner.mjs";
 
@@ -15,6 +17,7 @@ const PROJECT_ROOT = resolve(HERE, "../../..");
 const PUBLIC_ROOT = join(HERE, "public");
 const DEFAULT_RUNTIME_ROOT = join(PROJECT_ROOT, "reports", "validation-handoff", "runtime");
 const DEFAULT_STATE_ROOT = join(PROJECT_ROOT, "reports", "platform", "audit-runs");
+const DEFAULT_OPENCODE_CONFIG = join(PROJECT_ROOT, ".opencode", "opencode.json");
 const DEFAULT_STAGE_REGISTRY = join(PROJECT_ROOT, ".opencode", "skills", "common-subagent", "audit-artifact-management", "contracts", "stage-agent-contracts.json");
 const DEFAULT_ROLES = join(PROJECT_ROOT, ".opencode", "agent-manifest", "roles.json");
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
@@ -25,6 +28,7 @@ const STATIC_FILES = new Map([
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
+  ["/logo_DJ.png", ["logo_DJ.png", "image/png"]],
 ]);
 
 function json(response, status, value, headers = {}) {
@@ -101,6 +105,11 @@ function matchReportPath(pathname, suffix = "") {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function matchFindingWorkflowPath(pathname) {
+  const match = pathname.match(/^\/api\/v1\/findings\/([^/]+)\/workflow$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 function scopedResourceId(repositoryId, localId) {
   return createHash("sha256").update(`${repositoryId}\0${localId}`).digest("hex").slice(0, 24);
 }
@@ -137,7 +146,7 @@ function mergeSnapshots(snapshots) {
   }
   merged.audits.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
   merged.summary.audit_count = merged.audits.length;
-  merged.summary.active_audits = merged.audits.filter(audit => ["queued", "preparing", "running", "pausing", "paused", "cancelling"].includes(audit.status)).length;
+  merged.summary.active_audits = merged.audits.filter(audit => ["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(audit.status)).length;
   merged.summary.completed_audits = merged.audits.filter(audit => audit.status === "completed").length;
   merged.summary.finding_count = merged.findings.length;
   merged.summary.report_count = merged.reports.length;
@@ -195,49 +204,115 @@ async function streamValidationEvents(request, response, runner, validationId) {
 export function createAuditWorkbenchServer({
   runtimeRoot = DEFAULT_RUNTIME_ROOT,
   stateRoot = DEFAULT_STATE_ROOT,
-  repositories = [{ id: "workspace", name: "OpenCode Multi Agents", path: PROJECT_ROOT }],
+  repositories = [],
+  platformConfigPath = DEFAULT_OPENCODE_CONFIG,
+  legacyRuntimeRoot = false,
   runnerEnabled = false,
   runner: suppliedRunner = null,
   dynamicRunnerEnabled = false,
   dynamicStateRoot = null,
   dynamicRunner: suppliedDynamicRunner = null,
+  environmentService: suppliedEnvironmentService = null,
+  findingStateRoot = null,
+  findingWorkflow: suppliedFindingWorkflow = null,
 } = {}) {
   const resolvedRuntimeRoot = resolve(runtimeRoot);
-  const runner = suppliedRunner ?? new AuditRunner({ stateRoot, repositories, enabled: runnerEnabled });
+  const runner = suppliedRunner ?? new AuditRunner({ stateRoot, platformRoot: PROJECT_ROOT, repositories, configPath: platformConfigPath, enabled: runnerEnabled });
   const dynamicRunner = suppliedDynamicRunner ?? new DynamicValidationRunner({
     stateRoot: dynamicStateRoot ?? join(dirname(stateRoot), "dynamic-validation-runs"),
     enabled: dynamicRunnerEnabled,
     registryPath: DEFAULT_STAGE_REGISTRY,
     rolesPath: DEFAULT_ROLES,
   });
+  const environmentService = suppliedEnvironmentService ?? new EnvironmentHealthService({
+    projectRoot: PROJECT_ROOT,
+    configPaths: [resolve(platformConfigPath)],
+  });
+  const findingWorkflow = suppliedFindingWorkflow ?? new FindingWorkflowStore({
+    stateRoot: findingStateRoot ?? join(dirname(stateRoot), "finding-workflow"),
+  });
+
+  function runtimeSources() {
+    const artifacts = new Map(runner.artifactSources().map(source => [source.repository_id, source.reports_root]));
+    return runner.runtimeRepositories().map(repository => ({ repository, root: legacyRuntimeRoot ? resolvedRuntimeRoot : join(artifacts.get(repository.id), "validation-handoff", "runtime") }));
+  }
 
   async function validationRequests() {
     const values = [];
-    const repositories = runner.runtimeRepositories();
-    for (let index = 0; index < repositories.length; index += 1) {
-      const repository = repositories[index];
-      const root = index === 0 ? resolvedRuntimeRoot : join(repository.path, "reports", "validation-handoff", "runtime");
-      for (const request of await listValidationRequests(root)) values.push({ ...request, repository_id: repository.id, repository_name: repository.name });
+    for (const { repository, root } of runtimeSources()) {
+      for (const request of await listValidationRequests(root)) values.push({
+        ...request,
+        job_id: scopedResourceId(repository.id, request.id),
+        repository_id: repository.id,
+        repository_name: repository.name,
+      });
     }
     const jobs = new Map(dynamicRunner.listRuns().map(run => [run.id, run]));
-    return values.map(request => ({ ...request, job: jobs.get(request.id) ?? null }));
+    return Promise.all(values.map(async request => {
+      const legacyJob = jobs.get(request.id);
+      const policy = await runner.dynamicValidationPolicy(request.audit_id, request.repository_id);
+      return {
+        ...request,
+        artifact_dispatch_ready: request.dispatch_ready,
+        dispatch_ready: request.dispatch_ready && policy.enabled,
+        task_dynamic_validation_enabled: policy.enabled,
+        dispatch_blocked_reason: !policy.enabled
+          ? (policy.reason === "test-environment-disabled" ? "任务创建时未启用测试环境信息。" : "任务没有可用的测试环境上下文。")
+          : request.dispatch_ready ? null : "动态验证请求尚未密封、类型不受支持或已有结果。",
+        job: jobs.get(request.job_id) ?? (legacyJob?.repository_id === request.repository_id ? legacyJob : null),
+      };
+    }));
+  }
+
+  async function validationRuns() {
+    const values = [];
+    for (const { repository, root } of runtimeSources()) {
+      for (const run of await listValidationRuns(root)) values.push({
+        ...run,
+        resource_id: scopedResourceId(repository.id, run.id),
+        repository_id: repository.id,
+        repository_name: repository.name,
+      });
+    }
+    return values.sort((a, b) => String(b.recorded_at ?? "").localeCompare(String(a.recorded_at ?? "")));
+  }
+
+  async function validationRun(resourceId) {
+    for (const { repository, root } of runtimeSources()) {
+      for (const run of await listValidationRunDetails(root)) {
+        const scopedId = scopedResourceId(repository.id, run.id);
+        if (resourceId === scopedId || resourceId === run.id) return {
+          ...run,
+          resource_id: scopedId,
+          repository_id: repository.id,
+          repository_name: repository.name,
+        };
+      }
+    }
+    return null;
   }
 
   async function snapshot() {
-    await runner.ready;
-    const [validationRuns, runnerAudits] = await Promise.all([listValidationRuns(resolvedRuntimeRoot), Promise.resolve(runner.listAudits())]);
+    await Promise.all([runner.ready, findingWorkflow.ready]);
+    const runnerAudits = runner.listAudits();
+    const validationByRepository = new Map();
+    await Promise.all(runtimeSources().map(async ({ repository, root }) => {
+      validationByRepository.set(repository.id, await listValidationRuns(root));
+    }));
     const sources = runner.artifactSources();
     const snapshots = [];
-    for (let sourceIndex = 0; sourceIndex < sources.length; sourceIndex += 1) {
-      const source = sources[sourceIndex];
+    for (const source of sources) {
       const sourceRuns = runnerAudits.filter(audit => audit.repository_id === source.repository_id);
-      const value = await buildWorkspaceSnapshot({ reportsRoot: source.reports_root, validationRuns: sourceIndex === 0 ? validationRuns : [], runnerAudits: sourceRuns });
+      const value = await buildWorkspaceSnapshot({ reportsRoot: source.reports_root, validationRuns: validationByRepository.get(source.repository_id) ?? [], runnerAudits: sourceRuns });
       value.audits = value.audits.map(audit => ({
         ...audit,
         repository_id: audit.repository_id ?? source.repository_id,
         repository_name: audit.repository_name ?? source.repository_name,
       }));
-      value.findings = value.findings.map(finding => ({ ...finding, repository_id: source.repository_id, repository_name: source.repository_name }));
+      value.findings = value.findings.map(finding => {
+        const resourceId = scopedResourceId(source.repository_id, `${finding.audit_id}\0${finding.id}`);
+        return { ...finding, resource_id: resourceId, repository_id: source.repository_id, repository_name: source.repository_name, workflow: findingWorkflow.get(resourceId) };
+      });
       value.reports = value.reports.map(report => ({
         ...report,
         id: scopedResourceId(source.repository_id, report.id),
@@ -273,12 +348,32 @@ export function createAuditWorkbenchServer({
     return { report, bytes, digest };
   }
 
+  async function repositoriesSnapshot() {
+    const [items, data] = await Promise.all([runner.listRepositories(), snapshot()]);
+    return items.map(repository => {
+      const audits = data.audits
+        .filter(audit => audit.repository_id === repository.id)
+        .sort((a, b) => String(b.updated_at ?? b.created_at ?? "").localeCompare(String(a.updated_at ?? a.created_at ?? "")));
+      return {
+        ...repository,
+        audit_count: audits.length,
+        active_audit_count: audits.filter(audit => ["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(audit.status)).length,
+        last_audit_at: audits[0]?.updated_at ?? audits[0]?.created_at ?? null,
+        last_audit_status: audits[0]?.status ?? null,
+      };
+    });
+  }
+
   const server = createHttpServer(async (request, response) => {
     securityHeaders(response);
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (request.method === "GET" && (url.pathname === "/api/health" || url.pathname === "/api/v1/runtime/health")) {
         json(response, 200, { ok: true, service: "opencode-audit-workbench", runner: runner.health(), dynamic_runner: dynamicRunner.health() });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/v1/environment") {
+        json(response, 200, await environmentService.snapshot({ force: url.searchParams.get("refresh") === "1" }));
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/dashboard/summary") {
@@ -291,8 +386,14 @@ export function createAuditWorkbenchServer({
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/repositories") {
-        const items = await runner.listRepositories();
+        const items = await repositoriesSnapshot();
         json(response, 200, { items, count: items.length });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/v1/repositories") {
+        assertSafeMutation(request);
+        const repository = await runner.addRepository(await requestJson(request), request.headers["idempotency-key"]);
+        json(response, 201, repository, { Location: `/api/v1/repositories/${encodeURIComponent(repository.id)}` });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/audits") {
@@ -307,6 +408,36 @@ export function createAuditWorkbenchServer({
         return;
       }
       const auditId = matchAuditPath(url.pathname);
+      if (request.method === "DELETE" && auditId) {
+        assertSafeMutation(request);
+        const body = await requestJson(request);
+        if (body.confirmation !== auditId) throw Object.assign(new Error("删除确认必须与 audit_id 完全一致。"), { statusCode: 422, code: "audit-delete-confirmation-invalid" });
+        const data = await snapshot();
+        const audit = data.audits.find(item => item.id === auditId);
+        if (!audit) throw Object.assign(new Error("审计不存在。"), { statusCode: 404, code: "audit-not-found" });
+        const expected = String(request.headers["if-match"] ?? "").replaceAll('"', "");
+        if (Number(expected) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
+        const runnerAudit = runner.getAudit(auditId);
+        if (runnerAudit && ["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(runnerAudit.status)) {
+          throw Object.assign(new Error("运行中的审计不能删除；请先取消并等待任务结束。"), { statusCode: 409, code: "audit-delete-active" });
+        }
+        const activeValidations = dynamicRunner.listRuns().filter(run => run.audit_id === auditId && ["preparing", "running", "cancelling"].includes(run.status));
+        if (activeValidations.length) throw Object.assign(new Error("该审计仍有动态验证正在运行；请先取消并等待验证结束。"), { statusCode: 409, code: "audit-validation-active" });
+        const artifacts = data.artifacts.filter(artifact => artifact.audit_id === auditId && artifact.repository_id === audit.repository_id);
+        const validationRunsRemoved = await dynamicRunner.deleteAuditRuns(auditId);
+        const findingWorkflowsRemoved = await findingWorkflow.deleteAudit(auditId, audit.repository_id);
+        const result = await runner.deleteAudit(auditId, {
+          repositoryId: audit.repository_id,
+          expectedVersion: expected,
+          artifactPaths: artifacts.map(artifact => artifact.path),
+        });
+        json(response, 200, {
+          ...result,
+          removed_validation_runs: validationRunsRemoved,
+          removed_finding_workflows: findingWorkflowsRemoved,
+        });
+        return;
+      }
       if (request.method === "GET" && auditId) {
         const data = await snapshot();
         const audit = data.audits.find(item => item.id === auditId);
@@ -334,6 +465,18 @@ export function createAuditWorkbenchServer({
         json(response, 200, { items, count: items.length });
         return;
       }
+      const terminalAuditId = matchAuditPath(url.pathname, "terminal");
+      if (request.method === "GET" && terminalAuditId) {
+        json(response, 200, await runner.terminalSnapshot(terminalAuditId));
+        return;
+      }
+      const terminalResizeAuditId = matchAuditPath(url.pathname, "terminal/resize");
+      if (request.method === "POST" && terminalResizeAuditId) {
+        assertSafeMutation(request);
+        const body = await requestJson(request);
+        json(response, 200, await runner.resizeTerminal(terminalResizeAuditId, body.columns, body.rows));
+        return;
+      }
       const artifactAuditId = matchAuditPath(url.pathname, "artifacts");
       if (request.method === "GET" && artifactAuditId) {
         const data = await snapshot();
@@ -345,6 +488,24 @@ export function createAuditWorkbenchServer({
         const data = await snapshot();
         const items = filterFindings(data.findings, url);
         json(response, 200, { items, count: items.length });
+        return;
+      }
+      const findingWorkflowId = matchFindingWorkflowPath(url.pathname);
+      if (request.method === "POST" && findingWorkflowId) {
+        assertSafeMutation(request);
+        const data = await snapshot();
+        const finding = data.findings.find(item => item.resource_id === findingWorkflowId);
+        if (!finding) throw Object.assign(new Error("没有找到对应漏洞。"), { statusCode: 404, code: "finding-not-found" });
+        const body = await requestJson(request);
+        const expected = String(request.headers["if-match"] ?? "0").replaceAll('"', "");
+        const workflow = await findingWorkflow.update({
+          finding,
+          status: body.status,
+          note: body.note ?? "",
+          expectedVersion: expected,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        json(response, 200, workflow, { ETag: `"${workflow.version}"` });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/reports") {
@@ -384,11 +545,23 @@ export function createAuditWorkbenchServer({
         if (!repository) throw Object.assign(new Error("仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
         const requests = await validationRequests();
         const descriptor = requests.find(item => item.id === input.validation_request_id && item.repository_id === repository.id);
-        if (!descriptor?.dispatch_ready) throw Object.assign(new Error("没有找到可调度的密封动态验证请求。"), { statusCode: 422, code: "validation-request-not-ready" });
-        const repositories = runner.runtimeRepositories();
-        const repositoryIndex = repositories.findIndex(item => item.id === repository.id);
-        const root = repositoryIndex === 0 ? resolvedRuntimeRoot : join(repository.path, "reports", "validation-handoff", "runtime");
-        const run = await dynamicRunner.create({ input, repository, runtimeRoot: root, requestDescriptor: descriptor, idempotencyKey: request.headers["idempotency-key"] });
+        if (!descriptor) throw Object.assign(new Error("没有找到动态验证请求。"), { statusCode: 404, code: "validation-request-not-found" });
+        if (!descriptor.task_dynamic_validation_enabled) {
+          throw Object.assign(new Error("该审计任务创建时未启用测试环境信息，禁止触发动态验证。"), { statusCode: 409, code: "audit-dynamic-validation-disabled" });
+        }
+        if (!descriptor.artifact_dispatch_ready) throw Object.assign(new Error("没有找到可调度的密封动态验证请求。"), { statusCode: 422, code: "validation-request-not-ready" });
+        const source = runner.artifactSources().find(item => item.repository_id === repository.id);
+        const root = runtimeSources().find(item => item.repository.id === repository.id)?.root;
+        const executionPaths = await runner.ensureExecutionWorkspace(descriptor.audit_id, repository.id);
+        const run = await dynamicRunner.create({
+          input,
+          repository,
+          reportsRoot: source.reports_root,
+          runtimeRoot: root,
+          executionPaths,
+          requestDescriptor: { ...descriptor, request_id: descriptor.id, id: descriptor.job_id },
+          idempotencyKey: request.headers["idempotency-key"],
+        });
         json(response, 202, run, { Location: `/api/v1/validations/${encodeURIComponent(run.id)}`, ETag: `"${run.version}"` });
         return;
       }
@@ -406,13 +579,13 @@ export function createAuditWorkbenchServer({
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/runs") {
-        const runs = await listValidationRuns(resolvedRuntimeRoot);
+        const runs = await validationRuns();
         json(response, 200, { runs, count: runs.length });
         return;
       }
       if (request.method === "GET" && url.pathname.startsWith("/api/runs/")) {
         const id = decodeURIComponent(url.pathname.slice("/api/runs/".length));
-        const run = await getValidationRun(resolvedRuntimeRoot, id);
+        const run = await validationRun(id);
         if (!run) json(response, 404, { error: "run-not-found" });
         else json(response, 200, { run });
         return;
@@ -428,7 +601,13 @@ export function createAuditWorkbenchServer({
   return server;
 }
 
-export const createValidationObservatoryServer = createAuditWorkbenchServer;
+export function createValidationObservatoryServer(options = {}) {
+  return createAuditWorkbenchServer({
+    ...options,
+    repositories: options.repositories ?? [{ id: "workspace", name: "OpenCode Multi Agents", path: PROJECT_ROOT }],
+    legacyRuntimeRoot: options.legacyRuntimeRoot ?? options.repositories === undefined,
+  });
+}
 
 export function parseArgs(argv) {
   const options = {
@@ -452,12 +631,13 @@ export function parseArgs(argv) {
       const value = argv[++index] ?? "";
       const separator = value.indexOf("=");
       if (separator < 1) throw new Error("--repo 必须使用 id=/absolute/path 格式");
-      options.repositories.push({ id: value.slice(0, separator), path: value.slice(separator + 1) });
+      const path = value.slice(separator + 1);
+      if (!isAbsolute(path)) throw new Error("--repo 必须使用 id=/absolute/path 格式");
+      options.repositories.push({ id: value.slice(0, separator), path });
     } else throw new Error(`Unknown argument: ${option}`);
   }
   if (!LOOPBACK_HOSTS.has(options.host)) throw new Error("工作台只能监听 loopback 地址");
   if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error("Invalid port");
-  if (options.repositories.length === 0) options.repositories.push({ id: "workspace", name: "OpenCode Multi Agents", path: PROJECT_ROOT });
   return options;
 }
 

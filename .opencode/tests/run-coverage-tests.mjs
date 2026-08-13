@@ -30,6 +30,7 @@ import {
 import { candidateManifestDigest } from "../skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs";
 import { buildCvssAssessmentManifest } from "../skills/common-subagent/finding-adjudication/scripts/cvss-assessment-contract.mjs";
 import { attackChainManifestDigest } from "../skills/attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
+import { truthValidationArtifactDigest } from "../skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY = resolve(HERE, "../..");
@@ -42,6 +43,36 @@ const AUDIT_ID = "coverage-fixture-audit";
 const LENSES = ["sink-driven", "control-driven", "config-driven"];
 const DIMENSIONS = Array.from({ length: 10 }, (_, index) => `D${index + 1}`);
 const DOMAIN_AGENT = DOMAIN_AGENTS;
+
+function sealTruthArtifact(value) {
+  value.artifact_digest = truthValidationArtifactDigest(value);
+  return value;
+}
+
+function buildStaticTruthReview(role, intake, quickResultSet, verdict, bindings = {}) {
+  const findingIds = intake.findings.map(finding => finding.finding_id);
+  return sealTruthArtifact({
+    schema_version: 1,
+    artifact_type: "static-truth-review",
+    audit_id: intake.audit_id,
+    round: intake.round,
+    role,
+    execution_status: "COMPLETE",
+    agent_session_id: `coverage-fixture-${role.toLowerCase()}`,
+    intake_digest: intake.artifact_digest,
+    quick_result_digest: quickResultSet.artifact_digest,
+    ...bindings,
+    reviewed_finding_ids: findingIds,
+    findings: findingIds.map(findingId => ({
+      finding_id: findingId,
+      verdict,
+      claims: ["已独立核对入口、数据流、保护措施与直接安全影响。"],
+      evidence_refs: ["reports/adjudication/finding-input.coverage-fixture-audit.r1.json"],
+      reasoning: "冻结源码与证据支持当前角色结论，且未发现未解释的来源摘要漂移。",
+      gaps: [],
+    })),
+  });
+}
 
 async function writeParserCapabilities(path, scope, capabilities) {
   const manifest = {
@@ -1596,12 +1627,110 @@ async function main() {
     };
     adjudication.manifest_digest = candidateManifestDigest(adjudication);
     await writeFile(adjudicationPath, `${JSON.stringify(adjudication, null, 2)}\n`, "utf8");
+    const validationIntakePath = join(coverage, "truth-validation-intake.json");
+    const validationIntake = sealTruthArtifact({
+      schema_version: 1,
+      artifact_type: "finding-truth-validation-intake",
+      audit_id: AUDIT_ID,
+      round: 1,
+      scope_digest: scope.scope_digest,
+      policy: {
+        quick_dynamic: { enabled: false, explicit_task_opt_in: false, deadline_seconds: 120, target_scope: "LOOPBACK_ONLY" },
+        static_review: "AFFIRMATIVE_NEGATIVE_MODERATOR",
+        full_dynamic_trigger: "MANUAL_ONLY",
+      },
+      findings: [{
+        finding_id: findingId,
+        finding_object_digest: adjudication.decisions[0].finding_object_digest,
+        finding_path: "reports/adjudication/finding-input.coverage-fixture-audit.r1.json",
+        adjudication_state: adjudication.decisions[0].state,
+        quick_dynamic_eligible: false,
+        runtime_request_path: null,
+      }],
+    });
+    await writeFile(validationIntakePath, `${JSON.stringify(validationIntake, null, 2)}\n`, "utf8");
+    const quickValidationPath = join(coverage, "quick-validation.json");
+    const quickValidation = sealTruthArtifact({
+      schema_version: 1,
+      artifact_type: "quick-dynamic-result-set",
+      audit_id: AUDIT_ID,
+      round: 1,
+      intake_digest: validationIntake.artifact_digest,
+      deadline_seconds: 120,
+      elapsed_ms: 0,
+      deadline_exceeded: false,
+      evidence_bindings: [],
+      results: [{
+        finding_id: findingId,
+        status: "SKIPPED",
+        duration_ms: 0,
+        target_origin: null,
+        evidence_refs: [],
+        summary: "任务未授权快速动态验证，该发现已进入本地三方静态复核。",
+        gaps: [],
+      }],
+    });
+    await writeFile(quickValidationPath, `${JSON.stringify(quickValidation, null, 2)}\n`, "utf8");
+    const affirmativePath = join(coverage, "affirmative-review.json");
+    const negativePath = join(coverage, "negative-review.json");
+    const moderatorPath = join(coverage, "moderator-review.json");
+    const affirmativeReview = buildStaticTruthReview("AFFIRMATIVE", validationIntake, quickValidation, "PROVEN");
+    const negativeReview = buildStaticTruthReview("NEGATIVE", validationIntake, quickValidation, "REFUTED", {
+      affirmative_review_digest: affirmativeReview.artifact_digest,
+    });
+    const moderatorReview = buildStaticTruthReview("MODERATOR", validationIntake, quickValidation, "TRUE_POSITIVE", {
+      affirmative_review_digest: affirmativeReview.artifact_digest,
+      negative_review_digest: negativeReview.artifact_digest,
+    });
+    await Promise.all([
+      writeFile(affirmativePath, `${JSON.stringify(affirmativeReview, null, 2)}\n`, "utf8"),
+      writeFile(negativePath, `${JSON.stringify(negativeReview, null, 2)}\n`, "utf8"),
+      writeFile(moderatorPath, `${JSON.stringify(moderatorReview, null, 2)}\n`, "utf8"),
+    ]);
+    const validationRoutingPath = join(coverage, "validation-routing.json");
+    const validationRouting = sealTruthArtifact({
+      schema_version: 1,
+      artifact_type: "finding-validation-routing-manifest",
+      audit_id: AUDIT_ID,
+      round: 1,
+      scope_digest: scope.scope_digest,
+      intake_digest: validationIntake.artifact_digest,
+      quick_result_digest: quickValidation.artifact_digest,
+      role_review_digests: {
+        affirmative: affirmativeReview.artifact_digest,
+        negative: negativeReview.artifact_digest,
+        moderator: moderatorReview.artifact_digest,
+      },
+      full_dynamic_trigger: "MANUAL_ONLY",
+      findings: [{
+        finding_id: findingId,
+        route: "STATIC_THREE_PARTY",
+        quick_dynamic_status: "SKIPPED",
+        moderator_verdict: "TRUE_POSITIVE",
+        final_verdict: "TRUE_POSITIVE",
+        report_disposition: "FINDING",
+        evidence_refs: ["reports/validation/moderator-review.json"],
+        rationale: "正反双方完成独立挑战后，Moderator 依据冻结源码确认该漏洞真实成立。",
+      }],
+      summary: { total: 1, true_positive: 1, false_positive: 0, inconclusive: 0 },
+      complete: true,
+    });
+    await writeFile(validationRoutingPath, `${JSON.stringify(validationRouting, null, 2)}\n`, "utf8");
+    const truthValidationArgs = [
+      "--validation-intake", validationIntakePath,
+      "--quick-validation", quickValidationPath,
+      "--affirmative", affirmativePath,
+      "--negative", negativePath,
+      "--moderator", moderatorPath,
+      "--validation-routing", validationRoutingPath,
+    ];
     const cvssClaimsPath = join(coverage, "cvss-claims.json");
     const cvssClaims = {
       schema_version: 1,
       audit_id: AUDIT_ID,
       scope_digest: scope.scope_digest,
       adjudication_manifest_digest: adjudication.manifest_digest,
+      validation_routing_digest: validationRouting.artifact_digest,
       assessments: [{
         finding_id: findingId,
         vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
@@ -1612,10 +1741,11 @@ async function main() {
     };
     await writeFile(cvssClaimsPath, `${JSON.stringify(cvssClaims, null, 2)}\n`, "utf8");
     const cvssAssessmentPath = join(coverage, "cvss-assessment.json");
-    const cvssAssessment = buildCvssAssessmentManifest(cvssClaims, adjudication);
+    const cvssAssessment = buildCvssAssessmentManifest(cvssClaims, adjudication, validationRouting);
     await writeFile(cvssAssessmentPath, `${JSON.stringify(cvssAssessment, null, 2)}\n`, "utf8");
     run(resolve(ADJUDICATION_SCRIPTS, "validate-cvss-assessment.mjs"), [
       "--adjudication", adjudicationPath,
+      "--routing", validationRoutingPath,
       "--assessment", cvssAssessmentPath,
     ]);
     run(resolve(ADJUDICATION_SCRIPTS, "build-empty-cvss-assessment.mjs"), [
@@ -1633,6 +1763,7 @@ async function main() {
       audit_id: AUDIT_ID,
       scope_digest: scope.scope_digest,
       adjudication_manifest_digest: adjudication.manifest_digest,
+      validation_routing_digest: validationRouting.artifact_digest,
       chains: [{
         chain_id: "CHAIN-COVERAGE-FIXTURE-001",
         assessment_state: "SUPPORTED_STATIC",
@@ -1667,6 +1798,7 @@ async function main() {
       "--coverage-summary", summaryPath,
       "--adjudication-input", adjudicationInputPath,
       "--adjudication", adjudicationPath,
+      ...truthValidationArgs,
       "--cvss", cvssAssessmentPath,
       "--chains", attackChainsPath,
       "--output", finalReportModelPath,
@@ -1679,6 +1811,7 @@ async function main() {
       "--coverage-summary", summaryPath,
       "--adjudication-input", adjudicationInputPath,
       "--adjudication", adjudicationPath,
+      ...truthValidationArgs,
       "--cvss", cvssAssessmentPath,
       "--chains", attackChainsPath,
       "--output", policyFinalReportModelPath,
@@ -1695,6 +1828,7 @@ async function main() {
       "--coverage-summary", summaryPath,
       "--adjudication-input", adjudicationInputPath,
       "--adjudication", adjudicationPath,
+      ...truthValidationArgs,
       "--cvss", cvssAssessmentPath,
       "--chains", attackChainsPath,
       "--output", join(coverage, "checkpoint-from-complete-model.json"),
@@ -1706,7 +1840,7 @@ async function main() {
     if (finalReportModel.findings.length !== 1 || finalReportModel.chains.length !== 1
       || finalReportModel.findings[0].attack_surface?.schema_version !== 1
       || !finalReportModel.findings[0].attack_surface_source?.json_pointer?.endsWith("/finding/attack_surface")
-      || !finalReport.includes("## Per-Finding Attack Surface")
+      || !finalReport.includes("## 逐项攻击面证据")
       || !finalReport.includes("fixture HTTP request parameter")
       || finalReport.includes("CONFIRMED") || !finalReport.includes("GENERATED: final-report-model")) {
       throw new Error("Final report model did not preserve only adjudicated, provenance-bound results");

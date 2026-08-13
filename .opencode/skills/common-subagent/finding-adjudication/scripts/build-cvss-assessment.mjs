@@ -12,17 +12,18 @@ function parseArgs(argv) {
     if (!token?.startsWith("--") || value == null) throw new Error(`Invalid argument near ${token ?? "<end>"}`);
     args[token.slice(2)] = value;
   }
-  for (const key of ["claims", "adjudication", "output"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
+  for (const key of ["claims", "adjudication", "routing", "output"]) if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   return args;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const [claims, adjudication] = await Promise.all([
+  const [claims, adjudication, routing] = await Promise.all([
     readFile(resolve(args.claims), "utf8").then(JSON.parse),
     readFile(resolve(args.adjudication), "utf8").then(JSON.parse),
+    readFile(resolve(args.routing), "utf8").then(JSON.parse),
   ]);
-  const manifest = buildCvssAssessmentManifest(claims, adjudication);
+  const manifest = buildCvssAssessmentManifest(claims, adjudication, routing);
   const output = resolve(args.output);
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");

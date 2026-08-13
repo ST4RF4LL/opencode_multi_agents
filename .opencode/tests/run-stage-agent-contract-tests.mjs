@@ -39,7 +39,19 @@ async function main() {
     readFile(ROLES_PATH, "utf8").then(JSON.parse),
   ]);
   assert.deepEqual(validateStageContractRegistry(registry, roles), []);
-  assert.equal(registry.stages.length, 12);
+  assert.deepEqual(registry.stages.map(stage => stage.stage_id), [
+    "P00_AUDIT_INIT",
+    "P01_RECON",
+    "P02_THREAT_MODEL",
+    "P03_PLAN",
+    "P04_FOCUS_EXECUTION",
+    "P05_SYSTEM_CHAIN_DISCOVERY",
+    "P06_CORRELATION",
+    "P07_GAP_ROUND",
+    "P08_FINALIZE",
+    "P08_RUNTIME_VALIDATION",
+    "P10_OPTIMIZE",
+  ]);
   assert.equal(new Set(registry.contracts.map(contract => contract.agent_name)).size, Object.keys(roles.agents).length);
 
   const input = seal({

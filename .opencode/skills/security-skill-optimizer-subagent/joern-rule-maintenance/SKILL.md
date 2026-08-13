@@ -1,6 +1,6 @@
 ---
 name: joern-rule-maintenance
-description: Maintain dimension-and-lens-tagged Joern static-analysis rules and metadata from completed final-report-bound vuln-judger TRUE_POSITIVE and FALSE_POSITIVE results.
+description: Maintain dimension-and-lens-tagged Joern static-analysis rules and metadata from completed digest-bound local truth-validation TRUE_POSITIVE and FALSE_POSITIVE results.
 license: MIT
 metadata:
   role: security-skill-optimizer

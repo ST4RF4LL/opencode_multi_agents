@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderFinalReport, validateFinalReportModel } from "../../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
+import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const STAGE_DELIVERY_REGISTRY = resolve(HERE, "../../skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json");
+const STAGE_AGENT_REGISTRY = resolve(HERE, "../../skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json");
 
 const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
 const MAX_ARTIFACTS = 5000;
@@ -14,6 +21,7 @@ const REPORT_DIRECTORIES = new Set([
   "coverage",
   "final",
   "sarif",
+  "stage-deliveries",
   "validation",
   "vulnerability-mining",
 ]);
@@ -128,7 +136,16 @@ function hasArtifact(artifacts, kind, fragment = null) {
   return artifacts.some(artifact => artifact.kind === kind && (!fragment || artifact.path.includes(fragment)));
 }
 
-function stageSnapshot(artifacts, runtimeCount) {
+function stageSnapshot(artifacts, runtimeCount, materialized = null) {
+  if (materialized) return materialized.stages.map(stage => ({
+    id: stage.id,
+    label: stage.label,
+    state: stage.state,
+    round: stage.round,
+    manifest_path: stage.manifest_path,
+    manifest_digest: stage.manifest_digest,
+    issues: stage.errors,
+  }));
   const reached = {
     scope: hasArtifact(artifacts, "coverage", "coverage-plan."),
     recon: hasArtifact(artifacts, "coverage", "coverage-plan."),
@@ -272,7 +289,7 @@ function reportFromArtifact(artifact, artifacts) {
   };
 }
 
-export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits = []) {
+export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits = [], stageDeliveriesByAudit = new Map()) {
   const groups = new Map();
   for (const artifact of artifacts) {
     const current = groups.get(artifact.audit_id) ?? [];
@@ -286,7 +303,10 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
   return [...groups.entries()].map(([auditId, auditArtifacts]) => {
     const runtimeCount = validationRuns.filter(run => run.audit_id === auditId).length;
     const runner = runnerById.get(auditId);
-    const stages = stageSnapshot(auditArtifacts, runtimeCount);
+    const materialized = stageDeliveriesByAudit.get(auditId);
+    const useMaterialized = Boolean(materialized && (runner?.stage_delivery_enforcement === "ENFORCED"
+      || materialized.completed_count > 0 || auditArtifacts.some(artifact => artifact.kind === "stage-deliveries")));
+    const stages = stageSnapshot(auditArtifacts, runtimeCount, useMaterialized ? materialized : null);
     const lastModified = auditArtifacts.map(item => item.modified_at).sort().at(-1) ?? runner?.updated_at ?? null;
     const completedCount = stages.filter(stage => stage.state === "completed").length;
     const completed = completedCount === stages.length;
@@ -305,6 +325,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       stage: activeStage?.label ?? (discontinuous ? "制品不连续" : completed ? "报告封存" : "等待开始"),
       stages,
       progress,
+      progress_source: useMaterialized ? "stage-delivery-manifest" : "legacy-artifact-heuristic",
       finding_count: findings.filter(finding => finding.audit_id === auditId).length,
       runtime_validation_count: runtimeCount,
       artifact_count: auditArtifacts.length,
@@ -313,6 +334,21 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       updated_at: runner?.updated_at ?? lastModified,
       exit_code: runner?.exit_code ?? null,
       error: runner?.error ?? null,
+      execution_transport: runner?.execution_transport ?? null,
+      terminal: runner?.terminal ?? null,
+      paths: runner?.paths ?? null,
+      provider_session_id: runner?.provider_session_id ?? runner?.terminal?.provider_session_id ?? null,
+      recovery_count: Number(runner?.recovery_count ?? 0),
+      last_recovered_at: runner?.last_recovered_at ?? null,
+      interrupted_at: runner?.interrupted_at ?? null,
+      interruption_reason: runner?.interruption_reason ?? null,
+      task_context: runner?.task_context ?? {
+        additional_instructions_enabled: false,
+        additional_instructions_length: 0,
+        test_environment_enabled: false,
+        test_environment_length: 0,
+        dynamic_validation_enabled: false,
+      },
     };
   }).sort((left, right) => String(right.updated_at ?? "").localeCompare(String(left.updated_at ?? "")));
 }
@@ -320,7 +356,20 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
 export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [], runnerAudits = [] }) {
   const artifacts = await scanReportArtifacts(reportsRoot);
   const findings = findingsFromArtifacts(artifacts);
-  const audits = auditsFromArtifacts(artifacts, validationRuns, runnerAudits);
+  const auditIds = new Set([
+    ...artifacts.map(artifact => artifact.audit_id),
+    ...validationRuns.map(run => run.audit_id),
+    ...runnerAudits.map(run => run.id),
+  ]);
+  const [registry, stageAgentRegistry] = await Promise.all([
+    readFile(STAGE_DELIVERY_REGISTRY, "utf8").then(JSON.parse),
+    readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
+  ]);
+  const stageDeliveriesByAudit = new Map(await Promise.all([...auditIds].map(async auditId => [
+    auditId,
+    await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry }),
+  ])));
+  const audits = auditsFromArtifacts(artifacts, validationRuns, runnerAudits, stageDeliveriesByAudit);
   const reports = artifacts.filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown").map(artifact => reportFromArtifact(artifact, artifacts));
   const severity = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
   for (const finding of findings) {
@@ -331,7 +380,7 @@ export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [],
     generated_at: new Date().toISOString(),
     summary: {
       audit_count: audits.length,
-      active_audits: audits.filter(audit => ["queued", "preparing", "running", "pausing", "paused", "cancelling"].includes(audit.status)).length,
+      active_audits: audits.filter(audit => ["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(audit.status)).length,
       completed_audits: audits.filter(audit => audit.status === "completed").length,
       finding_count: findings.length,
       report_count: reports.length,

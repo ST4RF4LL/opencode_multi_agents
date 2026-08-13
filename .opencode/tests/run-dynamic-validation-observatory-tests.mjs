@@ -118,7 +118,7 @@ try {
   assert.equal(sanitizeForWeb({ password: "secret" }).password, "[REDACTED]");
   assert.equal(sanitizeForWeb('{"access_token":"must-not-leak"}').includes("must-not-leak"), false);
 
-  const server = createValidationObservatoryServer({ runtimeRoot });
+  const server = createValidationObservatoryServer({ runtimeRoot, stateRoot: join(temp, "state") });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
@@ -134,7 +134,7 @@ try {
 
     const indexResponse = await fetch(`http://127.0.0.1:${address.port}/`);
     assert.equal(indexResponse.status, 200);
-    assert.match(await indexResponse.text(), /OpenCode 安全审计工作台/);
+    assert.match(await indexResponse.text(), /DeepHole·JAVA/);
 
     const postResponse = await fetch(`http://127.0.0.1:${address.port}/api/runs`, { method: "POST" });
     assert.equal(postResponse.status, 405);

@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title>OpenCode 安全审计工作台</title>
+    <title>DeepHole·JAVA</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand"><div class="brand-mark">S<span>/</span></div><div><strong>SENTINEL</strong><small>OPENCODE AUDIT</small></div></div>
+        <div class="brand"><img class="brand-logo" src="/logo_DJ.png" alt="DeepHole·JAVA 标识"><div><strong>DeepHole·<br>JAVA</strong></div></div>
         <div class="workspace-card"><span>当前工作空间</span><strong>源码安全工程中心</strong><small id="engine-caption">正在连接运行时…</small></div>
         <nav class="nav" aria-label="主导航">
           <button class="active" data-view="dashboard"><span>⌁</span>工作台</button>
@@ -19,10 +19,10 @@
           <button data-view="findings"><span>!</span>漏洞发现 <em id="finding-badge">0</em></button>
           <button data-view="reports"><span>▤</span>审计报告</button>
           <p>验证与运行</p>
-          <button data-view="validation"><span>⌘</span>动态验证</button>
-          <button data-view="runtime"><span>◉</span>Agent 运行时</button>
+          <button data-view="validation"><span>⌘</span>完整动态验证</button>
+          <button data-view="runtime"><span>◉</span>运行环境</button>
         </nav>
-        <div class="runner-card"><div><i id="runner-pulse"></i><strong id="runner-state">读取中</strong></div><p>OpenCode 本地受控运行驱动</p><small>仅允许服务端登记仓库</small></div>
+        <div class="runner-card"><div><i id="runner-pulse"></i><strong id="runner-state">读取中</strong></div><p>OpenCode 本地受控运行驱动</p><small>项目目录由操作员登记</small></div>
       </aside>
 
       <div class="workspace">
@@ -42,7 +42,7 @@
             </div>
           </section>
 
-          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">SERVER ALLOWLIST</p><h2>审计项目</h2><p>浏览器只能选择这里登记的仓库，无法提交任意本地路径或命令。</p></div></div><article class="panel"><div id="project-table" class="data-table"></div></article></section>
+          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">AUDIT TARGETS</p><h2>审计项目</h2><p>登记你要审计的源码目录；路径属于工作台所在机器，而不是浏览器所在机器。</p></div><button id="add-project" class="button primary">＋ 指定目录</button></div><article class="panel"><div id="project-table" class="data-table"></div></article></section>
 
           <section id="view-audits" class="view"><div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div></div><div class="split"><article class="panel"><div id="audit-table" class="data-table"></div></article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div></section>
 
@@ -50,9 +50,15 @@
 
           <section id="view-reports" class="view"><div class="page-heading"><div><p class="eyebrow">REPORT DELIVERY</p><h2>审计报告</h2><p>最终中文 Markdown 报告、模型绑定状态与内容摘要记录。</p></div></div><div id="report-grid" class="report-grid"></div></section>
 
-          <section id="view-validation" class="view"><div class="page-heading"><div><p class="eyebrow">AUTHORIZED RUNTIME EVIDENCE</p><h2>动态验证</h2><p>只有密封的 JW-INJECT-06 请求、显式 localhost 授权和两个专用测试账号齐备时才能调度。</p></div></div><article class="panel request-panel"><div class="section-title"><div><p class="eyebrow">SEALED REQUESTS</p><h2>待验证请求</h2></div><span id="dynamic-runner-caption" class="status">读取中</span></div><div id="validation-request-list" class="request-list"></div></article><div class="split validation-split"><article class="panel"><div class="section-title"><div><p class="eyebrow">RESULTS</p><h2>验证结果</h2></div></div><div id="validation-list" class="audit-list"></div></article><aside id="validation-detail" class="panel detail-panel"><div class="empty-state">选择一次验证查看环境和脱敏 HTTP 证据。</div></aside></div></section>
+          <section id="view-validation" class="view"><div class="page-heading"><div><p class="eyebrow">AUTHORIZED RUNTIME EVIDENCE</p><h2>完整动态验证</h2><p>该页面只负责人工触发的完整验证；审计主链中的 120 秒快速动态与本地三方静态复核由八环节交付门禁自动记录。</p></div></div><article class="panel request-panel"><div class="section-title"><div><p class="eyebrow">SEALED REQUESTS</p><h2>待人工验证请求</h2></div><span id="dynamic-runner-caption" class="status">读取中</span></div><div id="validation-request-list" class="request-list"></div></article><div class="split validation-split"><article class="panel"><div class="section-title"><div><p class="eyebrow">RESULTS</p><h2>完整验证结果</h2></div></div><div id="validation-list" class="audit-list"></div></article><aside id="validation-detail" class="panel detail-panel"><div class="empty-state">选择一次验证查看环境和脱敏 HTTP 证据。</div></aside></div></section>
 
-          <section id="view-runtime" class="view"><div class="page-heading"><div><p class="eyebrow">RUNTIME CONTROL</p><h2>Agent 运行时</h2><p>运行驱动默认关闭；启用后通过固定参数启动 OpenCode，不拼接 shell 命令。</p></div></div><div id="runtime-grid" class="metric-grid"></div><article class="panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>仓库路径来自服务端启动参数 <code>--repo id=/absolute/path</code>。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>动态验证仍需单独显式授权与 localhost 测试环境。</li></ul></article></section>
+          <section id="view-runtime" class="view">
+            <div class="page-heading"><div><p class="eyebrow">PLATFORM READINESS</p><h2>运行环境</h2><p id="environment-caption">正在检查操作系统、OpenCode、静态分析器和浏览器能力…</p></div></div>
+            <div id="runtime-grid" class="metric-grid"></div>
+            <div id="capability-grid" class="capability-grid"></div>
+            <article class="panel environment-panel"><div class="section-title"><div><p class="eyebrow">COMPONENT HEALTH</p><h2>组件健康</h2></div><button class="text-button" id="refresh-environment">重新探测</button></div><div id="environment-table" class="data-table"></div></article>
+            <article class="panel boundary-panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>审计项目由操作员指定工作台所在机器上的绝对目录，并在服务端规范化、校验和持久登记。</li><li>目标源码目录与工作台 OpenCode Agent/MCP 配置相互隔离。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>测试环境 ENABLE 是 120 秒快速动态的任务级显式授权；完整动态仍需逐次人工授权，两者都只允许 loopback。</li></ul></article>
+          </section>
         </main>
       </div>
     </div>
@@ -64,8 +70,43 @@
         <label>审计项目<select name="repository_id" id="repository-select" required></select></label>
         <div class="form-row"><label>audit_id<input name="audit_id" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,127}" placeholder="audit-2026-001" required></label><label>目标 ref<input name="ref" value="HEAD" maxlength="200" required></label></div>
         <label class="check"><input name="allow_dirty" type="checkbox">允许审计包含未提交修改的工作树（会降低可复现性）</label>
+        <div class="audit-contexts">
+          <section class="audit-context-option" data-context-option>
+            <div class="audit-context-heading">
+              <div><strong>测试目标补充说明</strong><small>追加当前任务要求与关注重点，例如“只验证 XSS 漏洞”。</small></div>
+              <label class="enable-switch"><input name="additional_instructions_enabled" type="checkbox" aria-controls="additional-instructions"><span>ENABLE</span></label>
+            </div>
+            <label class="context-textarea" for="additional-instructions">补充说明<textarea id="additional-instructions" name="additional_instructions" maxlength="12000" placeholder="例如：只验证 XSS 漏洞；重点检查后台富文本入口；其余漏洞只记录静态证据。" disabled></textarea></label>
+          </section>
+          <section class="audit-context-option sensitive" data-context-option>
+            <div class="audit-context-heading">
+              <div><strong>测试环境信息</strong><small>松散填写 URL、测试账号、密码、登录方式及其他环境说明。</small></div>
+              <label class="enable-switch"><input name="test_environment_enabled" type="checkbox" aria-controls="test-environment-context"><span>ENABLE</span></label>
+            </div>
+            <label class="context-textarea" for="test-environment-context">环境上下文<textarea id="test-environment-context" name="test_environment_context" maxlength="24000" autocomplete="off" spellcheck="false" placeholder="URL: http://127.0.0.1:8080&#10;测试账号: ...&#10;测试密码: ...&#10;登录/数据清理说明: ..." disabled></textarea></label>
+            <p class="context-note">未启用时不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用即明确授权审计主链执行一次、全任务最多 120 秒的 loopback 快速动态确认；信息按敏感上下文保存且不在任务 API 中回显。完整动态验证仍需在验证页逐次手动触发。</p>
+          </section>
+        </div>
         <div id="audit-form-error" class="notice error" hidden></div>
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-dialog>取消</button><button id="submit-audit" class="button primary" type="submit">提交 OpenCode</button></div>
+      </form>
+    </dialog>
+    <dialog id="project-dialog">
+      <form id="project-form" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">AUDIT TARGET</p><h2>指定审计项目目录</h2></div><button type="button" class="icon-button" data-close-project>×</button></div>
+        <label>项目目录<input name="path" maxlength="4096" placeholder="例如：/Users/me/Workspace/service-a 或 C:\\src\\service-a" required></label>
+        <label>显示名称（可选）<input name="name" maxlength="120" placeholder="默认使用目录名"></label>
+        <div class="notice">这里填写工作台服务所在 macOS、WSL、Windows 或 Linux 主机可访问的绝对目录。浏览器安全模型无法返回本机绝对路径，因此使用明确的路径输入。</div>
+        <div id="project-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-project>取消</button><button id="submit-project" class="button primary" type="submit">登记项目</button></div>
+      </form>
+    </dialog>
+    <dialog id="delete-audit-dialog">
+      <form id="delete-audit-form">
+        <div class="dialog-heading"><div><p class="eyebrow">DELETE AUDIT</p><h2>删除审计任务</h2></div><button type="button" class="icon-button" data-close-delete-audit>×</button></div>
+        <p class="delete-warning">将删除任务 <strong id="delete-audit-id" class="mono"></strong> 在工作台中的运行状态、可归属报告、临时文件、执行工作区以及关联验证/处置状态。被审计源码目录不会被修改。</p>
+        <div id="delete-audit-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-delete-audit>取消</button><button id="submit-delete-audit" class="button danger" type="submit">确认删除</button></div>
       </form>
     </dialog>
     <dialog id="validation-dialog">
@@ -93,12 +134,29 @@
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-report>关闭</button><a id="report-download" class="button primary" href="#">下载原始 Markdown</a></div>
       </article>
     </dialog>
+    <dialog id="terminal-dialog" class="terminal-dialog">
+      <article class="report-dialog-body">
+        <div class="dialog-heading"><div><p class="eyebrow">READ-ONLY TMUX MONITOR</p><h2 id="terminal-title">OpenCode 实时窗口</h2><p id="terminal-subtitle"></p></div><button type="button" class="icon-button" data-close-terminal aria-label="关闭终端监控">×</button></div>
+        <div class="terminal-toolbar"><span id="terminal-live-state" class="status unavailable">正在连接</span><code id="terminal-target" class="mono">—</code></div>
+        <p id="terminal-message" class="terminal-message"></p>
+        <div id="terminal-command-wrap" class="terminal-command" hidden><span>本机只读 tmux 连接</span><code id="terminal-command" class="mono"></code></div>
+        <div id="opencode-session-wrap" class="terminal-command" hidden><span>OpenCode session</span><code id="opencode-session-id" class="mono"></code><span>OpenCode 会话直连</span><code id="opencode-session-command" class="mono"></code></div>
+        <pre id="terminal-output" class="terminal-output" tabindex="0">正在读取 tmux 窗口…</pre>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-terminal>关闭</button><button id="refresh-terminal" type="button" class="button primary">立即刷新</button></div>
+      </article>
+    </dialog>
     <dialog id="finding-dialog" class="finding-dialog">
       <article class="report-dialog-body">
         <div class="dialog-heading"><div><p class="eyebrow">CANONICAL FINDING</p><h2 id="finding-detail-title">漏洞详情</h2><p id="finding-detail-subtitle"></p></div><button type="button" class="icon-button" data-close-finding aria-label="关闭漏洞详情">×</button></div>
         <dl id="finding-detail-facts" class="detail-facts"></dl>
         <div id="finding-detail-body" class="finding-detail-body"></div>
-        <div class="dialog-actions"><button type="button" class="button secondary" data-close-finding>关闭</button></div>
+        <form id="finding-workflow-form" class="finding-workflow-form">
+          <div class="section-title"><div><p class="eyebrow">OPERATOR WORKFLOW</p><h2>人工处理</h2></div><small id="finding-workflow-version">版本 0</small></div>
+          <label>处理状态<select name="status" required><option value="unreviewed">未处理</option><option value="confirmed">已确认</option><option value="rejected">已排除</option><option value="insufficient_evidence">证据不足</option><option value="awaiting_validation">待动态验证</option><option value="validated">验证通过</option><option value="validation_failed">验证失败</option><option value="validation_blocked">验证受阻</option><option value="reported">已入报告</option></select></label>
+          <label>处理备注<textarea name="note" maxlength="4000" placeholder="记录人工判断、待办或与 Owner 沟通结论；不会覆盖 canonical finding。"></textarea></label>
+          <div id="finding-workflow-error" class="notice error" hidden></div>
+          <div class="dialog-actions"><button type="button" class="button secondary" data-close-finding>关闭</button><button id="submit-finding-workflow" type="submit" class="button primary">保存处理状态</button></div>
+        </form>
       </article>
     </dialog>
     <div id="toast" class="toast" role="status"></div>

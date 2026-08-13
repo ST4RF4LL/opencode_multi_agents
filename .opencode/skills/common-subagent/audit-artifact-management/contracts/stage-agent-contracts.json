@@ -11,9 +11,8 @@
     { "stage_id": "P06_CORRELATION", "order": 6, "name": "Evidence correlation" },
     { "stage_id": "P07_GAP_ROUND", "order": 7, "name": "Targeted gap rounds and optional threat refinement" },
     { "stage_id": "P08_FINALIZE", "order": 8, "name": "Adjudication, post-adjudication chains, coverage seals, and final report" },
-    { "stage_id": "P08_RUNTIME_VALIDATION", "order": 9, "name": "Explicit localhost dynamic runtime validation sidecar" },
-    { "stage_id": "P09_INDEPENDENT_REVIEW", "order": 10, "name": "Independent whole-report review" },
-    { "stage_id": "P10_OPTIMIZE", "order": 11, "name": "Reusable security-audit asset optimization" }
+    { "stage_id": "P08_RUNTIME_VALIDATION", "order": 9, "name": "Explicit manual localhost full dynamic runtime validation sidecar" },
+    { "stage_id": "P10_OPTIMIZE", "order": 10, "name": "Reusable security-audit asset optimization" }
   ],
   "envelope": {
     "schema_version": 1,
@@ -443,6 +442,106 @@
       }
     },
     {
+      "contract_id": "P08_FINALIZE.vulnerability-validator",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "vulnerability-validator",
+      "invocation": "REQUIRED_ONCE",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["finding-adjudication-input", "finding-adjudication", "external-runtime-validation-request-set"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "supported_finding_ids", "quick_dynamic_task_opt_in", "full_dynamic_trigger"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["truth-validation-intake", "quick-dynamic-result-set", "affirmative-review", "negative-review", "moderator-review", "validation-routing-manifest"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "total_count", "quick_confirmed_ids", "statically_reviewed_ids", "true_positive_ids", "false_positive_ids", "inconclusive_ids", "full_dynamic_trigger", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.quick-dynamic-validator",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "quick-dynamic-validator",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["truth-validation-intake", "external-runtime-validation-request-set"],
+        "optional_artifact_types": ["private-test-environment-context"],
+        "required_payload_fields": ["explicit_task_opt_in", "deadline_seconds", "target_scope", "eligible_finding_ids"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["quick-dynamic-result-set"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["deadline_seconds", "elapsed_ms", "confirmed_ids", "not_confirmed_ids", "blocked_ids", "timed_out_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.vulnerability-affirmative",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "vulnerability-affirmative",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["truth-validation-intake", "quick-dynamic-result-set"],
+        "optional_artifact_types": ["finding-artifact-set"],
+        "required_payload_fields": ["round", "review_finding_ids", "independent_reconstruction"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["affirmative-review"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "reviewed_finding_ids", "proven_ids", "not_proven_ids", "inconclusive_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.vulnerability-negative",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "vulnerability-negative",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["truth-validation-intake", "quick-dynamic-result-set", "affirmative-review"],
+        "optional_artifact_types": ["finding-artifact-set"],
+        "required_payload_fields": ["round", "review_finding_ids", "independent_reconstruction_before_challenge"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["negative-review"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "reviewed_finding_ids", "upheld_ids", "refuted_ids", "inconclusive_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
+      "contract_id": "P08_FINALIZE.vulnerability-moderator",
+      "stage_id": "P08_FINALIZE",
+      "agent_name": "vulnerability-moderator",
+      "invocation": "CONDITIONAL",
+      "input_scope_state": "FROZEN",
+      "output_scope_state": "FROZEN",
+      "input": {
+        "required_artifact_types": ["truth-validation-intake", "quick-dynamic-result-set", "affirmative-review", "negative-review"],
+        "optional_artifact_types": ["finding-artifact-set"],
+        "required_payload_fields": ["round", "review_finding_ids", "independent_source_check"],
+        "optional_payload_fields": []
+      },
+      "output": {
+        "required_artifact_types": ["moderator-review"],
+        "optional_artifact_types": [],
+        "required_payload_fields": ["round", "reviewed_finding_ids", "true_positive_ids", "false_positive_ids", "inconclusive_ids", "gaps"],
+        "optional_payload_fields": []
+      }
+    },
+    {
       "contract_id": "P08_FINALIZE.security-attack-chain-hunter",
       "stage_id": "P08_FINALIZE",
       "agent_name": "security-attack-chain-hunter",
@@ -450,7 +549,7 @@
       "input_scope_state": "FROZEN",
       "output_scope_state": "FROZEN",
       "input": {
-        "required_artifact_types": ["threat-model", "focus-areas", "finding-adjudication", "focus-audit-result-set", "correlation-report"],
+        "required_artifact_types": ["threat-model", "focus-areas", "validation-routing-manifest", "focus-audit-result-set", "correlation-report"],
         "optional_artifact_types": ["preliminary-attack-chain-report"],
         "required_payload_fields": ["round", "reviewed_focus_area_ids", "reviewed_trust_boundary_ids", "reviewed_asset_ids", "known_gaps"],
         "optional_payload_fields": []
@@ -470,13 +569,13 @@
       "input_scope_state": "FROZEN",
       "output_scope_state": "FROZEN",
       "input": {
-        "required_artifact_types": ["coverage-plan", "coverage-ledger", "finding-adjudication", "cvss-assessment", "attack-chain-report", "correlation-report"],
+        "required_artifact_types": ["coverage-plan", "coverage-ledger", "finding-adjudication", "validation-routing-manifest", "cvss-assessment", "attack-chain-report", "correlation-report"],
         "optional_artifact_types": ["stage-handoff-set", "external-runtime-validation-request-set"],
         "required_payload_fields": ["report_mode", "expected_stage_contract_ids", "expected_focus_sessions", "known_gaps"],
         "optional_payload_fields": []
       },
       "output": {
-        "required_artifact_types": ["stage-handoff-verification", "coverage-verification", "semantic-coverage-verification", "final-report-model", "final-report"],
+        "required_artifact_types": ["stage-handoff-verification", "coverage-verification", "coverage-summary", "semantic-coverage-verification", "final-report-model", "final-report"],
         "optional_artifact_types": ["external-runtime-validation-request-set"],
         "required_payload_fields": ["report_kind", "coverage_complete", "semantic_complete", "stage_handoffs_complete", "supported_finding_ids", "attack_chain_ids", "residual_gaps"],
         "optional_payload_fields": []
@@ -503,26 +602,6 @@
       }
     },
     {
-      "contract_id": "P09_INDEPENDENT_REVIEW.vulnerability-validator",
-      "stage_id": "P09_INDEPENDENT_REVIEW",
-      "agent_name": "vulnerability-validator",
-      "invocation": "REQUIRED_FOR_TERMINAL_REPORT",
-      "input_scope_state": "FROZEN",
-      "output_scope_state": "FROZEN",
-      "input": {
-        "required_artifact_types": ["final-report", "coverage-verification", "semantic-coverage-verification"],
-        "optional_artifact_types": [],
-        "required_payload_fields": ["report_sha256", "source_repository_path", "review_engine", "run_id"],
-        "optional_payload_fields": ["skills_path"]
-      },
-      "output": {
-        "required_artifact_types": ["third-party-review-json", "third-party-review-markdown"],
-        "optional_artifact_types": [],
-        "required_payload_fields": ["run_id", "terminal_state", "review_complete", "finding_accounting", "residual_gaps"],
-        "optional_payload_fields": []
-      }
-    },
-    {
       "contract_id": "P10_OPTIMIZE.security-skill-optimizer",
       "stage_id": "P10_OPTIMIZE",
       "agent_name": "security-skill-optimizer",
@@ -530,9 +609,9 @@
       "input_scope_state": "FROZEN",
       "output_scope_state": "FROZEN",
       "input": {
-        "required_artifact_types": ["third-party-review-json", "final-report"],
+        "required_artifact_types": ["validation-routing-manifest", "moderator-review", "final-report"],
         "optional_artifact_types": ["source-auditor-note-set"],
-        "required_payload_fields": ["review_status", "eligible_verdict_ids", "prohibited_changes", "residual_gaps"],
+        "required_payload_fields": ["validation_status", "eligible_verdict_ids", "prohibited_changes", "residual_gaps"],
         "optional_payload_fields": []
       },
       "output": {

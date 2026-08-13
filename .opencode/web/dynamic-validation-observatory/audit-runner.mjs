@@ -3,30 +3,84 @@ import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { appendFile, mkdir, open, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { appendFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
+import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
+import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
 
 const execFileAsync = promisify(execFile);
 const AUDIT_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/i;
 const REPOSITORY_ID = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
-const TERMINAL = new Set(["completed", "failed", "cancelled"]);
-const ACTIVE = new Set(["queued", "preparing", "running", "pausing", "paused", "cancelling"]);
+const TERMINAL = new Set(["completed", "failed", "interrupted", "cancelled"]);
+const ACTIVE = new Set(["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"]);
+const RECOVERABLE = new Set(["failed", "interrupted", "cancelled"]);
 const MAX_LOG_LINE = 16 * 1024;
 const MAX_LOG_READ_BYTES = 256 * 1024;
+const MAX_ADDITIONAL_INSTRUCTIONS = 12_000;
+const MAX_TEST_ENVIRONMENT_CONTEXT = 24_000;
+const PRIVATE_CONTEXT_FILES = Object.freeze({
+  additional_instructions: "additional-instructions.txt",
+  test_environment: "test-environment.txt",
+});
+const PROMPT_CLIENT = fileURLToPath(new URL("./opencode-prompt-client.mjs", import.meta.url));
+const STAGE_DELIVERY_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json", import.meta.url));
+const STAGE_AGENT_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json", import.meta.url));
 
-function redact(value) {
-  return String(value)
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonicalize(value[key])]));
+}
+
+function digestObjectWithout(value, field) {
+  const copy = structuredClone(value);
+  delete copy[field];
+  return createHash("sha256").update(JSON.stringify(canonicalize(copy))).digest("hex");
+}
+
+async function defaultStageDeliveryVerifier({ reportsRoot, auditId }) {
+  const [registry, stageAgentRegistry] = await Promise.all([
+    readFile(STAGE_DELIVERY_REGISTRY, "utf8").then(JSON.parse),
+    readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
+  ]);
+  return verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry });
+}
+
+function sensitiveRedactionValues(text) {
+  const source = String(text ?? "").trim();
+  if (!source) return [];
+  const values = new Set([source, JSON.stringify(source).slice(1, -1)]);
+  for (const line of source.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length >= 4) values.add(trimmed);
+    for (const token of trimmed.split(/[\s,;，；|:：=\/]+/u)) if (token.length >= 4) values.add(token);
+  }
+  return [...values].filter(value => value.length >= 4).sort((left, right) => right.length - left.length);
+}
+
+function redact(value, sensitiveValues = []) {
+  let output = String(value);
+  for (const sensitive of sensitiveValues) output = output.replaceAll(sensitive, "[PRIVATE_CONTEXT_REDACTED]");
+  return output
     .replace(/(["']?(?:password|passwd|secret|token|authorization|cookie)["']?\s*[:=]\s*["']?)[^\s,"']+/gi, "$1[REDACTED]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]")
     .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, "[JWT_REDACTED]")
     .slice(0, MAX_LOG_LINE);
 }
 
-async function existsFile(path) {
+function redactTerminalOutput(value, sensitiveValues = []) {
+  return String(value ?? "").split("\n").map(line => redact(line, sensitiveValues)).join("\n");
+}
+
+async function configFacts(path) {
   try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
+    const value = JSON.parse(await readFile(path, "utf8"));
+    return { configured: true, config_valid: Boolean(value && typeof value === "object" && !Array.isArray(value)), config_error: null };
+  } catch (error) {
+    if (error?.code === "ENOENT") return { configured: false, config_valid: false, config_error: null };
+    return { configured: true, config_valid: false, config_error: "OpenCode 配置不是有效 JSON。" };
   }
 }
 
@@ -37,7 +91,7 @@ function normalizeRepository(repository, defaultConfigPath) {
     id: repository.id,
     name: repository.name ?? basename(path),
     path,
-    config_path: resolve(repository.config_path ?? join(path, ".opencode", "opencode.json") ?? defaultConfigPath),
+    config_path: resolve(repository.config_path ?? defaultConfigPath ?? join(path, ".opencode", "opencode.json")),
   };
 }
 
@@ -50,47 +104,209 @@ async function git(repositoryPath, args) {
   return result.stdout.trim();
 }
 
-function publicRepository(repository, facts = {}) {
+function publicRepository(repository, facts = {}, activity = {}) {
+  const issues = [];
+  if (!facts.git_repository) issues.push("不是可用的 Git 工作树");
+  if (!facts.configured) issues.push("工作台缺少 OpenCode 审计引擎配置");
+  else if (!facts.config_valid) issues.push(facts.config_error ?? "工作台 OpenCode 审计引擎配置无效");
+  const ready = Boolean(facts.git_repository && facts.configured && facts.config_valid);
   return {
     id: repository.id,
     name: repository.name,
+    directory: repository.path,
     configured: facts.configured ?? false,
+    config_valid: facts.config_valid ?? false,
     git_repository: facts.git_repository ?? false,
     branch: facts.branch ?? null,
     commit: facts.commit ?? null,
     dirty: facts.dirty ?? null,
+    ready,
+    readiness: !ready ? "blocked" : facts.dirty ? "warning" : "ready",
+    issues,
+    audit_count: activity.audit_count ?? 0,
+    active_audit_count: activity.active_audit_count ?? 0,
+    last_audit_at: activity.last_audit_at ?? null,
+    last_audit_status: activity.last_audit_status ?? null,
+  };
+}
+
+function normalizeContextInput(input, { enabledField, valueField, label, maxLength }) {
+  const enabledValue = input?.[enabledField];
+  if (enabledValue !== undefined && typeof enabledValue !== "boolean") {
+    throw Object.assign(new Error(`${label}的 enable 值必须是布尔值。`), { statusCode: 422, code: "audit-context-enable-invalid" });
+  }
+  const value = input?.[valueField];
+  if (value !== undefined && value !== null && typeof value !== "string") {
+    throw Object.assign(new Error(`${label}必须是文本。`), { statusCode: 422, code: "audit-context-value-invalid" });
+  }
+  if (enabledValue !== true) return { enabled: false, text: "" };
+  const text = String(value ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!text) throw Object.assign(new Error(`启用${label}后必须填写内容。`), { statusCode: 422, code: "audit-context-required" });
+  if (text.includes("\0")) throw Object.assign(new Error(`${label}包含不允许的空字符。`), { statusCode: 422, code: "audit-context-value-invalid" });
+  if (text.length > maxLength) throw Object.assign(new Error(`${label}不能超过 ${maxLength} 个字符。`), { statusCode: 422, code: "audit-context-too-large" });
+  return { enabled: true, text };
+}
+
+function contextMetadata(enabled, fileName = null, text = "") {
+  if (!enabled) return { enabled: false, file_name: null, sha256: null, byte_length: 0, character_length: 0 };
+  const bytes = Buffer.from(`${text}\n`, "utf8");
+  return {
+    enabled: true,
+    file_name: fileName,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    byte_length: bytes.length,
+    character_length: text.length,
   };
 }
 
 function publicAudit(audit) {
-  const { idempotency_digest, action_idempotency_digests, ...value } = audit;
-  return { ...value };
+  const { idempotency_digest, action_idempotency_digests, private_context: privateContext, ...value } = audit;
+  const additional = privateContext?.additional_instructions;
+  const environment = privateContext?.test_environment;
+  return {
+    ...value,
+    task_context: {
+      additional_instructions_enabled: additional?.enabled === true,
+      additional_instructions_length: Number(additional?.character_length ?? 0),
+      test_environment_enabled: environment?.enabled === true,
+      test_environment_length: Number(environment?.character_length ?? 0),
+      dynamic_validation_enabled: environment?.enabled === true,
+    },
+  };
 }
 
-function auditPrompt(audit) {
+function controlledChild(root, candidate) {
+  const value = relative(resolve(root), resolve(candidate));
+  return value !== "" && value !== ".." && !value.startsWith(`..${sep}`) && !isAbsolute(value);
+}
+
+async function controlledPathInfo(root, candidate) {
+  if (!controlledChild(root, candidate)) throw new Error(`拒绝删除受控根目录之外的路径：${candidate}`);
+  const absoluteRoot = resolve(root);
+  const parts = relative(absoluteRoot, resolve(candidate)).split(sep);
+  let current = absoluteRoot;
+  for (let index = -1; index < parts.length; index += 1) {
+    if (index >= 0) current = join(current, parts[index]);
+    try {
+      const info = await lstat(current);
+      if (info.isSymbolicLink()) throw Object.assign(new Error(`拒绝删除包含目录链接的路径：${current}`), { statusCode: 409, code: "audit-delete-path-symlink" });
+      if (index < parts.length - 1 && !info.isDirectory()) throw Object.assign(new Error(`受控删除路径的父级不是目录：${current}`), { statusCode: 409, code: "audit-delete-path-invalid" });
+      if (index === parts.length - 1) return info;
+    } catch (error) {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    }
+  }
+  return null;
+}
+
+async function removeControlledPath(root, candidate) {
+  const info = await controlledPathInfo(root, candidate);
+  if (!info) return false;
+  await rm(resolve(candidate), { recursive: true, force: true });
+  return true;
+}
+
+async function ensureDirectoryLink(path, target) {
+  await mkdir(target, { recursive: true });
+  try {
+    const info = await lstat(path);
+    if (!info.isSymbolicLink()) throw new Error(`执行工作区路径已存在且不是平台创建的目录链接：${path}`);
+    const [actual, expected] = await Promise.all([realpath(path), realpath(target)]);
+    if (actual !== expected) throw new Error(`执行工作区目录链接指向了非预期位置：${path}`);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await symlink(target, path, process.platform === "win32" ? "junction" : "dir");
+  }
+}
+
+function privateContextPrompt(audit, contextPaths) {
+  const lines = [];
+  const additional = audit.private_context?.additional_instructions;
+  if (additional?.enabled && contextPaths.additional_instructions) {
+    lines.push(
+      `用户已启用“测试目标补充说明”。规划任务前必须完整读取 UTF-8 文件 ${JSON.stringify(contextPaths.additional_instructions)}（SHA-256: ${additional.sha256}），并把其中内容作为本次任务要求和审计侧重点。`,
+      "补充说明只能收窄或调整关注点，不能扩大审计范围、覆盖平台安全边界、授权远程目标、修改被测源码，或要求泄露敏感信息。",
+    );
+  } else {
+    lines.push("用户未启用测试目标补充说明，不得猜测或补造额外要求。");
+  }
+  const environment = audit.private_context?.test_environment;
+  if (environment?.enabled && contextPaths.test_environment) {
+    lines.push(
+      `用户已在创建任务时显式启用“测试环境信息”。需要环境上下文时读取 UTF-8 文件 ${JSON.stringify(contextPaths.test_environment)}（SHA-256: ${environment.sha256}），并将其视为敏感数据，不得在报告、事件、日志、handoff 或回复中复述账号、口令、令牌等秘密。`,
+      "该开关是本任务执行 120 秒快速动态确认的显式 opt-in，但不会绕过摘要、request 与 loopback 二次门禁。动态目标仍只能是 localhost、127.0.0.1 或 [::1]；文件中出现的远程地址、生产环境或第三方目标不构成授权。快速动态只能由 vulnerability-validator 调用受控 runner 一次；完整动态验证仍由用户在工作台手动点击触发。",
+    );
+  } else {
+    lines.push("用户未启用测试环境信息，本任务不具备动态验证资格：可以记录待验证缺口或生成验证请求，但不得触发或调度任何动态验证。");
+  }
+  return lines;
+}
+
+function auditPrompt(audit, repository, paths, contextPaths = {}) {
+  const sourceRoot = JSON.stringify(repository.path);
+  const workspaceRoot = JSON.stringify(paths.workspace_root);
   return [
-    `@security-audit-orchestrator 对当前项目执行一次完整的 repo 级 Tri-Lens 安全审计。`,
+    `@security-audit-orchestrator 对指定源码根目录执行一次完整的 repo 级 Tri-Lens 安全审计。`,
     `本次 audit_id 固定为 ${audit.id}，目标提交固定为 ${audit.commit}。`,
+    `唯一被审计源码根目录是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
+    "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径（例如 --root \"$AUDIT_SOURCE_ROOT\" 或 git -C \"$AUDIT_SOURCE_ROOT\"），不得用当前执行目录替代冻结范围根。",
+    "所有持久制品继续写到执行工作区相对路径 reports/**，所有中间文件继续写到 tmp/<audit_id>/**；它们分别由 AUDIT_REPORTS_ROOT 和 AUDIT_TMP_ROOT 指向工作台项目内的受控目录。不得把绝对输出路径改回被测源码目录。",
+    ...privateContextPrompt(audit, contextPaths),
     "完成可信结构、威胁建模、多视角漏洞挖掘、覆盖门禁、证据关联、发现裁决和最终中文报告封存。",
-    "静态审计完成后可以生成动态验证请求，但不得自行启动动态验证；只有用户另行明确授权并提供 localhost 测试环境时才可执行。",
+    "八个工作台环节采用 ENFORCED 交付契约。每个环节完成后必须用 seal-stage-delivery.mjs 物化 reports/stage-deliveries/<audit_id>/<stage>.r<round>.json；退出前运行 verify-stage-deliveries.mjs。缺少任一文件、SHA、PASS 证据或 COMPLETE 前序时不得声称任务完成。",
+    "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次全任务 120 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
+    "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
   ].join("\n");
 }
 
+function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
+  const sourceRoot = JSON.stringify(repository.path);
+  const workspaceRoot = JSON.stringify(paths.workspace_root);
+  return [
+    `@security-audit-orchestrator 继续执行此前中断的 repo 级 Tri-Lens 安全审计。`,
+    `这是同一任务 ${audit.id} 的第 ${Number(audit.recovery_count ?? 0)} 次断点恢复，目标提交仍固定为 ${audit.commit}；不得生成新的 audit_id。`,
+    `唯一被审计源码根目录仍是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
+    "先检查 reports/**、tmp/<audit_id>/** 中已经落盘的清单、账本、handoff、checkpoint 和中间结果，校验已有制品后从最早未完成阶段继续；不要删除有效制品，也不要无条件重跑已完成阶段。",
+    "先运行 verify-stage-deliveries.mjs 定位八环节中最早未通过的物化 manifest；摘要有效且 materialized complete 的环节必须复用，修复后用 seal-stage-delivery.mjs 封存对应 round。",
+    "会话中的历史说明只能作为线索，阶段完成性必须以当前落盘制品及确定性校验结果为准；若发现半写入、摘要不匹配或前后不一致的制品，应重建对应制品后再继续。",
+    "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径，不得用当前执行目录替代冻结范围根。",
+    "所有持久制品继续写到执行工作区相对路径 reports/**，所有中间文件继续写到 tmp/<audit_id>/**；不得把绝对输出路径改回被测源码目录。",
+    ...privateContextPrompt(audit, contextPaths),
+    "继续完成真实性 routing、覆盖门禁、CVSS、攻击链和最终中文报告封存。先校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复；不得重跑摘要有效的角色。",
+    "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
+  ].join("\n");
+}
+
+function providerSessionId(value) {
+  return typeof value === "string" && value.length >= 3 && value.length <= 240 && /^[A-Za-z0-9._:-]+$/.test(value) ? value : null;
+}
+
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, repositories = [], enabled = false, command = "opencode", spawnProcess = spawn } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
+    this.configPath = configPath ? resolve(configPath) : null;
+    this.platformRoot = resolve(platformRoot ?? (this.configPath ? resolve(dirname(this.configPath), "..") : process.cwd()));
+    this.artifactsRoot = join(this.platformRoot, "reports", "repositories");
+    this.temporaryRoot = join(this.platformRoot, "tmp", "repositories");
+    this.executionRoot = join(this.platformRoot, "workspace", "audit-runs");
+    this.repositoryRegistryPath = join(this.stateRoot, "repositories.json");
     this.repositories = new Map(repositories.map(repository => {
-      const normalized = normalizeRepository(repository);
+      const normalized = normalizeRepository(repository, this.configPath);
       return [normalized.id, normalized];
     }));
     this.enabled = enabled;
     this.command = command;
     this.spawnProcess = spawnProcess;
+    this.stageDeliveryVerifier = stageDeliveryVerifier;
+    this.terminalMonitor = terminalMonitor ?? new OpenCodeTmuxMonitor({ stateRoot: this.stateRoot, command: this.command });
     this.audits = new Map();
     this.processes = new Map();
+    this.completions = new Map();
     this.subscribers = new Map();
     this.writeQueues = new Map();
+    this.contextRedactions = new Map();
     this.ready = this.initialize();
   }
 
@@ -104,36 +320,108 @@ export class AuditRunner extends EventEmitter {
 
   async initialize() {
     await mkdir(this.stateRoot, { recursive: true });
+    if (this.configPath) {
+      try { this.configPath = await realpath(this.configPath); } catch {}
+    }
+    for (const repository of this.repositories.values()) {
+      try { repository.path = await realpath(repository.path); } catch {}
+      if (this.configPath) repository.config_path = this.configPath;
+    }
+    try {
+      const registry = JSON.parse(await readFile(this.repositoryRegistryPath, "utf8"));
+      for (const repository of registry.repositories ?? []) {
+        const normalized = normalizeRepository(repository, this.configPath);
+        try { normalized.path = await realpath(normalized.path); } catch {}
+        if (!this.repositories.has(normalized.id) && ![...this.repositories.values()].some(existing => existing.path === normalized.path)) this.repositories.set(normalized.id, normalized);
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw new Error(`审计项目注册表无效：${error.message}`);
+    }
+    await this.persistRepositories();
     const entries = await readdir(this.stateRoot, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       try {
         const audit = JSON.parse(await readFile(join(this.stateRoot, entry.name, "run.json"), "utf8"));
-        if (ACTIVE.has(audit.status)) {
-          audit.status = "failed";
-          audit.error = "平台重启后未发现可恢复的 OpenCode 子进程；请重试该审计。";
-          audit.updated_at = new Date().toISOString();
-          audit.version = Number(audit.version ?? 0) + 1;
-          await this.persist(audit);
-        }
         this.audits.set(audit.id, audit);
+        if (ACTIVE.has(audit.status)) {
+          const previousStatus = audit.status;
+          let terminalLive = false;
+          if (audit.terminal?.supported && audit.terminal?.socket_name && audit.terminal?.target && typeof this.terminalMonitor.targetLive === "function") {
+            terminalLive = await this.terminalMonitor.targetLive(audit.terminal.socket_name, audit.terminal.target).catch(() => false);
+          }
+          audit.status = "interrupted";
+          audit.pid = null;
+          audit.finished_at = new Date().toISOString();
+          audit.interrupted_at = audit.finished_at;
+          audit.interruption_reason = "workbench-restarted";
+          audit.error = terminalLive
+            ? "工作台服务已重启；原隔离 OpenCode 窗口仍可查看。请使用断点恢复重新接管任务。"
+            : "工作台服务已重启，原 Runner 连接已中断。请使用断点恢复继续任务。";
+          if (audit.terminal) {
+            audit.terminal.live = terminalLive;
+            audit.terminal.status = terminalLive ? "disconnected" : "closed";
+            audit.terminal.message = audit.error;
+          }
+          await this.record(audit, "audit.interrupted", { reason: audit.interruption_reason, previous_status: previousStatus, terminal_live: terminalLive });
+        }
       } catch {
         // Ignore incomplete state directories; they remain available for operator inspection.
       }
     }
   }
 
+  async persistRepositories() {
+    const temporary = `${this.repositoryRegistryPath}.${process.pid}.${randomUUID()}.tmp`;
+    const value = {
+      schema_version: 1,
+      updated_at: new Date().toISOString(),
+      repositories: [...this.repositories.values()].map(repository => ({ id: repository.id, name: repository.name, path: repository.path })),
+    };
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await rename(temporary, this.repositoryRegistryPath);
+  }
+
+  async addRepository(input, idempotencyKey) {
+    await this.ready;
+    if (!idempotencyKey || idempotencyKey.length > 200) throw Object.assign(new Error("缺少有效的 Idempotency-Key。"), { statusCode: 400, code: "idempotency-key-required" });
+    if (typeof input.path !== "string" || !input.path.trim() || input.path.length > 4096 || !isAbsolute(input.path)) {
+      throw Object.assign(new Error("项目目录必须是工作台所在机器上的绝对路径。"), { statusCode: 422, code: "repository-path-invalid" });
+    }
+    let canonicalPath;
+    try {
+      canonicalPath = await realpath(input.path.trim());
+      const info = await stat(canonicalPath);
+      if (!info.isDirectory()) throw new Error("not-directory");
+    } catch {
+      throw Object.assign(new Error("项目目录不存在、不可读取或不是目录。"), { statusCode: 422, code: "repository-directory-unavailable" });
+    }
+    if (canonicalPath === parse(canonicalPath).root) {
+      throw Object.assign(new Error("不能把文件系统根目录登记为审计项目。"), { statusCode: 422, code: "repository-path-too-broad" });
+    }
+    const existing = [...this.repositories.values()].find(repository => repository.path === canonicalPath);
+    if (existing) return publicRepository(existing, await this.repositoryFacts(existing));
+    const repository = normalizeRepository({
+      id: `project-${createHash("sha256").update(canonicalPath).digest("hex").slice(0, 12)}`,
+      name: typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 120) : basename(canonicalPath),
+      path: canonicalPath,
+    }, this.configPath);
+    this.repositories.set(repository.id, repository);
+    await this.persistRepositories();
+    return publicRepository(repository, await this.repositoryFacts(repository));
+  }
+
   async repositoryFacts(repository) {
-    const configured = await existsFile(repository.config_path);
+    const config = await configFacts(repository.config_path);
     try {
       const [commit, branch, dirty] = await Promise.all([
         git(repository.path, ["rev-parse", "HEAD"]),
         git(repository.path, ["branch", "--show-current"]),
-        git(repository.path, ["status", "--porcelain", "--untracked-files=no"]),
+        git(repository.path, ["status", "--porcelain", "--untracked-files=normal"]),
       ]);
-      return { configured, git_repository: true, commit, branch: branch || "DETACHED", dirty: Boolean(dirty) };
+      return { ...config, git_repository: true, commit, branch: branch || "DETACHED", dirty: Boolean(dirty) };
     } catch {
-      return { configured, git_repository: false, commit: null, branch: null, dirty: null };
+      return { ...config, git_repository: false, commit: null, branch: null, dirty: null };
     }
   }
 
@@ -141,7 +429,13 @@ export class AuditRunner extends EventEmitter {
     await this.ready;
     const values = [];
     for (const repository of this.repositories.values()) {
-      values.push(publicRepository(repository, await this.repositoryFacts(repository)));
+      const audits = [...this.audits.values()].filter(audit => audit.repository_id === repository.id).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+      values.push(publicRepository(repository, await this.repositoryFacts(repository), {
+        audit_count: audits.length,
+        active_audit_count: audits.filter(audit => ACTIVE.has(audit.status)).length,
+        last_audit_at: audits[0]?.updated_at ?? null,
+        last_audit_status: audits[0]?.status ?? null,
+      }));
     }
     return values;
   }
@@ -150,8 +444,75 @@ export class AuditRunner extends EventEmitter {
     return [...this.repositories.values()].map(repository => ({
       repository_id: repository.id,
       repository_name: repository.name,
-      reports_root: join(repository.path, "reports"),
+      reports_root: join(this.artifactsRoot, repository.id),
     }));
+  }
+
+  async ensureSourceBinding(audit, repository, paths) {
+    const directory = join(paths.reports_root, "platform", "audit-runs", audit.id);
+    const path = join(directory, "source-binding.json");
+    const value = {
+      schema_version: 1,
+      audit_id: audit.id,
+      repository_id: repository.id,
+      source_root: repository.path,
+      commit: audit.commit,
+      branch: audit.branch,
+      created_at: audit.created_at,
+      task_context: {
+        additional_instructions_enabled: audit.private_context?.additional_instructions?.enabled === true,
+        additional_instructions_sha256: audit.private_context?.additional_instructions?.sha256 ?? null,
+        quick_dynamic_opt_in: audit.private_context?.test_environment?.enabled === true,
+        test_environment_context_sha256: audit.private_context?.test_environment?.sha256 ?? null,
+        full_dynamic_trigger: "MANUAL_ONLY",
+      },
+    };
+    value.binding_digest = digestObjectWithout(value, "binding_digest");
+    await mkdir(directory, { recursive: true });
+    try {
+      const existing = JSON.parse(await readFile(path, "utf8"));
+      if (existing.binding_digest !== digestObjectWithout(existing, "binding_digest")
+        || existing.binding_digest !== value.binding_digest) {
+        throw Object.assign(new Error("审计源码绑定已漂移，拒绝在同一 audit_id 下继续。"), { statusCode: 409, code: "audit-source-binding-drift" });
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    }
+    return path;
+  }
+
+  async prepareExecutionWorkspace(audit, repository) {
+    const workspaceRoot = join(this.executionRoot, audit.id);
+    const reportsRoot = join(this.artifactsRoot, repository.id);
+    const tmpRoot = join(this.temporaryRoot, repository.id);
+    await mkdir(workspaceRoot, { recursive: true });
+    await Promise.all([
+      ensureDirectoryLink(join(workspaceRoot, ".opencode"), dirname(repository.config_path)),
+      ensureDirectoryLink(join(workspaceRoot, "reports"), reportsRoot),
+      ensureDirectoryLink(join(workspaceRoot, "tmp"), tmpRoot),
+    ]);
+    const paths = {
+      source_root: repository.path,
+      workspace_root: workspaceRoot,
+      reports_root: reportsRoot,
+      tmp_root: tmpRoot,
+    };
+    paths.source_binding = await this.ensureSourceBinding(audit, repository, paths);
+    await writeFile(join(workspaceRoot, "audit-workspace.json"), `${JSON.stringify({ audit_id: audit.id, repository_id: repository.id, ...paths }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    return paths;
+  }
+
+  async ensureExecutionWorkspace(auditId, repositoryId) {
+    if (!AUDIT_ID.test(auditId ?? "")) throw Object.assign(new Error("audit_id 格式非法，无法创建执行工作区。"), { statusCode: 422, code: "audit-id-invalid" });
+    const repository = this.repositories.get(repositoryId);
+    if (!repository) throw Object.assign(new Error("仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
+    const audit = this.audits.get(auditId);
+    if (!audit) throw Object.assign(new Error("动态验证只能复用工作台受管审计的冻结执行上下文。"), { statusCode: 409, code: "audit-not-managed" });
+    if (audit.repository_id !== repositoryId) {
+      throw Object.assign(new Error("审计与仓库绑定不一致。"), { statusCode: 409, code: "audit-repository-mismatch" });
+    }
+    return this.prepareExecutionWorkspace(audit, repository);
   }
 
   runtimeRepositories() {
@@ -165,6 +526,151 @@ export class AuditRunner extends EventEmitter {
   getAudit(id) {
     const audit = this.audits.get(id);
     return audit ? publicAudit(audit) : null;
+  }
+
+  async writePrivateContexts(auditId, contexts) {
+    const directory = join(this.stateRoot, auditId);
+    await mkdir(directory, { recursive: true });
+    const metadata = {};
+    for (const [key, context] of Object.entries(contexts)) {
+      const fileName = PRIVATE_CONTEXT_FILES[key];
+      if (!context.enabled) {
+        metadata[key] = contextMetadata(false);
+        continue;
+      }
+      const bytes = `${context.text}\n`;
+      const temporary = join(directory, `${fileName}.${process.pid}.${randomUUID()}.tmp`);
+      await writeFile(temporary, bytes, { encoding: "utf8", mode: 0o600 });
+      await rename(temporary, join(directory, fileName));
+      metadata[key] = contextMetadata(true, fileName, context.text);
+    }
+    return metadata;
+  }
+
+  async verifiedPrivateContextPaths(audit, { keys = Object.keys(PRIVATE_CONTEXT_FILES) } = {}) {
+    const paths = {};
+    for (const key of keys) {
+      const metadata = audit.private_context?.[key];
+      if (!metadata?.enabled) continue;
+      const expectedFileName = PRIVATE_CONTEXT_FILES[key];
+      if (metadata.file_name !== expectedFileName || !/^[a-f0-9]{64}$/.test(metadata.sha256 ?? "")) {
+        throw Object.assign(new Error("任务私有上下文元数据无效，拒绝继续。"), { statusCode: 409, code: "audit-context-integrity-failed" });
+      }
+      const path = join(this.stateRoot, audit.id, expectedFileName);
+      let bytes;
+      try {
+        const info = await stat(path);
+        if (!info.isFile()) throw new Error("not-file");
+        bytes = await readFile(path);
+      } catch {
+        throw Object.assign(new Error("任务私有上下文文件缺失或不可读取，拒绝继续。"), { statusCode: 409, code: "audit-context-integrity-failed" });
+      }
+      if (createHash("sha256").update(bytes).digest("hex") !== metadata.sha256) {
+        throw Object.assign(new Error("任务私有上下文摘要不匹配，拒绝继续。"), { statusCode: 409, code: "audit-context-integrity-failed" });
+      }
+      paths[key] = path;
+    }
+    return paths;
+  }
+
+  async redactionsForAudit(audit) {
+    const cached = this.contextRedactions.get(audit.id);
+    if (cached) return cached;
+    const values = new Set();
+    for (const [key, fileName] of Object.entries(PRIVATE_CONTEXT_FILES)) {
+      if (audit.private_context?.[key]?.enabled !== true) continue;
+      try {
+        const text = await readFile(join(this.stateRoot, audit.id, fileName), "utf8");
+        for (const value of sensitiveRedactionValues(text)) values.add(value);
+      } catch {
+        // Integrity checks at launch provide the behavior gate; missing files add no log redactions.
+      }
+    }
+    const result = [...values].sort((left, right) => right.length - left.length);
+    this.contextRedactions.set(audit.id, result);
+    return result;
+  }
+
+  async dynamicValidationPolicy(auditId, repositoryId = null) {
+    await this.ready;
+    const audit = this.audits.get(auditId);
+    if (!audit || (repositoryId && audit.repository_id !== repositoryId)) {
+      return { enabled: false, reason: "audit-not-managed" };
+    }
+    if (audit.private_context?.test_environment?.enabled !== true) {
+      return { enabled: false, reason: "test-environment-disabled" };
+    }
+    try {
+      const paths = await this.verifiedPrivateContextPaths(audit, { keys: ["test_environment"] });
+      return {
+        enabled: true,
+        reason: null,
+        audit_id: audit.id,
+        repository_id: audit.repository_id,
+        context_path: paths.test_environment,
+        context_sha256: audit.private_context.test_environment.sha256,
+      };
+    } catch {
+      return { enabled: false, reason: "test-environment-context-invalid" };
+    }
+  }
+
+  async deleteAudit(id, { repositoryId, expectedVersion, artifactPaths = [] } = {}) {
+    await this.ready;
+    if (!AUDIT_ID.test(id ?? "")) throw Object.assign(new Error("audit_id 格式非法。"), { statusCode: 422, code: "audit-id-invalid" });
+    if (!REPOSITORY_ID.test(repositoryId ?? "") || !this.repositories.has(repositoryId)) {
+      throw Object.assign(new Error("审计所属仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
+    }
+    const audit = this.audits.get(id);
+    if (audit && audit.repository_id !== repositoryId) throw Object.assign(new Error("审计与仓库绑定不一致。"), { statusCode: 409, code: "audit-repository-mismatch" });
+    if (audit && Number(expectedVersion) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
+    if (audit && (ACTIVE.has(audit.status) || this.processes.has(id) || this.completions.has(id))) {
+      throw Object.assign(new Error("运行中的审计不能删除；请先取消并等待任务结束。"), { statusCode: 409, code: "audit-delete-active" });
+    }
+    const queuedWrite = this.writeQueues.get(id);
+    if (queuedWrite) await queuedWrite;
+    if (audit && (ACTIVE.has(audit.status) || this.processes.has(id) || this.completions.has(id))) {
+      throw Object.assign(new Error("审计仍有未完成的运行状态，暂不能删除。"), { statusCode: 409, code: "audit-delete-active" });
+    }
+
+    const reportsRoot = join(this.artifactsRoot, repositoryId);
+    let removedArtifacts = 0;
+    for (const artifactPath of [...new Set(artifactPaths)]) {
+      if (typeof artifactPath !== "string" || !artifactPath || isAbsolute(artifactPath)) {
+        throw Object.assign(new Error("审计制品路径不受工作台控制。"), { statusCode: 409, code: "audit-artifact-path-invalid" });
+      }
+      const candidate = resolve(reportsRoot, artifactPath);
+      if (!controlledChild(reportsRoot, candidate)) throw Object.assign(new Error("审计制品路径越出仓库制品目录。"), { statusCode: 409, code: "audit-artifact-path-invalid" });
+      try {
+        const info = await controlledPathInfo(reportsRoot, candidate);
+        if (!info) continue;
+        if (!info.isFile()) throw Object.assign(new Error("审计制品不是可安全删除的普通文件。"), { statusCode: 409, code: "audit-artifact-path-invalid" });
+        await rm(candidate);
+        removedArtifacts += 1;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+
+    for (const directory of [
+      join(reportsRoot, "handoffs", id),
+      join(reportsRoot, "validation-handoff", "runtime", id),
+    ]) await removeControlledPath(reportsRoot, directory);
+    await removeControlledPath(this.temporaryRoot, join(this.temporaryRoot, repositoryId, id));
+    await removeControlledPath(this.executionRoot, join(this.executionRoot, id));
+    if (audit) await removeControlledPath(this.stateRoot, join(this.stateRoot, id));
+
+    this.audits.delete(id);
+    this.subscribers.delete(id);
+    this.writeQueues.delete(id);
+    this.contextRedactions.delete(id);
+    return {
+      deleted: true,
+      audit_id: id,
+      repository_id: repositoryId,
+      removed_artifact_files: removedArtifacts,
+      removed_runner_state: Boolean(audit),
+    };
   }
 
   async persist(audit) {
@@ -250,7 +756,7 @@ export class AuditRunner extends EventEmitter {
     }
     if (this.audits.has(id)) throw Object.assign(new Error("audit_id 已存在。"), { statusCode: 409, code: "audit-exists" });
     const facts = await this.repositoryFacts(repository);
-    if (!facts.git_repository || !facts.configured) throw Object.assign(new Error("白名单仓库缺少 Git 元数据或 .opencode/opencode.json。"), { statusCode: 422, code: "repository-not-ready" });
+    if (!facts.git_repository || !facts.config_valid) throw Object.assign(new Error("项目目录缺少 Git 元数据，或工作台 OpenCode 配置无效。"), { statusCode: 422, code: "repository-not-ready" });
     if (facts.dirty && input.allow_dirty !== true) throw Object.assign(new Error("仓库存在未提交修改；为保证目标提交可复现，默认拒绝启动。"), { statusCode: 409, code: "repository-dirty" });
     const requestedRef = typeof input.ref === "string" && input.ref ? input.ref : "HEAD";
     if (!/^[a-z0-9][a-z0-9._\/-]{0,199}$/i.test(requestedRef) || requestedRef.includes("..") || requestedRef.includes("@{")) {
@@ -258,6 +764,20 @@ export class AuditRunner extends EventEmitter {
     }
     const commit = await git(repository.path, ["rev-parse", "--verify", `${requestedRef}^{commit}`]);
     if (commit !== facts.commit) throw Object.assign(new Error("当前工作树不在请求的提交上；平台不会自动 checkout。"), { statusCode: 409, code: "ref-not-checked-out" });
+    const contexts = {
+      additional_instructions: normalizeContextInput(input, {
+        enabledField: "additional_instructions_enabled",
+        valueField: "additional_instructions",
+        label: "测试目标补充说明",
+        maxLength: MAX_ADDITIONAL_INSTRUCTIONS,
+      }),
+      test_environment: normalizeContextInput(input, {
+        enabledField: "test_environment_enabled",
+        valueField: "test_environment_context",
+        label: "测试环境信息",
+        maxLength: MAX_TEST_ENVIRONMENT_CONTEXT,
+      }),
+    };
     const now = new Date().toISOString();
     const audit = {
       id,
@@ -275,11 +795,25 @@ export class AuditRunner extends EventEmitter {
       finished_at: null,
       exit_code: null,
       error: null,
+      allow_dirty: input.allow_dirty === true,
+      provider_session_id: null,
+      recovery_count: 0,
+      stage_delivery_enforcement: "ENFORCED",
+      stage_delivery: null,
+      last_recovered_at: null,
+      interrupted_at: null,
+      interruption_reason: null,
       idempotency_digest: createHash("sha256").update(idempotencyKey).digest("hex"),
     };
+    audit.private_context = await this.writePrivateContexts(id, contexts);
     this.audits.set(id, audit);
     await this.persist(audit);
-    await this.record(audit, "audit.queued", { repository_id: repository.id, commit });
+    await this.record(audit, "audit.queued", {
+      repository_id: repository.id,
+      commit,
+      additional_instructions_enabled: audit.private_context.additional_instructions.enabled,
+      test_environment_enabled: audit.private_context.test_environment.enabled,
+    });
     this.start(audit, repository).catch(async error => {
       audit.status = "failed";
       audit.error = redact(error.message);
@@ -289,20 +823,91 @@ export class AuditRunner extends EventEmitter {
     return publicAudit(audit);
   }
 
-  async start(audit, repository) {
-    audit.status = "preparing";
-    audit.started_at = new Date().toISOString();
-    await this.record(audit, "audit.preparing", {});
-    const child = this.spawnProcess(this.command, [
-      "run",
-      "--format", "json",
+  async start(audit, repository, { resume = false, existingSessionId = null } = {}) {
+    audit.status = resume ? "recovering" : "preparing";
+    audit.started_at ??= new Date().toISOString();
+    audit.finished_at = null;
+    audit.exit_code = null;
+    audit.pid = null;
+    audit.error = null;
+    audit.interruption_reason = null;
+    await this.record(audit, resume ? "audit.recovering" : "audit.preparing", resume ? { recovery_count: audit.recovery_count } : {});
+    const paths = await this.prepareExecutionWorkspace(audit, repository);
+    audit.paths = paths;
+    await this.record(audit, "audit.workspace.ready", paths);
+    const contextPaths = await this.verifiedPrivateContextPaths(audit);
+    const quickDynamicEnabled = audit.private_context?.test_environment?.enabled === true && Boolean(contextPaths.test_environment);
+    const environment = {
+      ...(await buildOpenCodeEnvironment(repository.config_path)),
+      AUDIT_SOURCE_ROOT: paths.source_root,
+      AUDIT_SOURCE_BINDING_PATH: paths.source_binding,
+      AUDIT_ENGINE_ROOT: resolve(dirname(repository.config_path), ".."),
+      AUDIT_WORKSPACE_ROOT: paths.workspace_root,
+      AUDIT_REPORTS_ROOT: paths.reports_root,
+      AUDIT_TMP_ROOT: paths.tmp_root,
+      AUDIT_QUICK_DYNAMIC_ENABLED: quickDynamicEnabled ? "true" : "false",
+      AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS: "120",
+      AUDIT_FULL_DYNAMIC_TRIGGER: "MANUAL_ONLY",
+      ...(quickDynamicEnabled ? {
+        AUDIT_TEST_ENVIRONMENT_CONTEXT_PATH: contextPaths.test_environment,
+        AUDIT_TEST_ENVIRONMENT_CONTEXT_SHA256: audit.private_context.test_environment.sha256,
+      } : {}),
+    };
+    const sessionId = providerSessionId(existingSessionId ?? audit.provider_session_id ?? audit.terminal?.provider_session_id);
+    await this.redactionsForAudit(audit);
+    const prompt = resume ? recoveryPrompt(audit, repository, paths, contextPaths) : auditPrompt(audit, repository, paths, contextPaths);
+    let command = this.command;
+    let args = [
+      "run", "--format", "json",
+      ...(sessionId ? ["--session", sessionId] : []),
       "--agent", "security-audit-orchestrator",
-      "--dir", repository.path,
+      "--dir", paths.workspace_root,
       "--title", audit.name,
-      auditPrompt(audit),
-    ], {
-      cwd: repository.path,
-      env: { ...process.env, OPENCODE_CONFIG: repository.config_path },
+      prompt,
+    ];
+    audit.execution_transport = "opencode-run";
+    try {
+      const probe = await this.terminalMonitor.probe();
+      if (!probe.available) {
+        audit.terminal = { backend: "tmux", supported: false, status: "unavailable", live: false, message: probe.message };
+        await this.record(audit, "audit.terminal.unavailable", { message: redact(probe.message) });
+      } else {
+        audit.terminal = { backend: "tmux", supported: true, status: "starting", live: false, message: "正在启动隔离 OpenCode TUI。" };
+        await this.record(audit, "audit.terminal.starting", {});
+        audit.terminal = await this.terminalMonitor.start({
+          audit,
+          repository,
+          environment,
+          executionDirectory: paths.workspace_root,
+          providerSessionId: sessionId,
+        });
+        audit.execution_transport = audit.terminal.transport;
+        audit.provider_session_id = providerSessionId(audit.terminal.provider_session_id);
+        const requestPath = join(this.stateRoot, audit.id, "prompt-request.json");
+        await writeFile(requestPath, `${JSON.stringify({
+          server_url: audit.terminal.server_url,
+          session_id: audit.terminal.provider_session_id,
+          directory: paths.workspace_root,
+          payload: { agent: "security-audit-orchestrator", parts: [{ type: "text", text: prompt }] },
+        }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+        command = process.execPath;
+        args = [PROMPT_CLIENT, requestPath];
+        await this.record(audit, "audit.terminal.ready", {
+          backend: audit.terminal.backend,
+          target: audit.terminal.target,
+          provider_session_id: audit.terminal.provider_session_id,
+          resumed: resume,
+        });
+      }
+    } catch (error) {
+      await this.terminalMonitor.stop(audit.terminal).catch(() => {});
+      audit.terminal = { backend: "tmux", supported: false, status: "error", live: false, message: `tmux 监控启动失败，已回退普通 Runner：${redact(error.message)}` };
+      audit.execution_transport = "opencode-run";
+      await this.record(audit, "audit.terminal.failed", { message: audit.terminal.message });
+    }
+    const child = this.spawnProcess(command, args, {
+      cwd: paths.workspace_root,
+      env: environment,
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });
@@ -317,9 +922,16 @@ export class AuditRunner extends EventEmitter {
         buffer += chunk;
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
-        for (const line of lines) this.recordLog(audit, source, line).catch(() => {});
+        for (const line of lines) {
+          this.captureProviderSession(audit, line).catch(() => {});
+          this.recordLog(audit, source, line).catch(() => {});
+        }
       });
-      stream?.on("end", () => { if (buffer) this.recordLog(audit, source, buffer).catch(() => {}); });
+      stream?.on("end", () => {
+        if (!buffer) return;
+        this.captureProviderSession(audit, buffer).catch(() => {});
+        this.recordLog(audit, source, buffer).catch(() => {});
+      });
     };
     capture(child.stdout, "stdout");
     capture(child.stderr, "stderr");
@@ -327,27 +939,140 @@ export class AuditRunner extends EventEmitter {
       audit.error = redact(error.message);
     });
     child.once("close", (code, signal) => {
-      startedEvent.then(() => {
+      const completion = startedEvent.then(async () => {
         this.processes.delete(audit.id);
         audit.exit_code = code;
         audit.finished_at = new Date().toISOString();
         audit.pid = null;
-        if (audit.status === "cancelling") audit.status = "cancelled";
+        if (audit.status === "cancelling" && audit.interruption_reason === "workbench-shutdown") audit.status = "interrupted";
+        else if (audit.status === "cancelling") audit.status = "cancelled";
+        else if (code === 0 && audit.stage_delivery_enforcement === "ENFORCED") {
+          try {
+            const verification = await this.stageDeliveryVerifier({ reportsRoot: audit.paths.reports_root, auditId: audit.id });
+            audit.stage_delivery = {
+              enforcement: verification.enforcement ?? "ENFORCED",
+              complete: verification.complete === true,
+              completed_count: Number(verification.completed_count ?? 0),
+              stages: verification.stages ?? [],
+              errors: (verification.errors ?? []).slice(0, 100),
+              verified_at: new Date().toISOString(),
+            };
+            if (verification.complete) {
+              audit.status = "completed";
+            } else {
+              audit.status = "interrupted";
+              audit.interruption_reason = "stage-delivery-incomplete";
+              audit.error = `OpenCode 已正常退出，但八环节物化交付门禁仅完成 ${audit.stage_delivery.completed_count}/8；请从最早未完成环节恢复。`;
+            }
+          } catch (error) {
+            audit.status = "interrupted";
+            audit.interruption_reason = "stage-delivery-verification-failed";
+            audit.error = `OpenCode 已正常退出，但八环节交付校验器失败：${redact(error.message)}`;
+          }
+        }
         else if (code === 0) audit.status = "completed";
-        else audit.status = "failed";
+        else audit.status = "interrupted";
         if (signal && !audit.error) audit.error = `进程由信号 ${signal} 结束。`;
+        if (audit.status === "interrupted") {
+          audit.interrupted_at = audit.finished_at;
+          audit.interruption_reason ||= signal ? "runner-signalled" : "runner-exited";
+          audit.error ||= `Runner 异常退出（exit code ${code ?? "null"}），可从当前检查点恢复。`;
+        }
+        await this.finalizeTerminal(audit).catch(error => {
+          audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "error", message: `终端归档失败：${redact(error.message)}` };
+        });
         return this.record(audit, `audit.${audit.status}`, { exit_code: code, signal: signal ?? null });
-      }).catch(() => {});
+      });
+      this.completions.set(audit.id, completion);
+      completion.finally(() => { if (this.completions.get(audit.id) === completion) this.completions.delete(audit.id); }).catch(() => {});
     });
     await startedEvent;
   }
 
+  async captureProviderSession(audit, line) {
+    if (audit.provider_session_id) return;
+    let value;
+    try { value = JSON.parse(line); } catch { return; }
+    const sessionId = providerSessionId(value?.sessionID ?? value?.session_id ?? value?.session?.id);
+    if (!sessionId || audit.provider_session_id) return;
+    audit.provider_session_id = sessionId;
+    await this.record(audit, "audit.session.bound", { provider_session_id: sessionId });
+  }
+
   async recordLog(audit, source, line) {
-    const message = redact(line);
+    const message = redact(line, await this.redactionsForAudit(audit));
     if (!message) return;
     const entry = { occurred_at: new Date().toISOString(), source, message };
     await appendFile(join(this.stateRoot, audit.id, "runner.log.jsonl"), `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
     await this.record(audit, "agent.output", entry, { bumpVersion: false });
+  }
+
+  async finalizeTerminal(audit) {
+    if (!audit.terminal?.supported || !audit.terminal?.socket_name) return;
+    let captured = "";
+    try {
+      captured = redactTerminalOutput(await this.terminalMonitor.capture(audit.terminal, 1000), await this.redactionsForAudit(audit));
+      if (captured) await writeFile(join(this.stateRoot, audit.id, "terminal.txt"), `${captured}\n`, { encoding: "utf8", mode: 0o600 });
+    } finally {
+      try {
+        await this.terminalMonitor.stop(audit.terminal);
+      } finally {
+        audit.terminal.live = false;
+        audit.terminal.status = captured ? "archived" : "closed";
+        audit.terminal.message = captured ? "OpenCode TUI 已结束，当前显示最终只读快照。" : "OpenCode TUI 已结束且没有可归档画面。";
+        audit.terminal.closed_at = new Date().toISOString();
+      }
+    }
+  }
+
+  async terminalSnapshot(id) {
+    await this.ready;
+    const audit = this.audits.get(id);
+    if (!audit) throw Object.assign(new Error("审计不存在。"), { statusCode: 404, code: "audit-not-found" });
+    const terminal = audit.terminal;
+    const sessionId = providerSessionId(audit.provider_session_id ?? terminal?.provider_session_id);
+    const sessionConnection = {
+      provider_session_id: sessionId,
+      opencode_command: sessionId ? `opencode -s ${sessionId}` : null,
+    };
+    if (!terminal?.supported) {
+      return { available: false, live: false, status: terminal?.status ?? "unavailable", target: null, attach_command: null, ...sessionConnection, output: "", message: terminal?.message ?? "该任务未启用 tmux OpenCode 监控。" };
+    }
+    if (terminal.live) {
+      try {
+        const output = redactTerminalOutput(await this.terminalMonitor.capture(terminal), await this.redactionsForAudit(audit));
+        return { available: true, live: true, status: terminal.status, target: terminal.target, attach_command: terminal.attach_command, ...sessionConnection, output, message: terminal.message, columns: terminal.columns ?? null, rows: terminal.rows ?? null };
+      } catch (error) {
+        return { available: false, live: false, status: "disconnected", target: terminal.target, attach_command: terminal.attach_command, ...sessionConnection, output: "", message: `tmux 窗口暂时不可读：${redact(error.message)}` };
+      }
+    }
+    try {
+      const output = redactTerminalOutput(await readFile(join(this.stateRoot, id, "terminal.txt"), "utf8"), await this.redactionsForAudit(audit));
+      return { available: true, live: false, status: terminal.status, target: terminal.target, attach_command: null, ...sessionConnection, output, message: terminal.message };
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      return { available: false, live: false, status: terminal.status, target: terminal.target, attach_command: null, ...sessionConnection, output: "", message: terminal.message };
+    }
+  }
+
+  async resizeTerminal(id, columns, rows) {
+    await this.ready;
+    const audit = this.audits.get(id);
+    if (!audit) throw Object.assign(new Error("审计不存在。"), { statusCode: 404, code: "audit-not-found" });
+    if (!audit.terminal?.supported || !audit.terminal?.live || typeof this.terminalMonitor.resize !== "function") {
+      throw Object.assign(new Error("该审计当前没有可调整的实时 tmux 窗口。"), { statusCode: 409, code: "terminal-not-live" });
+    }
+    if (!Number.isInteger(columns) || columns < 40 || columns > 320 || !Number.isInteger(rows) || rows < 12 || rows > 120) {
+      throw Object.assign(new Error("终端尺寸必须是 40-320 列、12-120 行范围内的整数。"), { statusCode: 422, code: "terminal-size-invalid" });
+    }
+    await this.enqueue(id, async () => {
+      const size = await this.terminalMonitor.resize(audit.terminal, columns, rows);
+      audit.terminal.columns = size.columns;
+      audit.terminal.rows = size.rows;
+      audit.terminal.resized_at = new Date().toISOString();
+      await this.persist(audit);
+    });
+    return this.terminalSnapshot(id);
   }
 
   async action(id, action, expectedVersion, idempotencyKey) {
@@ -358,21 +1083,87 @@ export class AuditRunner extends EventEmitter {
     const actionDigest = createHash("sha256").update(idempotencyKey).digest("hex");
     if ((audit.action_idempotency_digests ?? []).includes(actionDigest)) return publicAudit(audit);
     if (Number(expectedVersion) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
+    if (action === "recover") {
+      if (!this.enabled) throw Object.assign(new Error("运行驱动未启用，不能恢复审计。"), { statusCode: 503, code: "runner-disabled" });
+      if (!RECOVERABLE.has(audit.status) || this.processes.has(id) || this.completions.has(id)) {
+        throw Object.assign(new Error("只有已中断、失败或已取消且没有残留 Runner 的审计可以断点恢复。"), { statusCode: 409, code: "audit-not-recoverable" });
+      }
+      const repository = this.repositories.get(audit.repository_id);
+      if (!repository) throw Object.assign(new Error("审计所属仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
+      const facts = await this.repositoryFacts(repository);
+      if (!facts.git_repository || !facts.config_valid) {
+        throw Object.assign(new Error("项目目录或工作台 OpenCode 配置已不可用，不能恢复。"), { statusCode: 422, code: "repository-not-ready" });
+      }
+      if (facts.commit !== audit.commit) {
+        throw Object.assign(new Error(`源码目录已不在原提交 ${audit.commit}，工作台不会自动 checkout。`), { statusCode: 409, code: "recovery-source-commit-changed" });
+      }
+      if (facts.dirty && audit.allow_dirty === false) {
+        throw Object.assign(new Error("源码目录在任务中断后出现未提交修改；为避免恢复到不同代码，已拒绝继续。"), { statusCode: 409, code: "recovery-source-dirty" });
+      }
+
+      const existingSessionId = providerSessionId(audit.provider_session_id ?? audit.terminal?.provider_session_id);
+      if (audit.terminal?.live) {
+        await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(error => this.recordLog(audit, "stderr", `旧 OpenCode session 中止确认失败，将继续关闭该任务的隔离 tmux：${error.message}`));
+      }
+      if (audit.terminal?.supported && audit.terminal?.socket_name) {
+        await this.terminalMonitor.stop(audit.terminal);
+        audit.terminal.live = false;
+        audit.terminal.status = "closed";
+      }
+
+      audit.recovery_count = Number(audit.recovery_count ?? 0) + 1;
+      audit.last_recovered_at = new Date().toISOString();
+      audit.action_idempotency_digests = [...(audit.action_idempotency_digests ?? []), actionDigest].slice(-100);
+      await this.record(audit, "audit.recovery.requested", {
+        recovery_count: audit.recovery_count,
+        recovery_mode: existingSessionId ? "session-and-artifacts" : "artifacts",
+        provider_session_id: existingSessionId,
+      });
+      try {
+        await this.start(audit, repository, { resume: true, existingSessionId });
+      } catch (error) {
+        audit.status = "interrupted";
+        audit.error = redact(error.message);
+        audit.finished_at = new Date().toISOString();
+        audit.interrupted_at = audit.finished_at;
+        audit.interruption_reason = "recovery-launch-failed";
+        await this.record(audit, "audit.interrupted", { reason: audit.interruption_reason, message: audit.error });
+        throw Object.assign(new Error(`断点恢复启动失败：${audit.error}`), { statusCode: 502, code: "audit-recovery-launch-failed" });
+      }
+      return publicAudit(audit);
+    }
     const child = this.processes.get(id);
     if (!child || TERMINAL.has(audit.status)) throw Object.assign(new Error("审计当前不可执行该操作。"), { statusCode: 409, code: "action-not-allowed" });
     if (action === "pause" && audit.status === "running") {
       audit.status = "pausing";
       await this.record(audit, "audit.pausing", {});
       if (!child.kill("SIGSTOP")) throw new Error("暂停信号发送失败。");
+      try {
+        if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGSTOP");
+      } catch (error) {
+        child.kill("SIGCONT");
+        audit.status = "running";
+        await this.record(audit, "audit.pause_failed", { message: redact(error.message) });
+        throw new Error(`OpenCode server 暂停失败：${error.message}`);
+      }
       audit.status = "paused";
       await this.record(audit, "audit.paused", {});
     } else if (action === "resume" && audit.status === "paused") {
+      if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGCONT");
       if (!child.kill("SIGCONT")) throw new Error("恢复信号发送失败。");
       audit.status = "running";
       await this.record(audit, "audit.resumed", {});
     } else if (action === "cancel" && ACTIVE.has(audit.status)) {
+      if (audit.status === "paused") {
+        if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGCONT");
+        if (!child.kill("SIGCONT")) throw new Error("取消前恢复审计进程失败。");
+      }
+      audit.interruption_reason = null;
       audit.status = "cancelling";
       await this.record(audit, "audit.cancelling", {});
+      if (audit.terminal?.live) {
+        await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(error => this.recordLog(audit, "stderr", `OpenCode session 中止确认失败：${error.message}`));
+      }
       if (!child.kill("SIGTERM")) throw new Error("取消信号发送失败。");
     } else {
       throw Object.assign(new Error("操作与当前状态不匹配。"), { statusCode: 409, code: "action-not-allowed" });
@@ -387,6 +1178,7 @@ export class AuditRunner extends EventEmitter {
       enabled: this.enabled,
       command: this.command,
       active_processes: this.processes.size,
+      active_tmux_monitors: [...this.audits.values()].filter(audit => audit.terminal?.live).length,
       registered_repositories: this.repositories.size,
       state_root: "server-managed",
     };
@@ -397,9 +1189,17 @@ export class AuditRunner extends EventEmitter {
     for (const [id, child] of this.processes) {
       const audit = this.audits.get(id);
       if (!audit || audit.status === "cancelling") continue;
+      if (audit.status === "paused") {
+        if (audit.terminal?.live) await this.terminalMonitor.signalServer(audit.terminal, "SIGCONT").catch(() => {});
+        child.kill("SIGCONT");
+      }
+      audit.interruption_reason = "workbench-shutdown";
       audit.status = "cancelling";
       await this.record(audit, "audit.cancelling", { reason: "workbench-shutdown" });
+      if (audit.terminal?.live) await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(() => {});
       child.kill("SIGTERM");
     }
+    while (this.completions.size) await Promise.allSettled([...this.completions.values()]);
+    while (this.writeQueues.size) await Promise.allSettled([...this.writeQueues.values()]);
   }
 }

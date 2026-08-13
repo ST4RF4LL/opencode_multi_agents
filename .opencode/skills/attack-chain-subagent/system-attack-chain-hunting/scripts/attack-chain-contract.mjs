@@ -34,12 +34,22 @@ export function attackChainManifestDigest(value) {
   return createHash("sha256").update(JSON.stringify(canonicalize(copy))).digest("hex");
 }
 
-function admittedFindingIds(adjudication) {
+function admittedFindingIds(adjudication, routing = null, errors = []) {
   if (!isObject(adjudication) || !validDigest(adjudication.manifest_digest) || !Array.isArray(adjudication.decisions)) return null;
-  return new Set(adjudication.decisions
+  const preliminary = new Set(adjudication.decisions
     .filter(decision => ["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"].includes(decision?.state))
     .map(decision => decision.finding_id)
     .filter(nonEmptyString));
+  if (!routing) return preliminary;
+  if (!isObject(routing) || routing.artifact_type !== "finding-validation-routing-manifest"
+    || routing.audit_id !== adjudication.audit_id || routing.scope_digest !== adjudication.scope_digest
+    || routing.complete !== true || !validDigest(routing.artifact_digest) || !Array.isArray(routing.findings)) {
+    errors.push("validation-routing-invalid");
+    return new Set();
+  }
+  const routed = new Set(routing.findings.map(item => item?.finding_id).filter(nonEmptyString));
+  if (routed.size !== preliminary.size || [...preliminary].some(id => !routed.has(id))) errors.push("validation-routing-accounting-invalid");
+  return new Set(routing.findings.filter(item => item?.final_verdict === "TRUE_POSITIVE").map(item => item.finding_id));
 }
 
 function validateStep(step, admittedFindings, errors, chainId) {
@@ -116,14 +126,15 @@ function validateChain(chain, admittedFindings, gapMap, errors) {
   }
 }
 
-export function validateAttackChainManifest(manifest, adjudication) {
+export function validateAttackChainManifest(manifest, adjudication, routing = null) {
   const errors = [];
-  const admittedFindings = admittedFindingIds(adjudication);
+  const admittedFindings = admittedFindingIds(adjudication, routing, errors);
   if (!admittedFindings) return ["adjudication-manifest-invalid"];
   if (!isObject(manifest)) return ["attack-chain-manifest-not-object"];
   if (manifest.schema_version !== ATTACK_CHAIN_SCHEMA_VERSION) errors.push("attack-chain-schema-version-invalid");
   if (!nonEmptyString(manifest.audit_id) || !validDigest(manifest.scope_digest)) errors.push("attack-chain-audit-or-scope-invalid");
   if (manifest.adjudication_manifest_digest !== adjudication.manifest_digest) errors.push("attack-chain-adjudication-digest-mismatch");
+  if (routing && manifest.validation_routing_digest !== routing.artifact_digest) errors.push("attack-chain-validation-routing-digest-mismatch");
   if (!Array.isArray(manifest.chains) || !isObject(manifest.chain_accounting) || !Array.isArray(manifest.gaps)) {
     errors.push("attack-chain-collections-missing");
     return errors;

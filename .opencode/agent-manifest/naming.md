@@ -42,9 +42,9 @@ Recommended server categories:
 - `*_scan` for static scanners.
 - `*_intel` for external documentation, advisory, or code intelligence.
 - `audit_lab` for safe local validation helpers.
-- `joern` for CPG and Joern query workflows.
-- `vuln_judger` for the final-report-only OpenCode three-party review. Expose it only to `vulnerability-validator` as `vuln_judger_*` (or `vuln-judger_*` when the user has configured the MCP server with a hyphen). Both name forms refer to the same service.
-- `chrome-devtools` for visible isolated Chrome control. Expose `chrome-devtools_*` only to `dynamic-vulnerability-validator`; use `chrome-devtools-mcp@latest`, do not enable headless or connect to an existing/persistent Chrome profile, and do not add an `agent-browser` fallback in this implementation.
+- Joern/CPG workflows use the direct CLI and are not registered as MCP servers.
+- Finding truth review uses local OpenCode Affirmative/Negative/Moderator sessions and is not an MCP server.
+- `chrome-devtools` for visible isolated Chrome control. Expose `chrome-devtools_*` only to `quick-dynamic-validator` and `dynamic-vulnerability-validator`; use `chrome-devtools-mcp@latest`, do not enable headless or connect to an existing/persistent Chrome profile, and do not add an `agent-browser` fallback in this implementation.
 
 When replacing a placeholder MCP, keep the server name if possible so agent permissions do not need to change.
 

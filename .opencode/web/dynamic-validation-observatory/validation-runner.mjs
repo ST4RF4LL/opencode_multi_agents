@@ -7,6 +7,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { validateExternalRuntimeValidationRequest } from "../../skills/common-subagent/finding-evidence-contract/scripts/external-runtime-validation-contract.mjs";
 import { validateStageEnvelope } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-agent-contract.mjs";
+import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
 
 const RUN_ID = /^[a-z0-9][a-z0-9._:-]{2,260}$/i;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -99,11 +100,13 @@ function validateAuthorization(input) {
   return { target, attacker, victim };
 }
 
-function validationPrompt({ requestPath, envelopePath, target, attacker, victim, input }) {
+function validationPrompt({ requestPath, envelopePath, target, attacker, victim, input, repository, executionPaths }) {
   return [
     "@dynamic-vulnerability-validator 执行一次用户明确授权的 localhost Web XSS 动态验证。",
     `密封 runtime-validation request：${requestPath}`,
     `密封 P08 input envelope：${envelopePath}`,
+    `被测源码根目录 ${repository.path} 只读；不得在其中创建 reports、tmp、浏览器数据或任何其他文件。`,
+    `当前执行工作区是 ${executionPaths.workspace_root}；所有相对 reports/** 输出必须通过该工作区落到工作台受控制品目录。`,
     `授权测试目标：${target.href}`,
     "用户已确认该环境和以下两个账号均为专用测试资产，不是生产、第三方或真实用户账号。",
     `attacker username: ${attacker.username}`,
@@ -214,6 +217,23 @@ export class DynamicValidationRunner extends EventEmitter {
     return run ? publicRun(run) : null;
   }
 
+  async deleteAuditRuns(auditId) {
+    await this.ready;
+    const values = [...this.runs.values()].filter(run => run.audit_id === auditId);
+    if (values.some(run => ["preparing", "running", "cancelling"].includes(run.status) || this.processes.has(run.id))) {
+      throw Object.assign(new Error("该审计仍有动态验证正在运行；请先取消并等待验证结束。"), { statusCode: 409, code: "audit-validation-active" });
+    }
+    for (const run of values) {
+      const queuedWrite = this.queues.get(run.id);
+      if (queuedWrite) await queuedWrite;
+      await rm(this.directory(run.id), { recursive: true, force: true });
+      this.runs.delete(run.id);
+      this.subscribers.delete(run.id);
+      this.queues.delete(run.id);
+    }
+    return values.length;
+  }
+
   async eventsSince(id, sequence = 0) {
     try {
       const content = await readFile(join(this.directory(id), "events.jsonl"), "utf8");
@@ -231,9 +251,9 @@ export class DynamicValidationRunner extends EventEmitter {
     return () => listeners.delete(listener);
   }
 
-  async validateArtifacts({ repository, runtimeRoot, requestDescriptor, target }) {
-    if (resolve(runtimeRoot) !== resolve(repository.path, "reports", "validation-handoff", "runtime")) {
-      throw Object.assign(new Error("动态验证 runtime root 必须位于白名单仓库的标准 reports 路径。"), { statusCode: 422, code: "validation-runtime-root-invalid" });
+  async validateArtifacts({ repository, reportsRoot, runtimeRoot, requestDescriptor, target }) {
+    if (resolve(runtimeRoot) !== resolve(reportsRoot, "validation-handoff", "runtime")) {
+      throw Object.assign(new Error("动态验证 runtime root 必须位于工作台为该仓库分配的 reports 路径。"), { statusCode: 422, code: "validation-runtime-root-invalid" });
     }
     const requestPath = join(runtimeRoot, requestDescriptor.request_path);
     const envelopePath = join(runtimeRoot, requestDescriptor.envelope_path);
@@ -260,7 +280,7 @@ export class DynamicValidationRunner extends EventEmitter {
     return { request, envelope, requestPath, envelopePath };
   }
 
-  async create({ input, repository, runtimeRoot, requestDescriptor, idempotencyKey }) {
+  async create({ input, repository, reportsRoot, runtimeRoot, executionPaths, requestDescriptor, idempotencyKey }) {
     await this.ready;
     if (!this.enabled) throw Object.assign(new Error("动态验证 Runner 未启用。"), { statusCode: 503, code: "dynamic-runner-disabled" });
     if (!idempotencyKey || idempotencyKey.length > 200) throw Object.assign(new Error("缺少有效的 Idempotency-Key。"), { statusCode: 400, code: "idempotency-key-required" });
@@ -271,7 +291,7 @@ export class DynamicValidationRunner extends EventEmitter {
     if (existing && ["preparing", "running", "cancelling"].includes(existing.status)) throw Object.assign(new Error("该 finding 已有动态验证正在运行。"), { statusCode: 409, code: "validation-active" });
     if (requestDescriptor.result_present) throw Object.assign(new Error("该 finding 已存在动态验证结果；默认拒绝覆盖。"), { statusCode: 409, code: "validation-result-exists" });
     const authorization = validateAuthorization(input);
-    const artifacts = await this.validateArtifacts({ repository, runtimeRoot, requestDescriptor, target: authorization.target });
+    const artifacts = await this.validateArtifacts({ repository, reportsRoot, runtimeRoot, requestDescriptor, target: authorization.target });
     const now = new Date().toISOString();
     const run = {
       id: requestDescriptor.id,
@@ -297,7 +317,7 @@ export class DynamicValidationRunner extends EventEmitter {
     this.runs.set(run.id, run);
     await this.persist(run);
     await this.record(run, "validation.preparing", { target_origin: run.target_origin });
-    this.start({ run, repository, runtimeRoot, requestDescriptor, artifacts, authorization, input }).catch(async error => {
+    this.start({ run, repository, runtimeRoot, executionPaths, requestDescriptor, artifacts, authorization, input }).catch(async error => {
       run.status = "failed";
       run.error = genericRedact(error.message);
       run.finished_at = new Date().toISOString();
@@ -306,21 +326,25 @@ export class DynamicValidationRunner extends EventEmitter {
     return publicRun(run);
   }
 
-  async start({ run, repository, runtimeRoot, requestDescriptor, artifacts, authorization, input }) {
+  async start({ run, repository, runtimeRoot, executionPaths, requestDescriptor, artifacts, authorization, input }) {
     const ephemeral = await createEphemeralOpenCodeHome(this.authSourceRoot);
     run.ephemeral_session_root = ephemeral.root;
     await this.persist(run);
     const secrets = [authorization.attacker.username, authorization.attacker.password, authorization.victim.username, authorization.victim.password];
-    const prompt = validationPrompt({ ...artifacts, target: authorization.target, attacker: authorization.attacker, victim: authorization.victim, input });
+    const prompt = validationPrompt({ ...artifacts, target: authorization.target, attacker: authorization.attacker, victim: authorization.victim, input, repository, executionPaths });
     const authorizationFile = join(ephemeral.root, "dynamic-validation-authorization.txt");
     await writeFile(authorizationFile, prompt, { encoding: "utf8", mode: 0o600 });
     let child;
     try {
-      child = this.spawnProcess(this.command, ["run", "--format", "json", "--agent", "dynamic-vulnerability-validator", "--dir", repository.path, "--title", `动态验证 ${run.audit_id}/${run.finding_id}`, "--file", authorizationFile, "请读取所附授权说明并严格按 dynamic-vulnerability-validator 契约执行。"], {
-        cwd: repository.path,
+      child = this.spawnProcess(this.command, ["run", "--format", "json", "--agent", "dynamic-vulnerability-validator", "--dir", executionPaths.workspace_root, "--title", `动态验证 ${run.audit_id}/${run.finding_id}`, "--file", authorizationFile, "请读取所附授权说明并严格按 dynamic-vulnerability-validator 契约执行。"], {
+        cwd: executionPaths.workspace_root,
         env: {
-          ...process.env,
-          OPENCODE_CONFIG: repository.config_path,
+          ...await buildOpenCodeEnvironment(repository.config_path),
+          AUDIT_SOURCE_ROOT: executionPaths.source_root,
+          AUDIT_ENGINE_ROOT: resolve(dirname(repository.config_path), ".."),
+          AUDIT_WORKSPACE_ROOT: executionPaths.workspace_root,
+          AUDIT_REPORTS_ROOT: executionPaths.reports_root,
+          AUDIT_TMP_ROOT: executionPaths.tmp_root,
           XDG_DATA_HOME: ephemeral.dataHome,
           XDG_STATE_HOME: ephemeral.stateHome,
           TMPDIR: ephemeral.tempHome,
@@ -364,7 +388,7 @@ export class DynamicValidationRunner extends EventEmitter {
 
   async validateResultArtifacts({ run, repository, runtimeRoot, requestDescriptor }) {
     if (this.resultValidator) return this.resultValidator({ run: publicRun(run), repository, runtimeRoot, requestDescriptor });
-    const validator = join(repository.path, ".opencode", "skills", "dynamic-vulnerability-validator-subagent", "web-xss-runtime-validation", "scripts", "validate-web-xss-runtime-result.mjs");
+    const validator = join(dirname(repository.config_path), "skills", "dynamic-vulnerability-validator-subagent", "web-xss-runtime-validation", "scripts", "validate-web-xss-runtime-result.mjs");
     await execFileAsync(process.execPath, [
       validator,
       "--request", join(runtimeRoot, requestDescriptor.request_path),

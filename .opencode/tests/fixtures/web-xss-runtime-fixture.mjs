@@ -6,11 +6,11 @@ import { stageEnvelopeDigest } from "../../skills/common-subagent/audit-artifact
 const DIGEST = "a".repeat(64);
 const SOURCE_DIGEST = "b".repeat(64);
 
-export function buildWebXssRuntimeRequest(commit) {
+export function buildWebXssRuntimeRequest(commit, { auditId = "web-xss-fixture" } = {}) {
   const finding = {
     finding_schema_version: 2,
     finding_id: "FIND-WEB-XSS-001",
-    audit_id: "web-xss-fixture",
+    audit_id: auditId,
     scope_digest: DIGEST,
     state: "CANDIDATE",
     classification: {

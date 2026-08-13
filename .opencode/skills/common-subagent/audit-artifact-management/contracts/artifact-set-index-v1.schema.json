@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.open-code.invalid/schemas/artifact-set-index-v1.schema.json",
+  "title": "Artifact set index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "set_type",
+    "audit_id",
+    "round",
+    "scope_digest",
+    "items",
+    "item_count",
+    "set_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "set_type": { "type": "string", "minLength": 1 },
+    "audit_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$" },
+    "round": { "type": "integer", "minimum": 1 },
+    "scope_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_type", "path", "sha256", "media_type", "json_pointer"],
+        "properties": {
+          "artifact_type": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "pattern": "^reports/" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "media_type": { "type": "string", "minLength": 1 },
+          "json_pointer": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "string", "pattern": "^/" }
+            ]
+          }
+        }
+      }
+    },
+    "item_count": { "type": "integer", "minimum": 0 },
+    "set_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 of recursively key-sorted compact JSON after removing set_digest; seal and verify with artifact-set-contract.mjs."
+    }
+  }
+}

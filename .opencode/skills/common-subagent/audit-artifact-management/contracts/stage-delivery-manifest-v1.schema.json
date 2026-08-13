@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.open-code.invalid/schemas/stage-delivery-manifest-v1.schema.json",
+  "title": "Workbench stage delivery manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "registry_id",
+    "registry_digest",
+    "template_id",
+    "stage_id",
+    "stage_order",
+    "audit_id",
+    "round",
+    "status",
+    "scope_binding",
+    "activated_conditions",
+    "predecessor_manifests",
+    "input_artifacts",
+    "output_artifacts",
+    "validation_results",
+    "gaps",
+    "producer",
+    "started_at",
+    "completed_at",
+    "completion",
+    "manifest_digest"
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_type", "path", "sha256", "media_type", "json_pointer"],
+      "properties": {
+        "artifact_type": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^reports/" },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "media_type": { "type": "string", "minLength": 1 },
+        "json_pointer": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^/" }
+          ]
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gap_id", "category", "description", "blocking", "evidence_refs"],
+      "properties": {
+        "gap_id": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "blocking": { "type": "boolean" },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "registry_id": { "const": "workbench-stage-deliveries-v1" },
+    "registry_digest": { "$ref": "#/$defs/digest" },
+    "template_id": { "type": "string", "pattern": "^WB0[1-8]_[A-Z0-9_]+$" },
+    "stage_id": {
+      "enum": ["scope", "recon", "threat", "audit", "correlation", "adjudication", "validation", "report"]
+    },
+    "stage_order": { "type": "integer", "minimum": 1, "maximum": 8 },
+    "audit_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$" },
+    "round": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["COMPLETE", "PARTIAL", "BLOCKED", "FAILED", "NOT_APPLICABLE"] },
+    "scope_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "scope_digest"],
+      "properties": {
+        "state": { "enum": ["UNFROZEN", "FROZEN"] },
+        "scope_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/digest" }
+          ]
+        }
+      }
+    },
+    "activated_conditions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "predecessor_manifests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage_id", "round", "path", "sha256", "manifest_digest", "status"],
+        "properties": {
+          "stage_id": { "enum": ["scope", "recon", "threat", "audit", "correlation", "adjudication", "validation", "report"] },
+          "round": { "type": "integer", "minimum": 1 },
+          "path": { "type": "string", "pattern": "^reports/" },
+          "sha256": { "$ref": "#/$defs/digest" },
+          "manifest_digest": { "$ref": "#/$defs/digest" },
+          "status": { "enum": ["COMPLETE", "PARTIAL", "BLOCKED", "FAILED", "NOT_APPLICABLE"] }
+        }
+      }
+    },
+    "input_artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifactBinding" }
+    },
+    "output_artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifactBinding" }
+    },
+    "validation_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["validator_id", "status", "checked_artifact_types", "evidence_refs", "issues"],
+        "properties": {
+          "validator_id": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["PASS", "FAIL", "NOT_RUN", "NOT_APPLICABLE"] },
+          "checked_artifact_types": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "evidence_refs": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "issues": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gap" }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_name", "agent_session_id", "internal_stage_ids", "stage_agent_contract_ids"],
+      "properties": {
+        "agent_name": { "type": "string", "minLength": 1 },
+        "agent_session_id": { "type": "string", "minLength": 1 },
+        "internal_stage_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "stage_agent_contract_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "format": "date-time" }
+      ]
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_outputs_satisfied", "required_validators_passed", "predecessors_complete", "complete"],
+      "properties": {
+        "required_outputs_satisfied": { "type": "boolean" },
+        "required_validators_passed": { "type": "boolean" },
+        "predecessors_complete": { "type": "boolean" },
+        "complete": { "type": "boolean" }
+      }
+    },
+    "manifest_digest": { "$ref": "#/$defs/digest" }
+  }
+}

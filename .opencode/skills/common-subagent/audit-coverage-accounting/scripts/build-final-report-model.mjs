@@ -6,6 +6,7 @@ import { objectDigest } from "./coverage-v2-common.mjs";
 import { validateAdjudicationManifest } from "../../finding-adjudication/scripts/finding-adjudication-contract.mjs";
 import { validateCvssAssessmentManifest } from "../../finding-adjudication/scripts/cvss-assessment-contract.mjs";
 import { validateAttackChainManifest } from "../../../attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
+import { validateTruthValidationBundle } from "../../../vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs";
 import { finalReportModelDigest, validateFinalReportModel } from "./final-report-model-core.mjs";
 
 function parseArgs(argv) {
@@ -16,7 +17,7 @@ function parseArgs(argv) {
     if (!token?.startsWith("--") || value == null) throw new Error(`Invalid argument near ${token ?? "<end>"}`);
     args[token.slice(2)] = value;
   }
-  for (const key of ["audit-id", "mode", "coverage-summary", "adjudication-input", "adjudication", "cvss", "chains", "output"]) {
+  for (const key of ["audit-id", "mode", "coverage-summary", "adjudication-input", "adjudication", "validation-intake", "quick-validation", "affirmative", "negative", "moderator", "validation-routing", "cvss", "chains", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
   if (!new Set(["final", "policy-final", "partial-final", "checkpoint"]).has(args.mode)) {
@@ -31,10 +32,16 @@ function source(artifact, digest, jsonPointer) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const [summary, input, adjudication, cvss, chains] = await Promise.all([
+  const [summary, input, adjudication, validationIntake, quickResultSet, affirmative, negative, moderator, routing, cvss, chains] = await Promise.all([
     readFile(resolve(args["coverage-summary"]), "utf8").then(JSON.parse),
     readFile(resolve(args["adjudication-input"]), "utf8").then(JSON.parse),
     readFile(resolve(args.adjudication), "utf8").then(JSON.parse),
+    readFile(resolve(args["validation-intake"]), "utf8").then(JSON.parse),
+    readFile(resolve(args["quick-validation"]), "utf8").then(JSON.parse),
+    readFile(resolve(args.affirmative), "utf8").then(JSON.parse),
+    readFile(resolve(args.negative), "utf8").then(JSON.parse),
+    readFile(resolve(args.moderator), "utf8").then(JSON.parse),
+    readFile(resolve(args["validation-routing"]), "utf8").then(JSON.parse),
     readFile(resolve(args.cvss), "utf8").then(JSON.parse),
     readFile(resolve(args.chains), "utf8").then(JSON.parse),
   ]);
@@ -49,9 +56,15 @@ async function main() {
   }
   const adjudicationErrors = validateAdjudicationManifest(adjudication, input);
   if (adjudicationErrors.length > 0) throw new Error(`Finding adjudication is invalid:\n- ${adjudicationErrors.join("\n- ")}`);
-  const cvssErrors = validateCvssAssessmentManifest(cvss, adjudication);
+  const truthBundle = { intake: validationIntake, quickResultSet, affirmative, negative, moderator, routing };
+  const truthErrors = validateTruthValidationBundle(truthBundle);
+  if (truthErrors.length > 0) throw new Error(`Finding truth validation is invalid:\n- ${truthErrors.join("\n- ")}`);
+  if (routing.audit_id !== args["audit-id"] || routing.scope_digest !== summary.scope_digest) {
+    throw new Error("Validation routing is bound to another audit or scope");
+  }
+  const cvssErrors = validateCvssAssessmentManifest(cvss, adjudication, routing);
   if (cvssErrors.length > 0) throw new Error(`CVSS assessment is invalid:\n- ${cvssErrors.join("\n- ")}`);
-  const chainErrors = validateAttackChainManifest(chains, adjudication);
+  const chainErrors = validateAttackChainManifest(chains, adjudication, routing);
   if (chainErrors.length > 0) throw new Error(`Attack-chain manifest is invalid:\n- ${chainErrors.join("\n- ")}`);
   if (chains.audit_id !== args["audit-id"] || chains.scope_digest !== summary.scope_digest) {
     throw new Error("Attack-chain report is bound to a different audit or scope");
@@ -61,6 +74,7 @@ async function main() {
   const candidateSource = index => source(resolve(args["adjudication-input"]), input.manifest_digest, `/candidates/${index}/finding/attack_surface`);
   const cvssSource = index => source(resolve(args.cvss), cvss.manifest_digest, `/assessments/${index}`);
   const chainSource = index => source(resolve(args.chains), chains.manifest_digest, `/chains/${index}`);
+  const routingSource = index => source(resolve(args["validation-routing"]), routing.artifact_digest, `/findings/${index}`);
   const metrics = [
     ["coverage.all_atomic_checks", summary.accounting.known_coverage, "/accounting/known_coverage"],
     ["coverage.vulnerability_type_checks", summary.vulnerability_types.checks, "/vulnerability_types/checks"],
@@ -78,29 +92,45 @@ async function main() {
   const excludedFindings = [];
   const cvssByFindingId = new Map(cvss.assessments.map((assessment, index) => [assessment.finding_id, { assessment, index }]));
   const candidatesByFindingId = new Map(input.candidates.map((candidate, index) => [candidate.finding_id, { candidate, index }]));
+  const routingByFindingId = new Map(routing.findings.map((item, index) => [item.finding_id, { item, index }]));
   adjudication.decisions.forEach((decision, index) => {
     const candidateRecord = candidatesByFindingId.get(decision.finding_id);
     if (!candidateRecord) throw new Error(`Adjudication decision has no bound candidate: ${decision.finding_id}`);
     const row = {
       finding_id: decision.finding_id,
       state: decision.state,
+      preliminary_state: decision.state,
       finding_object_digest: decision.finding_object_digest,
       source: decisionSource(index),
       attack_surface: structuredClone(candidateRecord.candidate.finding.attack_surface),
       attack_surface_source: candidateSource(candidateRecord.index),
       attack_surface_review: structuredClone(decision.attack_surface_review),
       attack_surface_review_source: attackSurfaceReviewSource(index),
+      validation: null,
     };
     if (["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"].includes(decision.state)) {
-      const score = cvssByFindingId.get(decision.finding_id);
-      if (!score) throw new Error(`Supported finding is missing a CVSS assessment: ${decision.finding_id}`);
-      row.cvss = {
-        vector: score.assessment.vector,
-        base_score: score.assessment.base_score,
-        severity: score.assessment.severity,
-        source: cvssSource(score.index),
+      const routed = routingByFindingId.get(decision.finding_id);
+      if (!routed) throw new Error(`Supported finding is missing validation routing: ${decision.finding_id}`);
+      row.state = routed.item.final_verdict;
+      row.validation = {
+        route: routed.item.route,
+        final_verdict: routed.item.final_verdict,
+        report_disposition: routed.item.report_disposition,
+        source: routingSource(routed.index),
       };
-      findings.push(row);
+      if (routed.item.final_verdict === "TRUE_POSITIVE") {
+        const score = cvssByFindingId.get(decision.finding_id);
+        if (!score) throw new Error(`True-positive finding is missing a CVSS assessment: ${decision.finding_id}`);
+        row.cvss = {
+          vector: score.assessment.vector,
+          base_score: score.assessment.base_score,
+          severity: score.assessment.severity,
+          source: cvssSource(score.index),
+        };
+        findings.push(row);
+      } else {
+        excludedFindings.push(row);
+      }
     }
     else excludedFindings.push(row);
   });
@@ -131,10 +161,22 @@ async function main() {
       policy_satisfied: summary.policy_satisfied === true,
       metrics,
     },
+    truth_validation: {
+      routing_digest: routing.artifact_digest,
+      full_dynamic_trigger: routing.full_dynamic_trigger,
+      summary: structuredClone(routing.summary),
+      source: source(resolve(args["validation-routing"]), routing.artifact_digest, "/summary"),
+    },
     inputs: {
       coverage_summary: resolve(args["coverage-summary"]),
       adjudication_input: resolve(args["adjudication-input"]),
       adjudication: resolve(args.adjudication),
+      truth_validation_intake: resolve(args["validation-intake"]),
+      quick_dynamic_results: resolve(args["quick-validation"]),
+      affirmative_review: resolve(args.affirmative),
+      negative_review: resolve(args.negative),
+      moderator_review: resolve(args.moderator),
+      validation_routing: resolve(args["validation-routing"]),
       cvss_assessment: resolve(args.cvss),
       attack_chains: resolve(args.chains),
     },

@@ -51,7 +51,9 @@ Focus/boundary/asset ID sets, and no gaps.
 
 Load `system-attack-chain-hunting`, `secure-code-review-common`, `audit-coverage-accounting`, and `audit-artifact-management`.
 
-Consume the sealed threat model, sealed Focus Areas, every current-round coverage/discovery artifact, the independent Finding Adjudication manifest, Recon inventories, and source/config evidence needed to test transitions. Search specifically for chains that cross Focus Areas, trust boundaries, identities, tenants, components, or deployment layers. Only `SUPPORTED_STATIC` or `SUPPORTED_RUNTIME` adjudication decisions may support a chain step; candidates, rejected findings, and unresolved findings remain explicit gaps rather than transitions.
+Consume the sealed threat model, sealed Focus Areas, every current-round coverage/discovery artifact, Recon inventories, and source/config evidence needed to test transitions. Search specifically for chains that cross Focus Areas, trust boundaries, identities, tenants, components, or deployment layers.
+
+For the preliminary `P05` pass, finding references remain candidates and cannot make a chain terminally supported. For the final `P08` pass, require both the preliminary Finding Adjudication manifest and the complete `validation-routing` manifest. Only routing `TRUE_POSITIVE` finding IDs may support a step or proven transition; `FALSE_POSITIVE`, `INCONCLUSIVE`, rejected, reclassified, and unrouted findings remain exclusions or explicit gaps. Bind `validation_routing_digest` in the final chain manifest and run `validate-attack-chains.mjs --adjudication ... --routing ... --chains ...` before returning COMPLETE.
 
 Write:
 

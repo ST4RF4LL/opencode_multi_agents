@@ -7,7 +7,6 @@ set -o pipefail
 
 run_tests=false
 check_python=false
-require_review=false
 check_mcp=true
 failures=0
 warnings=0
@@ -22,7 +21,6 @@ usage() {
 选项:
   --python          运行临时 Joern Python 前端冒烟检查。
   --test            环境检查后运行完整项目回归测试。
-  --require-review  将缺少全局 vuln_judger MCP 视为失败。
   --no-mcp          跳过 Coverage Ledger MCP 健康检查；仍直接检查扫描器和 Joern CLI。
   -h, --help        显示本帮助。
 
@@ -38,7 +36,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --python) check_python=true ;;
     --test) run_tests=true ;;
-    --require-review) require_review=true ;;
     --no-mcp) check_mcp=false ;;
     -h|--help) usage; exit 0 ;;
     *)
@@ -109,11 +106,11 @@ probe_available() {
 }
 
 check_configs() {
-  node - "$project_config" "$template_config" "$global_config" "$require_review" <<'NODE'
+  node - "$project_config" "$template_config" "$global_config" <<'NODE'
 const fs = require("fs");
 const path = require("path");
 
-const [projectPath, templatePath, globalPath, requireReview] = process.argv.slice(2);
+const [projectPath, templatePath, globalPath] = process.argv.slice(2);
 let invalid = false;
 
 function readJson(label, file, required) {
@@ -161,10 +158,6 @@ if (project) {
       invalid = true;
     }
   }
-  if (project.mcp?.vuln_judger || project.mcp?.["vuln-judger"]) {
-    console.log("  - 项目 opencode.json: vuln_judger 必须由全局配置提供");
-    invalid = true;
-  }
 }
 
 const projectMcp = new Set(Object.keys(project?.mcp ?? {}));
@@ -173,12 +166,7 @@ const duplicates = [...projectMcp].filter(name => globalMcp.has(name));
 if (duplicates.length > 0) console.log(`  - 警告: 项目与全局 MCP 重名: ${duplicates.join(", ")}`);
 else console.log("  - 项目与全局 MCP: 无重名项");
 
-const hasReview = globalMcp.has("vuln_judger") || globalMcp.has("vuln-judger");
-if (hasReview) console.log("  - 全局 vuln_judger: 已配置");
-else if (requireReview === "true") {
-  console.log("  - 全局 vuln_judger: 需要但未配置");
-  invalid = true;
-} else console.log("  - 全局 vuln_judger: 未配置（仅最终三方复核需要）");
+console.log("  - finding 真实性复核: 使用项目内本地正方/反方/Moderator 链，无需外部 review MCP");
 console.log("  - 提示: 项目专用 MCP 保留在项目配置中，只有共享服务才配置到全局");
 
 process.exit(invalid ? 1 : 0);

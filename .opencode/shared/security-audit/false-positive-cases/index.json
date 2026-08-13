@@ -160,6 +160,27 @@
       "weakness": "xxe",
       "path": "java/java-xxe-fp.md",
       "yaml": "java/java-xxe-fp.yaml"
+    },
+    {
+      "id": "web-csrf-suppression-misread",
+      "language": "web",
+      "skill": "web-source-security-review",
+      "weakness": "session-hijack",
+      "path": "web/web-csrf-suppression-misread.md"
+    },
+    {
+      "id": "web-rfc7234-cache-semantics-misread",
+      "language": "web",
+      "skill": "web-source-security-review",
+      "weakness": "data-exposure",
+      "path": "web/web-rfc7234-cache-semantics-misread.md"
+    },
+    {
+      "id": "web-single-tenant-na-misread",
+      "language": "web",
+      "skill": "web-source-security-review",
+      "weakness": "idor",
+      "path": "web/web-single-tenant-na-misread.md"
     }
   ]
 }

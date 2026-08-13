@@ -1,6 +1,6 @@
 ---
 name: audit-skill-optimization
-description: Improve threat-led Focus Area Tri-Lens security audit skills from completed final-report-bound vuln-judger feedback, tagged by threat, Focus Area, dimension, lens, and discovery track without bloating prompts or changing agent role boundaries.
+description: Improve threat-led Focus Area Tri-Lens security audit skills from completed digest-bound local truth-validation routing, tagged by threat, Focus Area, dimension, lens, and discovery track without bloating prompts or changing agent role boundaries.
 license: MIT
 metadata:
   role: security-skill-optimizer
@@ -9,7 +9,7 @@ metadata:
 
 # Audit Skill Optimization
 
-Use this skill when a completed final-report-bound vuln-judger review shows that an audit skill should be updated.
+Use this skill when a terminal local truth-validation verdict and its Moderator evidence show that an audit skill should be updated.
 
 ## Update Rules
 

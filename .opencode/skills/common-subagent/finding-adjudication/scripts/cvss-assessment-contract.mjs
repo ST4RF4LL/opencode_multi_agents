@@ -31,14 +31,30 @@ export function cvssAssessmentManifestDigest(value) {
   return createHash("sha256").update(JSON.stringify(canonicalize(copy))).digest("hex");
 }
 
-export function validateCvssAssessmentClaims(claims, adjudication) {
+function eligibleFindingIds(adjudication, routing = null, errors = []) {
+  const preliminary = new Set(adjudication.decisions.filter(item => SUPPORTED_STATES.has(item.state)).map(item => item.finding_id));
+  if (!routing) return preliminary;
+  if (!isObject(routing) || routing.artifact_type !== "finding-validation-routing-manifest"
+    || routing.audit_id !== adjudication.audit_id || routing.scope_digest !== adjudication.scope_digest
+    || routing.complete !== true || !validDigest(routing.artifact_digest)
+    || !Array.isArray(routing.findings)) {
+    errors.push("cvss-validation-routing-invalid");
+    return new Set();
+  }
+  const routedIds = new Set(routing.findings.map(item => item?.finding_id).filter(nonEmptyString));
+  if (routedIds.size !== preliminary.size || [...preliminary].some(id => !routedIds.has(id))) errors.push("cvss-validation-routing-accounting-invalid");
+  return new Set(routing.findings.filter(item => item?.final_verdict === "TRUE_POSITIVE").map(item => item.finding_id));
+}
+
+export function validateCvssAssessmentClaims(claims, adjudication, routing = null) {
   const errors = [];
   if (!isObject(claims)) return ["cvss-claims-not-object"];
   if (claims.schema_version !== 1) errors.push("cvss-claims-schema-version-invalid");
   if (claims.audit_id !== adjudication.audit_id || claims.scope_digest !== adjudication.scope_digest) errors.push("cvss-claims-audit-or-scope-mismatch");
   if (claims.adjudication_manifest_digest !== adjudication.manifest_digest) errors.push("cvss-claims-adjudication-digest-mismatch");
+  if (routing && claims.validation_routing_digest !== routing.artifact_digest) errors.push("cvss-claims-validation-routing-digest-mismatch");
   if (!Array.isArray(claims.assessments)) return [...errors, "cvss-claims-assessments-missing"];
-  const supported = new Set(adjudication.decisions.filter(item => SUPPORTED_STATES.has(item.state)).map(item => item.finding_id));
+  const supported = eligibleFindingIds(adjudication, routing, errors);
   const seen = new Set();
   for (const assessment of claims.assessments) {
     if (!isObject(assessment) || !nonEmptyString(assessment.finding_id) || seen.has(assessment.finding_id)) {
@@ -64,14 +80,15 @@ export function validateCvssAssessmentClaims(claims, adjudication) {
   return [...new Set(errors)];
 }
 
-export function buildCvssAssessmentManifest(claims, adjudication) {
-  const errors = validateCvssAssessmentClaims(claims, adjudication);
+export function buildCvssAssessmentManifest(claims, adjudication, routing = null) {
+  const errors = validateCvssAssessmentClaims(claims, adjudication, routing);
   if (errors.length > 0) throw new Error(`CVSS assessment claims are invalid:\n- ${errors.join("\n- ")}`);
   const manifest = {
     schema_version: 1,
     audit_id: adjudication.audit_id,
     scope_digest: adjudication.scope_digest,
     adjudication_manifest_digest: adjudication.manifest_digest,
+    ...(routing ? { validation_routing_digest: routing.artifact_digest } : {}),
     assessments: claims.assessments.map(assessment => ({
       finding_id: assessment.finding_id,
       ...scoreCvssV31(assessment.vector),
@@ -84,14 +101,15 @@ export function buildCvssAssessmentManifest(claims, adjudication) {
   return manifest;
 }
 
-export function validateCvssAssessmentManifest(manifest, adjudication) {
+export function validateCvssAssessmentManifest(manifest, adjudication, routing = null) {
   const errors = [];
   if (!isObject(manifest)) return ["cvss-assessment-manifest-not-object"];
   if (manifest.schema_version !== 1) errors.push("cvss-assessment-schema-version-invalid");
   if (manifest.audit_id !== adjudication.audit_id || manifest.scope_digest !== adjudication.scope_digest) errors.push("cvss-assessment-audit-or-scope-mismatch");
   if (manifest.adjudication_manifest_digest !== adjudication.manifest_digest) errors.push("cvss-assessment-adjudication-digest-mismatch");
+  if (routing && manifest.validation_routing_digest !== routing.artifact_digest) errors.push("cvss-assessment-validation-routing-digest-mismatch");
   if (!Array.isArray(manifest.assessments)) return [...errors, "cvss-assessment-rows-missing"];
-  const supported = new Set(adjudication.decisions.filter(item => SUPPORTED_STATES.has(item.state)).map(item => item.finding_id));
+  const supported = eligibleFindingIds(adjudication, routing, errors);
   const seen = new Set();
   for (const assessment of manifest.assessments) {
     if (!isObject(assessment) || !nonEmptyString(assessment.finding_id) || seen.has(assessment.finding_id)) {

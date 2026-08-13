@@ -19,7 +19,7 @@ node .opencode/skills/common-subagent/finding-adjudication/scripts/build-adjudic
   --audit-id <audit-id> \
   --plan reports/coverage/coverage-plan.<audit-id>.json \
   --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl \
-  --structural reports/coverage/coverage-structural-v3.<audit-id>.json \
+  --structural reports/coverage/coverage-structural-v1.<audit-id>.json \
   --output reports/adjudication/finding-input.<audit-id>.r<round>.json
 ```
 
@@ -32,8 +32,10 @@ node .opencode/skills/common-subagent/finding-adjudication/scripts/validate-find
 ```
 
 The adjudication manifest must account for each input candidate exactly once.
-Only `SUPPORTED_STATIC` and `SUPPORTED_RUNTIME` may be forwarded to attack
-chains or final synthesis. `CANDIDATE` is never a final vulnerability state.
+Only `SUPPORTED_STATIC` and `SUPPORTED_RUNTIME` enter the subsequent
+truth-validation intake. They still cannot reach final attack chains or report
+synthesis until validation-routing returns `TRUE_POSITIVE`. `CANDIDATE` is
+never a final vulnerability state.
 
 ## Required semantic work
 
@@ -55,10 +57,10 @@ For every candidate:
    refuted; a rejection requires it to be supported; uncertainty requires an
    explicit unresolved question.
 7. Do not assign a final CVSS score here. Record evidence and outcome; later
-   scoring is a separate deterministic step. For `SUPPORTED_*` results, the
-   orchestrator supplies a vector, rationale, assumptions, and evidence refs to
-   `build-cvss-assessment.mjs`; the script, not an agent, derives the score and
-   severity.
+   scoring is a separate deterministic step. After truth routing, the
+   orchestrator supplies vectors only for routing `TRUE_POSITIVE`, including
+   `validation_routing_digest`, to `build-cvss-assessment.mjs --routing ...`;
+   the script, not an agent, derives the score and severity.
 
 Use the framework checklists in `references/framework-semantic-models.md` for
 JWT, object storage paths, logging, mass assignment, Spring RBAC, Actuator,
@@ -70,4 +72,5 @@ CORS, and URL/SSRF/redirect claims.
 - Do not turn a blind or seeded candidate into coverage closure.
 - Do not call a potential chain `SUPPORTED_*` when a required transition is
   unknown; preserve the uncertainty for the chain gate.
-- Do not call `vuln_judger`; it remains the final whole-report review.
+- Do not call external `vuln_judger`; local truth validation belongs to
+  `vulnerability-validator` after this preliminary adjudication.

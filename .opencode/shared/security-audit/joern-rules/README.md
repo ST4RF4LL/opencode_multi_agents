@@ -20,3 +20,12 @@ joern <cpg.bin> --script .opencode/shared/security-audit/joern-rules/java/<rule-
 ```
 
 Keep full logs outside the agent context and return only a bounded summary.
+
+## Web (JavaScript) gap registry
+
+`web/gaps.md` records confirmed-but-unvalidated rule contracts for browser
+JavaScript and `node:http` server code (source: audit-20260812-rvi09, 67/67
+TRUE_POSITIVE). No `.sc` rule is shipped there yet: the Java rules do not fit
+JS/Node targets, and unvalidated rules must not enter the inventory. Promote a
+gap to a first-class `web/<rule-id>.sc` + `.md` pair only after it runs on a
+real JS CPG with recorded TP/FP counts (see `web/gaps.md` validation policy).

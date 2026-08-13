@@ -18,8 +18,11 @@
 - 暂不支持 Docker 容器内部域名、远程 staging、生产、第三方站点或真实用户。
 - 初期只支持 Web XSS；其他漏洞类型保持 `NOT_RUN`，以后单独设计和开放。
 
-现有的 `vulnerability-validator` 继续只负责最终报告的 vuln-judger 三方复核。
-动态验证器是另一个独立 Agent，不重命名、不替代前者。
+`vulnerability-validator` 现在负责终稿前的真实性路由：任务 opt-in 时先委派
+`quick-dynamic-validator` 做全任务最多 120 秒的 loopback 快速确认，再把未确认项
+交给本地正方、反方、Moderator 静态挑战。本文件描述的
+`dynamic-vulnerability-validator` 是另一个只由用户手动触发的完整验证 Agent；其结果
+是 sidecar，不替代或自动改写上述 routing。
 
 ## 2. 总体架构
 
@@ -83,9 +86,9 @@ sealed external-runtime-validation request
 用户的日常浏览器 profile。浏览器状态恢复只允许关闭本次 MCP 创建的 page 或
 isolated context；禁止通过系统级 kill Chrome/Chromium 进程重置环境。
 
-全局配置默认拒绝 `chrome-devtools_*` 工具，只有动态验证 Agent 的前置权限块
-可以使用它们。`initial.sh` 仅探测 MCP 的工具可用性；浏览器会在实际调用页面
-相关工具时以可见窗口启动。
+全局配置默认拒绝 `chrome-devtools_*` 工具，只有 `quick-dynamic-validator` 与
+`dynamic-vulnerability-validator` 的前置权限块可以使用它们。`initial.sh` 仅探测 MCP
+的工具可用性；浏览器会在实际调用页面相关工具时以可见窗口启动。
 
 ## 4. 输入、账号与环境信息
 
@@ -239,7 +242,7 @@ node .opencode/skills/dynamic-vulnerability-validator-subagent/web-xss-runtime-v
 
 - 配置已启用 `chrome-devtools`，使用 `@latest`、隔离模式，并且没有 headless、
   remote attach 或持久 profile 参数。
-- 全局默认拒绝 Chrome MCP，只有动态验证 Agent 拥有对应工具权限。
+- 全局默认拒绝 Chrome MCP，只有快速动态与人工完整动态两个验证 Agent 拥有对应工具权限。
 - 非 loopback target、含凭证字段的 target binding、缺少用户显式授权、缺少两个
   不同测试账号或缺少清理说明都会被拒绝。
 - `DOM_PROBE_ONLY` 不得形成 `SUPPORTED_RUNTIME`。

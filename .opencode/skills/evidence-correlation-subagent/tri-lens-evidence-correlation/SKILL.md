@@ -134,6 +134,6 @@ discovery_metrics:
 follow_up_packets: []
 ```
 
-Keep `validation_state=unvalidated` during correlation. Independent adjudication occurs only after the complete final report is sealed and produces separate vuln-judger companion artifacts.
+Keep `validation_state=unvalidated` during correlation. Preliminary semantic adjudication and the local quick-dynamic/Affirmative/Negative/Moderator truth-routing chain run only after correlation and before final-report synthesis; correlation must not predict their verdicts.
 
 Treat discovery metrics as routing signals, not completeness proof. When duplicate rate rises and novelty/new-surface yield falls, recommend repartitioning Focus Areas, a blind pass, or a system-chain pass instead of adding identical agents.

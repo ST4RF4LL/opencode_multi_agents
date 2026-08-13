@@ -1,0 +1,1498 @@
+{
+  "schema_version": 1,
+  "registry_id": "workbench-stage-deliveries-v1",
+  "purpose": "固定工作台八个审计环节之间的输入、输出、内容契约、校验门禁和断点恢复锚点。",
+  "lifecycle": {
+    "state": "ACTIVE",
+    "enforcement": "ENFORCED",
+    "compatibility": "作为 P00-P10 Stage/Agent 契约之上的强制聚合交付层；历史无清单任务只读兼容展示，新建工作台任务必须通过八环节物化校验。"
+  },
+  "manifest": {
+    "schema_version": 1,
+    "path_template": "reports/stage-deliveries/{audit_id}/{stage_id}.r{round}.json",
+    "schema_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-delivery-manifest-v1.schema.json"
+  },
+  "statuses": ["COMPLETE", "PARTIAL", "BLOCKED", "FAILED", "NOT_APPLICABLE"],
+  "stages": [
+    {
+      "stage_id": "scope",
+      "template_id": "WB01_SCOPE_FREEZE",
+      "order": 1,
+      "label": "范围冻结",
+      "objective": "把操作员指定的源码根、提交、排除项、解析能力和 scope digest 固定为后续环节不可静默变更的审计边界。",
+      "internal_stage_ids": ["P00_AUDIT_INIT", "P01_RECON"],
+      "stage_agent_contract_ids": [
+        "P00_AUDIT_INIT.security-audit-orchestrator",
+        "P01_RECON.security-intel-collector"
+      ],
+      "predecessor_stage_ids": [],
+      "input_artifacts": [
+        {
+          "artifact_type": "repository-source-binding",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": [],
+          "producer": "audit-workbench",
+          "path_template": "reports/platform/audit-runs/{audit_id}/source-binding.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/audit_workbench_runtime",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "audit-init-input-envelope",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": [],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/handoffs/{audit_id}/P00_AUDIT_INIT/{agent_name}.{agent_session_id}.input.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-envelope-v1.schema.json",
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/validate-stage-agent-envelope.mjs",
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "scope-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["scope"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/scope-manifest.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "parser-capabilities",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["scope"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/parser-capabilities.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "scope-stage-handoffs",
+          "requirement": "REQUIRED",
+          "artifact_types": ["scope-manifest", "parser-capabilities"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/validate-stage-agent-envelope.mjs",
+          "pass_condition": "P00 与 P01 的输入/输出信封摘要绑定有效，P01 输出状态为 COMPLETE。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["scope-manifest", "parser-capabilities"],
+        "required_validator_ids": ["scope-stage-handoffs"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["scope-manifest", "parser-capabilities"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "源码根、提交、排除项或解析器能力摘要变化时重新冻结范围；否则复用已校验的 scope digest。"
+      },
+      "integration_notes": [
+        "当前 P01 同时产出范围和侦察制品；范围与侦察两个工作台清单可以在同一 P01 输出信封完成后依次封存。"
+      ]
+    },
+    {
+      "stage_id": "recon",
+      "template_id": "WB02_ASSET_RECON",
+      "order": 2,
+      "label": "资产侦察",
+      "objective": "生成完整函数、接口、配置、敏感操作、AI 面和威胁路由清单，使威胁建模只消费可追溯的冻结资产。",
+      "internal_stage_ids": ["P01_RECON"],
+      "stage_agent_contract_ids": ["P01_RECON.security-intel-collector"],
+      "predecessor_stage_ids": ["scope"],
+      "input_artifacts": [
+        {
+          "artifact_type": "scope-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["scope"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/scope-manifest.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "parser-capabilities",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["scope"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/parser-capabilities.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "function-manifest-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/function-manifests.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "interface-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/interface-manifest.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/work/required_recon_files",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-interface-extractors.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "interface-extractor-coverage",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/interface-extractor-coverage.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/work/required_recon_files",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-interface-extractors.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "threat-routing-index",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/threat-routing-index.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "recon-summary",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/recon-summary.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "recon-inventory-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/recon-inventories.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "recon-stage-handoffs",
+          "requirement": "REQUIRED",
+          "artifact_types": ["function-manifest-set", "interface-manifest", "interface-extractor-coverage", "threat-routing-index", "recon-summary", "recon-inventory-set"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/validate-stage-agent-envelope.mjs",
+          "pass_condition": "P01 输出信封为 COMPLETE，且所有要求的侦察制品均有 digest binding。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "interface-extractor-coverage",
+          "requirement": "REQUIRED",
+          "artifact_types": ["interface-manifest", "interface-extractor-coverage"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-interface-extractors.mjs",
+          "pass_condition": "接口抽取器覆盖校验无 blocking gap。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["function-manifest-set", "interface-manifest", "interface-extractor-coverage", "threat-routing-index", "recon-summary", "recon-inventory-set"],
+        "required_validator_ids": ["recon-stage-handoffs", "interface-extractor-coverage"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["function-manifest-set", "recon-inventory-set"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "复用摘要与 scope digest 一致的函数及资产清单；只重建缺失、摘要漂移或抽取器覆盖失败的清单。"
+      },
+      "integration_notes": [
+        "recon-summary 与 recon-inventory-set 的完整性由 P01 信封、文件摘要和下游威胁模型校验共同约束。"
+      ]
+    },
+    {
+      "stage_id": "threat",
+      "template_id": "WB03_THREAT_AND_PLAN",
+      "order": 3,
+      "label": "威胁建模",
+      "objective": "把冻结资产转化为威胁、Focus Area、工作包、原子检查和可恢复 Ledger，使审计执行拥有唯一计划。",
+      "internal_stage_ids": ["P02_THREAT_MODEL", "P03_PLAN"],
+      "stage_agent_contract_ids": [
+        "P02_THREAT_MODEL.security-threat-modeler.bootstrap",
+        "P03_PLAN.security-audit-orchestrator"
+      ],
+      "predecessor_stage_ids": ["scope", "recon"],
+      "input_artifacts": [
+        {
+          "artifact_type": "scope-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["scope"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/scope-manifest.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "function-manifest-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/function-manifests.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "interface-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/interface-manifest.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/work/required_recon_files",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-interface-extractors.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "interface-extractor-coverage",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/interface-extractor-coverage.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/work/required_recon_files",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-interface-extractors.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "threat-routing-index",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/threat-routing-index.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "recon-summary",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/coverage/{audit_id}/inputs/recon-summary.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P01_RECON.security-intel-collector",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "recon-inventory-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/recon-inventories.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "vulnerability-catalog",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": [],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/{audit_id}/inputs/application-ai-vulnerability-catalog.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/shared/security-audit/vulnerability-catalog-v2.schema.json",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/validate-vulnerability-catalog-v2.mjs",
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "threat-model",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/threat-model.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-areas",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/focus-areas.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-input-snapshot",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/{audit_id}/inputs/snapshot-index.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_verification/durable_input_snapshot",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/snapshot-coverage-inputs.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-plan",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-plan.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_plan",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-ledger",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "coverage-ledger-mcp",
+          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "threat-model-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["threat-model", "focus-areas"],
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "pass_condition": "威胁、入口、资产、信任边界和 Focus Area 分区全部通过内容契约。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "plan-stage-handoffs",
+          "requirement": "REQUIRED",
+          "artifact_types": ["coverage-input-snapshot", "coverage-plan", "coverage-ledger"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/validate-stage-agent-envelope.mjs",
+          "pass_condition": "P02 与 P03 输出信封均为 COMPLETE，Plan 和 Ledger 绑定同一 scope digest。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["threat-model", "focus-areas", "coverage-input-snapshot", "coverage-plan", "coverage-ledger"],
+        "required_validator_ids": ["threat-model-contract", "plan-stage-handoffs"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "coverage-ledger"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "输入摘要不变时复用已封存威胁模型、Focus Area、Plan 和 Ledger；任何上游资产摘要变化都必须重建本环节。"
+      },
+      "integration_notes": [
+        "工作台不单列覆盖计划阶段，因此 WB03 同时聚合 P02 威胁建模与 P03 计划初始化。"
+      ]
+    },
+    {
+      "stage_id": "audit",
+      "template_id": "WB04_MULTI_DIMENSION_AUDIT",
+      "order": 4,
+      "label": "多维漏洞审计",
+      "objective": "按 Focus Area、语言/平台分配和 Tri-Lens 执行完整覆盖及发现会话，保存候选发现与 Ledger 收据。",
+      "internal_stage_ids": ["P04_FOCUS_EXECUTION", "P07_GAP_ROUND"],
+      "stage_agent_contract_ids": [
+        "P04_FOCUS_EXECUTION.c-cpp-source-auditor",
+        "P04_FOCUS_EXECUTION.java-source-auditor",
+        "P04_FOCUS_EXECUTION.web-source-auditor",
+        "P04_FOCUS_EXECUTION.python-source-auditor",
+        "P04_FOCUS_EXECUTION.platform-security-auditor",
+        "P04_FOCUS_EXECUTION.ai-security-auditor",
+        "P07_GAP_ROUND.c-cpp-source-auditor",
+        "P07_GAP_ROUND.java-source-auditor",
+        "P07_GAP_ROUND.web-source-auditor",
+        "P07_GAP_ROUND.python-source-auditor",
+        "P07_GAP_ROUND.platform-security-auditor",
+        "P07_GAP_ROUND.ai-security-auditor"
+      ],
+      "predecessor_stage_ids": ["recon", "threat"],
+      "input_artifacts": [
+        {
+          "artifact_type": "recon-inventory-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["recon"],
+          "producer": "security-intel-collector",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/recon-inventories.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "threat-model",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/threat-model.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-areas",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/focus-areas.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-plan",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-plan.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_plan",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-ledger",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "coverage-ledger-mcp",
+          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "follow-up-packet-set",
+          "requirement": "CONDITIONAL",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-evidence-correlator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/follow-up-packets.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": "correlation_gap_round"
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "focus-audit-result-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/focus-audit-results.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-artifact-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/finding-artifacts.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "sarif-set",
+          "requirement": "OPTIONAL",
+          "cardinality": "ZERO_OR_ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/sarif.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "focus-stage-handoffs",
+          "requirement": "REQUIRED",
+          "artifact_types": ["focus-audit-result-set"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/verify-stage-agent-handoffs.mjs",
+          "pass_condition": "每个 Focus Area assignment × lens 及必需 discovery track 均存在 digest-bound COMPLETE 输出。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "focus-audit-result-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["focus-audit-result-set"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/reconcile-audit-report.mjs",
+          "pass_condition": "所有覆盖报告完成实体行 reconcile，且不存在未解释的 GAP cell。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "finding-v2-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["finding-artifact-set"],
+          "validator_ref": ".opencode/skills/common-subagent/finding-evidence-contract/scripts/validate-finding-artifact.mjs",
+          "pass_condition": "集合内每个候选 Finding v2 均通过结构、来源和摘要校验；空集合以 item_count=0 明确表达。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["focus-audit-result-set", "finding-artifact-set"],
+        "required_validator_ids": ["focus-stage-handoffs", "focus-audit-result-contract", "finding-v2-contract"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["focus-audit-result-set", "finding-artifact-set"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "以 COMPLETE 输出信封、Ledger receipt 和集合索引为锚，只重新调度缺失或失效的 assignment/lens/discovery 会话；gap round 增加 round，禁止覆盖上一轮。"
+      },
+      "integration_notes": [
+        "P07 的定向补审通过 correlation_gap_round 回边进入本环节，并必须生成新 round 的交付清单。",
+        "集合索引必须存在，即使候选发现为零，以区分零结果和漏交付。"
+      ]
+    },
+    {
+      "stage_id": "correlation",
+      "template_id": "WB05_EVIDENCE_CORRELATION",
+      "order": 5,
+      "label": "证据关联",
+      "objective": "统一覆盖结果、发现证据、重复项、矛盾、攻击链候选和后续工作包，并决定进入裁决还是回退补审。",
+      "internal_stage_ids": ["P05_SYSTEM_CHAIN_DISCOVERY", "P06_CORRELATION", "P07_GAP_ROUND"],
+      "stage_agent_contract_ids": [
+        "P05_SYSTEM_CHAIN_DISCOVERY.security-attack-chain-hunter",
+        "P06_CORRELATION.security-evidence-correlator",
+        "P07_GAP_ROUND.security-evidence-correlator"
+      ],
+      "predecessor_stage_ids": ["threat", "audit"],
+      "input_artifacts": [
+        {
+          "artifact_type": "threat-model",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/threat-model.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-areas",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/focus-areas.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-plan",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-plan.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_plan",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-audit-result-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/focus-audit-results.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-artifact-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/finding-artifacts.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "preliminary-attack-chain-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-attack-chain-hunter",
+          "path_template": "reports/attack-chains/security-attack-chain-hunter.{audit_id}.preliminary.r{round}.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P05_SYSTEM_CHAIN_DISCOVERY.security-attack-chain-hunter",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "correlation-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-evidence-correlator",
+          "path_template": "reports/correlation/security-evidence-correlator.{audit_id}.r{round}.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/correlation",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "follow-up-packet-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-evidence-correlator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/follow-up-packets.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-structural",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-structural-v1.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_structural_v1",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage.mjs",
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "correlation-stage-handoffs",
+          "requirement": "REQUIRED",
+          "artifact_types": ["preliminary-attack-chain-report", "correlation-report", "follow-up-packet-set"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/validate-stage-agent-envelope.mjs",
+          "pass_condition": "P05/P06 或相应 P07 关联输出为 COMPLETE，并绑定本轮全部输入结果。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "structural-coverage-intake",
+          "requirement": "REQUIRED",
+          "artifact_types": ["coverage-structural", "finding-artifact-set"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage.mjs",
+          "pass_condition": "候选发现与结构覆盖 intake 保守守恒，隔离项不进入裁决。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["preliminary-attack-chain-report", "correlation-report", "follow-up-packet-set", "coverage-structural"],
+        "required_validator_ids": ["correlation-stage-handoffs", "structural-coverage-intake"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["correlation-report", "follow-up-packet-set", "coverage-structural"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "若 follow-up packet 非空或存在 blocking contradiction，本环节保持 PARTIAL 并回退 WB04；仅重算受新增结果影响的关联分区。"
+      },
+      "integration_notes": [
+        "correlation-report 与 preliminary-attack-chain-report 目前只有信封级约束，仍需补充独立内容 schema 和确定性校验器。"
+      ]
+    },
+    {
+      "stage_id": "adjudication",
+      "template_id": "WB06_FINDING_ADJUDICATION",
+      "order": 6,
+      "label": "发现裁决",
+      "objective": "对每个可信候选形成唯一的初步语义裁决与显式 runtime request 集合，为后续快速动态和本地三方真实性挑战提供冻结输入。",
+      "internal_stage_ids": ["P08_FINALIZE"],
+      "stage_agent_contract_ids": [
+        "P08_FINALIZE.security-finding-adjudicator",
+        "P08_FINALIZE.security-audit-orchestrator"
+      ],
+      "predecessor_stage_ids": ["threat", "audit", "correlation"],
+      "input_artifacts": [
+        {
+          "artifact_type": "threat-model",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/threat-model.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-areas",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-threat-modeler",
+          "path_template": "reports/coverage/{audit_id}/inputs/focus-areas.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "validator_ref": ".opencode/skills/threat-modeling-subagent/evidence-backed-threat-modeling/scripts/threat-model-contract.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-plan",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-plan.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_plan",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-ledger",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "coverage-ledger-mcp",
+          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-audit-result-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/focus-audit-results.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-artifact-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/finding-artifacts.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "correlation-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-evidence-correlator",
+          "path_template": "reports/correlation/security-evidence-correlator.{audit_id}.r{round}.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/correlation",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-structural",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-structural-v1.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_structural_v1",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage.mjs",
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "finding-adjudication-input",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/adjudication/finding-input.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/build-adjudication-input.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-adjudication",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-finding-adjudicator",
+          "path_template": "reports/adjudication/security-finding-adjudicator.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-finding-adjudication.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "external-runtime-validation-request-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/runtime-validation-requests.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "finding-adjudication-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["finding-adjudication-input", "finding-adjudication"],
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-finding-adjudication.mjs",
+          "pass_condition": "每个可信候选恰有一个终态决定，输入和输出摘要绑定一致。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["finding-adjudication-input", "finding-adjudication", "external-runtime-validation-request-set"],
+        "required_validator_ids": ["finding-adjudication-contract"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["finding-adjudication", "external-runtime-validation-request-set"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "候选输入摘要不变时保留已校验裁决与请求集合；候选集合变化时整轮重新裁决并增加 round，所有下游真实性验证随之失效。"
+      },
+      "integration_notes": [
+        "该环节只形成初步 SUPPORTED/REJECTED/INCONCLUSIVE 语义裁决；SUPPORTED 仍必须通过 WB07 truth-validation routing 才能进入 CVSS、攻击链与终稿。"
+      ]
+    },
+    {
+      "stage_id": "validation",
+      "template_id": "WB07_VALIDATION_GATES",
+      "order": 7,
+      "label": "验证复核",
+      "objective": "先执行任务级 120 秒快速动态分流，再由本地 Affirmative、Negative、Moderator 挑战所有未确认 finding；基于终局 routing 生成 CVSS 与攻击链，并通过 Stage handoff、结构覆盖和语义覆盖门禁。",
+      "internal_stage_ids": ["P08_FINALIZE"],
+      "stage_agent_contract_ids": [
+        "P08_FINALIZE.vulnerability-validator",
+        "P08_FINALIZE.quick-dynamic-validator",
+        "P08_FINALIZE.vulnerability-affirmative",
+        "P08_FINALIZE.vulnerability-negative",
+        "P08_FINALIZE.vulnerability-moderator",
+        "P08_FINALIZE.security-attack-chain-hunter",
+        "P08_FINALIZE.security-audit-orchestrator",
+        "P08_FINALIZE.security-finding-adjudicator"
+      ],
+      "predecessor_stage_ids": ["threat", "audit", "correlation", "adjudication"],
+      "input_artifacts": [
+        {
+          "artifact_type": "coverage-plan",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-plan.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_plan",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-ledger",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["threat"],
+          "producer": "coverage-ledger-mcp",
+          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "focus-audit-result-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["audit"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/focus-audit-results.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "correlation-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-evidence-correlator",
+          "path_template": "reports/correlation/security-evidence-correlator.{audit_id}.r{round}.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/correlation",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-adjudication",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-finding-adjudicator",
+          "path_template": "reports/adjudication/security-finding-adjudicator.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-finding-adjudication.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-adjudication-input",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/adjudication/finding-input.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/build-adjudication-input.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "external-runtime-validation-request-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/stage-deliveries/{audit_id}/sets/runtime-validation-requests.r{round}.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/artifact-set-index-v1.schema.json",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "truth-validation-intake",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-validator",
+          "path_template": "reports/validation/truth-validation-intake.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "quick-dynamic-result-set",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "quick-dynamic-validator-or-controller",
+          "path_template": "reports/validation/quick/{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "affirmative-review",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-affirmative-or-controller-when-not-applicable",
+          "path_template": "reports/validation/static/{audit_id}/affirmative.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "negative-review",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-negative-or-controller-when-not-applicable",
+          "path_template": "reports/validation/static/{audit_id}/negative.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "moderator-review",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-moderator-or-controller-when-not-applicable",
+          "path_template": "reports/validation/static/{audit_id}/moderator.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "validation-routing-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-validator",
+          "path_template": "reports/validation/validation-routing.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "cvss-assessment",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/adjudication/cvss-assessment.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/cvss-assessment-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-cvss-assessment.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "attack-chain-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-attack-chain-hunter",
+          "path_template": "reports/attack-chains/security-attack-chain-hunter.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs",
+          "validator_ref": ".opencode/skills/attack-chain-subagent/system-attack-chain-hunting/scripts/validate-attack-chains.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "stage-handoff-verification",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/handoffs/stage-handoff-verification.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json",
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/verify-stage-agent-handoffs.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-verification",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-verification.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_verification",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-summary",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-summary.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_summary",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-summary.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "semantic-coverage-verification",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/semantic-coverage-verification.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/semantic_coverage_verification",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-semantic-coverage.mjs",
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "truth-validation-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["truth-validation-intake", "quick-dynamic-result-set", "affirmative-review", "negative-review", "moderator-review", "validation-routing-manifest"],
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "pass_condition": "每个初步支持 finding 恰好路由一次；快速 CONFIRMED 直接进入 TRUE_POSITIVE，其余均完成正方、反方与 Moderator 本地静态挑战，且完整动态保持 MANUAL_ONLY。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "cvss-assessment-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["validation-routing-manifest", "cvss-assessment"],
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-cvss-assessment.mjs",
+          "pass_condition": "每个 routing TRUE_POSITIVE finding 恰有一个脚本派生的 CVSS 3.1 评估，其他 verdict 不进入评分。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "attack-chain-contract",
+          "requirement": "REQUIRED",
+          "artifact_types": ["validation-routing-manifest", "attack-chain-report"],
+          "validator_ref": ".opencode/skills/attack-chain-subagent/system-attack-chain-hunting/scripts/validate-attack-chains.mjs",
+          "pass_condition": "攻击链只消费 routing TRUE_POSITIVE finding，并守恒 raw、accepted、rejected 与 conditional chain。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "stage-handoff-gate",
+          "requirement": "REQUIRED",
+          "artifact_types": ["stage-handoff-verification"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/verify-stage-agent-handoffs.mjs",
+          "pass_condition": "固定阶段、全部 Focus assignment/lens 和 discovery expectation 均 COMPLETE。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "coverage-gate",
+          "requirement": "REQUIRED",
+          "artifact_types": ["coverage-verification", "coverage-summary"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3.mjs",
+          "pass_condition": "结构/原子检查/接口/类型覆盖满足声明的 final policy，摘要与 Ledger seal 一致。",
+          "condition_id": null
+        },
+        {
+          "validator_id": "semantic-coverage-gate",
+          "requirement": "REQUIRED",
+          "artifact_types": ["semantic-coverage-verification"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-semantic-coverage.mjs",
+          "pass_condition": "入口、威胁、Focus Area、发现轨道和系统攻击链语义核算 complete=true。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["truth-validation-intake", "quick-dynamic-result-set", "affirmative-review", "negative-review", "moderator-review", "validation-routing-manifest", "cvss-assessment", "attack-chain-report", "stage-handoff-verification", "coverage-verification", "coverage-summary", "semantic-coverage-verification"],
+        "required_validator_ids": ["truth-validation-contract", "cvss-assessment-contract", "attack-chain-contract", "stage-handoff-gate", "coverage-gate", "semantic-coverage-gate"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["validation-routing-manifest", "cvss-assessment", "attack-chain-report", "stage-handoff-verification", "coverage-verification", "coverage-summary", "semantic-coverage-verification"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "从 intake 起按 quick、Affirmative、Negative、Moderator、routing 顺序复用摘要有效的制品，从最早缺失项恢复；routing 变化时重建 CVSS、攻击链与覆盖门禁。"
+      },
+      "integration_notes": [
+        "任务未启用测试环境时 quick result 必须显式 SKIPPED，所有初步支持项进入静态三方；启用时整个 quick 批次硬上限为 120 秒。",
+        "完整动态验证是工作台人工 sidecar，不属于八环节完成门禁，也不得自动改写 routing。"
+      ]
+    },
+    {
+      "stage_id": "report",
+      "template_id": "WB08_REPORT_SEAL",
+      "order": 8,
+      "label": "报告封存",
+      "objective": "从已通过真实性 routing、覆盖门禁、CVSS 与攻击链校验的输入确定性构建并验证最终中文报告，并保留可选优化结果。",
+      "internal_stage_ids": ["P08_FINALIZE", "P10_OPTIMIZE"],
+      "stage_agent_contract_ids": [
+        "P08_FINALIZE.security-audit-orchestrator",
+        "P10_OPTIMIZE.security-skill-optimizer"
+      ],
+      "predecessor_stage_ids": ["correlation", "adjudication", "validation"],
+      "input_artifacts": [
+        {
+          "artifact_type": "correlation-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["correlation"],
+          "producer": "security-evidence-correlator",
+          "path_template": "reports/correlation/security-evidence-correlator.{audit_id}.r{round}.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/correlation",
+          "validator_ref": null,
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-adjudication-input",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/adjudication/finding-input.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/build-adjudication-input.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "finding-adjudication",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["adjudication"],
+          "producer": "security-finding-adjudicator",
+          "path_template": "reports/adjudication/security-finding-adjudicator.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/finding-adjudication-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-finding-adjudication.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "validation-routing-manifest",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-validator",
+          "path_template": "reports/validation/validation-routing.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "moderator-review",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "vulnerability-moderator-or-controller-when-not-applicable",
+          "path_template": "reports/validation/static/{audit_id}/moderator.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs",
+          "validator_ref": ".opencode/skills/vulnerability-validator-subagent/vulnerability-validation/scripts/validate-truth-validation.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "cvss-assessment",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/adjudication/cvss-assessment.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/cvss-assessment-contract.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/finding-adjudication/scripts/validate-cvss-assessment.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "attack-chain-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-attack-chain-hunter",
+          "path_template": "reports/attack-chains/security-attack-chain-hunter.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs",
+          "validator_ref": ".opencode/skills/attack-chain-subagent/system-attack-chain-hunting/scripts/validate-attack-chains.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "stage-handoff-verification",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/handoffs/stage-handoff-verification.{audit_id}.r{round}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json",
+          "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/verify-stage-agent-handoffs.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-verification",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-verification.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_verification",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "coverage-summary",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/coverage-summary.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_summary",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-summary.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "semantic-coverage-verification",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["validation"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/coverage/semantic-coverage-verification.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/semantic_coverage_verification",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-semantic-coverage.mjs",
+          "condition_id": null
+        }
+      ],
+      "output_artifacts": [
+        {
+          "artifact_type": "final-report-model",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["report"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/final/security-audit-report-model.{audit_id}.json",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-final-report.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "final-report",
+          "requirement": "REQUIRED",
+          "cardinality": "ONE",
+          "source_stage_ids": ["report"],
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/final/security-audit-report.{audit_id}.md",
+          "validation_level": "DETERMINISTIC",
+          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/final_report",
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-final-report.mjs",
+          "condition_id": null
+        },
+        {
+          "artifact_type": "optimization-change-summary",
+          "requirement": "OPTIONAL",
+          "cardinality": "ZERO_OR_ONE",
+          "source_stage_ids": ["report"],
+          "producer": "security-skill-optimizer",
+          "path_template": "reports/optimization/optimization-change-summary.{audit_id}.json",
+          "validation_level": "ENVELOPE_ONLY",
+          "contract_ref": ".opencode/skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json#P10_OPTIMIZE.security-skill-optimizer",
+          "validator_ref": null,
+          "condition_id": null
+        }
+      ],
+      "validators": [
+        {
+          "validator_id": "final-report-verification",
+          "requirement": "REQUIRED",
+          "artifact_types": ["final-report-model", "final-report"],
+          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-final-report.mjs",
+          "pass_condition": "报告模型摘要有效，Markdown 与确定性渲染结果逐字节一致。",
+          "condition_id": null
+        }
+      ],
+      "completion_gate": {
+        "required_output_types": ["final-report-model", "final-report"],
+        "required_validator_ids": ["final-report-verification"],
+        "requires_predecessors_complete": true,
+        "requires_zero_gaps": true
+      },
+      "recovery_policy": {
+        "anchor_artifact_types": ["final-report-model", "final-report"],
+        "invalidate_on_input_change": true,
+        "resume_rule": "validation routing 与报告模型输入摘要不变且模型有效时只补渲染缺失 Markdown；任一真实性、CVSS、攻击链或覆盖输入变化时重新构建并验证模型。"
+      },
+      "integration_notes": [
+        "P10 优化不阻断报告封存，优化摘要是可选交付件。",
+        "最终报告必须严格按 validation-routing manifest 分流：TRUE_POSITIVE 为漏洞、FALSE_POSITIVE 为排除项、INCONCLUSIVE 为剩余缺口。"
+      ]
+    }
+  ],
+  "feedback_edges": [
+    {
+      "from_stage_id": "correlation",
+      "to_stage_id": "audit",
+      "condition_id": "correlation_gap_round",
+      "allowed_source_statuses": ["PARTIAL"],
+      "round_rule": "目标 audit round 必须大于来源 correlation round，且保留所有历史清单。",
+      "description": "关联阶段存在 blocking gap、矛盾或定向 follow-up packet 时，回到多维审计执行增量补审。"
+    }
+  ],
+  "registry_digest": "6c02198bd5495263baa139ec21584986ceed603da44ae621104a16c7e7bc8883"
+}
