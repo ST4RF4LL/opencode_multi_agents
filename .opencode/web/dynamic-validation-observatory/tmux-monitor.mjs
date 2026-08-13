@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { arch as osArch, platform as osPlatform } from "node:os";
 import { basename, join } from "node:path";
@@ -33,6 +33,16 @@ function localPort() {
 
 function runtimeOverrides(environment) {
   return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (key.startsWith("OPENCODE_") || /^AUDIT_(?:SOURCE|ENGINE|WORKSPACE|REPORTS|TMP)_ROOT$/.test(key)) && typeof value === "string"));
+}
+
+function fetchFailureDetail(error) {
+  const parts = [error?.message, error?.cause?.code, error?.cause?.message].filter(Boolean);
+  return [...new Set(parts)].join(" / ") || "未知连接错误";
+}
+
+function compactDiagnostic(value, limit = 2_000) {
+  const text = String(value ?? "").replaceAll("\u0000", "").trim();
+  return text.length > limit ? `…${text.slice(-limit)}` : text;
 }
 
 async function fetchJson(url, options = {}, timeoutMs = 5_000) {
@@ -168,7 +178,7 @@ export class OpenCodeTmuxMonitor {
     return { columns: actualColumns, rows: actualRows };
   }
 
-  async waitForServer(serverUrl) {
+  async waitForServer(serverUrl, { socket_name: socketName = null, diagnostic_path: diagnosticPath = null } = {}) {
     const deadline = Date.now() + this.readyTimeoutMs;
     let detail = "";
     while (Date.now() < deadline) {
@@ -176,11 +186,18 @@ export class OpenCodeTmuxMonitor {
         await fetchJson(`${serverUrl}/global/health`, {}, 1_000);
         return;
       } catch (error) {
-        detail = error.message;
+        detail = fetchFailureDetail(error);
       }
       await new Promise(resolve => setTimeout(resolve, 200));
     }
-    throw new Error(`OpenCode server 未在超时内就绪：${detail}`);
+    let diagnostic = "";
+    if (diagnosticPath) {
+      try { diagnostic = compactDiagnostic(await readFile(diagnosticPath, "utf8")); } catch {}
+    }
+    if (!diagnostic && socketName) {
+      try { diagnostic = compactDiagnostic(await this.capture({ socket_name: socketName, target: "audit:server" }, 120)); } catch {}
+    }
+    throw new Error(`OpenCode server 未在超时内就绪：${detail}${diagnostic ? `；server 输出：${diagnostic}` : "；未捕获到 server 输出，请确认 psmux 可执行目标命令"}`);
   }
 
   async waitForTui(socketName, target) {
@@ -209,15 +226,17 @@ export class OpenCodeTmuxMonitor {
     await this.stop({ socket_name: socketName, target: "audit:server" }).catch(() => {});
 
     const serverSpecPath = join(auditStateRoot, "tmux-server.json");
+    const serverDiagnosticPath = join(auditStateRoot, "opencode-server.log");
     await writeFile(serverSpecPath, `${JSON.stringify({
       command: this.command,
       args: ["serve", "--hostname", "127.0.0.1", "--port", new URL(serverUrl).port],
       cwd: executionDirectory,
       environment: runtimeOverrides(environment),
+      diagnostic_path: serverDiagnosticPath,
     }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    await this.tmux(socketName, ["new-session", "-d", "-x", "160", "-y", "48", "-s", "audit", "-n", "server", "-c", executionDirectory, process.execPath, LAUNCHER, serverSpecPath], { timeout: 30_000 });
+    await this.tmux(socketName, ["new-session", "-d", "-x", "160", "-y", "48", "-s", "audit", "-n", "server", "-c", executionDirectory, "--", process.execPath, LAUNCHER, serverSpecPath], { timeout: 30_000 });
     try {
-      await this.waitForServer(serverUrl);
+      await this.waitForServer(serverUrl, { socket_name: socketName, diagnostic_path: serverDiagnosticPath });
       const query = new URLSearchParams({ directory: executionDirectory });
       const session = providerSessionId
         ? { id: providerSessionId, resumed: true }
@@ -235,7 +254,7 @@ export class OpenCodeTmuxMonitor {
         cwd: executionDirectory,
         environment: runtimeOverrides(environment),
       }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-      await this.tmux(socketName, ["new-window", "-d", "-t", "audit", "-n", "tui", "-c", executionDirectory, process.execPath, LAUNCHER, attachSpecPath]);
+      await this.tmux(socketName, ["new-window", "-d", "-t", "audit", "-n", "tui", "-c", executionDirectory, "--", process.execPath, LAUNCHER, attachSpecPath]);
       await this.waitForTui(socketName, target);
       return {
         backend: this.multiplexerBackend ?? "tmux",

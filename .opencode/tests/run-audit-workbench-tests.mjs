@@ -541,6 +541,65 @@ if (mode === "serve") {
   assert.equal(windowsMonitorProbe.multiplexer_command, "C:\\tools\\psmux.exe");
   assert(windowsMonitorCalls.every(call => call.command !== "opencode" && call.command !== "tmux"));
 
+  const windowsStartCalls = [];
+  let windowsOpenCodeServer = null;
+  const windowsStartMonitor = new OpenCodeTmuxMonitor({
+    stateRoot: join(temp, "windows-psmux-start-state"),
+    platform: "win32",
+    environment: { PATH: "C:\\tools", PATHEXT: ".EXE" },
+    async execute(command, args) {
+      windowsStartCalls.push({ command, args });
+      const operation = args[2];
+      if (operation === "kill-server") return { stdout: "", stderr: "" };
+      if (operation === "new-session" || operation === "new-window") {
+        const boundary = args.indexOf("--");
+        assert(boundary > 0, `psmux ${operation} 缺少命令边界 --`);
+        assert.equal(args[boundary + 1], process.execPath);
+        return { stdout: "", stderr: "" };
+      }
+      if (operation === "capture-pane") return { stdout: "Windows psmux OpenCode TUI\n", stderr: "" };
+      throw new Error(`unexpected psmux operation: ${operation}`);
+    },
+  });
+  windowsStartMonitor.probeResult = {
+    available: true,
+    backend: "psmux",
+    opencode_command: "C:\\tools\\opencode.exe",
+    multiplexer_command: "C:\\tools\\psmux.exe",
+  };
+  windowsStartMonitor.command = "C:\\tools\\opencode.exe";
+  windowsStartMonitor.tmuxCommand = "C:\\tools\\psmux.exe";
+  windowsStartMonitor.multiplexerBackend = "psmux";
+  windowsStartMonitor.waitForServer = async serverUrl => {
+    const port = Number(new URL(serverUrl).port);
+    windowsOpenCodeServer = createHttpServer((request, response) => {
+      response.setHeader("Content-Type", "application/json");
+      if (request.method === "POST" && request.url.startsWith("/session?")) response.end('{"id":"ses_windows_fixture"}');
+      else response.end('{"healthy":true}');
+    });
+    windowsOpenCodeServer.listen(port, "127.0.0.1");
+    await once(windowsOpenCodeServer, "listening");
+  };
+  const windowsTerminal = await windowsStartMonitor.start({
+    audit: { id: "audit-windows-psmux", name: "Windows psmux 集成测试" },
+    repository: { path: canonicalRepositoryRoot },
+    executionDirectory: canonicalRepositoryRoot,
+    environment: {},
+  });
+  assert.equal(windowsTerminal.backend, "psmux");
+  assert.equal(windowsTerminal.provider_session_id, "ses_windows_fixture");
+  assert.equal(windowsStartCalls.filter(call => ["new-session", "new-window"].includes(call.args[2])).length, 2);
+  windowsOpenCodeServer.close();
+  await once(windowsOpenCodeServer, "close");
+
+  const serverDiagnosticPath = join(temp, "opencode-server-diagnostic.log");
+  await writeFile(serverDiagnosticPath, "OpenCode 配置加载失败：fixture diagnostic", "utf8");
+  const diagnosticMonitor = new OpenCodeTmuxMonitor({ stateRoot: join(temp, "diagnostic-monitor-state"), readyTimeoutMs: 10 });
+  await assert.rejects(
+    diagnosticMonitor.waitForServer("http://127.0.0.1:1", { diagnostic_path: serverDiagnosticPath }),
+    /server 输出：OpenCode 配置加载失败：fixture diagnostic/,
+  );
+
   const findingWorkflowRoot = join(temp, "finding-workflow");
   const findingWorkflow = new FindingWorkflowStore({ stateRoot: findingWorkflowRoot });
   await findingWorkflow.ready;
@@ -1259,7 +1318,7 @@ if (mode === "serve") {
   assert.equal(deletedWorkflow.status, "unreviewed");
   assert.equal(deletedWorkflow.version, 0);
 
-  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: tmuxInstalled ? 197 : 192 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: tmuxInstalled ? 199 : 194 })}\n`);
 } finally {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
