@@ -19,7 +19,6 @@
     "skill": {
       "*": "deny"
     },
-    "coverage_*": "allow",
     "cpp_index_*": "deny",
     "jvm_index_*": "deny",
     "python_index_*": "deny",
@@ -27,13 +26,6 @@
     "chrome-devtools_*": "deny"
   },
   "mcp": {
-    "coverage_ledger": {
-      "type": "local",
-      "command": ["node", ".opencode/mcp/coverage-ledger-server.mjs"],
-      "cwd": ".",
-      "timeout": 300000,
-      "enabled": true
-    },
     "chrome-devtools": {
       "type": "local",
       "command": [

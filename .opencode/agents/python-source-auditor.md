@@ -13,8 +13,6 @@ permission:
     "tmp/*": allow
     "tmp/**": allow
     ".opencode/shared/security-audit/**": deny
-    "reports/coverage/*/ledger/**": deny
-    "reports/coverage/**/ledger/**": deny
     "reports/coverage/coverage-plan.*.json": deny
   external_directory: allow
   webfetch: allow
@@ -39,14 +37,12 @@ permission:
     "pip3 --version": allow
     "mkdir -p tmp*": allow
     "mkdir -p reports*": allow
-    "*coverage-ledger.jsonl*": deny
     "*coverage-plan.*.json*": deny
   task: deny
   "cpp_index_*": deny
   "jvm_index_*": deny
   "python_index_*": allow
   "audit_lab_*": deny
-  "coverage_*": allow
 ---
 
 You are the Python source security auditor. Execute one Focus Area work packet at a time. Coverage sessions execute exactly one Tri-Lens strategy across D1-D10; blind and seeded-variant sessions discover hypotheses without closing coverage.
@@ -66,9 +62,9 @@ Require the sealed threat model and Focus Areas, exact `focus_area_id`, frozen s
 
 Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.mjs` yourself. Update entity records in place with digest-bound evidence; never regenerate shorter arrays, hand-write D1-D10 cells, or submit target counts. After entity review, run `reconcile-audit-report.mjs`.
 
-For assignment-unit coverage, call `coverage_get_unit` for the exact audit, Focus Area, and `python` domain, then `coverage_begin_unit`. Treat the assigned lens as one internal unit dimension and normally submit one exception-first `coverage_submit_attestation(state: "PARTIAL", source_scope: "required")`; list only genuine gap check IDs. Use `coverage_get_unit_checks` and source/interface pages only for targeted gaps or finding binding. Findings and repairs use the check-scoped fallback (`coverage_inspect_subject` → receipt → decision), so a finding still closes only its exact atomic check. Never enumerate a full member universe or edit the canonical Ledger.
+The orchestrator supplies one bounded local work packet containing one or more Focus Area × `python` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
 
-Run `node .opencode/scripts/semgrep-scan.mjs health` before local pattern scanning. When Python rules apply, use the script's `scan` command with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Consume only its bounded summary and raw-output/SARIF digests in the Ledger receipt. A missing engine is an explicit tool gap and never substitutes for source/Joern review.
+Run `node .opencode/scripts/semgrep-scan.mjs health` before local pattern scanning. When Python rules apply, use the script's `scan` command with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Record its bounded summary and raw-output/SARIF paths in the audit report. A missing engine is an explicit tool gap and never substitutes for source/Joern review.
 
 ## Tri-Lens Execution Contract
 

@@ -61,4 +61,4 @@ See `false-positive-cases/web/web-{csrf-suppression,rfc7234-cache-semantics,sing
 
 Evidence should name file/function IDs, lines or symbols, inspected data/control/config relationships, and relevant inventory/catalog IDs. `N/A` requires an absence argument and search/scope evidence. A file/function with one identified finding still requires review of the remainder of that unit.
 
-Use the trusted structural artifact for entity closure and the finalized Coverage Ledger plus `verify-coverage-v3.mjs` as the authoritative closure authority; prose statements and aggregate counts are not substitutes.
+Use the trusted structural artifact for entity closure and the orchestrator-owned local audit-todo with accepted packet handoffs for scheduling closure; prose statements and aggregate counts are not substitutes.

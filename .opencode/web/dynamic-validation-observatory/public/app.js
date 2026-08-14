@@ -140,7 +140,8 @@ function auditListItem(audit) {
   const fill = element("i");
   fill.style.width = `${audit.progress ?? 0}%`;
   bar.append(fill);
-  progress.append(element("small", "", `${audit.stage} · ${audit.progress ?? 0}%`), bar);
+  const todo = audit.todo?.total ? ` · 本地任务 ${audit.todo.done}/${audit.todo.total}${audit.todo.gap ? `，${audit.todo.gap} GAP` : ""}` : "";
+  progress.append(element("small", "", `${audit.stage} · ${audit.progress ?? 0}%${todo}`), bar);
   button.append(identity, progress, status(audit.status));
   button.addEventListener("click", () => { state.selectedAuditId = audit.id; setView("audits"); renderAuditDetail(); });
   return button;
@@ -213,7 +214,7 @@ function renderAudits() {
     row.append(identity);
     cell(row, `${audit.repository_name ?? "—"}\n${short(audit.commit)}`);
     cell(row, audit.stage);
-    cell(row, `${audit.progress}%`);
+    cell(row, audit.todo?.total ? `${audit.progress}% · 任务 ${audit.todo.done}/${audit.todo.total}` : `${audit.progress}%`);
     cell(row, audit.finding_count);
     const statusCell = element("td"); statusCell.append(status(audit.status)); row.append(statusCell);
     row.addEventListener("click", () => { state.selectedAuditId = audit.id; renderAuditDetail(); });
@@ -231,7 +232,7 @@ function renderAuditDetail() {
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
-  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], ["制品", `${audit.artifact_count} 个`], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
+  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], ["制品", `${audit.artifact_count} 个`], ["本地调度任务", audit.todo?.total ? `完成 ${audit.todo.done}/${audit.todo.total} · 运行 ${audit.todo.running} · 待领 ${audit.todo.pending} · GAP ${audit.todo.gap}` : "尚未从 Focus Area 初始化"], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const stages = element("ol", "stage-list");

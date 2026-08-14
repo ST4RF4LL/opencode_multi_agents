@@ -1,12 +1,7 @@
 {
   "version": 18,
-  "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block (normally <server>_*; coverage_ledger intentionally exposes coverage_*).",
+  "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block. Local audit scheduling is a file-backed orchestrator capability, not an MCP server.",
   "servers": {
-    "coverage_ledger": {
-      "status": "enabled-local",
-      "type": "custom",
-      "purpose": "Compact assignment-unit delivery, exception-first attestations, targeted check/finding fallback, append-only authenticated coverage telemetry, paginated gaps, and policy-aware finalization."
-    },
     "cpp_index": {
       "status": "placeholder",
       "type": "custom",
@@ -36,13 +31,13 @@
   "agents": {
     "security-intel-collector": [],
     "security-threat-modeler": [],
-    "c-cpp-source-auditor": ["cpp_index_*", "coverage_*"],
-    "java-source-auditor": ["jvm_index_*", "coverage_*"],
-    "web-source-auditor": ["coverage_*"],
-    "python-source-auditor": ["python_index_*", "coverage_*"],
-    "platform-security-auditor": ["coverage_*"],
-    "ai-security-auditor": ["coverage_*"],
-    "security-evidence-correlator": ["coverage_*"],
+    "c-cpp-source-auditor": ["cpp_index_*"],
+    "java-source-auditor": ["jvm_index_*"],
+    "web-source-auditor": [],
+    "python-source-auditor": ["python_index_*"],
+    "platform-security-auditor": [],
+    "ai-security-auditor": [],
+    "security-evidence-correlator": [],
     "security-attack-chain-hunter": [],
     "security-finding-adjudicator": [],
     "quick-dynamic-validator": ["chrome-devtools_*"],
@@ -52,6 +47,6 @@
     "vulnerability-negative": [],
     "vulnerability-moderator": [],
     "security-skill-optimizer": [],
-    "security-audit-orchestrator": ["coverage_*"]
+    "security-audit-orchestrator": []
   }
 }

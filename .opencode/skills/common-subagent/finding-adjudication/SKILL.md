@@ -5,20 +5,21 @@ description: Independently adjudicate accepted Finding v2 coverage candidates be
 
 # Finding Adjudication
 
-Use this skill after Coverage v3 has accepted and Ledger-attested Finding v2
+Use this skill after structural reconciliation has accepted packet-backed Finding v2
 artifacts. It is a separate semantic decision, not a second coverage pass and
 not the final third-party report review.
 
 ## Input and output
 
-Build the trusted candidate set from the frozen Plan, Ledger, and structural
+Build the trusted candidate set from the frozen Plan, local audit-todo, and structural
 artifact:
 
 ```sh
 node .opencode/skills/common-subagent/finding-adjudication/scripts/build-adjudication-input.mjs \
   --audit-id <audit-id> \
   --plan reports/coverage/coverage-plan.<audit-id>.json \
-  --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl \
+  --todo "$AUDIT_TODO_PATH" \
+  --reports-root "$AUDIT_REPORTS_ROOT" \
   --structural reports/coverage/coverage-structural-v1.<audit-id>.json \
   --output reports/adjudication/finding-input.<audit-id>.r<round>.json
 ```
@@ -68,7 +69,7 @@ CORS, and URL/SSRF/redirect claims.
 
 ## Boundaries
 
-- Do not modify the candidate, Ledger, Coverage Plan, or source repository.
+- Do not modify the candidate, local task state, Coverage Plan, or source repository.
 - Do not turn a blind or seeded candidate into coverage closure.
 - Do not call a potential chain `SUPPORTED_*` when a required transition is
   unknown; preserve the uncertainty for the chain gate.

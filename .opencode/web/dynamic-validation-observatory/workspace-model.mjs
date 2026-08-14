@@ -309,10 +309,12 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
     const useMaterialized = Boolean(materialized && (runner?.stage_delivery_enforcement === "ENFORCED"
       || materialized.completed_count > 0));
     const stages = stageSnapshot(auditArtifacts, runtimeCount, useMaterialized ? materialized : null);
+    const todo = runner?.todo ?? null;
     const lastModified = auditArtifacts.map(item => item.modified_at).sort().at(-1) ?? runner?.updated_at ?? null;
     const completedCount = stages.filter(stage => stage.state === "completed").length;
     const completed = completedCount === stages.length;
-    const progress = Math.round((completedCount / stages.length) * 100);
+    const todoEnforced = runner?.stage_delivery_enforcement === "TODO_ENFORCED" && Number(todo?.total ?? 0) > 0;
+    const progress = todoEnforced ? Number(todo.progress ?? 0) : Math.round((completedCount / stages.length) * 100);
     const activeStage = stages.find(stage => stage.state === "active");
     const discontinuous = !activeStage && !completed && completedCount > 0;
     return {
@@ -324,10 +326,12 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       status: runner?.status ?? (completed ? "completed" : "artifact_only"),
       version: runner?.version ?? 1,
       event_sequence: runner?.event_sequence ?? 0,
-      stage: activeStage?.label ?? (discontinuous ? "制品不连续" : completed ? "报告封存" : "等待开始"),
+      stage: todoEnforced
+        ? (todo.running || todo.pending ? `多维漏洞审计 · ${todo.done ?? 0}/${todo.total ?? 0}` : todo.complete ? "报告封存" : "多维漏洞审计 · 需处理失败项")
+        : (activeStage?.label ?? (todo?.running || todo?.pending ? `多维漏洞审计 · ${todo.done ?? 0}/${todo.total ?? 0}` : discontinuous ? "制品不连续" : completed ? "报告封存" : "等待开始")),
       stages,
       progress,
-      progress_source: useMaterialized ? "stage-delivery-manifest" : "legacy-artifact-heuristic",
+      progress_source: todoEnforced ? "local-audit-todo" : useMaterialized ? "stage-delivery-manifest" : "legacy-artifact-heuristic",
       completion_source: runner?.completion_source ?? null,
       finding_count: findings.filter(finding => finding.audit_id === auditId).length,
       runtime_validation_count: runtimeCount,
@@ -352,6 +356,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
         test_environment_length: 0,
         dynamic_validation_enabled: false,
       },
+      todo,
     };
   }).sort((left, right) => String(right.updated_at ?? "").localeCompare(String(left.updated_at ?? "")));
 }

@@ -75,15 +75,27 @@ async function main() {
   const cvssSource = index => source(resolve(args.cvss), cvss.manifest_digest, `/assessments/${index}`);
   const chainSource = index => source(resolve(args.chains), chains.manifest_digest, `/chains/${index}`);
   const routingSource = index => source(resolve(args["validation-routing"]), routing.artifact_digest, `/findings/${index}`);
-  const metrics = [
-    ["coverage.all_atomic_checks", summary.accounting.known_coverage, "/accounting/known_coverage"],
-    ["coverage.vulnerability_type_checks", summary.vulnerability_types.checks, "/vulnerability_types/checks"],
-    ["coverage.external_interface_checks", summary.external_interfaces.known_checks, "/external_interfaces/known_checks"],
-    ["coverage.file_checks", summary.files.checks, "/files/checks"],
-    ["coverage.function_checks", summary.functions.checks, "/functions/checks"],
-    ["coverage.assignment_units", summary.execution?.assignment_units, "/execution/assignment_units"],
-    ["coverage.attested_checks", summary.evidence?.attested_checks, "/evidence/attested_checks"],
-  ].map(([metric_id, value, pointer]) => ({
+  const metricDefinitions = summary.execution?.model === "local-audit-todo"
+    ? [
+        ["local_todo.terminal_items", summary.accounting.known_coverage, "/accounting/known_coverage"],
+        ["local_todo.done_items", summary.vulnerability_types.checks, "/vulnerability_types/checks"],
+        ["local_todo.gap_items", {
+          numerator: summary.local_todo?.gap ?? 0,
+          denominator: summary.local_todo?.total ?? 0,
+          percentage: summary.local_todo?.total ? Number((((summary.local_todo?.gap ?? 0) / summary.local_todo.total) * 100).toFixed(2)) : null,
+          state: summary.local_todo?.gap ? "GAP_VISIBLE" : "NONE",
+        }, "/local_todo/gap"],
+      ]
+    : [
+        ["coverage.all_atomic_checks", summary.accounting.known_coverage, "/accounting/known_coverage"],
+        ["coverage.vulnerability_type_checks", summary.vulnerability_types.checks, "/vulnerability_types/checks"],
+        ["coverage.external_interface_checks", summary.external_interfaces.known_checks, "/external_interfaces/known_checks"],
+        ["coverage.file_checks", summary.files.checks, "/files/checks"],
+        ["coverage.function_checks", summary.functions.checks, "/functions/checks"],
+        ["coverage.assignment_units", summary.execution?.assignment_units, "/execution/assignment_units"],
+        ["coverage.attested_checks", summary.evidence?.attested_checks, "/evidence/attested_checks"],
+      ];
+  const metrics = metricDefinitions.map(([metric_id, value, pointer]) => ({
     metric_id,
     value,
     source: source(resolve(args["coverage-summary"]), summary.manifest_digest, pointer),

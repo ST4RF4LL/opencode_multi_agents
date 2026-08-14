@@ -10,6 +10,7 @@ import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
 import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
 import { auditsFromArtifacts, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
+import { auditTodoSummary, createEmptyAuditTodo } from "../../scripts/audit-todo-core.mjs";
 
 const execFileAsync = promisify(execFile);
 const AUDIT_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/i;
@@ -47,6 +48,22 @@ async function defaultStageDeliveryVerifier({ reportsRoot, auditId }) {
     readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
   ]);
   return verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry });
+}
+
+async function defaultTodoCompletionVerifier({ audit, reportsRoot }) {
+  const summary = await auditTodoSummary(audit.todo_path);
+  const errors = [];
+  if (!summary || summary.total === 0) errors.push("本地审计任务尚未由 Coverage Plan 初始化。");
+  if (summary?.pending) errors.push(`仍有 ${summary.pending} 项 PENDING。`);
+  if (summary?.running) errors.push(`仍有 ${summary.running} 项 RUNNING。`);
+  if (summary?.failed) errors.push(`仍有 ${summary.failed} 项 FAILED，必须重试或人工处理。`);
+  const artifacts = await scanReportArtifacts(reportsRoot);
+  const finalReport = artifacts.find(artifact => artifact.audit_id === audit.id
+    && artifact.kind === "final"
+    && artifact.media_type === "text/markdown"
+    && /^final\/security-audit-report\..+\.md$/.test(artifact.path));
+  if (!finalReport) errors.push("缺少最终中文 Markdown 报告。");
+  return { complete: errors.length === 0, errors, summary, final_report_path: finalReport?.path ?? null };
 }
 
 function sensitiveRedactionValues(text) {
@@ -187,6 +204,16 @@ function publicAudit(audit) {
       test_environment_length: Number(environment?.character_length ?? 0),
       dynamic_validation_enabled: environment?.enabled === true,
     },
+    todo: audit.todo_summary ?? {
+      total: 0,
+      pending: 0,
+      running: 0,
+      done: 0,
+      gap: 0,
+      failed: 0,
+      progress: 0,
+      complete: false,
+    },
   };
 }
 
@@ -267,9 +294,12 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     `唯一被审计源码根目录是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
     "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径（例如 --root \"$AUDIT_SOURCE_ROOT\" 或 git -C \"$AUDIT_SOURCE_ROOT\"），不得用当前执行目录替代冻结范围根。",
     "所有持久制品继续写到执行工作区相对路径 reports/**，所有中间文件继续写到 tmp/<audit_id>/**；它们分别由 AUDIT_REPORTS_ROOT 和 AUDIT_TMP_ROOT 指向工作台项目内的受控目录。不得把绝对输出路径改回被测源码目录。",
+    `本次调度唯一真相是本机文件 ${JSON.stringify(paths.todo_path)}，只能由 Orchestrator 使用 node \"$AUDIT_TODO_CLI\" 管理；严禁使用 OpenCode todolist，也不得向子代理暴露或让其修改该文件。Coverage Ledger MCP、哈希链、token、INSPECT/RECEIPT/DECISION 流程均已废弃。`,
+    "完成 Scope、Recon、Threat 与 Coverage Plan 后，调用 audit-todo init 创建本地审计项；每项为一个 Focus Area × domain，三个 lens 在同一工作包内完成。然后循环调用 audit-todo claim（最多 4 个工作包、每包最多 12 项），只把返回的有限工作包分派给对应专业 Agent。不得把完整 Focus Area 清单写入 OpenCode task 或上下文。",
+    "专业 Agent 只写报告和一个工作包 handoff JSON 到 reports/audit-todo/<audit_id>/；handoff 必须逐项标明 DONE 或 GAP、报告相对路径、finding_ids 或 gap_reason。Orchestrator 仅检查该 handoff 的结构和报告是否存在，再调用 audit-todo complete；子代理失败时调用 audit-todo fail，过期 RUNNING 项调用 audit-todo recover 后重新领取。Orchestrator 不得阅读源码、判断漏洞或改写 Finding。",
     ...privateContextPrompt(audit, contextPaths),
     "完成可信结构、威胁建模、多视角漏洞挖掘、覆盖门禁、证据关联、发现裁决和最终中文报告封存。",
-    "八个工作台环节采用 ENFORCED 交付契约。每个环节完成后必须用 seal-stage-delivery.mjs 物化 reports/stage-deliveries/<audit_id>/<stage>.r<round>.json；退出前运行 verify-stage-deliveries.mjs。缺少任一文件、SHA、PASS 证据或 COMPLETE 前序时不得声称任务完成。",
+    "八个工作台环节仍须各自产出可读的阶段制品，但当前完成门禁以本地任务清单为准：所有调度项必须 DONE 或 GAP，且必须生成最终中文 Markdown 报告。不得调用或等待旧 Coverage Ledger 相关的 stage-delivery / coverage-finalize 门禁。",
     "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次全任务 120 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
     "这是无人值守的工作台任务：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明，完成强制交付后必须正常结束本次运行。",
@@ -283,11 +313,12 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     `@security-audit-orchestrator 继续执行此前中断的 repo 级 Tri-Lens 安全审计。`,
     `这是同一任务 ${audit.id} 的第 ${Number(audit.recovery_count ?? 0)} 次断点恢复，目标提交仍固定为 ${audit.commit}；不得生成新的 audit_id。`,
     `唯一被审计源码根目录仍是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
-    "先检查 reports/**、tmp/<audit_id>/** 中已经落盘的清单、账本、handoff、checkpoint 和中间结果，校验已有制品后从最早未完成阶段继续；不要删除有效制品，也不要无条件重跑已完成阶段。",
-    "先运行 verify-stage-deliveries.mjs 定位八环节中最早未通过的物化 manifest；摘要有效且 materialized complete 的环节必须复用，修复后用 seal-stage-delivery.mjs 封存对应 round。",
+    `先检查 reports/**、tmp/<audit_id>/** 以及本机本地任务清单 ${JSON.stringify(paths.todo_path)}；运行 node \"$AUDIT_TODO_CLI\" recover 和 stats，复用已有 DONE/GAP 项，只领取 PENDING 项。不得删除有效制品，也不要无条件重跑已完成工作包。`,
+    "优先复用已有阶段制品、最终报告和本地清单中的 DONE/GAP 状态；只恢复 PENDING 或过期 RUNNING 工作包。不得因缺失旧 Coverage Ledger 的 stage-delivery / coverage-finalize 制品而重跑已完成工作包。",
     "会话中的历史说明只能作为线索，阶段完成性必须以当前落盘制品及确定性校验结果为准；若发现半写入、摘要不匹配或前后不一致的制品，应重建对应制品后再继续。",
     "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径，不得用当前执行目录替代冻结范围根。",
     "所有持久制品继续写到执行工作区相对路径 reports/**，所有中间文件继续写到 tmp/<audit_id>/**；不得把绝对输出路径改回被测源码目录。",
+    "本地任务清单只由 Orchestrator 调度：继续以最多 4 个工作包、每包最多 12 项的界限领取和分派；不得使用 OpenCode todolist、Coverage Ledger MCP、哈希链或逐漏洞记账。子代理仅生成工作包 handoff，Orchestrator 完成结构校验后更新本地任务状态。",
     ...privateContextPrompt(audit, contextPaths),
     "继续完成真实性 routing、覆盖门禁、CVSS、攻击链和最终中文报告封存。先校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复；不得重跑摘要有效的角色。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
@@ -300,7 +331,7 @@ function providerSessionId(value) {
 }
 
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
     this.configPath = configPath ? resolve(configPath) : null;
@@ -317,6 +348,7 @@ export class AuditRunner extends EventEmitter {
     this.command = command;
     this.spawnProcess = spawnProcess;
     this.stageDeliveryVerifier = stageDeliveryVerifier;
+    this.todoCompletionVerifier = todoCompletionVerifier;
     this.terminalMonitor = terminalMonitor ?? new OpenCodeTmuxMonitor({ stateRoot: this.stateRoot, command: this.command });
     this.audits = new Map();
     this.processes = new Map();
@@ -360,6 +392,8 @@ export class AuditRunner extends EventEmitter {
       if (!entry.isDirectory()) continue;
       try {
         const audit = JSON.parse(await readFile(join(this.stateRoot, entry.name, "run.json"), "utf8"));
+        audit.todo_path ??= join(this.stateRoot, audit.id, "audit-todo.json");
+        audit.todo_summary = await auditTodoSummary(audit.todo_path);
         this.audits.set(audit.id, audit);
         if (ACTIVE.has(audit.status)) {
           const previousStatus = audit.status;
@@ -390,7 +424,7 @@ export class AuditRunner extends EventEmitter {
   }
 
   async reconcileLegacyCompletion(audit, reason = "watchdog") {
-    if (!audit || audit.stage_delivery_enforcement === "ENFORCED" || audit.status === "completed") return false;
+    if (!audit || ["ENFORCED", "TODO_ENFORCED"].includes(audit.stage_delivery_enforcement) || audit.status === "completed") return false;
     if (this.processes.has(audit.id) || this.completions.has(audit.id) || !audit.paths?.reports_root) return false;
     let inferred;
     try {
@@ -553,6 +587,8 @@ export class AuditRunner extends EventEmitter {
       workspace_root: workspaceRoot,
       reports_root: reportsRoot,
       tmp_root: tmpRoot,
+      todo_path: audit.todo_path ?? join(this.stateRoot, audit.id, "audit-todo.json"),
+      todo_handoff_root: join(reportsRoot, "audit-todo", audit.id),
     };
     paths.source_binding = await this.ensureSourceBinding(audit, repository, paths);
     await writeFile(join(workspaceRoot, "audit-workspace.json"), `${JSON.stringify({ audit_id: audit.id, repository_id: repository.id, ...paths }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -577,6 +613,14 @@ export class AuditRunner extends EventEmitter {
 
   listAudits() {
     return [...this.audits.values()].map(publicAudit).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  async listAuditsWithTodo() {
+    await Promise.all([...this.audits.values()].map(async audit => {
+      audit.todo_path ??= join(this.stateRoot, audit.id, "audit-todo.json");
+      audit.todo_summary = await auditTodoSummary(audit.todo_path);
+    }));
+    return this.listAudits();
   }
 
   getAudit(id) {
@@ -854,14 +898,17 @@ export class AuditRunner extends EventEmitter {
       allow_dirty: input.allow_dirty === true,
       provider_session_id: null,
       recovery_count: 0,
-      stage_delivery_enforcement: "ENFORCED",
+      stage_delivery_enforcement: "TODO_ENFORCED",
       stage_delivery: null,
       last_recovered_at: null,
       interrupted_at: null,
       interruption_reason: null,
       idempotency_digest: createHash("sha256").update(idempotencyKey).digest("hex"),
+      todo_path: join(this.stateRoot, id, "audit-todo.json"),
     };
     audit.private_context = await this.writePrivateContexts(id, contexts);
+    const todo = await createEmptyAuditTodo({ todoPath: audit.todo_path, auditId: id });
+    audit.todo_summary = todo.summary;
     this.audits.set(id, audit);
     await this.persist(audit);
     await this.record(audit, "audit.queued", {
@@ -901,6 +948,9 @@ export class AuditRunner extends EventEmitter {
       AUDIT_WORKSPACE_ROOT: paths.workspace_root,
       AUDIT_REPORTS_ROOT: paths.reports_root,
       AUDIT_TMP_ROOT: paths.tmp_root,
+      AUDIT_TODO_PATH: paths.todo_path,
+      AUDIT_TODO_HANDOFF_ROOT: paths.todo_handoff_root,
+      AUDIT_TODO_CLI: join(paths.workspace_root, ".opencode", "scripts", "audit-todo.mjs"),
       AUDIT_QUICK_DYNAMIC_ENABLED: quickDynamicEnabled ? "true" : "false",
       AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS: "120",
       AUDIT_FULL_DYNAMIC_TRIGGER: "MANUAL_ONLY",
@@ -1023,6 +1073,29 @@ export class AuditRunner extends EventEmitter {
             audit.status = "interrupted";
             audit.interruption_reason = "stage-delivery-verification-failed";
             audit.error = `OpenCode 已正常退出，但八环节交付校验器失败：${redact(error.message)}`;
+          }
+        }
+        else if (code === 0 && audit.stage_delivery_enforcement === "TODO_ENFORCED") {
+          try {
+            const verification = await this.todoCompletionVerifier({ audit, reportsRoot: audit.paths.reports_root });
+            audit.todo_summary = verification.summary ?? await auditTodoSummary(audit.todo_path);
+            audit.todo_completion = {
+              complete: verification.complete === true,
+              errors: (verification.errors ?? []).slice(0, 100),
+              final_report_path: verification.final_report_path ?? null,
+              verified_at: new Date().toISOString(),
+            };
+            if (verification.complete) {
+              audit.status = "completed";
+            } else {
+              audit.status = "interrupted";
+              audit.interruption_reason = "local-audit-todo-incomplete";
+              audit.error = `OpenCode 已正常退出，但本地调度任务尚未完成：${audit.todo_completion.errors.join("；")}`;
+            }
+          } catch (error) {
+            audit.status = "interrupted";
+            audit.interruption_reason = "local-audit-todo-verification-failed";
+            audit.error = `OpenCode 已正常退出，但本地调度任务校验失败：${redact(error.message)}`;
           }
         }
         else if (code === 0) audit.status = "completed";

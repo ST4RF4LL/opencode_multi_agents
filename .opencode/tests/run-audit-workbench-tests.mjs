@@ -160,9 +160,7 @@ try {
   await mkdir(join(reportsRoot, "final"), { recursive: true });
   await mkdir(join(reportsRoot, "stage-deliveries", "audit-history", "sets"), { recursive: true });
   await mkdir(runtimeRoot, { recursive: true });
-  await writeFile(join(repositoryRoot, ".opencode", "opencode.json"), `${JSON.stringify({
-    mcp: { coverage_ledger: { type: "local", command: ["node", ".opencode/mcp/coverage-ledger-server.mjs"], cwd: ".", timeout: 300000, enabled: true } },
-  })}\n`, "utf8");
+  await writeFile(join(repositoryRoot, ".opencode", "opencode.json"), "{}\n", "utf8");
   await writeFile(join(repositoryRoot, "README.md"), "fixture\n", "utf8");
   await writeFile(join(operatorSelectedRoot, "README.md"), "operator selected fixture\n", "utf8");
   await writeFile(join(reportsRoot, "coverage", "coverage-plan.audit-history.json"), JSON.stringify({
@@ -294,6 +292,23 @@ if (mode === "run") {
   assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").integrity_state, "verified_model");
   assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").model_digest, verifiedModel.manifest_digest);
   assert.equal(snapshot.reports.find(report => report.audit_id === "audit-mismatch").integrity_state, "model_mismatch");
+  const localTodoSnapshot = await buildWorkspaceSnapshot({
+    reportsRoot,
+    runnerAudits: [{
+      id: "audit-local-todo",
+      name: "本地任务进度测试",
+      status: "running",
+      repository_id: "fixture",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      stage_delivery_enforcement: "TODO_ENFORCED",
+      todo: { total: 4, done: 1, gap: 1, pending: 1, running: 1, failed: 0, progress: 50, complete: false },
+    }],
+  });
+  const localTodoAudit = localTodoSnapshot.audits.find(audit => audit.id === "audit-local-todo");
+  assert.equal(localTodoAudit.progress, 50);
+  assert.equal(localTodoAudit.progress_source, "local-audit-todo");
+  assert.equal(localTodoAudit.stage, "多维漏洞审计 · 1/4");
   assert(snapshot.reports.find(report => report.audit_id === "audit-mismatch").integrity_issues.includes("final-report-not-deterministic-render"));
   assert.equal(snapshot.findings[0].id, "F-001");
   assert.equal(snapshot.findings[0].description, "服务未校验记录归属。");
@@ -376,6 +391,7 @@ if (mode === "run") {
       stages: [],
       errors: [],
     }),
+    todoCompletionVerifier: async () => ({ complete: true, errors: [], summary: { total: 1, done: 1, gap: 0, pending: 0, running: 0, failed: 0, progress: 100, complete: true }, final_report_path: "final/security-audit-report.audit-fallback-001.md" }),
     spawnProcess(command, args, options) {
       fallbackSpawnCall = { command, args, options };
       return fallbackChild;
@@ -396,7 +412,7 @@ if (mode === "run") {
   fallbackChild.emit("close", 0, null);
   for (let attempt = 0; attempt < 50 && !(await fallbackRunner.eventsSince(fallbackAudit.id)).some(event => event.type === "audit.completed"); attempt += 1) await new Promise(resolve => setImmediate(resolve));
   assert.equal(fallbackRunner.getAudit(fallbackAudit.id).status, "completed");
-  assert.equal(fallbackRunner.getAudit(fallbackAudit.id).stage_delivery.complete, true);
+  assert.equal(fallbackRunner.getAudit(fallbackAudit.id).todo_completion.complete, true);
   const sourceBinding = JSON.parse(await readFile(join(platformRoot, "reports", "repositories", "fixture", "platform", "audit-runs", fallbackAudit.id, "source-binding.json"), "utf8"));
   assert.equal(sourceBinding.audit_id, fallbackAudit.id);
   assert.equal(sourceBinding.task_context.quick_dynamic_opt_in, false);
@@ -422,6 +438,7 @@ if (mode === "run") {
       stages: [],
       errors: ["validation:artifact-missing"],
     }),
+    todoCompletionVerifier: async () => ({ complete: false, errors: ["仍有 2 项 PENDING。"], summary: { total: 2, done: 0, gap: 0, pending: 2, running: 0, failed: 0, progress: 0, complete: false }, final_report_path: null }),
     spawnProcess() { return gatedChild; },
   });
   await gatedRunner.ready;
@@ -431,8 +448,8 @@ if (mode === "run") {
   gatedChild.emit("close", 0, null);
   for (let attempt = 0; attempt < 100 && gatedRunner.getAudit(gatedAudit.id)?.status === "running"; attempt += 1) await new Promise(resolve => setImmediate(resolve));
   assert.equal(gatedRunner.getAudit(gatedAudit.id).status, "interrupted");
-  assert.equal(gatedRunner.getAudit(gatedAudit.id).interruption_reason, "stage-delivery-incomplete");
-  assert.match(gatedRunner.getAudit(gatedAudit.id).error, /6\/8/);
+  assert.equal(gatedRunner.getAudit(gatedAudit.id).interruption_reason, "local-audit-todo-incomplete");
+  assert.match(gatedRunner.getAudit(gatedAudit.id).error, /2 项 PENDING/);
   await gatedRunner.shutdown();
   const dynamicStateRoot = join(temp, "dynamic-state");
   const dynamicRunner = new DynamicValidationRunner({
@@ -460,10 +477,7 @@ if (mode === "run") {
   const fakeBin = join(temp, "fake-bin");
   const healthConfig = join(temp, "health-opencode.json");
   await writeFile(healthConfig, `${JSON.stringify({
-    mcp: {
-      coverage_ledger: { enabled: true, command: ["node", "coverage.mjs"] },
-      "chrome-devtools": { enabled: true, command: ["npx", "chrome-devtools-mcp"] },
-    },
+    mcp: { "chrome-devtools": { enabled: true, command: ["npx", "chrome-devtools-mcp"] } },
   })}\n`, "utf8");
   let versionProbeCount = 0;
   const environmentService = new EnvironmentHealthService({
@@ -483,7 +497,7 @@ if (mode === "run") {
   assert.equal(health.platform.os, "linux");
   assert.equal(health.configuration.valid, 1);
   assert(health.capabilities.every(item => item.status === "ready"));
-  assert.equal(health.components.find(item => item.id === "coverage_ledger").status, "ready");
+  assert.equal(health.components.some(item => item.id === "coverage_ledger"), false);
   assert.equal(health.components.find(item => item.id === "chrome_devtools_mcp").status, "ready");
   const cachedProbeCount = versionProbeCount;
   await environmentService.snapshot();
@@ -736,12 +750,7 @@ if (mode === "run") {
     assert.equal(spawnCall.options.env.OPENCODE_CONFIG_DIR, join(canonicalRepositoryRoot, ".opencode"));
     assert.equal(spawnCall.options.env.OPENCODE_DISABLE_PROJECT_CONFIG, "true");
     assert.equal(typeof spawnCall.options.env.OPENCODE_CONFIG_CONTENT, "string");
-    const runtimeCoverageMcp = JSON.parse(spawnCall.options.env.OPENCODE_CONFIG_CONTENT).mcp.coverage_ledger;
-    assert.equal(runtimeCoverageMcp.type, "local");
-    assert.equal(runtimeCoverageMcp.enabled, true);
-    assert.equal(runtimeCoverageMcp.cwd, ".");
-    assert.equal(runtimeCoverageMcp.timeout, 300000);
-    assert.equal(runtimeCoverageMcp.command[1], join(canonicalRepositoryRoot, ".opencode", "mcp", "coverage-ledger-server.mjs"));
+    assert.equal(Object.hasOwn(JSON.parse(spawnCall.options.env.OPENCODE_CONFIG_CONTENT).mcp, "coverage_ledger"), false);
     assert.match(spawnCall.args[0], /terminal-output-relay\.mjs$/);
     const monitoredRunArgs = terminalMonitor.starts[0].args;
     assert.deepEqual(monitoredRunArgs.slice(0, 3), ["run", "--format", "json"]);
@@ -1203,7 +1212,7 @@ if (mode === "run") {
   const resumeRunArgs = resumeTerminalMonitor.starts[0].args;
   assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--session") + 1], "ses_resume_fixture");
   assert.match(resumeRunArgs.at(-1), /第 1 次断点恢复/);
-  assert.match(resumeRunArgs.at(-1), /不要删除有效制品/);
+  assert.match(resumeRunArgs.at(-1), /不得删除有效制品/);
   assert.match(resumeRunArgs.at(-1), /不得调用 question 工具/);
   const duplicateResume = await resumableRunner.action(resumableAuditId, "recover", interruptedAudit.version, "resume-action-001");
   assert.equal(duplicateResume.status, "running");

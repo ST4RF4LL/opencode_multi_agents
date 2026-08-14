@@ -41,12 +41,11 @@ async function readPackageComponent(projectRoot) {
 }
 
 async function inspectMcpConfiguration(configPaths) {
-  const states = { coverage_ledger: false, chrome_devtools: false, valid_configs: 0, invalid_configs: 0 };
+  const states = { chrome_devtools: false, valid_configs: 0, invalid_configs: 0 };
   for (const path of [...new Set(configPaths.filter(Boolean))]) {
     try {
       const config = JSON.parse(await readFile(path, "utf8"));
       states.valid_configs += 1;
-      states.coverage_ledger ||= config.mcp?.coverage_ledger?.enabled === true && Array.isArray(config.mcp.coverage_ledger.command);
       states.chrome_devtools ||= config.mcp?.["chrome-devtools"]?.enabled === true && Array.isArray(config.mcp["chrome-devtools"].command);
     } catch {
       states.invalid_configs += 1;
@@ -174,12 +173,11 @@ export class EnvironmentHealthService {
       readPackageComponent(this.projectRoot),
       inspectMcpConfiguration(this.configPaths),
     ]);
-    const coverage = configuredComponent("coverage_ledger", "Coverage Ledger MCP", "Agent 运行时", mcp.coverage_ledger, ["static"], "本地 Coverage Ledger MCP 已启用。" );
     const chromeMcp = configuredComponent("chrome_devtools_mcp", "Chrome DevTools MCP", "动态验证", mcp.chrome_devtools, ["dynamic"], "隔离 Chrome DevTools MCP 已启用。" );
-    const components = [node, npm, dependencies, git, opencode, tmux, coverage, java, joern, joernParse, opengrep, semgrep, chrome, chromeMcp];
+    const components = [node, npm, dependencies, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, chrome, chromeMcp];
     const capabilities = [
       capability("workbench", "工作台", ["node", "project_dependencies"], components),
-      capability("static", "静态漏洞挖掘", ["node", "git", "opencode", "project_dependencies", "coverage_ledger", "java", "joern", "joern_parse"], components, { anyOf: ["opengrep", "semgrep"] }),
+      capability("static", "静态漏洞挖掘", ["node", "git", "opencode", "project_dependencies", "java", "joern", "joern_parse"], components, { anyOf: ["opengrep", "semgrep"] }),
       capability("terminal_monitor", "OpenCode 窗口监控", ["node", "opencode", "tmux"], components),
       capability("dynamic", "Web 动态验证", ["node", "npm", "git", "opencode", "project_dependencies", "chrome", "chrome_devtools_mcp"], components),
     ];

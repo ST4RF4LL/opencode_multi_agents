@@ -88,7 +88,7 @@ Every output JSON has exactly these fields:
     "audit_strategy": "sink-driven",
     "coverage_state": "PASS",
     "finding_ids": [],
-    "ledger_decision_refs": [],
+    "packet_handoff_refs": [],
     "gaps": []
   },
   "gaps": [],

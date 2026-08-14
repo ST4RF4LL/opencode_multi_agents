@@ -11,7 +11,7 @@ metadata:
 
 Use the bundled scripts as the source of truth for coverage. Do not replace their outputs with manually estimated counts.
 
-Structural accounting, Coverage Plan/Ledger telemetry, and semantic completion are separate signals. The frozen `observe`/`release`/`assurance` policy decides which signals gate workflow acceptance; none may be rewritten to substitute for another.
+Structural accounting, Coverage Plan scheduling, and semantic completion are separate signals. The frozen `observe`/`release`/`assurance` policy guides audit depth; none may be rewritten to substitute for another.
 
 ## Build the scope
 
@@ -53,7 +53,7 @@ The bounded driver creates the mandatory Java, JavaScript, and embedded-Web mani
 
 The individual Java/Joern/embedded builders remain available for diagnosis. Do not call them again in threat modeling, planning, or gap rounds. Every `function_inventory_required` file must occur in exactly one complete function manifest.
 
-If a capability artifact says a required parser is unavailable, strict inventory stops. An operator may explicitly produce a Recon-only partial index by passing `--allow-partial true` to both the function driver and routing-index builder, together with the same capability artifact. That index carries `complete=false` and structured function-inventory gaps. It may inform file-level threat modeling only; it must not be snapshotted, planned, ledger-initialized, or represented as a complete audit.
+If a capability artifact says a required parser is unavailable, strict inventory stops. An operator may explicitly produce a Recon-only partial index by passing `--allow-partial true` to both the function driver and routing-index builder, together with the same capability artifact. That index carries `complete=false` and structured function-inventory gaps. It may inform file-level threat modeling only; it must not be snapshotted, scheduled, or represented as a complete audit.
 
 Build and verify the external-interface universe, then build the compact entity index used by threat modeling:
 
@@ -175,7 +175,7 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-co
   --output reports/coverage/coverage-plan.<audit-id>.json
 ```
 
-Repeat `--functions` for every frozen language manifest. The Plan builder accepts only exact paths and byte hashes from the snapshot index; live or stale inputs are rejected. Schema v2 plans and ledgers must be rebuilt from a new snapshot and are not upgraded in place. The v3 plan contains:
+Repeat `--functions` for every frozen language manifest. The Plan builder accepts only exact paths and byte hashes from the snapshot index; live or stale inputs are rejected. Plans must be rebuilt from a new snapshot and are not upgraded in place. The plan contains:
 
 - one mandatory negative-discovery baseline for every active `domain × vulnerability type × lens`;
 - interface checks only for explicitly `CONFIRMED` interfaces selected by the catalog's versioned applicability profile;
@@ -185,56 +185,51 @@ Repeat `--functions` for every frozen language manifest. The Plan builder accept
 - a unique `focus_area_id` on every atomic check.
 - one content-addressed `coverage_unit` for each Focus Area assignment/domain; lenses and atomic checks are internal dimensions of that unit.
 
-`--coverage-mode` accepts `observe` (default), `release`, or `assurance`. `observe` records honest telemetry without making unfinished checks a workflow blocker. `release` requires all policy-tagged AI, external-interface, and identity/privilege units. `assurance` preserves the strict all-required-checks gate. The selected mode is frozen in the Plan; changing it requires a new Plan and Ledger.
+`--coverage-mode` accepts `observe` (default), `release`, or `assurance`. The selected mode is frozen in the Plan; changing it requires a new Plan. It guides reporting depth, but never creates a per-check event log or substitutes for the orchestrator-owned task state.
 
 Python and C/C++ use the same shared catalog selector as the structural verifier; AI uses `AI-*`; Java, Web, and Platform use their direct catalog selectors. Every atomic subject/type/domain group must contain all three lenses. A plan is complete only when `U=0` and its interface inventory is bounded; candidates and extractor gaps do not inflate `R`, but they still block complete finalization.
 
-Initialize the ledger once:
+Initialize the local queue once after the Plan is frozen. The queue is not an MCP, has no hash chain, and is owned only by the orchestrator:
 
 ```sh
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/initialize-coverage-ledger.mjs \
-  --plan reports/coverage/coverage-plan.<audit-id>.json \
-  --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl
+node "$AUDIT_TODO_CLI" init \
+  --todo "$AUDIT_TODO_PATH" \
+  --audit-id <audit-id> \
+  --plan reports/coverage/coverage-plan.<audit-id>.json
 ```
 
-For a local, explicitly incomplete handoff, use the same service-owned checkpoint semantics rather than editing the ledger:
+The local queue creates one item for each `Focus Area × domain` coverage unit.
+All three lenses and the unit's atomic checks stay inside that item; they must
+not become OpenCode todo entries or individual subagent tasks. The orchestrator
+claims at most four bounded work packets at a time, with at most twelve items
+per packet:
 
 ```sh
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/checkpoint-coverage-ledger.mjs \
-  --plan reports/coverage/coverage-plan.<audit-id>.json \
-  --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl \
-  --idempotency-key <stable-key> --label <reason>
+node "$AUDIT_TODO_CLI" claim --todo "$AUDIT_TODO_PATH" --packets 4 --items 12
 ```
 
-It produces `PARTIAL_CHECKPOINT`, never `FINALIZED_COMPLETE`, and preserves every unresolved check as a gap.
+Each specialist receives only one returned packet. It writes its normal
+vulnerability-mining report and one JSON handoff under
+`reports/audit-todo/<audit-id>/<packet-id>.json`. The handoff lists each packet
+item exactly once as `DONE` (existing relative `report_path`, optional finding
+IDs) or `GAP` (concise reason). The orchestrator checks only its shape and the
+referenced report file, then records it with `audit-todo complete`. It must not
+review source code or decide whether a finding is true while doing that.
 
-When an explicitly authorized budget, round, or operator stop ends the audit,
-seal a terminal partial ledger instead of relabeling a checkpoint. This prevents
-any later Ledger mutation and permits only a prominently partial final report:
+If a packet fails before a valid handoff, the orchestrator calls
+`audit-todo fail`; recoverable failures return to `PENDING`, while an exhausted
+or operator-blocked item is `FAILED` and remains visible. On restart call
+`audit-todo recover`, then claim only PENDING items. `DONE` and `GAP` are
+terminal for scheduling, but `GAP` must remain in the correlation and final
+report. The final completion gate is: no PENDING/RUNNING/FAILED item, accepted
+handoffs for every claimed packet, and an existing final Chinese Markdown
+report.
 
-```sh
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/finalize-partial-coverage-ledger.mjs \
-  --plan reports/coverage/coverage-plan.<audit-id>.json \
-  --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl \
-  --idempotency-key <stable-key> \
-  --termination-reason round-limit-reached
-```
-
-Allowed termination reasons are `budget-exhausted`, `round-limit-reached`, and
-`operator-stop`. `FINALIZED_PARTIAL` never authorizes complete coverage; it is
-immutable, unlike `PARTIAL_CHECKPOINT`.
-
-Coverage sessions never edit the plan or canonical ledger. The `coverage_ledger` MCP is intentionally paginated: do not request or paste a full plan, ledger, member list, or all gaps into model context. Use the tools in this order:
-
-1. `coverage_get_unit` filtered by exact `audit_id`, `focus_area_id`, domain, or assignment. It returns compact assignment-unit counts and state without atomic member IDs.
-2. `coverage_begin_unit` once per executing session. It returns a session-bound, unit-scoped `assignment_token`.
-3. Treat lenses as internal unit dimensions. A lens-specific session calls `coverage_submit_attestation(state: "PARTIAL")` once for its completed lens; a combined session may use `state=COMPLETE` only when all required lenses are covered and the gap list is empty. Include `source_scope: "required"`, tool/version, a bounded result payload or artifact, and only exceptional `gap_check_ids`. The service merges lens attestations and expands each all-minus-gaps proof into exact check state without returning the frozen member universe.
-4. Use `coverage_get_unit_checks`, `coverage_get_subject_sources`, or `coverage_get_subject_interfaces` only for targeted gap classification, finding binding, or diagnostics. Do not enumerate them in a no-finding path.
-5. Coverage execution and finding adjudication are independent. A unit attestation does not assert `NO_FINDING`; before or after it, bind a finding or exact result through the check-scoped fallback: `coverage_get_packet`/`coverage_get_unit_checks` → `coverage_inspect_subject` → `coverage_record_tool_result` → `coverage_submit_decision`. A `FINDING` includes one unique standalone Finding v2 JSON artifact per ID and closes only its bound atomic check. `coverage_delegate_assignment` remains available only for this fallback.
-6. `coverage_get_gaps` routes exceptional follow-up work. It remains check-exact and cursor-paginated.
-7. `coverage_checkpoint` creates a nonterminal diagnostic checkpoint. `coverage_finalize` seals according to the frozen policy: `FINALIZED_OBSERVED`, `FINALIZED_RELEASE`, or strict `FINALIZED_COMPLETE`.
-
-Execution states are `PLANNED → INSPECTED → VERIFIED`, or terminally incomplete `GAP`/`INVALIDATED`. Result states are independently `NO_FINDING`, `FINDING`, or `INCONCLUSIVE`. `VERIFIED` requires a valid receipt from the active assignment. `FINDING` closes only its atomic check; it never closes other types, interfaces, or lenses. Agents cannot submit `N/A`. Direct writes to `reports/coverage/<audit-id>/ledger/` are denied. The service serializes mutations across processes, fsyncs each event, and authenticates the public hash chain with a mode-0600 HMAC key sidecar.
+Specialists never read, mutate, or infer queue state. They own source analysis
+and findings; the orchestrator owns dispatch and recording only. Result states
+inside reports remain independently `NO_FINDING`, `FINDING`, or
+`INCONCLUSIVE`; a `DONE` task never closes a different type, interface, or
+lens.
 
 Record shape:
 
@@ -255,7 +250,7 @@ File evidence uses `kind=source-location` and must bind `file_id`, exact frozen 
 
 Seal `threat-model.json` and `focus-areas.json` with `seal-semantic-manifest.mjs` before creating the snapshot used by the Plan. Snapshotting preflights the exact primary file/function/catalog partition and rejects missing or duplicate function-manifest membership, so Focus Area omissions fail before Plan construction. It may preserve interface candidates or extractor gaps for a partial, auditable run; those blockers remain unbounded inventory and cannot be finalized as complete.
 
-When restarting an audit whose non-cache frozen source hashes are exactly equal to a prior audit, `reseed-semantic-manifests.mjs` may carry forward only the prior threat hypotheses and Focus partition. It marks both artifacts `revalidation_required=true`, removes known local `.atlas/` cache assignments, and never carries forward coverage, Ledger decisions, Finding states, adjudication, chains, or final-report conclusions. Use it only before the new snapshot and re-run the required semantic review:
+When restarting an audit whose non-cache frozen source hashes are exactly equal to a prior audit, `reseed-semantic-manifests.mjs` may carry forward only the prior threat hypotheses and Focus partition. It marks both artifacts `revalidation_required=true`, removes known local `.atlas/` cache assignments, and never carries forward coverage reports, local task state, Finding states, adjudication, chains, or final-report conclusions. Use it only before the new snapshot and re-run the required semantic review:
 
 ```sh
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/reseed-semantic-manifests.mjs \
@@ -267,43 +262,17 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/reseed-s
   --focus-output tmp/<new-audit-id>/recon/focus-areas.json
 ```
 
-After `coverage_finalize`, run the v3 gate. Use `--mode policy` for `observe`/`release`, or `--mode complete` for an assurance/full-coverage claim. Policy mode may exit zero while `coverage_status` remains `PARTIAL` or `BLOCKED`; it reports `policy_satisfied=true` and never relabels that state as complete coverage. The gate invokes the structural verifier itself from frozen arguments, persists that trusted artifact, derives the JSON summary and Markdown from the same state, and emits the authoritative verification. It rejects a caller-supplied `--structural` artifact:
+After all packets have handed off, run `verify-coverage.mjs` for structural file/function/catalog reconciliation, then run `verify-semantic-coverage.mjs` with the snapshot index, vulnerability-mining reports directory, validated Finding Adjudication manifest, and final Attack-chain report. Use `audit-todo stats` to record task terminality separately, then build the final-report input summary from the plan and local queue:
 
 ```sh
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-v3.mjs \
-  --mode policy \
-  --root . \
+node .opencode/scripts/build-local-audit-summary.mjs \
   --audit-id <audit-id> \
-  --scope reports/coverage/<audit-id>/inputs/scope-manifest.json \
-  --functions reports/coverage/<audit-id>/inputs/functions-java.json \
-  --functions reports/coverage/<audit-id>/inputs/functions-javascript.json \
-  --functions reports/coverage/<audit-id>/inputs/functions-embedded-web.json \
-  --interfaces reports/coverage/<audit-id>/inputs/interface-manifest.json \
-  --interface-extractors reports/coverage/<audit-id>/inputs/interface-extractor-coverage.json \
-  --snapshot-index reports/coverage/<audit-id>/inputs/snapshot-index.json \
-  --reports-dir reports/vulnerability-mining \
-  --catalog reports/coverage/<audit-id>/inputs/application-ai-vulnerability-catalog.json \
   --plan reports/coverage/coverage-plan.<audit-id>.json \
-  --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl \
-  --structural-output reports/coverage/coverage-structural-v1.<audit-id>.json \
-  --summary-output reports/coverage/coverage-summary.<audit-id>.json \
-  --markdown-output reports/coverage/coverage-summary.<audit-id>.md \
-  --output reports/coverage/coverage-verification.<audit-id>.json
-
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage-summary.mjs \
-  --mode policy \
-  --summary reports/coverage/coverage-summary.<audit-id>.json \
-  --markdown reports/coverage/coverage-summary.<audit-id>.md \
-  --plan reports/coverage/coverage-plan.<audit-id>.json \
-  --ledger reports/coverage/<audit-id>/ledger/coverage-ledger.jsonl \
-  --structural reports/coverage/coverage-structural-v1.<audit-id>.json
+  --todo "$AUDIT_TODO_PATH" \
+  --output reports/coverage/coverage-summary.<audit-id>.json
 ```
 
-Repeat `--functions` for every snapshotted language. A policy-accepted non-complete report uses `build-final-report-model.mjs --mode policy-final`; its visible disclaimer preserves all remaining gaps. For an interrupted, non-final run, call `coverage_checkpoint`, then pass `--mode partial` to both v3 verification commands. Partial mode writes sealed diagnostic artifacts, exits nonzero, and never produces `complete=true`.
-
-`verify-coverage-v2.mjs` remains only as a caller-compatible wrapper around the v3 core. It does not accept or migrate v2 plans or ledgers.
-
-Also run `verify-semantic-coverage.mjs` with the snapshot index, vulnerability-mining reports directory, validated Finding Adjudication manifest, and final Attack-chain v2 report. A complete audit requires authoritative Coverage v3, verified JSON/Markdown summary, and semantic artifacts to say `complete: true`.
+A complete audit requires valid structural and semantic artifacts, terminal local task state, and a final report; no event ledger or per-check HMAC finalization is involved.
 
 Structural completion requires:
 
@@ -315,8 +284,8 @@ Structural completion requires:
 6. The external-interface manifest and extractor verification are digest-bound to the scope, and no indeterminate/failed extractor remains.
 7. No `GAP`, invalid `N/A`, unknown IDs, or conflicting ownership remains.
 8. Every D1-D10 cell exactly matches `reconcile-audit-report.mjs`; every closed row has source/function/catalog evidence bound to frozen IDs and hashes.
-9. Every required catalog-domain negative-discovery and applicable interface/type check has all three lenses and a receipt-backed `VERIFIED` ledger decision.
-10. The ledger sequence, public hash chain, service HMAC chain, plan/snapshot binding, `FINALIZE_COMPLETE` event, and exact JSON/Markdown summary are valid.
+9. Every required catalog-domain negative-discovery and applicable interface/type check has all three lenses inside its completed packet report or remains a visible GAP.
+10. The local task list is bound to the plan, each claimed packet has one structurally valid handoff, and each DONE item points to an existing report.
 
 Semantic completion requires:
 
@@ -328,13 +297,13 @@ Semantic completion requires:
 
 Coverage metrics use `R=required`, `V=verified`, `U=unknown`, and `N=not applicable` for materialized atomic checks only. Known coverage is `V/R`; when inventory is bounded, the conservative lower bound is `V/(R+U)`. Candidates, unresolved interfaces, and extractor gap files are a separate inventory universe. If that universe is unbounded, the total and interface lower-bound percentages are `null` with state `UNBOUNDED`, never an optimistic numeric value; the vulnerability-type baseline retains its own correctly scoped ratio. `R=0` renders `NOT_APPLICABLE`, never 100%. Interfaces split ingress, egress, and bidirectional. Files are complete only when every required file record and contained function check is complete.
 
-Each verifier exits nonzero on any violation. Only all three terminal gates authorize a complete structural/type/interface-and-semantic coverage statement.
+Each verifier exits nonzero on any violation. Structural and semantic gates plus terminal local task state authorize a complete structural/type/interface-and-semantic coverage statement.
 
-The structural artifact emits a digest-bound `finding_intake` manifest. Only `accepted_findings` may participate in Ledger reconciliation; `quarantined_findings` are diagnostic only. The v3 gate rejects any coverage-track finding with no exact Ledger `FINDING` artifact, a mismatched primary check, or a mismatched canonical Finding v2 digest.
+The structural artifact emits a digest-bound `finding_intake` manifest. Only `accepted_findings` from packet-backed reports may enter adjudication; `quarantined_findings` are diagnostic only. Reconciliation rejects a coverage-track finding with no accepted packet report, a mismatched source binding, or a mismatched canonical Finding v2 digest.
 
 ## Render the final report deterministically
 
-Do not hand-write the sealed final Markdown. After the coverage summary, Finding
+Do not hand-write the sealed final Markdown. After the local-task-derived coverage summary, Finding
 Adjudication input/output, the script-derived CVSS 3.1 assessment, and
 Attack-chain v2 artifact all validate, build a digest-bound model, render it,
 and byte-verify the result. Only supported findings receive a CVSS assessment;
@@ -351,7 +320,7 @@ node .opencode/skills/common-subagent/finding-adjudication/scripts/build-cvss-as
 ```sh
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-final-report-model.mjs \
   --audit-id <audit-id> \
-  --mode final \
+  --mode <final-if-no-gap|policy-final-if-any-gap> \
   --coverage-summary reports/coverage/coverage-summary.<audit-id>.json \
   --adjudication-input reports/adjudication/finding-input.<audit-id>.r<round>.json \
   --adjudication reports/adjudication/security-finding-adjudicator.<audit-id>.r<round>.json \
@@ -374,18 +343,11 @@ adjudication-bound `CONDITIONAL`/supported chains appear as final results.
 `verify-final-report.mjs` rejects any byte drift, `CONFIRMED` label, or direct
 reference to an unadjudicated raw attack-chain artifact.
 
-For an incomplete run, never use `--mode final` or write under `reports/final/`.
-After `coverage_checkpoint` and partial coverage verification, a zero-candidate
-input may use `build-empty-finding-adjudication.mjs`,
-`build-empty-cvss-assessment.mjs`, and `build-empty-attack-chain-report.mjs`; then pass `--mode
-checkpoint` and render under `reports/checkpoints/`. The checkpoint renderer
-labels it nonterminal and therefore ineligible for third-party final-report
-review.
-
-Only after a `FINALIZED_PARTIAL` seal may a terminal partial primary be rendered
-with `--mode partial-final`; it must explicitly retain gaps and may never be
-labeled complete. A checkpoint is not interchangeable with this terminal form.
+If there is any local `GAP`, use `--mode policy-final`; the generated Markdown
+must preserve all gaps. Use `--mode final` only when every local item is DONE.
+For an interrupted run, do not write under `reports/final/`; leave the queue
+recoverable and retain the intermediate reports for the next orchestrator run.
 
 ## Claim boundary
 
-The structural gate proves base-owner plus AI-overlay accounting over frozen files, source-defined functions, executable template units recognized by configured AST/CPG extractors, catalog domains, and deterministic source/spec/config external-interface anchors. Coverage v3 additionally proves execution of every snapshot-bound required vulnerability-type/interface/lens check with assignment-authorized, service-attested receipts and a finalized authenticated ledger. These are coverage-completion claims, not proof that no vulnerability exists. The semantic gate proves terminal entry-point threat decisions, Focus Area/lens/track execution, and a system pass over declared boundaries/assets. Unsupported potential source, generated code absent from the repository, hosted model/tool behavior, and runtime-only controls remain gaps.
+The structural gate proves base-owner plus AI-overlay accounting over frozen files, source-defined functions, executable template units recognized by configured AST/CPG extractors, catalog domains, and deterministic source/spec/config external-interface anchors. The local task list additionally proves that every scheduled `Focus Area × domain` packet has a completed report or an explicit GAP; it does not claim that every atomic check was independently verified. These are coverage-completion claims, not proof that no vulnerability exists. The semantic gate proves terminal entry-point threat decisions, Focus Area/lens/track execution, and a system pass over declared boundaries/assets. Unsupported potential source, generated code absent from the repository, hosted model/tool behavior, and runtime-only controls remain gaps.

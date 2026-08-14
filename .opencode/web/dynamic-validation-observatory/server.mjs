@@ -303,7 +303,7 @@ export function createAuditWorkbenchServer({
   async function snapshot() {
     await Promise.all([runner.ready, findingWorkflow.ready]);
     await runner.reconcileLegacyCompletions("workspace-watchdog");
-    const runnerAudits = runner.listAudits();
+    const runnerAudits = await runner.listAuditsWithTodo();
     const validationByRepository = new Map();
     await Promise.all(runtimeSources().map(async ({ repository, root }) => {
       validationByRepository.set(repository.id, await listValidationRuns(root));

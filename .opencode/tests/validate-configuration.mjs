@@ -66,8 +66,7 @@ async function main() {
   const parserCapabilitiesText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-parser-capabilities.mjs"), "utf8");
   const semgrepCliText = await readFile(join(OPENCODE, "scripts/semgrep-scan.mjs"), "utf8");
   const semgrepCoreText = await readFile(join(OPENCODE, "scripts/semgrep-core.mjs"), "utf8");
-  const coverageServerText = await readFile(join(OPENCODE, "mcp/coverage-ledger-server.mjs"), "utf8");
-  const coverageCoreText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs"), "utf8");
+  const auditTodoCoreText = await readFile(join(OPENCODE, "scripts/audit-todo-core.mjs"), "utf8");
   const packageConfig = await json(join(OPENCODE, "package.json"));
   const stageContractRegistry = await json(join(OPENCODE, "skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json"));
   const stageDeliveryRegistry = await json(join(OPENCODE, "skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json"));
@@ -107,15 +106,15 @@ async function main() {
   "stage/agent contracts do not cover every phase and agent");
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
   assert(/^\s*"\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
-  assert(/^\s*"coverage_\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must auto-allow Coverage Ledger MCP tools");
-  assert(orchestratorText.includes('"*coverage-ledger.jsonl*": deny'), "security-audit-orchestrator must hard-deny direct canonical ledger writes");
+  assert(orchestratorText.includes("audit-todo claim --packets 4 --items 12"), "security-audit-orchestrator must use bounded local work packets");
+  assert(orchestratorText.includes("OpenCode todolist"), "security-audit-orchestrator must prohibit OpenCode todolist fan-out");
   assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
   assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");
   assert(config.permission.question === "deny", "global permissions must disable interactive questions for unattended jobs");
   assert(config.permission.doom_loop === "allow", "global permissions must not prompt when OpenCode detects a possible doom loop");
   assert(config.permission.external_directory === "allow", "global permissions must not prompt for the operator-selected external source directory");
   assert(!("vuln_judger_*" in config.permission) && !("vuln-judger_*" in config.permission), "global config must not reference the removed external truth-review MCP");
-  assert(config.permission["coverage_*"] === "allow", "global permission must auto-allow Coverage Ledger MCP tools");
+  assert(!("coverage_*" in config.permission), "global config must not retain Coverage Ledger MCP permissions");
   assert(!("semgrep_*" in config.permission), "global config must not retain Semgrep/OpenGrep MCP permissions");
   for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
     assert(!(placeholder in config.mcp), `${placeholder} MCP placeholder must be absent from project config`);
@@ -128,6 +127,7 @@ async function main() {
     assert(!/:\s*ask\s*$/m.test(frontmatter), `${agentFile} permissions must not request user confirmation`);
     assert(!frontmatter.includes("joern_*"), `${agentFile} must not retain Joern MCP permissions`);
     assert(!frontmatter.includes("semgrep_*"), `${agentFile} must not retain Semgrep/OpenGrep MCP permissions`);
+    assert(!frontmatter.includes("coverage_*"), `${agentFile} must not retain Coverage Ledger MCP permissions`);
     assert(!/vuln[_-]judger/i.test(agentText), `${agentFile} must not reference the removed external truth-review MCP`);
     for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
       assert(!frontmatter.includes(`${placeholder}_*`), `${agentFile} must not retain ${placeholder} placeholder permissions`);
@@ -136,6 +136,7 @@ async function main() {
   for (const [agent, toolPrefixes] of Object.entries(mcpMap.agents)) {
     assert(!toolPrefixes.includes("joern_*"), `${agent} must not retain Joern MCP routing`);
     assert(!toolPrefixes.includes("semgrep_*"), `${agent} must not retain Semgrep/OpenGrep MCP routing`);
+    assert(!toolPrefixes.includes("coverage_*"), `${agent} must not retain Coverage Ledger MCP routing`);
     for (const placeholder of REMOVED_MCP_PLACEHOLDERS) {
       assert(!toolPrefixes.includes(`${placeholder}_*`), `${agent} must not retain ${placeholder} placeholder routing`);
     }
@@ -216,11 +217,10 @@ async function main() {
     && artifactPolicy.reports.coverage_summary.required_fields.includes("execution")
     && artifactPolicy.reports.coverage_summary.required_fields.includes("inventory")
     && artifactPolicy.reports.coverage_summary.markdown_companion, "coverage summary policy lacks v3 digest/status/inventory/Markdown contract");
-  assert(artifactPolicy.reports.coverage_ledger.optional_event_types.includes("UNIT_ATTESTATION")
-    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("FINALIZE_OBSERVED")
-    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("FINALIZE_RELEASE")
-    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("FINALIZE_COMPLETE")
-    && artifactPolicy.reports.coverage_ledger.optional_event_types.includes("PARTIAL_CHECKPOINT"), "coverage ledger policy lacks unit and policy seal events");
+  assert(artifactPolicy.reports.audit_todo.item_identity.includes("Focus Area × domain")
+    && artifactPolicy.reports.audit_todo.item_states.includes("DONE")
+    && artifactPolicy.reports.audit_todo.item_states.includes("GAP")
+    && artifactPolicy.reports.audit_todo.handoff_path_template.includes("reports/audit-todo/"), "local audit todo policy is incomplete");
   assert(artifactPolicy.reports.semantic_coverage_verification.required_fields.includes("claim_boundary"), "semantic coverage verification policy lacks claim boundary");
   assert(artifactPolicy.reports.hypothesis_discovery.required_fields.includes("seed_inputs"), "discovery policy lacks seed provenance");
   assert(artifactPolicy.reports.stage_handoff?.registry?.endsWith("stage-agent-contracts.json")
@@ -286,6 +286,15 @@ async function main() {
     && packageConfig.scripts["start:dynamic-validation-web:runner"]?.includes("--enable-runner")
     && packageConfig.scripts["start:dynamic-validation-web:full"]?.includes("--enable-runner --enable-dynamic-validation"),
   "OpenCode audit workbench is not enabled");
+  assert(await exists(join(OPENCODE, "scripts/audit-todo.mjs"))
+    && await exists(join(OPENCODE, "scripts/audit-todo-core.mjs"))
+    && await exists(join(OPENCODE, "scripts/build-local-audit-summary.mjs"))
+    && await exists(join(OPENCODE, "tests/run-audit-todo-tests.mjs"))
+    && packageConfig.scripts["test:audit-todo"]?.includes("run-audit-todo-tests.mjs")
+    && auditTodoCoreText.includes("claimAuditTodo")
+    && auditTodoCoreText.includes("completeAuditTodoPacket")
+    && auditTodoCoreText.includes('"PENDING", "RUNNING", "DONE", "GAP", "FAILED"'),
+  "orchestrator-owned local audit todo is not enabled");
   assert(artifactPolicy.reports.final_report?.model_path_template?.endsWith(".json")
     && artifactPolicy.reports.final_report?.model_required_fields?.includes("manifest_digest"), "final report policy lacks its deterministic report model");
   const truthValidationPolicy = artifactPolicy.reports.finding_truth_validation;
@@ -361,25 +370,8 @@ async function main() {
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
     assert(text.includes("node .opencode/scripts/semgrep-scan.mjs health"), `${agent} must use the direct Semgrep/OpenGrep CLI`);
   }
-  assert(config.mcp.coverage_ledger?.enabled === true && config.mcp.coverage_ledger.command?.includes(".opencode/mcp/coverage-ledger-server.mjs"), "local Coverage Ledger MCP must be enabled");
-  assert(mcpMap.servers.coverage_ledger?.status === "enabled-local", "mcp-map must register Coverage Ledger as enabled-local");
-  assert(coverageServerText.includes("MAX_RESPONSE_BYTES = 16 * 1024")
-    && coverageServerText.includes('source_scope: z.literal("required")')
-    && coverageServerText.includes("compactReceipt"), "Coverage Ledger MCP must enforce bounded responses and compact required-source-set receipts");
-  assert(coverageCoreText.includes('"required-source-set"')
-    && coverageCoreText.includes("source_set_sha256"), "Coverage Ledger core must bind frozen source universes by a server-derived digest");
-  assert(await exists(join(OPENCODE, "tests/run-coverage-response-tests.mjs"))
-    && packageConfig.scripts["test:coverage"]?.includes("run-coverage-response-tests.mjs"), "Coverage Ledger large-response regression test must be enabled");
-  for (const agent of requiredAgents) {
-    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
-    assert(text.includes('source_scope: "required"'), `${agent} must use compact required-source-set receipts`);
-  }
-  for (const agent of [...requiredAgents, "security-evidence-correlator", "security-audit-orchestrator"]) {
-    assert(mcpMap.agents[agent].includes("coverage_*"), `${agent} must receive Coverage Ledger tools`);
-    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
-    assert(/^\s*"coverage_\*": allow\s*$/m.test(text), `${agent} must auto-allow Coverage Ledger tools`);
-    assert(text.includes('"*coverage-ledger.jsonl*": deny'), `${agent} must hard-deny direct ledger bash writes`);
-  }
+  assert(!("coverage_ledger" in config.mcp), "project config must not enable the removed Coverage Ledger MCP");
+  assert(!("coverage_ledger" in mcpMap.servers), "mcp-map must not retain Coverage Ledger");
   assert(!("vuln_judger" in config.mcp) && !("vuln-judger" in config.mcp), "project config must not define the removed external truth-review MCP");
   assert(!("vuln_judger" in mcpMap.servers) && !("vuln-judger" in mcpMap.servers), "mcp-map must not retain an external truth-review server");
   const chromeMcp = config.mcp["chrome-devtools"];

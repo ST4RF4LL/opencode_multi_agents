@@ -5,10 +5,10 @@
     "security-audit-orchestrator": {
       "mode": "primary",
       "stage_contract_ids": ["P00_AUDIT_INIT.security-audit-orchestrator", "P03_PLAN.security-audit-orchestrator", "P08_FINALIZE.security-audit-orchestrator"],
-      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, build the sparse Coverage Plan, route service-owned Ledger packets, plan base-owner plus AI-overlay File × Function × Catalog × Interface × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural/v2/semantic gates, require quick-dynamic/local-three-party truth routing before final synthesis, and write the sealed comprehensive report. Does not auto-delete tmp/.",
+      "responsibility": "Freeze deterministic scope, coordinate threat modeling and Focus Area partitioning, build the sparse Coverage Plan, locally schedule bounded work packets, plan base-owner plus AI-overlay File × Function × Catalog × Interface × D1-D10 × Lens coverage and blind/seeded discovery, enforce structural/semantic gates, require quick-dynamic/local-three-party truth routing before final synthesis, and write the sealed comprehensive report. Does not auto-delete tmp/.",
       "inputs": ["User scope", "repository path", "audit constraints", "audit depth"],
-      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "digest-bound quick/static truth-validation routing under reports/validation/", "Coverage Plan, service-owned Ledger, v1 structural, v2 authoritative, machine summary, and semantic artifacts", "base-plus-AI file/function/catalog/interface coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
-      "must_not": ["Deep-audit language-specific code directly", "run browser validation directly", "bypass vulnerability-validator truth routing", "directly edit or write the canonical Coverage Ledger", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
+      "outputs": ["Threat-led Tri-Lens application/platform/AI audit report under reports/final/", "digest-bound quick/static truth-validation routing under reports/validation/", "Coverage Plan, local task list and packet handoffs, structural/machine summary, and semantic artifacts", "base-plus-AI file/function/catalog/interface coverage matrices", "threat/Focus/attack-chain coverage", "canonical findings", "attack chains", "open gaps", "artifact summary with manual tmp retention note"],
+      "must_not": ["Deep-audit language-specific code directly", "run browser validation directly", "bypass vulnerability-validator truth routing", "perform vulnerability analysis or rewrite specialist findings while scheduling", "edit audited source", "edit reusable audit assets directly", "automatically delete tmp/ or tmp/<audit_id>/", "write durable final reports under tmp/ or audited app/test trees outside reports/"]
     },
     "security-intel-collector": {
       "mode": "subagent",
@@ -31,7 +31,7 @@
       "stage_contract_ids": ["P04_FOCUS_EXECUTION.c-cpp-source-auditor", "P07_GAP_ROUND.c-cpp-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for C/C++ and native source; only coverage packets close one Tri-Lens strategy across D1-D10.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "C/C++ scope", "build metadata", "recon inventories", "single-track work packet"],
-      "outputs": ["Focus-scoped D1-D10 coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
+      "outputs": ["Focus-scoped D1-D10 coverage for one packet or discovery artifact", "packet handoff with DONE/GAP per local task", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/c-cpp-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/c-cpp-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "audit Java/Python-only code as primary scope", "modify audited source"]
     },
@@ -40,7 +40,7 @@
       "stage_contract_ids": ["P04_FOCUS_EXECUTION.java-source-auditor", "P07_GAP_ROUND.java-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for Java/JVM source; only coverage packets close one Tri-Lens strategy across D1-D10.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Java/JVM scope", "complete Java/JVM function manifests", "unified application/AI vulnerability catalog", "build metadata", "recon inventories", "single-track work packet"],
-      "outputs": ["exact Java file/function/catalog coverage for one lens", "Coverage Ledger receipts and decisions", "D1-D10 coverage cells for one lens", "candidate findings", "transfer block", "validation requests"],
+      "outputs": ["exact Java file/function/catalog coverage for one packet", "packet handoff with DONE/GAP per local task", "D1-D10 coverage cells", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/java-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/java-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "audit C/C++ or Python-only code as primary scope", "modify audited source"]
     },
@@ -49,7 +49,7 @@
       "stage_contract_ids": ["P04_FOCUS_EXECUTION.web-source-auditor", "P07_GAP_ROUND.web-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for browser JavaScript/TypeScript, HTML, JSP, templates, service workers, and browser security behavior.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Web source scope", "JavaScript and embedded-Web function manifests", "recon inventories", "unified application/AI vulnerability catalog", "single-track Focus packet"],
-      "outputs": ["Focus-scoped Web coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
+      "outputs": ["Focus-scoped Web coverage for one packet or discovery artifact", "packet handoff with DONE/GAP per local task", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/web-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/web-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "treat client-side checks as server-side enforcement", "modify audited source"]
     },
@@ -58,7 +58,7 @@
       "stage_contract_ids": ["P04_FOCUS_EXECUTION.python-source-auditor", "P07_GAP_ROUND.python-source-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for Python source and framework configuration.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Python scope", "dependency metadata", "recon inventories", "single-track Focus packet"],
-      "outputs": ["Focus-scoped Python coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "transfer block", "validation requests"],
+      "outputs": ["Focus-scoped Python coverage for one packet or discovery artifact", "packet handoff with DONE/GAP per local task", "candidate findings", "transfer block", "validation requests"],
       "artifacts": ["reports/sarif/python-source-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/python-source-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "audit C/C++ or Java-only code as primary scope", "modify audited source"]
     },
@@ -67,7 +67,7 @@
       "stage_contract_ids": ["P04_FOCUS_EXECUTION.platform-security-auditor", "P07_GAP_ROUND.platform-security-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet for language-neutral dependencies, build, CI/CD, containers, orchestration, gateways, network, secrets, and IaC.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Platform artifact scope", "recon inventories", "single-track Focus packet"],
-      "outputs": ["Focus-scoped platform coverage for one lens or discovery artifact", "Coverage Ledger receipts and decisions", "candidate findings", "effective-state gaps", "source-component correlation hints"],
+      "outputs": ["Focus-scoped platform coverage for one packet or discovery artifact", "packet handoff with DONE/GAP per local task", "candidate findings", "effective-state gaps", "source-component correlation hints"],
       "artifacts": ["reports/sarif/platform-security-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/platform-security-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Blend multiple audit strategies in one session", "claim deployed state without evidence", "duplicate application-source auditing", "modify audited source"]
     },
@@ -76,7 +76,7 @@
       "stage_contract_ids": ["P04_FOCUS_EXECUTION.ai-security-auditor", "P07_GAP_ROUND.ai-security-auditor"],
       "responsibility": "Perform one Focus Area coverage/blind/seeded packet as part of the independent full-repository AI overlay for LLM, agentic, RAG, memory, MCP/tool, model-provider, training, evaluation, and model-artifact risks.",
       "inputs": ["Sealed threat model and Focus Areas", "Coverage Plan packets", "Complete frozen file/function scope", "AI surface inventory", "all common Recon inventories", "unified application/AI vulnerability catalog", "single-track Focus assignment"],
-      "outputs": ["exact domain=ai file/function/catalog coverage for one lens", "Coverage Ledger receipts and decisions", "AI D1-D10 coverage cells", "candidate findings", "AI-absence evidence or gaps", "validation requests"],
+      "outputs": ["exact domain=ai file/function/catalog coverage for one packet", "packet handoff with DONE/GAP per local task", "AI D1-D10 coverage cells", "candidate findings", "AI-absence evidence or gaps", "validation requests"],
       "artifacts": ["reports/sarif/ai-security-auditor.<agent-session-id>.sarif", "reports/vulnerability-mining/ai-security-auditor.<agent-session-id>.audit-report.json"],
       "must_not": ["Replace base language/platform ownership", "blend multiple audit strategies in one session", "send repository data to external AI services", "execute untrusted model artifacts", "perform live third-party prompt/tool attacks", "modify audited source"]
     },
@@ -84,7 +84,7 @@
       "mode": "subagent",
       "stage_contract_ids": ["P06_CORRELATION.security-evidence-correlator", "P07_GAP_ROUND.security-evidence-correlator"],
       "responsibility": "Preserve exact structural and semantic coverage, normalize Focus Area D1-D10/track evidence, deduplicate candidates, canonicalize supplied attack chains, expose contradictions and gaps, compute discovery routing metrics, and generate follow-up packets.",
-      "inputs": ["Threat model and Focus Areas", "Coverage Plan and read-only Ledger gaps", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation results"],
+      "inputs": ["Threat model and Focus Areas", "Coverage Plan and read-only local task GAP list", "Recon inventories", "coverage and blind/seeded vulnerability-mining JSON", "system attack-chain report", "SARIF references", "previous correlation results"],
       "outputs": ["Coverage cube", "canonical findings", "duplicate map", "contradictions", "residual gaps", "follow-up packets", "attack-chain candidates"],
       "artifacts": ["reports/correlation/security-evidence-correlator.<audit-id>.r<round>.json"],
       "must_not": ["Perform new deep source auditing", "invent evidence", "classify exploitability", "modify audited source or reusable audit assets"]
@@ -101,11 +101,11 @@
     "security-finding-adjudicator": {
       "mode": "subagent",
       "stage_contract_ids": ["P08_FINALIZE.security-finding-adjudicator"],
-      "responsibility": "Independently adjudicate each accepted Ledger-attested Finding v2 candidate for actual framework semantics, source-to-effect proof, guard effectiveness, and a tested counterclaim before attack-chain construction or final synthesis.",
-      "inputs": ["Frozen Coverage Plan and canonical Ledger", "trusted structural verification", "Finding v2 adjudication input manifest", "frozen source/config/dependency evidence"],
+      "responsibility": "Independently adjudicate each accepted packet-backed Finding v2 candidate for actual framework semantics, source-to-effect proof, guard effectiveness, and a tested counterclaim before attack-chain construction or final synthesis.",
+      "inputs": ["Frozen Coverage Plan and completed local packet handoffs", "trusted structural verification", "Finding v2 adjudication input manifest", "frozen source/config/dependency evidence"],
       "outputs": ["One terminal semantic decision per candidate", "guard and counterclaim evidence", "blocking questions and contradictions"],
       "artifacts": ["reports/adjudication/finding-input.<audit-id>.r<round>.json", "reports/adjudication/security-finding-adjudicator.<audit-id>.r<round>.json"],
-      "must_not": ["Close coverage", "modify candidates, Ledger, Plan, audited source, or reusable assets", "invent attack-chain transitions", "execute exploits", "assign final CVSS", "call vuln-judger"]
+      "must_not": ["Close coverage", "modify candidates, local task state, Plan, audited source, or reusable assets", "invent attack-chain transitions", "execute exploits", "assign final CVSS", "call vuln-judger"]
     },
     "vulnerability-validator": {
       "mode": "subagent",

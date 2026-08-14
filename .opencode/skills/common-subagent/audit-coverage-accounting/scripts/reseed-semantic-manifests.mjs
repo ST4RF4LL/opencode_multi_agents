@@ -80,7 +80,7 @@ function reseedThreatModel(source, auditId, scopeDigest) {
     source_manifest_digest: source.manifest_digest,
     source_equivalence: "all non-cache frozen file paths and hashes match",
     revalidation_required: true,
-    restrictions: "This transfers recon hypotheses and partitioning only; it never transfers coverage, Ledger decisions, Finding states, adjudications, chains, or final report conclusions.",
+    restrictions: "This transfers recon hypotheses and partitioning only; it never transfers coverage reports, local task state, Finding states, adjudications, chains, or final report conclusions.",
   };
   delete output.manifest_digest;
   output.manifest_digest = semanticDigest(output);

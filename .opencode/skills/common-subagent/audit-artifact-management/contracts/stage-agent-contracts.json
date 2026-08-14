@@ -5,7 +5,7 @@
     { "stage_id": "P00_AUDIT_INIT", "order": 0, "name": "Audit initialization" },
     { "stage_id": "P01_RECON", "order": 1, "name": "Recon and frozen inventory" },
     { "stage_id": "P02_THREAT_MODEL", "order": 2, "name": "Threat modeling and Focus Area partition" },
-    { "stage_id": "P03_PLAN", "order": 3, "name": "Coverage planning and Ledger initialization" },
+    { "stage_id": "P03_PLAN", "order": 3, "name": "Coverage planning and local task initialization" },
     { "stage_id": "P04_FOCUS_EXECUTION", "order": 4, "name": "Focus Area coverage and discovery execution" },
     { "stage_id": "P05_SYSTEM_CHAIN_DISCOVERY", "order": 5, "name": "Preliminary system attack-chain discovery" },
     { "stage_id": "P06_CORRELATION", "order": 6, "name": "Evidence correlation" },
@@ -95,7 +95,7 @@
         "optional_payload_fields": []
       },
       "output": {
-        "required_artifact_types": ["coverage-input-snapshot", "coverage-plan", "coverage-ledger"],
+        "required_artifact_types": ["coverage-input-snapshot", "coverage-plan", "audit-todo"],
         "optional_artifact_types": [],
         "required_payload_fields": ["plan_digest", "required_checks", "focus_packets", "discovery_packets", "gaps"],
         "optional_payload_fields": []
@@ -117,7 +117,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["learning_candidates"]
       }
     },
@@ -137,7 +137,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
-        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["learning_candidates"]
       }
     },
@@ -157,7 +157,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
-        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["learning_candidates"]
       }
     },
@@ -177,7 +177,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["learning_candidates"]
       }
     },
@@ -197,7 +197,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["effective_state_gaps", "correlation_hints"]
       }
     },
@@ -217,7 +217,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["focus_area_id", "assignment_id", "discovery_track", "audit_strategy", "coverage_state", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["ai_absence_evidence", "learning_candidates"]
       }
     },
@@ -251,7 +251,7 @@
       "input": {
         "required_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "focus-audit-result-set", "preliminary-attack-chain-report"],
         "optional_artifact_types": ["sarif-set", "previous-correlation", "finding-adjudication"],
-        "required_payload_fields": ["round", "ledger_gap_cursor", "expected_sessions", "known_gaps"],
+        "required_payload_fields": ["round", "local_gap_cursor", "expected_sessions", "known_gaps"],
         "optional_payload_fields": []
       },
       "output": {
@@ -297,7 +297,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": []
       }
     },
@@ -317,7 +317,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
-        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": []
       }
     },
@@ -337,7 +337,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set", "external-runtime-validation-request-set"],
-        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": []
       }
     },
@@ -357,7 +357,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": []
       }
     },
@@ -377,7 +377,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["effective_state_gaps"]
       }
     },
@@ -397,7 +397,7 @@
       "output": {
         "required_artifact_types": ["focus-audit-result"],
         "optional_artifact_types": ["sarif", "finding-artifact-set"],
-        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "ledger_decision_refs", "gaps"],
+        "required_payload_fields": ["round", "focus_area_id", "assignment_id", "audit_strategy", "resolved_gap_ids", "remaining_gap_ids", "finding_ids", "packet_handoff_refs", "gaps"],
         "optional_payload_fields": ["ai_absence_evidence"]
       }
     },
@@ -411,7 +411,7 @@
       "input": {
         "required_artifact_types": ["previous-correlation", "follow-up-result-set", "coverage-plan"],
         "optional_artifact_types": ["preliminary-attack-chain-report"],
-        "required_payload_fields": ["round", "previous_gap_ids", "expected_follow_up_ids", "ledger_gap_cursor"],
+        "required_payload_fields": ["round", "previous_gap_ids", "expected_follow_up_ids", "local_gap_cursor"],
         "optional_payload_fields": []
       },
       "output": {
@@ -429,7 +429,7 @@
       "input_scope_state": "FROZEN",
       "output_scope_state": "FROZEN",
       "input": {
-        "required_artifact_types": ["coverage-plan", "coverage-ledger", "coverage-structural", "finding-adjudication-input"],
+        "required_artifact_types": ["coverage-plan", "audit-todo", "coverage-structural", "finding-adjudication-input"],
         "optional_artifact_types": ["dependency-metadata", "deployment-metadata"],
         "required_payload_fields": ["round", "candidate_finding_ids", "candidate_count", "known_gaps"],
         "optional_payload_fields": []
@@ -569,7 +569,7 @@
       "input_scope_state": "FROZEN",
       "output_scope_state": "FROZEN",
       "input": {
-        "required_artifact_types": ["coverage-plan", "coverage-ledger", "finding-adjudication", "validation-routing-manifest", "cvss-assessment", "attack-chain-report", "correlation-report"],
+        "required_artifact_types": ["coverage-plan", "audit-todo", "finding-adjudication", "validation-routing-manifest", "cvss-assessment", "attack-chain-report", "correlation-report"],
         "optional_artifact_types": ["stage-handoff-set", "external-runtime-validation-request-set"],
         "required_payload_fields": ["report_mode", "expected_stage_contract_ids", "expected_focus_sessions", "known_gaps"],
         "optional_payload_fields": []
