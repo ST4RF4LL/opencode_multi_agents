@@ -343,6 +343,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       error: runner?.error ?? null,
       execution_transport: runner?.execution_transport ?? null,
       terminal: runner?.terminal ?? null,
+      queue: runner?.queue ?? null,
       paths: runner?.paths ?? null,
       provider_session_id: runner?.provider_session_id ?? runner?.terminal?.provider_session_id ?? null,
       recovery_count: Number(runner?.recovery_count ?? 0),

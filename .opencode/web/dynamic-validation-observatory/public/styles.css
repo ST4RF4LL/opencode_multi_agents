@@ -90,6 +90,7 @@ main { padding: 30px 34px 48px; max-width: 1600px; margin: 0 auto; }
 .progress i { display: block; height: 100%; background: var(--green); border-radius: inherit; }
 .status { display: inline-flex; width: fit-content; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 20px; color: #48534e; background: #edf0ee; font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .status.running, .status.recovering, .status.completed, .status.supported_runtime { color: var(--green); background: var(--green-soft); }
+.status.queued, .status.queue_active { color: #76501a; background: var(--amber-soft); }
 .status.failed, .status.interrupted, .status.cancelled, .status.critical { color: var(--red); background: var(--red-soft); }
 .status.paused, .status.artifact_only, .status.high { color: var(--amber); background: var(--amber-soft); }
 .status.verified_model { color: var(--green); background: var(--green-soft); }
@@ -224,6 +225,14 @@ main { padding: 30px 34px 48px; max-width: 1600px; margin: 0 auto; }
 .capability-card.ready strong { color: var(--green); }
 .capability-card.blocked strong { color: var(--red); }
 .environment-panel { margin-bottom: 18px; }
+.settings-panel { max-width: 760px; }
+.settings-form { display: grid; gap: 14px; }
+.settings-form label { display: grid; gap: 7px; color: #4b5751; font-size: 11px; font-weight: 700; }
+.settings-form input { width: 100%; height: 42px; padding: 0 12px; color: var(--ink); background: white; border: 1px solid #ccd4d0; border-radius: 7px; outline: none; }
+.settings-form input:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.field-unit { color: var(--muted); font-size: 10px; font-weight: 500; }
+.settings-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.settings-panel .detail-facts { margin-bottom: 0; }
 
 .notice { margin-bottom: 16px; padding: 12px 14px; border-radius: 8px; font-size: 12px; }
 .notice.error { color: #8b2926; background: var(--red-soft); border: 1px solid #f1c7c4; }

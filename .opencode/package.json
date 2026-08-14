@@ -1,8 +1,9 @@
 {
   "scripts": {
-    "test": "npm run test:config && npm run test:audit-todo && npm run test:stage-agent-contract && npm run test:stage-delivery-contract && npm run test:truth-validation-contract && npm run test:threat-model-contract && npm run test:semgrep && npm run test:finding-contract && npm run test:external-runtime-validation-contract && npm run test:dynamic-validation-contract && npm run test:dynamic-validation-web && npm run test:audit-workbench && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
+    "test": "npm run test:config && npm run test:audit-todo && npm run test:audit-queue && npm run test:stage-agent-contract && npm run test:stage-delivery-contract && npm run test:truth-validation-contract && npm run test:threat-model-contract && npm run test:semgrep && npm run test:finding-contract && npm run test:external-runtime-validation-contract && npm run test:dynamic-validation-contract && npm run test:dynamic-validation-web && npm run test:audit-workbench && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
     "test:config": "node tests/validate-configuration.mjs",
     "test:audit-todo": "node tests/run-audit-todo-tests.mjs",
+    "test:audit-queue": "node tests/run-audit-queue-tests.mjs",
     "test:stage-agent-contract": "node tests/run-stage-agent-contract-tests.mjs",
     "test:stage-delivery-contract": "node tests/run-stage-delivery-contract-tests.mjs",
     "test:truth-validation-contract": "node tests/run-truth-validation-contract-tests.mjs",

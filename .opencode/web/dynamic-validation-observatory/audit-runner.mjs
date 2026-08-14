@@ -17,6 +17,7 @@ const AUDIT_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/i;
 const REPOSITORY_ID = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
 const TERMINAL = new Set(["completed", "failed", "interrupted", "cancelled"]);
 const ACTIVE = new Set(["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"]);
+const EXECUTING = new Set([...ACTIVE].filter(status => status !== "queued"));
 const RECOVERABLE = new Set(["failed", "interrupted", "cancelled"]);
 const MAX_LOG_LINE = 16 * 1024;
 const MAX_LOG_READ_BYTES = 256 * 1024;
@@ -356,6 +357,8 @@ export class AuditRunner extends EventEmitter {
     this.subscribers = new Map();
     this.writeQueues = new Map();
     this.contextRedactions = new Map();
+    this.queueScheduler = null;
+    this.dispatching = new Set();
     this.ready = this.initialize();
   }
 
@@ -395,7 +398,10 @@ export class AuditRunner extends EventEmitter {
         audit.todo_path ??= join(this.stateRoot, audit.id, "audit-todo.json");
         audit.todo_summary = await auditTodoSummary(audit.todo_path);
         this.audits.set(audit.id, audit);
-        if (ACTIVE.has(audit.status)) {
+        if (audit.status === "queued") {
+          audit.queue ??= { mode: "start", enqueued_at: audit.updated_at ?? audit.created_at ?? new Date().toISOString() };
+          await this.persist(audit);
+        } else if (ACTIVE.has(audit.status)) {
           const previousStatus = audit.status;
           let terminalLive = false;
           if (audit.terminal?.supported && audit.terminal?.socket_name && audit.terminal?.target && typeof this.terminalMonitor.targetLive === "function") {
@@ -628,6 +634,58 @@ export class AuditRunner extends EventEmitter {
     return audit ? publicAudit(audit) : null;
   }
 
+  setQueueScheduler(queueScheduler) {
+    this.queueScheduler = queueScheduler;
+  }
+
+  queueSnapshot() {
+    const audits = [...this.audits.values()];
+    return {
+      queued: audits
+        .filter(audit => audit.status === "queued")
+        .sort((left, right) => String(left.created_at ?? "").localeCompare(String(right.created_at ?? "")) || left.id.localeCompare(right.id))
+        .map(audit => ({ id: audit.id, mode: audit.queue?.mode ?? "start", created_at: audit.created_at, enqueued_at: audit.queue?.enqueued_at ?? audit.updated_at })),
+      active_count: audits.filter(audit => EXECUTING.has(audit.status)).length,
+    };
+  }
+
+  async dispatchQueuedAudit(id) {
+    await this.ready;
+    const audit = this.audits.get(id);
+    if (!audit || audit.status !== "queued" || this.dispatching.has(id)) return null;
+    const repository = this.repositories.get(audit.repository_id);
+    if (!repository) {
+      audit.status = "failed";
+      audit.error = "审计所属仓库不再可用。";
+      audit.finished_at = new Date().toISOString();
+      await this.record(audit, "audit.failed", { message: audit.error, reason: "queue-repository-unavailable" });
+      return publicAudit(audit);
+    }
+    const queue = audit.queue ?? { mode: "start", enqueued_at: audit.updated_at ?? new Date().toISOString() };
+    const resume = queue.mode === "recover";
+    this.dispatching.add(id);
+    try {
+      audit.queue = { ...queue, dispatched_at: new Date().toISOString() };
+      await this.start(audit, repository, { resume, existingSessionId: resume ? providerSessionId(queue.provider_session_id) : null });
+      return publicAudit(audit);
+    } catch (error) {
+      audit.status = resume ? "interrupted" : "failed";
+      audit.error = redact(error.message);
+      audit.finished_at = new Date().toISOString();
+      if (resume) {
+        audit.interrupted_at = audit.finished_at;
+        audit.interruption_reason = "recovery-launch-failed";
+      }
+      await this.record(audit, `audit.${audit.status}`, {
+        reason: resume ? "recovery-launch-failed" : "queue-launch-failed",
+        message: audit.error,
+      });
+      throw error;
+    } finally {
+      this.dispatching.delete(id);
+    }
+  }
+
   async writePrivateContexts(auditId, contexts) {
     const directory = join(this.stateRoot, auditId);
     await mkdir(directory, { recursive: true });
@@ -724,12 +782,12 @@ export class AuditRunner extends EventEmitter {
     const audit = this.audits.get(id);
     if (audit && audit.repository_id !== repositoryId) throw Object.assign(new Error("审计与仓库绑定不一致。"), { statusCode: 409, code: "audit-repository-mismatch" });
     if (audit && Number(expectedVersion) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
-    if (audit && (ACTIVE.has(audit.status) || this.processes.has(id) || this.completions.has(id))) {
+    if (audit && (EXECUTING.has(audit.status) || this.processes.has(id) || this.completions.has(id) || this.dispatching.has(id))) {
       throw Object.assign(new Error("运行中的审计不能删除；请先取消并等待任务结束。"), { statusCode: 409, code: "audit-delete-active" });
     }
     const queuedWrite = this.writeQueues.get(id);
     if (queuedWrite) await queuedWrite;
-    if (audit && (ACTIVE.has(audit.status) || this.processes.has(id) || this.completions.has(id))) {
+    if (audit && (EXECUTING.has(audit.status) || this.processes.has(id) || this.completions.has(id) || this.dispatching.has(id))) {
       throw Object.assign(new Error("审计仍有未完成的运行状态，暂不能删除。"), { statusCode: 409, code: "audit-delete-active" });
     }
 
@@ -903,6 +961,7 @@ export class AuditRunner extends EventEmitter {
       last_recovered_at: null,
       interrupted_at: null,
       interruption_reason: null,
+      queue: { mode: "start", enqueued_at: now },
       idempotency_digest: createHash("sha256").update(idempotencyKey).digest("hex"),
       todo_path: join(this.stateRoot, id, "audit-todo.json"),
     };
@@ -917,12 +976,8 @@ export class AuditRunner extends EventEmitter {
       additional_instructions_enabled: audit.private_context.additional_instructions.enabled,
       test_environment_enabled: audit.private_context.test_environment.enabled,
     });
-    this.start(audit, repository).catch(async error => {
-      audit.status = "failed";
-      audit.error = redact(error.message);
-      audit.finished_at = new Date().toISOString();
-      await this.record(audit, "audit.failed", { message: audit.error });
-    });
+    if (this.queueScheduler && await this.queueScheduler.enqueueNewAudit()) return publicAudit(audit);
+    this.dispatchQueuedAudit(audit.id).catch(() => {});
     return publicAudit(audit);
   }
 
@@ -934,7 +989,7 @@ export class AuditRunner extends EventEmitter {
     audit.pid = null;
     audit.error = null;
     audit.interruption_reason = null;
-    await this.record(audit, resume ? "audit.recovering" : "audit.preparing", resume ? { recovery_count: audit.recovery_count } : {});
+    await this.record(audit, resume ? "audit.recovering" : "audit.preparing", resume ? { recovery_count: audit.recovery_count, queue_mode: audit.queue?.mode ?? "recover" } : { queue_mode: audit.queue?.mode ?? "start" });
     const paths = await this.prepareExecutionWorkspace(audit, repository);
     audit.paths = paths;
     await this.record(audit, "audit.workspace.ready", paths);
@@ -1252,16 +1307,18 @@ export class AuditRunner extends EventEmitter {
         recovery_mode: existingSessionId ? "session-and-artifacts" : "artifacts",
         provider_session_id: existingSessionId,
       });
+      audit.status = "queued";
+      audit.queue = {
+        mode: "recover",
+        enqueued_at: new Date().toISOString(),
+        provider_session_id: existingSessionId,
+      };
+      await this.record(audit, "audit.recovery.queued", { recovery_count: audit.recovery_count });
+      if (this.queueScheduler && await this.queueScheduler.enqueueNewAudit()) return publicAudit(audit);
       try {
-        await this.start(audit, repository, { resume: true, existingSessionId });
+        await this.dispatchQueuedAudit(audit.id);
       } catch (error) {
-        audit.status = "interrupted";
-        audit.error = redact(error.message);
-        audit.finished_at = new Date().toISOString();
-        audit.interrupted_at = audit.finished_at;
-        audit.interruption_reason = "recovery-launch-failed";
-        await this.record(audit, "audit.interrupted", { reason: audit.interruption_reason, message: audit.error });
-        throw Object.assign(new Error(`断点恢复启动失败：${audit.error}`), { statusCode: 502, code: "audit-recovery-launch-failed" });
+        throw Object.assign(new Error(`断点恢复启动失败：${audit.error ?? redact(error.message)}`), { statusCode: 502, code: "audit-recovery-launch-failed" });
       }
       return publicAudit(audit);
     }

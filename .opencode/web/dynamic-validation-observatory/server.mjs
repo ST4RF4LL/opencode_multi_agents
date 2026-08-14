@@ -6,6 +6,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import MarkdownIt from "markdown-it";
+import { AuditQueueScheduler, QueueSettingsStore } from "./audit-queue-scheduler.mjs";
 import { AuditRunner } from "./audit-runner.mjs";
 import { EnvironmentHealthService } from "./environment-health.mjs";
 import { FindingWorkflowStore } from "./finding-workflow.mjs";
@@ -223,9 +224,17 @@ export function createAuditWorkbenchServer({
   environmentService: suppliedEnvironmentService = null,
   findingStateRoot = null,
   findingWorkflow: suppliedFindingWorkflow = null,
+  queueSettingsPath = null,
+  queueSettingsStore: suppliedQueueSettingsStore = null,
+  queueScheduler: suppliedQueueScheduler = null,
 } = {}) {
   const resolvedRuntimeRoot = resolve(runtimeRoot);
   const runner = suppliedRunner ?? new AuditRunner({ stateRoot, platformRoot: PROJECT_ROOT, repositories, configPath: platformConfigPath, enabled: runnerEnabled });
+  const queueSettingsStore = suppliedQueueSettingsStore ?? new QueueSettingsStore({
+    path: queueSettingsPath ?? join(dirname(resolve(stateRoot)), "workbench-settings.json"),
+  });
+  const queueScheduler = suppliedQueueScheduler ?? new AuditQueueScheduler({ runner, settingsStore: queueSettingsStore });
+  runner.setQueueScheduler(queueScheduler);
   const dynamicRunner = suppliedDynamicRunner ?? new DynamicValidationRunner({
     stateRoot: dynamicStateRoot ?? join(dirname(stateRoot), "dynamic-validation-runs"),
     enabled: dynamicRunnerEnabled,
@@ -301,7 +310,7 @@ export function createAuditWorkbenchServer({
   }
 
   async function snapshot() {
-    await Promise.all([runner.ready, findingWorkflow.ready]);
+    await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready]);
     await runner.reconcileLegacyCompletions("workspace-watchdog");
     const runnerAudits = await runner.listAuditsWithTodo();
     const validationByRepository = new Map();
@@ -335,7 +344,9 @@ export function createAuditWorkbenchServer({
       }));
       snapshots.push(value);
     }
-    return mergeSnapshots(snapshots);
+    const merged = mergeSnapshots(snapshots);
+    merged.queue = await queueScheduler.snapshot();
+    return merged;
   }
 
   async function reportContent(reportId) {
@@ -390,6 +401,22 @@ export function createAuditWorkbenchServer({
         json(response, 200, { ...data.summary, generated_at: data.generated_at });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/v1/settings/queue") {
+        json(response, 200, { queue: await queueScheduler.snapshot() });
+        return;
+      }
+      if (request.method === "PUT" && url.pathname === "/api/v1/settings/queue") {
+        assertSafeMutation(request);
+        json(response, 200, { queue: await queueScheduler.updateSettings(await requestJson(request)) });
+        return;
+      }
+      if (request.method === "POST" && (url.pathname === "/api/v1/settings/queue/activate" || url.pathname === "/api/v1/settings/queue/deactivate")) {
+        assertSafeMutation(request);
+        await requestJson(request);
+        const queue = url.pathname.endsWith("/activate") ? await queueScheduler.activate() : await queueScheduler.deactivate();
+        json(response, 200, { queue });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/v1/workspace") {
         json(response, 200, await snapshot());
         return;
@@ -427,7 +454,7 @@ export function createAuditWorkbenchServer({
         const expected = String(request.headers["if-match"] ?? "").replaceAll('"', "");
         if (Number(expected) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
         const runnerAudit = runner.getAudit(auditId);
-        if (runnerAudit && ["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(runnerAudit.status)) {
+        if (runnerAudit && ["preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(runnerAudit.status)) {
           throw Object.assign(new Error("运行中的审计不能删除；请先取消并等待任务结束。"), { statusCode: 409, code: "audit-delete-active" });
         }
         const activeValidations = dynamicRunner.listRuns().filter(run => run.audit_id === auditId && ["preparing", "running", "cancelling"].includes(run.status));
@@ -607,7 +634,10 @@ export function createAuditWorkbenchServer({
       json(response, error.statusCode ?? 500, { error: error.code ?? "internal-error", message: error.message });
     }
   });
-  server.shutdownRunners = () => Promise.all([runner.shutdown(), dynamicRunner.shutdown()]);
+  server.shutdownRunners = async () => {
+    await queueScheduler.shutdown();
+    await Promise.all([runner.shutdown(), dynamicRunner.shutdown()]);
+  };
   return server;
 }
 

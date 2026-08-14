@@ -21,6 +21,7 @@
           <p>验证与运行</p>
           <button data-view="validation"><span>⌘</span>完整动态验证</button>
           <button data-view="runtime"><span>◉</span>运行环境</button>
+          <button data-view="settings"><span>⚙</span>设置</button>
         </nav>
         <div class="runner-card"><div><i id="runner-pulse"></i><strong id="runner-state">读取中</strong></div><p>OpenCode 本地受控运行驱动</p><small>项目目录由操作员登记</small></div>
       </aside>
@@ -58,6 +59,23 @@
             <div id="capability-grid" class="capability-grid"></div>
             <article class="panel environment-panel"><div class="section-title"><div><p class="eyebrow">COMPONENT HEALTH</p><h2>组件健康</h2></div><button class="text-button" id="refresh-environment">重新探测</button></div><div id="environment-table" class="data-table"></div></article>
             <article class="panel boundary-panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>审计项目由操作员指定工作台所在机器上的绝对目录，并在服务端规范化、校验和持久登记。</li><li>目标源码目录与工作台 OpenCode Agent/MCP 配置相互隔离。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>测试环境 ENABLE 是 120 秒快速动态的任务级显式授权；完整动态仍需逐次人工授权，两者都只允许 loopback。</li></ul></article>
+          </section>
+
+          <section id="view-settings" class="view">
+            <div class="page-heading"><div><p class="eyebrow">WORKBENCH SETTINGS</p><h2>设置</h2><p>排队由工作台定时调度；不以页面进度或漏洞 TODO 百分比作为启动依据。</p></div></div>
+            <article class="panel settings-panel">
+              <div class="section-title"><div><p class="eyebrow">AUDIT QUEUE</p><h2>任务序列排队</h2></div><span id="queue-status" class="status">读取中</span></div>
+              <form id="queue-settings-form" class="settings-form">
+                <div class="form-row">
+                  <label>队列间隔 <span class="field-unit">小时</span><input name="interval_hours" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+                  <label>并发 <span class="field-unit">个</span><input name="concurrency" type="number" min="1" step="1" inputmode="numeric" required></label>
+                </div>
+                <p class="settings-note">激活后立即按并发上限启动一批任务，之后每到一个间隔时点再补充启动。排队任务按创建时间先进先出；已运行任务结束后也等待下一个时点。</p>
+                <div id="queue-settings-error" class="notice error" hidden></div>
+                <div class="dialog-actions"><button id="save-queue-settings" class="button secondary" type="submit">保存设置</button><button id="toggle-queue" class="button primary" type="button">激活排队机制</button></div>
+              </form>
+              <dl id="queue-facts" class="detail-facts"></dl>
+            </article>
           </section>
         </main>
       </div>

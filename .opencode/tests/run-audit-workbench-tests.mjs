@@ -606,7 +606,7 @@ if (mode === "run") {
   await findingWorkflow.ready;
   let findingResourceId;
 
-  const server = createAuditWorkbenchServer({ runtimeRoot, runner, dynamicRunner, environmentService, findingWorkflow });
+  const server = createAuditWorkbenchServer({ stateRoot, runtimeRoot, runner, dynamicRunner, environmentService, findingWorkflow });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
@@ -1079,6 +1079,59 @@ if (mode === "run") {
     await assert.rejects(stat(findingWorkflow.directory(findingResourceId)), error => error.code === "ENOENT");
     assert.equal((await stat(join(reportsRoot, "final", "security-audit-report.audit-sealed.md"))).isFile(), true);
 
+    const queueDefaultsResponse = await fetch(`${base}/api/v1/settings/queue`);
+    assert.equal(queueDefaultsResponse.status, 200);
+    assert.deepEqual((await queueDefaultsResponse.json()).queue.enabled, false);
+    const queueInvalidResponse = await fetch(`${base}/api/v1/settings/queue`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interval_hours: 0 }),
+    });
+    assert.equal(queueInvalidResponse.status, 422);
+    const queueUpdateResponse = await fetch(`${base}/api/v1/settings/queue`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interval_hours: 0.5, concurrency: 2 }),
+    });
+    assert.equal(queueUpdateResponse.status, 200);
+    assert.equal((await queueUpdateResponse.json()).queue.interval_hours, 0.5);
+    const queueActivateResponse = await fetch(`${base}/api/v1/settings/queue/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(queueActivateResponse.status, 200);
+    assert.equal((await queueActivateResponse.json()).queue.enabled, true);
+    const queuedAuditResponse = await fetch(`${base}/api/v1/audits`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "queue-audit-request" },
+      body: JSON.stringify({
+        audit_id: "audit-queued-001",
+        repository_id: "fixture",
+        ref: "HEAD",
+        allow_dirty: true,
+      }),
+    });
+    assert.equal(queuedAuditResponse.status, 202);
+    const queuedAudit = await queuedAuditResponse.json();
+    assert.equal(queuedAudit.status, "queued");
+    assert.equal(runner.getAudit(queuedAudit.id).status, "queued");
+    assert.equal((await (await fetch(`${base}/api/v1/workspace`)).json()).queue.queued_count, 1);
+    const queuedDeleteResponse = await fetch(`${base}/api/v1/audits/${queuedAudit.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", "If-Match": `"${runner.getAudit(queuedAudit.id).version}"` },
+      body: JSON.stringify({ confirmation: queuedAudit.id }),
+    });
+    assert.equal(queuedDeleteResponse.status, 200);
+    assert.equal(runner.getAudit(queuedAudit.id), null);
+    const queueDeactivateResponse = await fetch(`${base}/api/v1/settings/queue/deactivate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(queueDeactivateResponse.status, 200);
+    assert.equal((await queueDeactivateResponse.json()).queue.enabled, false);
+
     const indexResponse = await fetch(`${base}/`);
     assert.equal(indexResponse.status, 200);
     const indexHtml = await indexResponse.text();
@@ -1087,6 +1140,10 @@ if (mode === "run") {
     assert.match(indexHtml, /class="report-preview markdown-body"/);
     assert.match(indexHtml, /id="finding-dialog"/);
     assert.match(indexHtml, /id="terminal-dialog"/);
+    assert.match(indexHtml, /data-view="settings"/);
+    assert.match(indexHtml, /id="queue-settings-form"/);
+    assert.match(indexHtml, /队列间隔/);
+    assert.match(indexHtml, /激活排队机制/);
     assert.match(indexHtml, /id="opencode-session-id"/);
     assert.match(indexHtml, />OpenCode 会话直连</);
     assert.match(indexHtml, /id="delete-audit-dialog"/);
@@ -1114,6 +1171,8 @@ if (mode === "run") {
     assert.match(appSource, /syncAuditContextControls/);
     assert.match(appSource, /task_dynamic_validation_enabled/);
     assert.match(appSource, /progress_source/);
+    assert.match(appSource, /排队中/);
+    assert.match(appSource, /\/api\/v1\/settings\/queue/);
     assert.match(appSource, /markdown-it-html-disabled/);
     assert.match(appSource, /关联 Repo/);
     assert.match(appSource, /finding\.repository_name/);
