@@ -13,6 +13,10 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function array(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function controlledRelative(root, candidate) {
   const rel = relative(resolve(root), resolve(candidate));
   return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
@@ -63,7 +67,7 @@ async function validateArtifactSetMaterialization({ reportsRoot, binding, file, 
   });
   errors.push(...indexErrors.map(error => `${binding.artifact_type}:${error}`));
   if (indexErrors.length > 0) return;
-  for (const item of index.items) {
+  for (const item of array(index.items)) {
     const member = await materializedFile(reportsRoot, item.path, item.sha256);
     if (!member.ok) errors.push(`${binding.artifact_type}:member-${member.error}`);
   }
@@ -160,11 +164,11 @@ async function inspectManifestInternal({ reportsRoot, manifestPath, registry, st
 
   const stage = registry.stages.find(item => item.stage_id === manifest.stage_id);
   const artifactFiles = new Map();
-  for (const binding of [...(manifest.input_artifacts ?? []), ...(manifest.output_artifacts ?? [])]) {
+  for (const binding of [...array(manifest.input_artifacts), ...array(manifest.output_artifacts)]) {
     const file = await materializedFile(reportsRoot, binding.path, binding.sha256);
     if (!file.ok) errors.push(file.error);
     else artifactFiles.set(binding.artifact_type, file);
-    const template = [...(stage?.input_artifacts ?? []), ...(stage?.output_artifacts ?? [])]
+    const template = [...array(stage?.input_artifacts), ...array(stage?.output_artifacts)]
       .find(item => item.artifact_type === binding.artifact_type);
     if (file.ok && template?.contract_ref?.endsWith("artifact-set-index-v1.schema.json")) {
       await validateArtifactSetMaterialization({ reportsRoot, binding, file, manifest, errors });
@@ -175,7 +179,7 @@ async function inspectManifestInternal({ reportsRoot, manifestPath, registry, st
   }
 
   const predecessorResults = new Map();
-  for (const predecessor of manifest.predecessor_manifests ?? []) {
+  for (const predecessor of array(manifest.predecessor_manifests)) {
     const file = await materializedFile(reportsRoot, predecessor.path, predecessor.sha256);
     if (!file.ok) {
       errors.push(`predecessor-${file.error}`);
@@ -200,17 +204,17 @@ async function inspectManifestInternal({ reportsRoot, manifestPath, registry, st
     if (!inspected.complete && predecessor.status === "COMPLETE") errors.push(`predecessor-materialization-invalid:${predecessor.path}`);
   }
 
-  for (const binding of manifest.input_artifacts ?? []) {
-    const template = stage?.input_artifacts.find(item => item.artifact_type === binding.artifact_type);
-    for (const sourceStageId of template?.source_stage_ids ?? []) {
+  for (const binding of array(manifest.input_artifacts)) {
+    const template = array(stage?.input_artifacts).find(item => item.artifact_type === binding.artifact_type);
+    for (const sourceStageId of array(template?.source_stage_ids)) {
       const predecessor = predecessorResults.get(sourceStageId)?.manifest;
-      const matched = predecessor?.output_artifacts?.some(output => output.artifact_type === binding.artifact_type
+      const matched = array(predecessor?.output_artifacts).some(output => output.artifact_type === binding.artifact_type
         && output.path === binding.path && output.sha256 === binding.sha256 && output.json_pointer === binding.json_pointer);
       if (!matched) errors.push(`input-provenance-mismatch:${binding.artifact_type}:${sourceStageId}`);
     }
   }
 
-  for (const validation of manifest.validation_results ?? []) {
+  for (const validation of array(manifest.validation_results)) {
     if (validation.status !== "PASS") continue;
     if (!Array.isArray(validation.evidence_refs) || validation.evidence_refs.length === 0) {
       errors.push(`validation-pass-evidence-missing:${validation.validator_id}`);

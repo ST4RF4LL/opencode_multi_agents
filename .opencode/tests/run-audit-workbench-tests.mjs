@@ -302,6 +302,42 @@ if (mode === "run") {
   assert.deepEqual(snapshot.findings[0].source_finding_ids, ["SOURCE-001"]);
   assert.equal(snapshot.findings[0].locations[0].detail, "缺少 ownership guard");
 
+  const malformedReportsRoot = join(temp, "malformed-workspace-reports");
+  const malformedAuditId = "audit-malformed-artifact";
+  await mkdir(join(malformedReportsRoot, "vulnerability-mining"), { recursive: true });
+  await mkdir(join(malformedReportsRoot, "stage-deliveries", malformedAuditId), { recursive: true });
+  await writeFile(join(malformedReportsRoot, "vulnerability-mining", "malformed.json"), `${JSON.stringify({ audit_id: malformedAuditId, findings: {} })}\n`, "utf8");
+  await writeFile(join(malformedReportsRoot, "stage-deliveries", malformedAuditId, "scope.r1.json"), `${JSON.stringify({
+    schema_version: 1,
+    audit_id: malformedAuditId,
+    stage_id: "scope",
+    round: 1,
+    status: "PARTIAL",
+    input_artifacts: {},
+    output_artifacts: {},
+    predecessor_manifests: {},
+    validation_results: {},
+  })}\n`, "utf8");
+  const malformedSnapshot = await buildWorkspaceSnapshot({
+    reportsRoot: malformedReportsRoot,
+    runnerAudits: [{ id: malformedAuditId, name: "畸形制品隔离测试", status: "running", repository_id: "fixture", created_at: new Date().toISOString(), updated_at: new Date().toISOString(), stage_delivery_enforcement: "ENFORCED" }],
+  });
+  assert.equal(malformedSnapshot.audits.some(audit => audit.id === malformedAuditId), true);
+  assert.equal(malformedSnapshot.summary.active_audits, 1);
+  assert.equal(Array.isArray(malformedSnapshot.findings), true);
+
+  const objectRegistryStateRoot = join(temp, "object-registry-state");
+  await mkdir(objectRegistryStateRoot, { recursive: true });
+  await writeFile(join(objectRegistryStateRoot, "repositories.json"), `${JSON.stringify({
+    schema_version: 1,
+    repositories: { fixture: { name: "对象形态仓库", path: canonicalRepositoryRoot } },
+  })}\n`, "utf8");
+  const objectRegistryRunner = new AuditRunner({ stateRoot: objectRegistryStateRoot, platformRoot, configPath: join(repositoryRoot, ".opencode", "opencode.json") });
+  await objectRegistryRunner.ready;
+  assert.equal((await objectRegistryRunner.listRepositories()).some(repository => repository.id === "fixture"), true);
+  assert.equal(Array.isArray(JSON.parse(await readFile(join(objectRegistryStateRoot, "repositories.json"), "utf8")).repositories), true);
+  await objectRegistryRunner.shutdown();
+
   let spawnCall = null;
   const child = new FakeChild();
   const terminalMonitor = new FakeTerminalMonitor();
@@ -1269,7 +1305,7 @@ if (mode === "run") {
   assert.equal(deletedWorkflow.status, "unreviewed");
   assert.equal(deletedWorkflow.version, 0);
 
-  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: tmuxInstalled ? 199 : 194 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, service: "opencode-audit-workbench", cases: tmuxInstalled ? 201 : 196 })}\n`);
 } finally {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {

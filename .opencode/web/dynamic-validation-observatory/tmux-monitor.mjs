@@ -16,6 +16,7 @@ const MIN_COLUMNS = 40;
 const MAX_COLUMNS = 320;
 const MIN_ROWS = 12;
 const MAX_ROWS = 120;
+const RUN_OUTPUT_TIMEOUT_MS = 60_000;
 
 function runtimeOverrides(environment) {
   return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (key.startsWith("OPENCODE_") || /^AUDIT_[A-Z0-9_]+$/.test(key)) && typeof value === "string"));
@@ -33,7 +34,7 @@ function sessionFromOutput(output) {
 }
 
 export class OpenCodeTmuxMonitor {
-  constructor({ stateRoot, command = null, tmuxCommand = null, environment = process.env, platform = osPlatform(), architecture = osArch(), execute = execFileAsync, resolveCommand = resolveExecutablePath, readyTimeoutMs = 30_000 } = {}) {
+  constructor({ stateRoot, command = null, tmuxCommand = null, environment = process.env, platform = osPlatform(), architecture = osArch(), execute = execFileAsync, resolveCommand = resolveExecutablePath, readyTimeoutMs = RUN_OUTPUT_TIMEOUT_MS } = {}) {
     this.stateRoot = stateRoot;
     this.environment = environment;
     this.platform = platform;
@@ -153,7 +154,7 @@ export class OpenCodeTmuxMonitor {
   }
 
   async waitForRunOutput(terminal) {
-    const deadline = Date.now() + Math.min(this.readyTimeoutMs, 10_000);
+    const deadline = Date.now() + Math.min(this.readyTimeoutMs, RUN_OUTPUT_TIMEOUT_MS);
     let detail = "";
     while (Date.now() < deadline) {
       try {

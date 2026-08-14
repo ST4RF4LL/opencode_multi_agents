@@ -96,6 +96,20 @@ function normalizeRepository(repository, defaultConfigPath) {
   };
 }
 
+function repositoryRegistryEntries(registry) {
+  const value = Array.isArray(registry) ? registry : registry?.repositories;
+  if (value === undefined || value === null) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "object") {
+    return Object.entries(value).map(([id, repository]) => (
+      typeof repository === "string"
+        ? { id, path: repository }
+        : { ...(repository ?? {}), id: repository?.id ?? id }
+    ));
+  }
+  throw new Error("repositories 必须是数组或以仓库 ID 为键的对象");
+}
+
 async function git(repositoryPath, args) {
   const result = await execFileAsync("git", ["-C", repositoryPath, ...args], {
     encoding: "utf8",
@@ -332,7 +346,7 @@ export class AuditRunner extends EventEmitter {
     }
     try {
       const registry = JSON.parse(await readFile(this.repositoryRegistryPath, "utf8"));
-      for (const repository of registry.repositories ?? []) {
+      for (const repository of repositoryRegistryEntries(registry)) {
         const normalized = normalizeRepository(repository, this.configPath);
         try { normalized.path = await realpath(normalized.path); } catch {}
         if (!this.repositories.has(normalized.id) && ![...this.repositories.values()].some(existing => existing.path === normalized.path)) this.repositories.set(normalized.id, normalized);

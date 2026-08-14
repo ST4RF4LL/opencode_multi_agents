@@ -216,6 +216,7 @@ function normalizedLocations(raw) {
 function normalizeFinding(raw, auditId, sourcePath) {
   const locations = normalizedLocations(raw);
   const location = locations[0] ?? {};
+  const sourceFindings = Array.isArray(raw.source_findings) ? raw.source_findings : [];
   return {
     id: raw.canonical_id ?? raw.finding_id ?? raw.id ?? createHash("sha256").update(`${auditId}:${sourcePath}:${raw.title ?? "finding"}`).digest("hex").slice(0, 16),
     audit_id: auditId,
@@ -230,7 +231,7 @@ function normalizeFinding(raw, auditId, sourcePath) {
     locations,
     remediation: displayText(raw.remediation),
     residual_uncertainty: displayText(raw.residual_uncertainty),
-    source_finding_ids: (raw.source_findings ?? []).slice(0, 32).map(item => item?.finding_id ?? item?.id).filter(Boolean),
+    source_finding_ids: sourceFindings.slice(0, 32).map(item => item?.finding_id ?? item?.id).filter(Boolean),
     contradiction_count: Array.isArray(raw.contradictions) ? raw.contradictions.length : 0,
     source_path: sourcePath,
   };
@@ -246,7 +247,8 @@ export function findingsFromArtifacts(artifacts) {
   for (const artifact of artifacts.filter(item => item.kind === "vulnerability-mining")) {
     if (byAudit.has(artifact.audit_id)) continue;
     const current = byAudit.get(artifact.audit_id) ?? [];
-    for (const item of artifact.data?.findings ?? []) current.push(normalizeFinding(item, artifact.audit_id, artifact.path));
+    const findings = Array.isArray(artifact.data?.findings) ? artifact.data.findings : [];
+    for (const item of findings) current.push(normalizeFinding(item, artifact.audit_id, artifact.path));
     byAudit.set(artifact.audit_id, current);
   }
   const seen = new Set();
@@ -366,10 +368,31 @@ export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [],
     readFile(STAGE_DELIVERY_REGISTRY, "utf8").then(JSON.parse),
     readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
   ]);
-  const stageDeliveriesByAudit = new Map(await Promise.all([...auditIds].map(async auditId => [
-    auditId,
-    await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry }),
-  ])));
+  const registryStages = Array.isArray(registry.stages) ? registry.stages : [];
+  const stageDeliveriesByAudit = new Map(await Promise.all([...auditIds].map(async auditId => {
+    try {
+      return [auditId, await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry })];
+    } catch (error) {
+      const message = String(error?.message ?? error).slice(0, 1000);
+      return [auditId, {
+        enforcement: registry.lifecycle?.enforcement ?? null,
+        audit_id: auditId,
+        complete: false,
+        completed_count: 0,
+        stages: registryStages.map((stage, index) => ({
+          id: stage.stage_id,
+          label: stage.label,
+          order: stage.order,
+          state: index === 0 ? "active" : "pending",
+          round: null,
+          manifest_path: null,
+          manifest_digest: null,
+          errors: index === 0 ? [`stage-delivery-verification-error:${message}`] : [],
+        })),
+        errors: [`stage-delivery-verification-error:${message}`],
+      }];
+    }
+  })));
   const audits = auditsFromArtifacts(artifacts, validationRuns, runnerAudits, stageDeliveriesByAudit);
   const reports = artifacts.filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown").map(artifact => reportFromArtifact(artifact, artifacts));
   const severity = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
