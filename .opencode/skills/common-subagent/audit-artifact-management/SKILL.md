@@ -15,7 +15,7 @@ Use this skill whenever an audit agent creates temporary files, tool reports, st
 
 Use `.opencode/agent-manifest/artifact-policy.json` as the source of truth.
 
-All durable deliverables go under workspace-root `reports/` only. Never write final reports under `tmp/` or inside audited application/test source trees outside `reports/`.
+The entry task injects the only durable-delivery and temporary roots. Do not choose a root from this skill; the `reports/` and `tmp/` examples below are compatibility-relative suffixes mapped by that entry task. Never write durable deliverables into the temporary or audited application/test source tree.
 
 - Final human-readable audit report: `reports/final/security-audit-report.<audit-id>.md`
 - Static-analysis report: `reports/sarif/<agent-name>.<agent-session-id>.sarif`

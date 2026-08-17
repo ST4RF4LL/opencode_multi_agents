@@ -740,6 +740,37 @@ if (mode === "run") {
   assert.equal(windowsRunSpec.args[0], "run");
   assert.equal(windowsRunSpec.args.includes("serve"), false);
 
+  // psmux may create a valid OpenCode process before its pane exposes any
+  // output.  That is not a launch failure and must not trigger the old 60-second
+  // fallback to the unmonitored runner.
+  const silentPsmuxMonitor = new OpenCodeTmuxMonitor({
+    stateRoot: join(temp, "windows-psmux-silent-state"),
+    platform: "win32",
+    environment: { PATH: "C:\\tools", PATHEXT: ".EXE" },
+    async execute(_command, args) {
+      const operation = args[2];
+      if (operation === "kill-server" || operation === "new-session") return { stdout: "", stderr: "" };
+      if (operation === "capture-pane") return { stdout: "", stderr: "" };
+      throw new Error(`unexpected silent psmux operation: ${operation}`);
+    },
+  });
+  silentPsmuxMonitor.probeResult = { available: true, backend: "psmux", opencode_command: "C:\\tools\\opencode.exe", multiplexer_command: "C:\\tools\\psmux.exe" };
+  silentPsmuxMonitor.command = "C:\\tools\\opencode.exe";
+  silentPsmuxMonitor.tmuxCommand = "C:\\tools\\psmux.exe";
+  silentPsmuxMonitor.multiplexerBackend = "psmux";
+  const silentPsmuxTerminal = await Promise.race([
+    silentPsmuxMonitor.start({
+      audit: { id: "audit-windows-psmux-silent", name: "Windows psmux 静默启动测试" },
+      repository: { path: canonicalRepositoryRoot },
+      executionDirectory: canonicalRepositoryRoot,
+      environment: {},
+      args: ["run", "--format", "json", "--agent", "security-audit-orchestrator", "--dir", canonicalRepositoryRoot, "--title", "Windows psmux 静默启动测试", "fixture prompt"],
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("psmux 静默启动被输出门禁阻塞。")), 500)),
+  ]);
+  assert.equal(silentPsmuxTerminal.backend, "psmux");
+  assert.match(silentPsmuxTerminal.message, /异步输出/);
+
   const findingWorkflowRoot = join(temp, "finding-workflow");
   const findingWorkflow = new FindingWorkflowStore({ stateRoot: findingWorkflowRoot });
   await findingWorkflow.ready;
@@ -899,6 +930,9 @@ if (mode === "run") {
     assert.match(monitoredPrompt, /audit-live-001/);
     assert.match(monitoredPrompt, new RegExp(canonicalRepositoryRoot.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.match(monitoredPrompt, /源码根目录必须只读/);
+    assert.match(monitoredPrompt, /唯一的持久交付根目录/);
+    assert.equal(monitoredPrompt.includes(reportsRoot), true);
+    assert.equal(monitoredPrompt.includes(join(reportsRoot, "final", `security-audit-report.${created.id}.md`)), true);
     assert.match(monitoredPrompt, /120 秒快速动态确认/);
     assert.match(monitoredPrompt, /完整动态验证仍只允许用户在工作台手动点击/);
     assert.match(monitoredPrompt, /不得调用 question 工具/);

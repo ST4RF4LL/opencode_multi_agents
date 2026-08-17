@@ -16,7 +16,6 @@ const MIN_COLUMNS = 40;
 const MAX_COLUMNS = 320;
 const MIN_ROWS = 12;
 const MAX_ROWS = 120;
-const RUN_OUTPUT_TIMEOUT_MS = 60_000;
 
 function runtimeOverrides(environment) {
   return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (key.startsWith("OPENCODE_") || /^AUDIT_[A-Z0-9_]+$/.test(key)) && typeof value === "string"));
@@ -34,7 +33,7 @@ function sessionFromOutput(output) {
 }
 
 export class OpenCodeTmuxMonitor {
-  constructor({ stateRoot, command = null, tmuxCommand = null, environment = process.env, platform = osPlatform(), architecture = osArch(), execute = execFileAsync, resolveCommand = resolveExecutablePath, readyTimeoutMs = RUN_OUTPUT_TIMEOUT_MS } = {}) {
+  constructor({ stateRoot, command = null, tmuxCommand = null, environment = process.env, platform = osPlatform(), architecture = osArch(), execute = execFileAsync, resolveCommand = resolveExecutablePath } = {}) {
     this.stateRoot = stateRoot;
     this.environment = environment;
     this.platform = platform;
@@ -43,7 +42,6 @@ export class OpenCodeTmuxMonitor {
     this.tmuxCommand = tmuxCommand ?? environment.AUDIT_MULTIPLEXER_BIN ?? environment.PSMUX_BIN ?? environment.TMUX_BIN ?? null;
     this.execute = execute;
     this.resolveCommand = resolveCommand;
-    this.readyTimeoutMs = readyTimeoutMs;
     this.probeResult = null;
     this.multiplexerBackend = null;
   }
@@ -153,26 +151,30 @@ export class OpenCodeTmuxMonitor {
     return { columns: actualColumns, rows: actualRows };
   }
 
-  async waitForRunOutput(terminal) {
-    const deadline = Date.now() + Math.min(this.readyTimeoutMs, RUN_OUTPUT_TIMEOUT_MS);
-    let detail = "";
-    while (Date.now() < deadline) {
+  async initialRunOutput(terminal) {
+    // A newly created OpenCode process can legitimately be silent while it loads
+    // configuration and the provider.  In particular, psmux on Windows does not
+    // guarantee that pane output is observable before that initialization ends.
+    // Process creation is the startup boundary; output is relayed asynchronously.
+    try {
+      const state = JSON.parse(await readFile(terminal.exit_path, "utf8"));
+      const output = await readFile(terminal.output_path, "utf8").catch(() => "");
+      throw new Error(`OpenCode run 在启动后立即退出（code=${state.code ?? "null"}, signal=${state.signal ?? "none"}）：${String(output || state.error || "无输出").trim().slice(-2_000)}`);
+    } catch (error) {
+      if (error?.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+    }
+    const deadline = Date.now() + (this.multiplexerBackend === "psmux" ? 0 : 2_000);
+    do {
       try {
         const output = await this.capture(terminal, 120);
         if (output.trim()) return output;
-      } catch (error) {
-        detail = error.message;
+      } catch {
+        // A pane can take a moment to become capturable; output remains optional.
       }
-      try {
-        const state = JSON.parse(await readFile(terminal.exit_path, "utf8"));
-        const output = await readFile(terminal.output_path, "utf8").catch(() => "");
-        throw new Error(`OpenCode run 在生成有效输出前退出（code=${state.code ?? "null"}, signal=${state.signal ?? "none"}）：${String(output || state.error || "无输出").trim().slice(-2_000)}`);
-      } catch (error) {
-        if (error?.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
-      }
+      if (Date.now() >= deadline) break;
       await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    throw new Error(`OpenCode run 未在超时内生成输出${detail ? `：${detail}` : ""}`);
+    } while (true);
+    return "";
   }
 
   async start({ audit, repository, environment, executionDirectory = repository.path, providerSessionId = null, args }) {
@@ -221,11 +223,13 @@ export class OpenCodeTmuxMonitor {
         resumed: providerSessionId !== null,
         message: providerSessionId ? `OpenCode run 已续接原会话并在隔离 ${this.multiplexerBackend ?? "tmux"} 中运行。` : `OpenCode run 已在隔离 ${this.multiplexerBackend ?? "tmux"} 会话中运行。`,
       };
-      const initialOutput = await this.waitForRunOutput(terminal);
+      const initialOutput = await this.initialRunOutput(terminal);
       const discoveredSessionId = providerSessionId ?? sessionFromOutput(initialOutput);
       if (discoveredSessionId) {
         terminal.provider_session_id = discoveredSessionId;
         terminal.opencode_command = `opencode -s ${discoveredSessionId}`;
+      } else if (!initialOutput.trim()) {
+        terminal.message = `OpenCode run 已在隔离 ${this.multiplexerBackend ?? "tmux"} 会话中启动，正在等待异步输出；这不会阻塞审计 Runner。`;
       }
       return terminal;
     } catch (error) {

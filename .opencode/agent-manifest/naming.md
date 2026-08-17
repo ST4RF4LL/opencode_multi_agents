@@ -64,7 +64,7 @@ Only `security-skill-optimizer` should modify these assets during normal audit f
 
 All temporary files belong under root `tmp/`, not under `.opencode/shared/`.
 
-All durable audit deliverables belong under workspace-root `reports/` only. Never write final reports under `tmp/` or inside audited application/test source trees outside `reports/`.
+The entry task injects the only durable-delivery and temporary roots. This document does not select a root: `reports/` and `tmp/` below are compatibility-relative suffixes mapped by that entry task. Never write durable deliverables into the temporary or audited application/test source tree.
 
 - Final human-readable audit report: `reports/final/security-audit-report.<audit-id>.md`
 - Static-analysis reports use SARIF 2.1.0 at `reports/sarif/<agent-name>.<agent-session-id>.sarif`.

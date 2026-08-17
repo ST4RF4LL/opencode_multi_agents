@@ -81,7 +81,7 @@ When `AUDIT_SOURCE_ROOT` is present, it is the only repository and frozen-scope 
 
 - treat `AUDIT_SOURCE_ROOT` as read-only and never create `reports/`, `tmp/`, caches, configuration, or helper files beneath it;
 - pass the absolute `AUDIT_SOURCE_ROOT` to every Git command (`git -C`), scope/parser/interface builder (`--root`), scanner target, subagent assignment, and final source binding; never substitute `.` or the execution workspace;
-- keep all contract paths and output paths relative to the execution workspace (`reports/**` and `tmp/<audit_id>/**`), which are bound to `AUDIT_REPORTS_ROOT` and `AUDIT_TMP_ROOT`;
+- use only the durable-delivery and temporary roots injected by the entry task; Agent/Skill documentation never selects a root directory. Contract path examples describe suffixes relative to that injected mapping only;
 - tell every subagent both the absolute read-only source root and the separate output workspace. Reject any returned artifact whose producer wrote into the source root.
 
 ## Mandatory Tri-Lens Model
@@ -278,12 +278,12 @@ Before declaring the full workflow complete, verify:
 - Do not edit audited source or reusable audit assets directly; delegate reusable changes to `security-skill-optimizer`.
 - Do not ask an auditor to cover multiple lenses in one session.
 - A finding does not prove that its coverage cell is complete.
-- All durable report deliverables go under workspace-root `reports/` only (final markdown under `reports/final/`). Never under `tmp/` or audited app/test trees outside `reports/`.
+- The entry task provides the only durable-delivery root and exact final-report target. Never infer or replace that root from this document, and never write durable deliverables under the temporary or audited source tree.
 - Never automatically delete `tmp/` or any `tmp/<audit_id>/` directory. Cleanup is manual-only.
 
 ## Final Report Format
 
-Write this markdown to `reports/final/security-audit-report.<audit_id>.md` (and may also display a summary in chat).
+Write this markdown only to the exact final-report target injected by the entry task (and may also display a summary in chat).
 
 ```markdown
 # Source, Platform, and AI System Security Audit Report
@@ -359,7 +359,7 @@ Copy values exactly from the verified `coverage-summary.<audit_id>.json`; do not
 - SARIF reports:
 - Local packet handoffs and todo summary:
 - Post-validation optimization handoff: outside this immutable report
-- Final report path: `reports/final/security-audit-report.<audit_id>.md`
+- Final report path: the exact path injected by the entry task
 - tmp retention status: retained for manual cleanup (`tmp/<audit_id>/` not auto-deleted)
 
 ## Not Applicable / Unsupported
