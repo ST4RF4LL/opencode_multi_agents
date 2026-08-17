@@ -14,6 +14,7 @@ import {
   listAuditTodoItems,
   readAuditTodo,
   recoverExpiredAuditTodo,
+  summarizeAuditTodo,
 } from "../scripts/audit-todo-core.mjs";
 import { buildLocalAuditSummary } from "../scripts/build-local-audit-summary.mjs";
 
@@ -46,6 +47,17 @@ try {
   assert.equal(initialized.summary.total, 3, "一个 coverage unit 对应一个本地任务");
   assert.equal(initialized.todo.items[0].required_lenses.length, 3, "三个 lens 不得拆为 UI todo 项");
   assert.equal((await initializeAuditTodo({ todoPath, auditId, planPath })).created, false, "同一计划重复初始化必须幂等");
+  const terminalGapSummary = summarizeAuditTodo({
+    audit_id: "audit-terminal-gap",
+    items: [
+      { agent_name: "java-source-auditor", status: "DONE" },
+      { agent_name: "java-source-auditor", status: "DONE" },
+      { agent_name: "java-source-auditor", status: "GAP" },
+    ],
+  });
+  assert.equal(terminalGapSummary.complete, true, "DONE 与 GAP 均为任务终态");
+  assert.equal(terminalGapSummary.finalization_ready, true, "仅含 DONE/GAP 时必须允许收尾");
+  assert.equal(terminalGapSummary.next_action, "FINALIZE_WITH_RESIDUAL_GAPS", "GAP 终态必须进入部分报告收尾而非继续领取");
 
   const claimed = await claimAuditTodo({ todoPath, packetLimit: 4, itemsPerPacket: 1, leaseMinutes: 30 });
   assert.equal(claimed.packets.length, 3, "应按专业 Agent 和包上限领取有限工作包");
@@ -109,6 +121,13 @@ try {
   assert.equal(localSummary.execution.model, "local-audit-todo");
   assert.equal(localSummary.coverage_status, "COMPLETE");
   assert.match(localSummary.manifest_digest, /^[a-f0-9]{64}$/);
+  const terminalGapTodo = await readAuditTodo(summaryTodoPath);
+  terminalGapTodo.items[0].status = "GAP";
+  terminalGapTodo.items[0].gap_reason = "测试覆盖缺口";
+  await writeFile(summaryTodoPath, `${JSON.stringify(terminalGapTodo, null, 2)}\n`, "utf8");
+  const partialLocalSummary = await buildLocalAuditSummary({ auditId: summaryAuditId, planPath: summaryPlanPath, todoPath: summaryTodoPath });
+  assert.equal(partialLocalSummary.local_todo.next_action, "FINALIZE_WITH_RESIDUAL_GAPS");
+  assert.equal(partialLocalSummary.coverage_status, "PARTIAL", "终态 GAP 必须允许生成部分覆盖摘要");
   process.stdout.write("audit todo tests passed\n");
 } finally {
   await rm(root, { recursive: true, force: true });

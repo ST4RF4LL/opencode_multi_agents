@@ -417,6 +417,13 @@ export function createAuditWorkbenchServer({
         json(response, 200, { queue });
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/v1/settings/queue/dispatch") {
+        assertSafeMutation(request);
+        await requestJson(request);
+        await queueScheduler.triggerNow();
+        json(response, 202, { queue: await queueScheduler.snapshot() });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/v1/workspace") {
         json(response, 200, await snapshot());
         return;
@@ -486,7 +493,17 @@ export function createAuditWorkbenchServer({
         assertSafeMutation(request);
         const body = await requestJson(request);
         const expected = String(request.headers["if-match"] ?? "").replaceAll('"', "");
-        const audit = await runner.action(actionAuditId, body.action, expected, request.headers["idempotency-key"]);
+        let audit;
+        if (body.action === "dispatch") {
+          const current = runner.getAudit(actionAuditId);
+          if (!current) throw Object.assign(new Error("审计不存在。"), { statusCode: 404, code: "audit-not-found" });
+          if (Number(expected) !== current.version) {
+            throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
+          }
+          audit = await queueScheduler.dispatchAuditNow(actionAuditId);
+        } else {
+          audit = await runner.action(actionAuditId, body.action, expected, request.headers["idempotency-key"]);
+        }
         json(response, 202, audit, { ETag: `"${audit.version}"` });
         return;
       }

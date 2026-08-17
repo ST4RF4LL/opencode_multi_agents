@@ -115,6 +115,18 @@ export function summarizeAuditTodo(todo) {
     byAgent.set(item.agent_name, current);
   }
   const terminal = counts.done + counts.gap + counts.failed;
+  const finalizationReady = items.length > 0 && counts.pending === 0 && counts.running === 0 && counts.failed === 0;
+  const nextAction = items.length === 0
+    ? "INITIALIZE"
+    : counts.pending > 0
+      ? "CLAIM"
+      : counts.running > 0
+        ? "RECOVER_OR_WAIT"
+        : counts.failed > 0
+          ? "REPAIR_FAILURES"
+          : counts.gap > 0
+            ? "FINALIZE_WITH_RESIDUAL_GAPS"
+            : "FINALIZE";
   return {
     audit_id: todo?.audit_id ?? null,
     total: items.length,
@@ -124,7 +136,9 @@ export function summarizeAuditTodo(todo) {
     gap: counts.gap,
     failed: counts.failed,
     terminal,
-    complete: items.length > 0 && counts.pending === 0 && counts.running === 0 && counts.failed === 0,
+    complete: finalizationReady,
+    finalization_ready: finalizationReady,
+    next_action: nextAction,
     progress: items.length === 0 ? 0 : Math.round((terminal / items.length) * 100),
     updated_at: todo?.updated_at ?? null,
     by_agent: [...byAgent.values()].sort((left, right) => left.agent_name.localeCompare(right.agent_name)),
@@ -287,7 +301,8 @@ export async function claimAuditTodo({ todoPath, packetLimit = 4, itemsPerPacket
   }
   todo.updated_at = now();
   await writeTodo(todoPath, todo);
-  return { packets, summary: summarizeAuditTodo(todo) };
+  const summary = summarizeAuditTodo(todo);
+  return { packets, summary, next_action: summary.next_action };
 }
 
 async function validateHandoff({ handoffPath, reportsRoot, todo, packet }) {

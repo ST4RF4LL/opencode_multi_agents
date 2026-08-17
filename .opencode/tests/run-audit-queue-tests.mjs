@@ -83,8 +83,18 @@ try {
   assert.equal(saved.queue.concurrency, 2);
   assert.match(saved.queue.next_dispatch_at, /^2026-08-14T00:30:00\.000Z$/);
 
+  await scheduler.triggerNow();
+  assert.deepEqual(runner.dispatched, ["audit-001", "audit-002"]);
+
+  await assert.rejects(scheduler.dispatchAuditNow("audit-003"), error => error.code === "queue-concurrency-full");
+  runner.audits.find(audit => audit.id === "audit-001").status = "completed";
+  await scheduler.dispatchAuditNow("audit-003");
+  assert.deepEqual(runner.dispatched, ["audit-001", "audit-002", "audit-003"]);
+  assert.equal(runner.audits.find(audit => audit.id === "audit-003").status, "running");
+
   await scheduler.deactivate();
   assert.equal((await store.get()).enabled, false);
+  await assert.rejects(scheduler.triggerNow(), error => error.code === "queue-disabled");
   assert.equal(timers.at(-1).cleared, true);
   await scheduler.shutdown();
 } finally {

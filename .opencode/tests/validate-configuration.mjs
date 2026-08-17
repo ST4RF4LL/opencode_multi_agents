@@ -107,6 +107,9 @@ async function main() {
   assert(sameSet(roleAgents, Object.keys(mcpMap.agents).sort()), "mcp-map agent keys do not equal role agent keys");
   assert(/^\s*"\*": allow\s*$/m.test(orchestratorText), "security-audit-orchestrator must default to all permissions without approval");
   assert(orchestratorText.includes("audit-todo claim --packets 4 --items 12"), "security-audit-orchestrator must use bounded local work packets");
+  assert(orchestratorText.includes("FINALIZE_WITH_RESIDUAL_GAPS")
+    && orchestratorText.includes("only scheduler loop condition")
+    && orchestratorText.includes("--mode policy-final"), "security-audit-orchestrator must finalize terminal GAP items instead of waiting or requeueing them");
   assert(orchestratorText.includes("OpenCode todolist"), "security-audit-orchestrator must prohibit OpenCode todolist fan-out");
   assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
   assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");

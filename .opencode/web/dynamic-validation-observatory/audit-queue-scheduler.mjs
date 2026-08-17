@@ -268,20 +268,50 @@ export class AuditQueueScheduler {
     return this.enqueueDispatch();
   }
 
-  async enqueueDispatch() {
+  async triggerNow() {
+    await this.ready;
+    const queue = await this.settingsStore.get();
+    if (!queue.enabled) {
+      throw Object.assign(new Error("排队机制尚未激活，请先在设置中激活后再立即调度。"), { statusCode: 409, code: "queue-disabled" });
+    }
+    return this.enqueueDispatch();
+  }
+
+  async dispatchAuditNow(auditId) {
+    await this.ready;
+    if (typeof auditId !== "string" || !auditId.trim()) {
+      throw invalid("需要指定要立即调度的审计任务。", "queue-audit-id-invalid");
+    }
+    return this.enqueueDispatch({ auditId: auditId.trim(), requireTarget: true });
+  }
+
+  async enqueueDispatch({ auditId = null, requireTarget = false } = {}) {
     const operation = this.dispatches.catch(() => {}).then(async () => {
       if (this.stopped) return;
       const queue = await this.settingsStore.get();
-      if (!queue.enabled) return;
+      if (!queue.enabled) {
+        if (requireTarget) throw Object.assign(new Error("排队机制尚未激活，请先在设置中激活后再立即调度。"), { statusCode: 409, code: "queue-disabled" });
+        return;
+      }
       const snapshot = this.runner.queueSnapshot();
       const capacity = Math.max(0, queue.concurrency - snapshot.active_count);
-      for (const audit of snapshot.queued.slice(0, capacity)) {
-        await this.runner.dispatchQueuedAudit(audit.id);
+      const candidates = auditId ? snapshot.queued.filter(audit => audit.id === auditId) : snapshot.queued;
+      if (requireTarget && !candidates.length) {
+        throw Object.assign(new Error("只有“排队中”的审计任务可以立即调度。"), { statusCode: 409, code: "audit-not-queued" });
+      }
+      if (requireTarget && capacity < 1) {
+        throw Object.assign(new Error("当前并发名额已满；请等待运行任务结束或在设置中提高并发。"), { statusCode: 409, code: "queue-concurrency-full" });
+      }
+      let dispatchedTarget = null;
+      for (const audit of candidates.slice(0, capacity)) {
+        const dispatched = await this.runner.dispatchQueuedAudit(audit.id);
+        if (audit.id === auditId) dispatchedTarget = dispatched;
       }
       const dispatchedAt = nowIso(this.clock);
       const nextAt = new Date(this.clock() + queue.interval_hours * 60 * 60 * 1000).toISOString();
       const persisted = await this.settingsStore.schedule({ lastDispatchAt: dispatchedAt, nextDispatchAt: nextAt });
       this.arm(Date.parse(persisted.next_dispatch_at));
+      return dispatchedTarget;
     });
     this.dispatches = operation;
     return operation;

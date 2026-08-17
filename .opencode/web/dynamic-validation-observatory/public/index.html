@@ -45,7 +45,7 @@
 
           <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">AUDIT TARGETS</p><h2>审计项目</h2><p>登记你要审计的源码目录；路径属于工作台所在机器，而不是浏览器所在机器。</p></div><button id="add-project" class="button primary">＋ 指定目录</button></div><article class="panel"><div id="project-table" class="data-table"></div></article></section>
 
-          <section id="view-audits" class="view"><div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div></div><div class="split"><article class="panel"><div id="audit-table" class="data-table"></div></article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div></section>
+          <section id="view-audits" class="view"><div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div><button id="dispatch-queue" class="button secondary">立即调度队列</button></div><div class="split"><article class="panel"><div id="audit-table" class="data-table"></div></article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div></section>
 
           <section id="view-findings" class="view"><div class="page-heading"><div><p class="eyebrow">FINDING LEDGER</p><h2>漏洞发现</h2><p>优先展示证据关联后的 canonical finding，并保留来源制品。</p></div><label class="search"><span>⌕</span><input id="finding-query" placeholder="搜索漏洞、文件或 ID"></label></div><article class="panel"><div id="finding-table" class="data-table"></div></article></section>
 

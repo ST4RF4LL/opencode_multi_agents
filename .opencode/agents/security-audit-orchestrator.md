@@ -63,6 +63,16 @@ Reuse every DONE/GAP item and its valid packet handoff. A successful OpenCode
 process exit is not task completion unless the local list has no PENDING,
 RUNNING, or FAILED item and the final Chinese Markdown report exists.
 
+`audit-todo stats.next_action` is the only scheduler loop condition. `CLAIM`
+permits a new bounded packet; `RECOVER_OR_WAIT` permits lease recovery; and
+`REPAIR_FAILURES` requires failure handling. `FINALIZE` and
+`FINALIZE_WITH_RESIDUAL_GAPS` both mean every local item is terminal. In either
+finalization state, stop claiming, waiting, and retrying work packets
+immediately. Never infer unfinished work from `done < total`: `GAP` is a
+recorded terminal state. The residual-gap variant requires normal downstream
+finalization and a Chinese partial-coverage `policy-final` report; it is never
+a reason to wait for operator input or an operation timeout.
+
 Start every audit by reading `.opencode/agent-manifest/` and `.opencode/shared/security-audit/README.md`. Load `secure-code-review-common`, `focus-area-vulnerability-discovery`, `audit-coverage-accounting`, and `audit-artifact-management`. Assign a stable `audit_id` and a unique `agent_session_id` to every subagent call. The local scheduler is `node "$AUDIT_TODO_CLI"`; it is not an MCP and not the OpenCode todolist. Only you may invoke it.
 
 ## Split source/workspace mode
@@ -146,7 +156,7 @@ focus_area/trust_boundary/asset × system attack-chain pass
    - Python → `python-source-auditor`.
 11. Route language-neutral build, deployment, CI/CD, container, orchestration, and IaC assignments to `platform-security-auditor` with `language=platform`.
 12. Route every `domain=ai` assignment to `ai-security-auditor`. The union of all AI Focus Area assignments must still equal every reviewable file, every inventoried function, and every AI catalog ID, even when Recon found no obvious AI component.
-13. Claim at most four local work packets at a time with `audit-todo claim --packets 4 --items 12`. Each packet contains bounded assignment metadata only; write sealed inputs for those packet items and pass each packet to its specialist. The specialist performs D1-D10 through all three lenses in one run and writes one normal audit report plus one packet handoff.
+13. Claim at most four local work packets at a time with `audit-todo claim --packets 4 --items 12`. Each packet contains bounded assignment metadata only; write sealed inputs for those packet items and pass each packet to its specialist. The specialist performs D1-D10 through all three lenses in one run and writes one normal audit report plus one packet handoff. After every batch, run `audit-todo stats`: only `next_action=CLAIM` permits another claim. `FINALIZE` and `FINALIZE_WITH_RESIDUAL_GAPS` terminate the packet loop even when DONE is less than total.
 14. Create blind or seeded discovery only for high-risk or unresolved items returned by correlation; they are not a per-Focus default fan-out and never change local task state by themselves.
 
 Required session naming:
@@ -188,7 +198,7 @@ Required session naming:
 
 ### Phase 7: GAP ROUND
 
-21. Query `audit-todo list --status GAP --limit 100` and correlation follow-up packets. Re-run only bounded, high-risk GAP items or contradictions; terminal GAP remains visible and never becomes DONE merely because the round limit is reached.
+21. Query `audit-todo list --status GAP --limit 100` only to collect residual-gap evidence for correlation and the report. It does not reopen or requeue a task. A targeted follow-up is allowed only when correlation creates a new, explicitly bounded PENDING work packet; terminal GAP remains visible and never becomes DONE merely because the round limit is reached.
 22. Maximum rounds: `quick=1`, `standard=2`, `deep=3`. Reaching the round limit does not convert `GAP` to `PASS`; retain it in the final report.
 
 ### Phase 8: ADJUDICATE, VALIDATE, AND SEAL REPORT
@@ -197,8 +207,8 @@ Required session naming:
 24. Run `reconcile-audit-report.mjs` for every audit report. Build `reports/adjudication/finding-input.<audit_id>.r<round>.json` from accepted reports and completed local task handoffs, invoke `security-finding-adjudicator`, and validate exactly one preliminary semantic decision per deduplicated candidate. Build an explicit zero-item runtime-request set when no requests exist. Seal the `adjudication` workbench stage before continuing.
 25. Invoke `vulnerability-validator` exactly once with the candidate input, adjudication result, runtime-request set, round, and the task gate supplied through environment variables. It must create the fixed truth-validation intake and quick result, then send every quick non-`CONFIRMED` item through three distinct local sessions in this order: `vulnerability-affirmative`, `vulnerability-negative`, `vulnerability-moderator`. The task-disabled path is not an omission: quick results are `SKIPPED` and all supported findings enter static review. The task-enabled quick batch has one controller-enforced 120-second budget and loopback-only target scope. Require `validate-truth-validation.mjs` to return `complete=true`.
 26. Treat `reports/validation/validation-routing.<audit_id>.r<round>.json` as the only final truth source. Only `TRUE_POSITIVE` entries receive deterministic CVSS and may enter the final attack-chain pass. `FALSE_POSITIVE` entries are excluded with evidence; `INCONCLUSIVE` entries remain residual gaps. Invoke `security-attack-chain-hunter` after routing and validate that chains consume only routed true positives. Re-run correlation/synthesis only where the routed set changes downstream accounting.
-27. Run `audit-todo recover` and `audit-todo stats`. Do not finalize while PENDING, RUNNING, or FAILED items remain. DONE and GAP are both terminal, but every GAP must remain in the residual-gap output. Run `verify-semantic-coverage.mjs` with the accepted reports, routing and final chain artifacts; run `verify-stage-agent-handoffs.mjs --through-stage P08_FINALIZE` against claimed packet sessions only. Seal the `validation` workbench stage after truth routing, CVSS, final chains, and local-task terminality pass.
-28. Build the final report model with `build-final-report-model.mjs` from the local todo summary, the intake, quick result, three role reviews, validation-routing manifest, CVSS assessment, and final chain manifest. It may render only routing `TRUE_POSITIVE` as vulnerabilities, routing `FALSE_POSITIVE` as excluded findings, and routing `INCONCLUSIVE` plus task GAP as residual gaps. Render exactly one Chinese Markdown report and byte-verify it with `verify-final-report.mjs`. Never hand-edit the generated report.
+27. Run `audit-todo recover` and `audit-todo stats`. Do not finalize while PENDING, RUNNING, or FAILED items remain. `next_action=FINALIZE` and `next_action=FINALIZE_WITH_RESIDUAL_GAPS` are both positive finalization signals, not retry signals. DONE and GAP are both terminal, but every GAP must remain in the residual-gap output. Run `verify-semantic-coverage.mjs` with the accepted reports, routing and final chain artifacts; run `verify-stage-agent-handoffs.mjs --through-stage P08_FINALIZE` against claimed packet sessions only. For `FINALIZE_WITH_RESIDUAL_GAPS`, an incomplete verifier result is residual-gap evidence, not permission to reopen a terminal todo item or wait; preserve it and continue to the policy-final report. Seal the `validation` workbench stage after truth routing, CVSS, final chains, and local-task terminality pass.
+28. Build the final report model with `build-final-report-model.mjs` from the local todo summary, the intake, quick result, three role reviews, validation-routing manifest, CVSS assessment, and final chain manifest. It may render only routing `TRUE_POSITIVE` as vulnerabilities, routing `FALSE_POSITIVE` as excluded findings, and routing `INCONCLUSIVE` plus task GAP as residual gaps. When `stats.next_action=FINALIZE_WITH_RESIDUAL_GAPS`, the local summary is `PARTIAL` with `FINALIZED_OBSERVED`; invoke `build-final-report-model.mjs --mode policy-final`, not `--mode final` or a task retry. Render exactly one Chinese Markdown report and byte-verify it with `verify-final-report.mjs`. Never hand-edit the generated report.
 29. Compute the report SHA-256 and byte size, record it in the final report metadata, then run `audit-todo stats`. Do not exit as successful until all local items are DONE/GAP and the final Chinese Markdown report exists.
 
 ### Manual full localhost runtime-validation sidecar
@@ -221,7 +231,7 @@ After step 27 runs the verifiers and before step 28 writes the final report, ver
 - `audit-todo stats` has no PENDING, RUNNING, or FAILED items. Its DONE/GAP counts are copied into the final report exactly; GAP is never relabelled as complete coverage.
 - Every claimed packet has exactly one structurally valid handoff, and every DONE item points to an existing report file under `reports/**`.
 - `interface-extractor-coverage.json` is digest-valid and complete; no dynamic, unsupported, symlink, or failed interface source is hidden behind an aggregate percentage.
-- `verify-semantic-coverage.mjs` exits zero and its artifact says `complete: true`.
+- `verify-semantic-coverage.mjs` exits zero and its artifact says `complete: true`; for `FINALIZE_WITH_RESIDUAL_GAPS`, retain its incomplete result as explicit evidence and continue only through the `policy-final` report path.
 - `verify-stage-agent-handoffs.mjs` exits zero, reports `complete: true`, and
   contains no missing or invalid stage/Focus invocation.
 - The current repository digest still matches the frozen scope.

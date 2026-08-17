@@ -82,6 +82,16 @@ function short(value, length = 12) {
   return text.length > length ? `${text.slice(0, length)}…` : text;
 }
 
+function todoStatusText(todo) {
+  if (!todo?.total) return "尚未从 Focus Area 初始化";
+  if (todo.finalization_ready || todo.complete) {
+    const terminal = todo.terminal ?? ((todo.done ?? 0) + (todo.gap ?? 0) + (todo.failed ?? 0));
+    const residual = todo.gap ? ` · GAP ${todo.gap}（已记录，可收尾）` : "";
+    return `终态 ${terminal}/${todo.total} · DONE ${todo.done ?? 0}${residual}`;
+  }
+  return `完成 ${todo.done ?? 0}/${todo.total} · 运行 ${todo.running ?? 0} · 待领 ${todo.pending ?? 0}${todo.gap ? ` · GAP ${todo.gap}` : ""}${todo.failed ? ` · FAILED ${todo.failed}` : ""}`;
+}
+
 function bytes(value) {
   if (!Number.isFinite(value)) return "—";
   if (value < 1024) return `${value} B`;
@@ -208,7 +218,19 @@ function renderProjects() {
 }
 
 function renderAudits() {
-  const [value, body] = table(["审计任务", "仓库 / 提交", "当前阶段", "进度", "漏洞", "状态"]);
+  const dispatchQueue = $("dispatch-queue");
+  const queue = state.workspace.queue ?? {};
+  const queued = queue.queued_count ?? state.workspace.audits.filter(audit => audit.status === "queued").length;
+  const availableSlots = queue.available_slots ?? 0;
+  dispatchQueue.disabled = !queue.enabled || !queued || !availableSlots;
+  dispatchQueue.title = !queue.enabled
+    ? "请先在设置中激活排队机制"
+    : !queued
+      ? "当前没有排队中的审计任务"
+      : !availableSlots
+        ? "当前并发名额已满"
+        : "跳过队列间隔，按创建时间启动当前可用名额内的任务";
+  const [value, body] = table(["审计任务", "仓库 / 提交", "当前阶段", "进度", "漏洞", "状态", "操作"]);
   for (const audit of state.workspace.audits) {
     const row = element("tr", "clickable");
     const identity = element("td");
@@ -219,6 +241,24 @@ function renderAudits() {
     cell(row, audit.status === "queued" ? "等待调度" : (audit.todo?.total ? `${audit.progress}% · 任务 ${audit.todo.done}/${audit.todo.total}` : `${audit.progress}%`));
     cell(row, audit.finding_count);
     const statusCell = element("td"); statusCell.append(status(audit.status)); row.append(statusCell);
+    const actionCell = element("td");
+    if (audit.status === "queued") {
+      const start = element("button", "button primary", "立即开始");
+      start.disabled = !queue.enabled || !availableSlots;
+      start.title = start.disabled
+        ? !queue.enabled
+          ? "请先在设置中激活排队机制"
+          : "当前并发名额已满"
+        : "跳过队列间隔，立即启动此任务；仍遵守并发上限";
+      start.addEventListener("click", event => {
+        event.stopPropagation();
+        requestAuditAction(audit, "dispatch");
+      });
+      actionCell.append(start);
+    } else {
+      actionCell.textContent = "—";
+    }
+    row.append(actionCell);
     row.addEventListener("click", () => { state.selectedAuditId = audit.id; renderAuditDetail(); });
     body.append(row);
   }
@@ -234,7 +274,7 @@ function renderAuditDetail() {
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
-  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度" : "等待定时调度") : "未排队"], ["本地调度任务", audit.todo?.total ? `完成 ${audit.todo.done}/${audit.todo.total} · 运行 ${audit.todo.running} · 待领 ${audit.todo.pending} · GAP ${audit.todo.gap}` : "尚未从 Focus Area 初始化"], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
+  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const stages = element("ol", "stage-list");
@@ -254,6 +294,15 @@ function renderAuditDetail() {
     const button = element("button", `button ${action === "cancel" ? "secondary" : "primary"}`, labels[action]);
     button.addEventListener("click", () => requestAuditAction(audit, action));
     actions.append(button);
+  }
+  if (audit.status === "queued") {
+    const dispatch = element("button", "button primary", "立即调度");
+    dispatch.disabled = !state.workspace.queue?.enabled;
+    dispatch.title = dispatch.disabled
+      ? "请先在设置中激活排队机制"
+      : "跳过队列间隔立即启动此任务；仍遵守并发上限";
+    dispatch.addEventListener("click", () => requestAuditAction(audit, "dispatch"));
+    actions.append(dispatch);
   }
   if (["failed", "interrupted", "cancelled"].includes(audit.status) && audit.repository_id) {
     const recover = element("button", "button primary", "断点恢复");
@@ -407,7 +456,21 @@ async function requestAuditAction(audit, action) {
       headers: { "Content-Type": "application/json", "If-Match": `"${audit.version}"`, "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ action }),
     });
-    toast(`已提交${({ pause: "暂停", resume: "恢复", recover: "断点恢复", cancel: "取消" })[action]}操作`);
+    toast(`已提交${({ pause: "暂停", resume: "恢复", recover: "断点恢复", cancel: "取消", dispatch: "立即调度" })[action]}操作`);
+    await load();
+  } catch (error) { showError(error); }
+}
+
+async function dispatchQueueNow() {
+  const button = $("dispatch-queue");
+  button.disabled = true;
+  try {
+    await api("/api/v1/settings/queue/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    toast("队列已立即调度，已按 FIFO 补足可用并发名额");
     await load();
   } catch (error) { showError(error); }
 }
@@ -995,6 +1058,7 @@ document.querySelectorAll("[data-close-delete-audit]").forEach(button => button.
 $("new-audit").addEventListener("click", () => openAuditDialog());
 $("add-project").addEventListener("click", openProjectDialog);
 $("refresh").addEventListener("click", () => load().then(() => toast("制品与运行状态已刷新")).catch(showError));
+$("dispatch-queue").addEventListener("click", () => dispatchQueueNow().catch(showError));
 $("finding-query").addEventListener("input", renderFindings);
 $("audit-form").addEventListener("submit", submitAudit);
 $("queue-settings-form").addEventListener("submit", submitQueueSettings);

@@ -1117,6 +1117,22 @@ if (mode === "run") {
     assert.equal(queuedAudit.status, "queued");
     assert.equal(runner.getAudit(queuedAudit.id).status, "queued");
     assert.equal((await (await fetch(`${base}/api/v1/workspace`)).json()).queue.queued_count, 1);
+    const queuedDispatchResponse = await fetch(`${base}/api/v1/audits/${queuedAudit.id}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "If-Match": `"${runner.getAudit(queuedAudit.id).version}"`, "Idempotency-Key": "queue-audit-dispatch" },
+      body: JSON.stringify({ action: "dispatch" }),
+    });
+    assert.equal(queuedDispatchResponse.status, 202, JSON.stringify(await queuedDispatchResponse.clone().json()));
+    assert.equal((await queuedDispatchResponse.json()).status, "running");
+    assert.equal(runner.getAudit(queuedAudit.id).status, "running");
+    const queuedCancelResponse = await fetch(`${base}/api/v1/audits/${queuedAudit.id}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "If-Match": `"${runner.getAudit(queuedAudit.id).version}"`, "Idempotency-Key": "queue-audit-cancel" },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    assert.equal(queuedCancelResponse.status, 202);
+    for (let attempt = 0; attempt < 50 && runner.getAudit(queuedAudit.id)?.status !== "cancelled"; attempt += 1) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(runner.getAudit(queuedAudit.id).status, "cancelled");
     const queuedDeleteResponse = await fetch(`${base}/api/v1/audits/${queuedAudit.id}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json", "If-Match": `"${runner.getAudit(queuedAudit.id).version}"` },
@@ -1124,6 +1140,36 @@ if (mode === "run") {
     });
     assert.equal(queuedDeleteResponse.status, 200);
     assert.equal(runner.getAudit(queuedAudit.id), null);
+    const queuedFifoAuditResponse = await fetch(`${base}/api/v1/audits`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "queue-audit-fifo-request" },
+      body: JSON.stringify({ audit_id: "audit-queued-002", repository_id: "fixture", ref: "HEAD", allow_dirty: true }),
+    });
+    assert.equal(queuedFifoAuditResponse.status, 202);
+    const queuedFifoAudit = await queuedFifoAuditResponse.json();
+    assert.equal(queuedFifoAudit.status, "queued");
+    const queueDispatchResponse = await fetch(`${base}/api/v1/settings/queue/dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(queueDispatchResponse.status, 202, JSON.stringify(await queueDispatchResponse.clone().json()));
+    assert.equal((await queueDispatchResponse.json()).queue.queued_count, 0);
+    assert.equal(runner.getAudit(queuedFifoAudit.id).status, "running");
+    const queuedFifoCancelResponse = await fetch(`${base}/api/v1/audits/${queuedFifoAudit.id}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "If-Match": `"${runner.getAudit(queuedFifoAudit.id).version}"`, "Idempotency-Key": "queue-audit-fifo-cancel" },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    assert.equal(queuedFifoCancelResponse.status, 202);
+    for (let attempt = 0; attempt < 50 && runner.getAudit(queuedFifoAudit.id)?.status !== "cancelled"; attempt += 1) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(runner.getAudit(queuedFifoAudit.id).status, "cancelled");
+    const queuedFifoDeleteResponse = await fetch(`${base}/api/v1/audits/${queuedFifoAudit.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", "If-Match": `"${runner.getAudit(queuedFifoAudit.id).version}"` },
+      body: JSON.stringify({ confirmation: queuedFifoAudit.id }),
+    });
+    assert.equal(queuedFifoDeleteResponse.status, 200);
     const queueDeactivateResponse = await fetch(`${base}/api/v1/settings/queue/deactivate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1172,6 +1218,9 @@ if (mode === "run") {
     assert.match(appSource, /task_dynamic_validation_enabled/);
     assert.match(appSource, /progress_source/);
     assert.match(appSource, /排队中/);
+    assert.match(appSource, /立即调度/);
+    assert.match(appSource, /立即开始/);
+    assert.match(indexHtml, /立即调度队列/);
     assert.match(appSource, /\/api\/v1\/settings\/queue/);
     assert.match(appSource, /markdown-it-html-disabled/);
     assert.match(appSource, /关联 Repo/);
