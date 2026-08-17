@@ -110,6 +110,7 @@ async function main() {
   assert(orchestratorText.includes("FINALIZE_WITH_RESIDUAL_GAPS")
     && orchestratorText.includes("only scheduler loop condition")
     && orchestratorText.includes("--mode policy-final"), "security-audit-orchestrator must finalize terminal GAP items instead of waiting or requeueing them");
+  assert(orchestratorText.includes("Chinese human-facing finding prose"), "security-audit-orchestrator must require Chinese finding prose for the workbench ledger");
   assert(orchestratorText.includes("OpenCode todolist"), "security-audit-orchestrator must prohibit OpenCode todolist fan-out");
   assert(config.permission["*"] === "allow", "global permission fallback must auto-approve otherwise unmatched operations");
   assert(!containsAction(config.permission, "ask"), "global permissions must not request user confirmation");

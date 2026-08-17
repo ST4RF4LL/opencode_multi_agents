@@ -135,7 +135,7 @@ function filterFindings(findings, url) {
   return findings.filter(finding => {
     if (auditId && finding.audit_id !== auditId) return false;
     if (severity && finding.severity !== severity) return false;
-    if (query && !`${finding.id} ${finding.title} ${finding.location.path ?? ""}`.toLowerCase().includes(query)) return false;
+    if (query && !`${finding.id} ${finding.title} ${finding.description ?? ""} ${finding.location?.path ?? ""} ${(finding.evidence ?? []).map(item => item.text ?? "").join(" ")}`.toLowerCase().includes(query)) return false;
     return true;
   });
 }
@@ -311,7 +311,7 @@ export function createAuditWorkbenchServer({
 
   async function snapshot() {
     await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready]);
-    await runner.reconcileLegacyCompletions("workspace-watchdog");
+    await runner.reconcileTerminalCompletions("workspace-watchdog");
     const runnerAudits = await runner.listAuditsWithTodo();
     const validationByRepository = new Map();
     await Promise.all(runtimeSources().map(async ({ repository, root }) => {

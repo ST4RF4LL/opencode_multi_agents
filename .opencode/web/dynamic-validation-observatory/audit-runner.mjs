@@ -8,9 +8,10 @@ import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } fr
 import { fileURLToPath } from "node:url";
 import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
 import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
-import { auditsFromArtifacts, scanReportArtifacts } from "./workspace-model.mjs";
+import { auditsFromArtifacts, materializeFinalReportFromModel, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
 import { auditTodoSummary, createEmptyAuditTodo } from "../../scripts/audit-todo-core.mjs";
+import { validateFinalReportModel } from "../../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 
 const execFileAsync = promisify(execFile);
 const AUDIT_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/i;
@@ -21,6 +22,7 @@ const EXECUTING = new Set([...ACTIVE].filter(status => status !== "queued"));
 const RECOVERABLE = new Set(["failed", "interrupted", "cancelled"]);
 const MAX_LOG_LINE = 16 * 1024;
 const MAX_LOG_READ_BYTES = 256 * 1024;
+const MAX_DELIVERY_CANDIDATES = 8;
 const MAX_ADDITIONAL_INSTRUCTIONS = 12_000;
 const MAX_TEST_ENVIRONMENT_CONTEXT = 24_000;
 const PRIVATE_CONTEXT_FILES = Object.freeze({
@@ -48,7 +50,131 @@ async function defaultStageDeliveryVerifier({ reportsRoot, auditId }) {
     readFile(STAGE_DELIVERY_REGISTRY, "utf8").then(JSON.parse),
     readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
   ]);
-  return verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry });
+  const verification = await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry });
+  return {
+    ...verification,
+    errors: [...new Set([...(verification.errors ?? []), ...deliveryVerificationGuidance(verification.errors, reportsRoot)])],
+  };
+}
+
+function reportDeliveryPaths(reportsRoot, auditId) {
+  const root = resolve(reportsRoot);
+  const reportRelativePath = `reports/final/security-audit-report.${auditId}.md`;
+  const modelRelativePath = `reports/final/security-audit-report-model.${auditId}.json`;
+  return {
+    root,
+    finalDirectory: join(root, "final"),
+    reportRelativePath,
+    modelRelativePath,
+    reportPath: join(root, "final", `security-audit-report.${auditId}.md`),
+    modelPath: join(root, "final", `security-audit-report-model.${auditId}.json`),
+  };
+}
+
+function reportsRelative(reportsRoot, candidate) {
+  const path = relative(resolve(reportsRoot), resolve(candidate));
+  if (!path || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) return null;
+  return `reports/${path.split(sep).join("/")}`;
+}
+
+async function finalDeliveryCandidates(reportsRoot, current, depth = 0, output = []) {
+  if (depth > 2 || output.length >= MAX_DELIVERY_CANDIDATES) return output;
+  let entries;
+  try {
+    entries = await readdir(current, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return output;
+    throw error;
+  }
+  for (const entry of entries) {
+    if (output.length >= MAX_DELIVERY_CANDIDATES) break;
+    if (entry.name.startsWith(".")) continue;
+    const candidate = join(current, entry.name);
+    if (entry.isDirectory()) {
+      await finalDeliveryCandidates(reportsRoot, candidate, depth + 1, output);
+      continue;
+    }
+    if (entry.isFile() && /\.(?:md|json)$/i.test(entry.name)) {
+      const display = reportsRelative(reportsRoot, candidate);
+      if (display) output.push({ path: candidate, relative_path: display, name: entry.name });
+    }
+  }
+  return output;
+}
+
+function finalModelValidationHints(model) {
+  const labels = {
+    "final-report-model-schema-version-invalid": "schema_version 不受支持",
+    "final-report-model-audit-or-scope-invalid": "audit_id 或 scope_digest 无效",
+    "final-report-model-kind-invalid": "report_kind 无效",
+    "final-report-model-inputs-invalid": "输入制品绑定不完整",
+    "final-report-model-coverage-invalid": "覆盖率摘要不符合最终报告要求",
+    "final-report-model-truth-validation-invalid": "真实性验证摘要不符合要求",
+    "final-report-model-digest-invalid": "manifest_digest 校验失败",
+  };
+  return [...new Set(validateFinalReportModel(model).slice(0, 6).map(error => labels[error] ?? `模型契约校验失败（${error}）`))];
+}
+
+async function finalReportDeliveryDiagnostics({ reportsRoot, auditId, repair }) {
+  const paths = reportDeliveryPaths(reportsRoot, auditId);
+  const hints = [
+    `最终报告交付件缺失：应写入执行工作区相对路径 ${paths.reportRelativePath}（受控目录：${paths.root}）。`,
+  ];
+  if (repair?.error === "final-report-render-too-large") {
+    hints.push("最终报告模型可渲染，但生成的 Markdown 超过工作台 8 MiB 制品上限；请拆分证据或压缩报告后按指定路径重新封存。");
+  }
+  let reportInfo = null;
+  try { reportInfo = await stat(paths.reportPath); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+  if (reportInfo) {
+    if (!reportInfo.isFile()) hints.push(`目标 ${paths.reportRelativePath} 已存在但不是普通文件；请移除该占位并写入 UTF-8 Markdown 文件。`);
+    else if (reportInfo.size > 8 * 1024 * 1024) hints.push(`目标 ${paths.reportRelativePath} 为 ${reportInfo.size} 字节，超过工作台 8 MiB 制品上限，无法索引。`);
+    else hints.push(`目标 ${paths.reportRelativePath} 已存在但未被索引；请确认文件名、UTF-8 编码和 audit_id 完全一致。`);
+  }
+  const candidates = await finalDeliveryCandidates(paths.root, paths.finalDirectory);
+  const relatedMarkdown = candidates.filter(item => item.name.toLowerCase().endsWith(".md") && item.relative_path !== paths.reportRelativePath && item.relative_path.includes(auditId));
+  if (relatedMarkdown.length) {
+    hints.push(`发现同一审计的 Markdown 候选：${relatedMarkdown.map(item => item.relative_path).join("、")}；请改名并移动为 ${paths.reportRelativePath}。`);
+  }
+  const relatedModels = candidates.filter(item => item.name.toLowerCase().endsWith(".json") && item.relative_path.includes(auditId));
+  if (relatedModels.length && !relatedModels.some(item => item.relative_path === paths.modelRelativePath)) {
+    hints.push(`发现同一审计的报告模型候选：${relatedModels.map(item => item.relative_path).join("、")}；标准模型路径应为 ${paths.modelRelativePath}。`);
+  }
+  try {
+    const raw = await readFile(paths.modelPath, "utf8");
+    let model;
+    try { model = JSON.parse(raw); } catch { hints.push(`报告模型 ${paths.modelRelativePath} 不是有效 JSON。`); return [...new Set(hints)]; }
+    if (model?.audit_id !== auditId) hints.push(`报告模型 ${paths.modelRelativePath} 的 audit_id 为 ${String(model?.audit_id ?? "<缺失>")}，应为 ${auditId}。`);
+    else {
+      const modelHints = [
+        ...finalModelValidationHints(model),
+        ...(!["FINAL", "POLICY_FINAL", "PARTIAL_FINAL"].includes(model?.report_kind) ? ["report_kind 必须为 FINAL、POLICY_FINAL 或 PARTIAL_FINAL"] : []),
+      ];
+      if (modelHints.length) hints.push(`报告模型 ${paths.modelRelativePath} 格式不合法：${modelHints.join("；")}。`);
+    }
+  } catch (error) {
+    if (error?.code === "ENOENT" && relatedMarkdown.length === 0 && relatedModels.length === 0) {
+      hints.push(`未发现同一审计的最终 Markdown 或报告模型；请按上述路径执行报告封存，不必重跑已完成的漏洞挖掘工作包。`);
+    } else if (error?.code !== "ENOENT") {
+      hints.push(`无法读取报告模型 ${paths.modelRelativePath}：${error.code ?? "unknown-error"}。`);
+    }
+  }
+  return [...new Set(hints)];
+}
+
+function deliveryVerificationGuidance(errors, reportsRoot) {
+  const root = resolve(reportsRoot);
+  const hints = [];
+  for (const error of errors ?? []) {
+    const missing = String(error).match(/artifact-missing:(reports\/[^\s:]+)/);
+    if (missing) hints.push(`交付件缺失：应在受控目录 ${root} 下提供 ${missing[1]}。`);
+    const invalidJson = String(error).match(/artifact-json-invalid:([^:]+)/);
+    if (invalidJson) hints.push(`交付件格式错误：${invalidJson[1]} 必须是有效 JSON，并满足其阶段契约。`);
+    const digest = String(error).match(/artifact-sha256-mismatch:(reports\/[^\s:]+)/);
+    if (digest) hints.push(`交付件摘要不匹配：${digest[1]} 已被修改或与 manifest 声明不一致；请重新物化该制品及所属 manifest。`);
+    const location = String(error).match(/manifest-path-mismatch:(reports\/[^\s:]+)/);
+    if (location) hints.push(`阶段 manifest 位置不合规：实际为 ${location[1]}；请使用阶段注册表规定的 reports/stage-deliveries/<audit_id>/<stage>.<round>.json 路径。`);
+  }
+  return [...new Set(hints)];
 }
 
 async function defaultTodoCompletionVerifier({ audit, reportsRoot }) {
@@ -58,13 +184,16 @@ async function defaultTodoCompletionVerifier({ audit, reportsRoot }) {
   if (summary?.pending) errors.push(`仍有 ${summary.pending} 项 PENDING。`);
   if (summary?.running) errors.push(`仍有 ${summary.running} 项 RUNNING。`);
   if (summary?.failed) errors.push(`仍有 ${summary.failed} 项 FAILED，必须重试或人工处理。`);
-  const artifacts = await scanReportArtifacts(reportsRoot);
-  const finalReport = artifacts.find(artifact => artifact.audit_id === audit.id
-    && artifact.kind === "final"
-    && artifact.media_type === "text/markdown"
-    && /^final\/security-audit-report\..+\.md$/.test(artifact.path));
-  if (!finalReport) errors.push("缺少最终中文 Markdown 报告。");
-  return { complete: errors.length === 0, errors, summary, final_report_path: finalReport?.path ?? null };
+  const repaired = await materializeFinalReportFromModel({ reportsRoot, auditId: audit.id });
+  const finalReport = repaired.artifact;
+  if (!finalReport) errors.push(...await finalReportDeliveryDiagnostics({ reportsRoot, auditId: audit.id, repair: repaired }));
+  return {
+    complete: errors.length === 0,
+    errors,
+    summary,
+    final_report_path: finalReport?.path ?? null,
+    final_report_materialized: repaired.materialized === true,
+  };
 }
 
 function sensitiveRedactionValues(text) {
@@ -427,7 +556,89 @@ export class AuditRunner extends EventEmitter {
         // Ignore incomplete state directories; they remain available for operator inspection.
       }
     }
-    await this.reconcileLegacyCompletions("startup-watchdog");
+    await this.reconcileFinalReportArtifacts("startup-watchdog");
+    await this.reconcileTerminalCompletions("startup-watchdog");
+  }
+
+  reportsRootForAudit(audit) {
+    if (!REPOSITORY_ID.test(audit?.repository_id ?? "")) return null;
+    return join(this.artifactsRoot, audit.repository_id);
+  }
+
+  async verifyTodoCompletion(audit) {
+    const reportsRoot = this.reportsRootForAudit(audit);
+    if (!reportsRoot) throw new Error("审计缺少受控报告目录绑定。");
+    const verification = await this.todoCompletionVerifier({ audit, reportsRoot });
+    audit.todo_summary = verification.summary ?? await auditTodoSummary(audit.todo_path);
+    audit.todo_completion = {
+      complete: verification.complete === true,
+      errors: (verification.errors ?? []).slice(0, 100),
+      final_report_path: verification.final_report_path ?? null,
+      final_report_materialized: verification.final_report_materialized === true,
+      verified_at: new Date().toISOString(),
+    };
+    return verification;
+  }
+
+  async completeRecoveredAudit(audit, { reason, completionSource, data = {} }) {
+    if (audit.terminal?.live) {
+      await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(() => {});
+      await this.finalizeTerminal(audit).catch(() => {
+        audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "closed", message: "审计已由完成性校验收敛，终端归档失败。" };
+      });
+    }
+    audit.status = "completed";
+    audit.pid = null;
+    audit.exit_code ??= 0;
+    audit.finished_at ??= new Date().toISOString();
+    audit.interrupted_at = null;
+    audit.interruption_reason = null;
+    audit.error = null;
+    audit.completion_source = completionSource;
+    await this.record(audit, "audit.completed", { reason, completion_source: completionSource, ...data });
+    return true;
+  }
+
+  async reconcileManagedCompletion(audit, reason = "watchdog") {
+    if (!audit || audit.status === "completed" || this.processes.has(audit.id) || this.completions.has(audit.id)) return false;
+    if (!RECOVERABLE.has(audit.status)) return false;
+    if (audit.stage_delivery_enforcement === "TODO_ENFORCED") {
+      try {
+        const verification = await this.verifyTodoCompletion(audit);
+        if (!verification.complete) return false;
+        return this.completeRecoveredAudit(audit, {
+          reason,
+          completionSource: "todo-artifact-verification",
+          data: { final_report_path: audit.todo_completion.final_report_path, report_materialized: audit.todo_completion.final_report_materialized },
+        });
+      } catch {
+        return false;
+      }
+    }
+    if (audit.stage_delivery_enforcement === "ENFORCED") {
+      const reportsRoot = this.reportsRootForAudit(audit);
+      if (!reportsRoot) return false;
+      try {
+        const verification = await this.stageDeliveryVerifier({ reportsRoot, auditId: audit.id });
+        audit.stage_delivery = {
+          enforcement: verification.enforcement ?? "ENFORCED",
+          complete: verification.complete === true,
+          completed_count: Number(verification.completed_count ?? 0),
+          stages: verification.stages ?? [],
+          errors: (verification.errors ?? []).slice(0, 100),
+          verified_at: new Date().toISOString(),
+        };
+        if (!verification.complete) return false;
+        return this.completeRecoveredAudit(audit, {
+          reason,
+          completionSource: "stage-delivery-verification",
+          data: { completed_count: audit.stage_delivery.completed_count },
+        });
+      } catch {
+        return false;
+      }
+    }
+    return false;
   }
 
   async reconcileLegacyCompletion(audit, reason = "watchdog") {
@@ -441,31 +652,47 @@ export class AuditRunner extends EventEmitter {
       return false;
     }
     if (inferred?.progress !== 100 || inferred.progress_source !== "legacy-artifact-heuristic") return false;
-    if (audit.terminal?.live) {
-      await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(() => {});
-      await this.finalizeTerminal(audit).catch(() => {
-        audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "closed", message: "历史任务已由完成性 watchdog 收敛，终端归档失败。" };
-      });
-    }
-    audit.status = "completed";
-    audit.pid = null;
-    audit.exit_code ??= 0;
-    audit.finished_at ??= new Date().toISOString();
-    audit.interrupted_at = null;
-    audit.interruption_reason = null;
-    audit.error = null;
-    audit.completion_source = "legacy-artifact-heuristic";
-    await this.record(audit, "audit.completed", { reason, completion_source: audit.completion_source, progress: 100 });
-    return true;
+    return this.completeRecoveredAudit(audit, {
+      reason,
+      completionSource: "legacy-artifact-heuristic",
+      data: { progress: 100 },
+    });
   }
 
-  async reconcileLegacyCompletions(reason = "watchdog") {
+  async reconcileFinalReportArtifacts(reason = "watchdog") {
+    let repaired = 0;
+    for (const audit of this.audits.values()) {
+      const reportsRoot = this.reportsRootForAudit(audit);
+      if (!reportsRoot) continue;
+      try {
+        const result = await materializeFinalReportFromModel({ reportsRoot, auditId: audit.id });
+        if (!result.materialized) continue;
+        audit.final_report = { path: result.artifact.path, repaired_at: new Date().toISOString(), model_path: result.model_path };
+        await this.record(audit, "audit.report.materialized", { reason, path: result.artifact.path, model_path: result.model_path });
+        repaired += 1;
+      } catch {
+        // Artifact repair is best effort; completion verification will expose a real missing report.
+      }
+    }
+    return repaired;
+  }
+
+  async reconcileTerminalCompletion(audit, reason = "watchdog") {
+    if (await this.reconcileManagedCompletion(audit, reason)) return true;
+    return this.reconcileLegacyCompletion(audit, reason);
+  }
+
+  async reconcileTerminalCompletions(reason = "watchdog") {
     let completed = 0;
     for (const audit of this.audits.values()) {
       if (!ACTIVE.has(audit.status) && !RECOVERABLE.has(audit.status)) continue;
-      if (await this.reconcileLegacyCompletion(audit, reason)) completed += 1;
+      if (await this.reconcileTerminalCompletion(audit, reason)) completed += 1;
     }
     return completed;
+  }
+
+  async reconcileLegacyCompletions(reason = "watchdog") {
+    return this.reconcileTerminalCompletions(reason);
   }
 
   async persistRepositories() {
@@ -1133,14 +1360,7 @@ export class AuditRunner extends EventEmitter {
         }
         else if (code === 0 && audit.stage_delivery_enforcement === "TODO_ENFORCED") {
           try {
-            const verification = await this.todoCompletionVerifier({ audit, reportsRoot: audit.paths.reports_root });
-            audit.todo_summary = verification.summary ?? await auditTodoSummary(audit.todo_path);
-            audit.todo_completion = {
-              complete: verification.complete === true,
-              errors: (verification.errors ?? []).slice(0, 100),
-              final_report_path: verification.final_report_path ?? null,
-              verified_at: new Date().toISOString(),
-            };
+            const verification = await this.verifyTodoCompletion(audit);
             if (verification.complete) {
               audit.status = "completed";
             } else {
@@ -1272,7 +1492,7 @@ export class AuditRunner extends EventEmitter {
     if ((audit.action_idempotency_digests ?? []).includes(actionDigest)) return publicAudit(audit);
     if (Number(expectedVersion) !== audit.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
     if (action === "recover") {
-      if (await this.reconcileLegacyCompletion(audit, "recovery-preflight")) return publicAudit(audit);
+      if (await this.reconcileTerminalCompletion(audit, "recovery-preflight")) return publicAudit(audit);
       if (!this.enabled) throw Object.assign(new Error("运行驱动未启用，不能恢复审计。"), { statusCode: 503, code: "runner-disabled" });
       if (!RECOVERABLE.has(audit.status) || this.processes.has(id) || this.completions.has(id)) {
         throw Object.assign(new Error("只有已中断、失败或已取消且没有残留 Runner 的审计可以断点恢复。"), { statusCode: 409, code: "audit-not-recoverable" });

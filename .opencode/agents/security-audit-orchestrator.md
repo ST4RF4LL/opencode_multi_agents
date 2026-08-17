@@ -173,6 +173,7 @@ Required session naming:
    - Entity-record evidence, then a D1-D10 coverage cell list reconciled by `reconcile-audit-report.mjs` for its single lens.
    - `focus_area_id` and `discovery_track=coverage`.
    - Evidence-backed findings with an originating lens.
+   - Chinese human-facing finding prose (title, evidence claim, rationale, uncertainty, and remediation); only IDs, file paths, API names, and code fragments remain in their original form.
    - Unchecked targets and explicit gaps.
    - A transfer block for targeted follow-up.
    - Vulnerability-mining JSON and SARIF when static tools were used.

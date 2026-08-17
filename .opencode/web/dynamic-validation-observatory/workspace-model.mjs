@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,6 +100,72 @@ function artifactKind(path) {
   return REPORT_DIRECTORIES.has(first) ? first : "other";
 }
 
+export function finalReportArtifactForAudit(artifacts, auditId) {
+  const canonicalPath = `final/security-audit-report.${auditId}.md`;
+  return artifacts.find(artifact => artifact.audit_id === auditId
+    && artifact.path === canonicalPath
+    && artifact.kind === "final"
+    && artifact.media_type === "text/markdown") ?? null;
+}
+
+function finalReportModelForAudit(artifacts, auditId) {
+  const canonicalPath = `final/security-audit-report-model.${auditId}.json`;
+  const candidates = artifacts
+    .filter(artifact => artifact.kind === "final"
+      && artifact.media_type === "application/json"
+      && artifact.data?.audit_id === auditId)
+    .sort((left, right) => Number(right.path === canonicalPath) - Number(left.path === canonicalPath)
+      || right.modified_at.localeCompare(left.modified_at));
+  for (const artifact of candidates) {
+    try {
+      if (validateFinalReportModel(artifact.data).length === 0
+        && ["FINAL", "POLICY_FINAL", "PARTIAL_FINAL"].includes(artifact.data.report_kind)) return { artifact, model: artifact.data };
+    } catch {
+      // Continue looking for another valid, audit-bound final report model.
+    }
+  }
+  return null;
+}
+
+// A completed model has a deterministic Markdown representation.  Materializing a
+// missing canonical file is a local repair, not a re-run of the audit or a new
+// report synthesis.  Existing files are deliberately never overwritten.
+export async function materializeFinalReportFromModel({ reportsRoot, auditId }) {
+  const root = resolve(reportsRoot);
+  const canonicalPath = `final/security-audit-report.${auditId}.md`;
+  const outputPath = resolve(root, canonicalPath);
+  if (normalizedPath(root, outputPath) !== canonicalPath) {
+    throw new Error("最终报告目标路径越出受控报告目录。");
+  }
+  const artifacts = await scanReportArtifacts(root);
+  const existing = finalReportArtifactForAudit(artifacts, auditId);
+  if (existing) return { available: true, materialized: false, artifact: existing, model_path: null };
+  const source = finalReportModelForAudit(artifacts, auditId);
+  if (!source) return { available: false, materialized: false, artifact: null, model_path: null };
+  const markdown = renderFinalReport(source.model);
+  if (Buffer.byteLength(markdown, "utf8") > MAX_ARTIFACT_BYTES) {
+    return { available: false, materialized: false, artifact: null, model_path: source.artifact.path, error: "final-report-render-too-large" };
+  }
+  await mkdir(dirname(outputPath), { recursive: true });
+  let created = false;
+  try {
+    await stat(outputPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    const temporary = `${outputPath}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(temporary, markdown, { encoding: "utf8", mode: 0o600 });
+    await rename(temporary, outputPath);
+    created = true;
+  }
+  const repaired = finalReportArtifactForAudit(await scanReportArtifacts(root), auditId);
+  return {
+    available: Boolean(repaired),
+    materialized: created && Boolean(repaired),
+    artifact: repaired,
+    model_path: source.artifact.path,
+  };
+}
+
 export async function scanReportArtifacts(reportsRoot) {
   const root = resolve(reportsRoot);
   const files = await collectFiles(root);
@@ -186,51 +252,182 @@ function severityRank(value) {
 
 function displayText(value, limit = 4000) {
   const text = Array.isArray(value)
-    ? value.map(item => typeof item === "string" ? item : item?.description ?? item?.summary ?? "").filter(Boolean).join("\n")
+    ? value.map(item => displayText(item, limit)).filter(Boolean).join("\n")
     : typeof value === "string"
       ? value
-      : value?.summary ?? value?.description ?? null;
+      : value?.summary ?? value?.description ?? value?.claim ?? value?.rationale ?? value?.outcome ?? value?.note ?? value?.control ?? null;
   if (!text) return null;
-  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+  const normalized = String(text).trim();
+  if (!normalized) return null;
+  return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized;
+}
+
+function positiveInteger(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function locationFrom(value, role = null) {
+  if (!value || typeof value !== "object") return null;
+  const path = [value.path, value.file, value.file_path, value.source_file, value.uri]
+    .find(item => typeof item === "string" && item.trim()) ?? null;
+  const line = positiveInteger(value.line ?? value.line_start ?? value.start_line);
+  const lineEnd = positiveInteger(value.line_end ?? value.end_line);
+  const detail = displayText(value.detail ?? value.description ?? value.snippet ?? value.claim ?? value.rationale, 1000);
+  if (!path && !detail) return null;
+  return { path, line, line_end: lineEnd && (!line || lineEnd >= line) ? lineEnd : null, detail, role };
 }
 
 function normalizedLocations(raw) {
-  let values = raw.locations ?? raw.affected_locations ?? raw.additional_locations ?? (raw.primary_location ? [raw.primary_location] : []);
-  if (!Array.isArray(values)) values = [values];
-  if (values.length === 0 && (raw.file || raw.location)) {
-    values = [typeof raw.location === "object" ? raw.location : {
+  const candidates = [];
+  const add = (value, role = null) => {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      const location = locationFrom(item, role);
+      if (location) candidates.push(location);
+    }
+  };
+
+  // 旧版 correlation artifact 使用 locations 数组；Finding v2 使用
+  // locations.primary，并把源/汇证据的位置放进 evidence.facts[].locator。
+  if (Array.isArray(raw.locations)) {
+    add(raw.locations);
+  } else if (raw.locations && typeof raw.locations === "object") {
+    add(raw.locations.primary, "主位置");
+    for (const key of ["secondary", "related", "additional", "affected"]) add(raw.locations[key], key);
+  }
+  add(raw.primary_location, "主位置");
+  add(raw.affected_locations, "受影响位置");
+  add(raw.additional_locations, "补充位置");
+  add(raw.source_binding?.primary_location, "主位置");
+  if (raw.file || raw.location) {
+    add(typeof raw.location === "object" ? raw.location : {
       path: raw.file,
       line: raw.line_start ?? raw.line,
       line_end: raw.line_end,
       detail: typeof raw.location === "string" ? raw.location : raw.lines,
-    }];
+    }, "主位置");
   }
-  return values.slice(0, 20).map(location => ({
-    path: location?.path ?? location?.file ?? null,
-    line: location?.line ?? location?.line_start ?? null,
-    line_end: location?.line_end ?? null,
-    detail: displayText(location?.detail ?? location?.description ?? location?.snippet, 1000),
-  })).filter(location => location.path || location.detail);
+  for (const fact of Array.isArray(raw.evidence?.facts) ? raw.evidence.facts : []) {
+    const role = typeof fact?.kind === "string" && fact.kind ? `${fact.kind} 证据` : "证据位置";
+    add(fact?.locator ?? fact?.location, role);
+  }
+
+  const locations = [];
+  const seen = new Map();
+  for (const candidate of candidates) {
+    // 同一文件同一起始行的主定位与 evidence locator 表示同一个锚点；
+    // line_end 的差异不应令它在页面里重复出现。
+    const key = `${candidate.path ?? ""}\u0000${candidate.line ?? ""}`;
+    const existing = seen.get(key);
+    if (existing) {
+      if (!existing.line_end && candidate.line_end) existing.line_end = candidate.line_end;
+      if (candidate.detail && !existing.detail?.includes(candidate.detail)) {
+        existing.detail = existing.detail ? `${existing.detail}\n${candidate.detail}` : candidate.detail;
+      }
+      continue;
+    }
+    seen.set(key, candidate);
+    locations.push(candidate);
+    if (locations.length >= 20) break;
+  }
+  return locations;
+}
+
+function normalizedEvidence(raw) {
+  const values = [];
+  const add = (items, fallbackKind = "证据") => {
+    for (const item of Array.isArray(items) ? items : [items]) {
+      const text = displayText(item?.claim ?? item?.description ?? item?.summary ?? item);
+      if (!text) continue;
+      values.push({
+        kind: typeof item?.kind === "string" && item.kind ? item.kind : fallbackKind,
+        text,
+        location: locationFrom(item?.locator ?? item?.location),
+      });
+    }
+  };
+  add(raw.evidence?.facts);
+  add(raw.sink_evidence, "汇点证据");
+  add(raw.control_evidence, "控制证据");
+  add(raw.config_evidence, "配置证据");
+  add(raw.blind_evidence, "盲测证据");
+  add(raw.seeded_evidence, "变体证据");
+  add(raw.mitigating_evidence, "缓解证据");
+  add((raw.source_findings ?? []).map(item => item?.title ? {
+    kind: item.lens ? `来源候选 / ${item.lens}` : "来源候选",
+    claim: item.title,
+    locator: item.location,
+  } : null).filter(Boolean), "来源候选");
+  return values.slice(0, 24);
+}
+
+function normalizedDimensions(raw) {
+  const dimensions = [
+    ...(Array.isArray(raw.dimensions) ? raw.dimensions : []),
+    ...(typeof raw.dimension === "string" ? [raw.dimension] : []),
+    ...(Array.isArray(raw.classification?.dimension_claims)
+    ? raw.classification.dimension_claims.map(item => item?.dimension).filter(item => typeof item === "string" && item)
+    : []),
+  ].filter(item => typeof item === "string" && item.trim());
+  return dimensions.length ? [...new Set(dimensions)].join("、") : null;
+}
+
+function normalizedStatus(raw) {
+  if (typeof raw.validation_state === "string" && raw.validation_state) return raw.validation_state;
+  if (typeof raw.status === "string" && raw.status) return raw.status;
+  const states = {
+    SUPPORTED_RUNTIME: "supported_runtime",
+    SUPPORTED_STATIC: "supported_static",
+    REJECTED: "rejected",
+    INCONCLUSIVE: "insufficient_evidence",
+  };
+  return states[raw.state] ?? "unvalidated";
+}
+
+function normalizedSeverity(raw) {
+  const value = raw.severity;
+  if (typeof value === "string") return value.toUpperCase();
+  if (value && typeof value === "object") {
+    const label = value.rating ?? value.level ?? value.label ?? value.severity;
+    if (typeof label === "string" && label) return label.toUpperCase();
+  }
+  return "UNKNOWN";
 }
 
 function normalizeFinding(raw, auditId, sourcePath) {
   const locations = normalizedLocations(raw);
   const location = locations[0] ?? {};
+  const evidence = normalizedEvidence(raw);
   const sourceFindings = Array.isArray(raw.source_findings) ? raw.source_findings : [];
+  const sourceTypes = [...new Set(sourceFindings.map(item => item?.vuln_type ?? item?.vulnerability_type_id).filter(item => typeof item === "string" && item))];
+  const vulnerabilityType = raw.vulnerability_type_id ?? raw.classification?.vulnerability_type_id ?? raw.cwe ?? (sourceTypes.length ? sourceTypes.join("、") : null);
+  const evidenceSummary = evidence.slice(0, 3).map(item => `${item.kind}：${item.text}`).join("\n");
+  const description = displayText(raw.description ?? raw.summary ?? raw.claim?.summary)
+    ?? displayText(raw.attack_surface?.impact?.outcome)
+    ?? (evidenceSummary || null)
+    ?? displayText(raw.severity?.rationale)
+    ?? "未提供漏洞判断摘要。";
   return {
     id: raw.canonical_id ?? raw.finding_id ?? raw.id ?? createHash("sha256").update(`${auditId}:${sourcePath}:${raw.title ?? "finding"}`).digest("hex").slice(0, 16),
     audit_id: auditId,
-    title: raw.title ?? raw.summary ?? "未命名漏洞发现",
-    severity: String(raw.severity ?? "UNKNOWN").toUpperCase(),
-    cvss_score: raw.cvss_score ?? raw.cvss?.score ?? null,
-    status: raw.validation_state ?? raw.status ?? "unvalidated",
-    dimension: raw.dimension ?? null,
-    vulnerability_type_id: raw.vulnerability_type_id ?? raw.cwe ?? null,
-    description: displayText(raw.description ?? raw.summary),
+    title: raw.title ?? raw.summary ?? raw.claim?.title ?? raw.classification?.title ?? (vulnerabilityType ? `漏洞类型：${vulnerabilityType}` : "未命名漏洞发现"),
+    severity: normalizedSeverity(raw),
+    cvss_score: raw.cvss_score ?? raw.cvss?.score ?? raw.severity?.cvss?.score ?? null,
+    status: normalizedStatus(raw),
+    dimension: normalizedDimensions(raw),
+    vulnerability_type_id: vulnerabilityType,
+    description,
     location,
     locations,
-    remediation: displayText(raw.remediation),
-    residual_uncertainty: displayText(raw.residual_uncertainty),
+    location_complete: Boolean(location.path && location.line),
+    evidence,
+    impact: displayText(raw.attack_surface?.impact?.outcome ?? raw.impact),
+    severity_rationale: displayText(raw.severity?.rationale),
+    reachability: displayText(raw.reachability?.rationale ?? raw.reachability?.state),
+    attacker_influence: displayText(raw.attacker_influence?.rationale ?? raw.attacker_influence?.state),
+    guards: displayText(raw.guards ?? raw.attack_surface?.controls),
+    remediation: displayText(raw.remediation?.summary ?? raw.remediation),
+    residual_uncertainty: displayText(raw.residual_uncertainty ?? raw.uncertainty?.assumptions ?? raw.attack_surface?.blindspots),
     source_finding_ids: sourceFindings.slice(0, 32).map(item => item?.finding_id ?? item?.id).filter(Boolean),
     contradiction_count: Array.isArray(raw.contradictions) ? raw.contradictions.length : 0,
     source_path: sourcePath,
@@ -261,7 +458,7 @@ export function findingsFromArtifacts(artifacts) {
 }
 
 function reportFromArtifact(artifact, artifacts) {
-  const model = artifacts.find(item => item.path === `final/security-audit-report-model.${artifact.audit_id}.json`)?.data ?? null;
+  const model = finalReportModelForAudit(artifacts, artifact.audit_id)?.model ?? null;
   let integrityState = "digest_only";
   let integrityIssues = [];
   if (model) {
@@ -350,6 +547,8 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       last_recovered_at: runner?.last_recovered_at ?? null,
       interrupted_at: runner?.interrupted_at ?? null,
       interruption_reason: runner?.interruption_reason ?? null,
+      todo_completion: runner?.todo_completion ?? null,
+      stage_delivery: runner?.stage_delivery ?? null,
       task_context: runner?.task_context ?? {
         additional_instructions_enabled: false,
         additional_instructions_length: 0,
@@ -400,7 +599,10 @@ export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [],
     }
   })));
   const audits = auditsFromArtifacts(artifacts, validationRuns, runnerAudits, stageDeliveriesByAudit);
-  const reports = artifacts.filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown").map(artifact => reportFromArtifact(artifact, artifacts));
+  const reports = artifacts
+    .filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown")
+    .filter(artifact => finalReportArtifactForAudit(artifacts, artifact.audit_id)?.id === artifact.id)
+    .map(artifact => reportFromArtifact(artifact, artifacts));
   const severity = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
   for (const finding of findings) {
     const key = finding.severity.toLowerCase();

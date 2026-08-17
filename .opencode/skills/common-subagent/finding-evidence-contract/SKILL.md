@@ -15,6 +15,13 @@ reachability and attacker-influence assessments, the fixed
 severity rationale, remediation, and source-report provenance. Do not use a
 free-text finding ID occurrence as evidence.
 
+All human-facing finding prose must be written in Chinese: title, evidence
+`claim`, rationale, uncertainty, guard description, severity rationale, and
+remediation summary. Keep only identifiers, paths, API names, code snippets,
+and catalog IDs in their original form. This applies equally to JSON evidence
+artifacts and the final Markdown report, so the workbench can present a
+directly readable finding ledger without machine translation.
+
 The attack-surface block is not prose metadata. It records, with indexes into
 `evidence.facts`, all of the following:
 

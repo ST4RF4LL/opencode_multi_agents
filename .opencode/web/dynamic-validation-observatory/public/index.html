@@ -47,7 +47,7 @@
 
           <section id="view-audits" class="view"><div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div><button id="dispatch-queue" class="button secondary">立即调度队列</button></div><div class="split"><article class="panel"><div id="audit-table" class="data-table"></div></article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div></section>
 
-          <section id="view-findings" class="view"><div class="page-heading"><div><p class="eyebrow">FINDING LEDGER</p><h2>漏洞发现</h2><p>优先展示证据关联后的 canonical finding，并保留来源制品。</p></div><label class="search"><span>⌕</span><input id="finding-query" placeholder="搜索漏洞、文件或 ID"></label></div><article class="panel"><div id="finding-table" class="data-table"></div></article></section>
+          <section id="view-findings" class="view"><div class="page-heading"><div><p class="eyebrow">FINDING LEDGER</p><h2>漏洞发现</h2><p>按结论、源码定位、关键证据、影响与修复展示；缺失定位会明确标记，而不会显示空白。</p></div><label class="search"><span>⌕</span><input id="finding-query" placeholder="搜索漏洞、文件、证据或 ID"></label></div><article class="panel"><div id="finding-table" class="finding-list"></div></article></section>
 
           <section id="view-reports" class="view"><div class="page-heading"><div><p class="eyebrow">REPORT DELIVERY</p><h2>审计报告</h2><p>最终中文 Markdown 报告、模型绑定状态与内容摘要记录。</p></div></div><div id="report-grid" class="report-grid"></div></section>
 

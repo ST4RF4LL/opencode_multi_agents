@@ -65,6 +65,7 @@ function status(value) {
     queue_active: "已激活", queue_inactive: "未激活",
     unreviewed: "未处理", confirmed: "已确认", rejected: "已排除", insufficient_evidence: "证据不足",
     awaiting_validation: "待动态验证", validated: "验证通过", validation_failed: "验证失败", validation_blocked: "验证受阻", reported: "已入报告",
+    supported_static: "静态证实",
   };
   const key = String(value ?? "unknown").toLowerCase();
   return element("span", `status ${key}`, labels[key] ?? value ?? "未知");
@@ -244,12 +245,10 @@ function renderAudits() {
     const actionCell = element("td");
     if (audit.status === "queued") {
       const start = element("button", "button primary", "立即开始");
-      start.disabled = !queue.enabled || !availableSlots;
+      start.disabled = !state.runtime?.runner?.enabled;
       start.title = start.disabled
-        ? !queue.enabled
-          ? "请先在设置中激活排队机制"
-          : "当前并发名额已满"
-        : "跳过队列间隔，立即启动此任务；仍遵守并发上限";
+        ? "运行驱动未启用"
+        : "人工立即启动：跳过队列间隔、激活状态和并发名额";
       start.addEventListener("click", event => {
         event.stopPropagation();
         requestAuditAction(audit, "dispatch");
@@ -281,6 +280,18 @@ function renderAuditDetail() {
   for (const stage of audit.stages ?? []) {
     const item = element("li", stage.state); item.append(element("i"), element("span", "", stage.label), element("small", "", stage.state === "completed" ? "完成" : stage.state === "active" ? "当前" : "等待")); stages.append(item);
   }
+  const diagnostics = [...new Set([
+    ...(audit.todo_completion?.errors ?? []),
+    ...(audit.stage_delivery?.errors ?? []),
+  ].filter(value => typeof value === "string" && value.trim()))];
+  if (!diagnostics.length && audit.error) diagnostics.push(audit.error);
+  const diagnosticPanel = diagnostics.length ? element("section", "audit-diagnostics") : null;
+  if (diagnosticPanel) {
+    diagnosticPanel.append(element("p", "eyebrow", "WATCHDOG DIAGNOSTICS"), element("h3", "", "交付件诊断"));
+    const list = element("ol");
+    for (const item of diagnostics) list.append(element("li", "", item));
+    diagnosticPanel.append(list);
+  }
   const actions = element("div", "action-row");
   if (audit.terminal) {
     const monitorLabel = audit.terminal.live ? "监控 OpenCode" : audit.terminal.status === "archived" ? "查看终端快照" : "终端监控状态";
@@ -296,11 +307,11 @@ function renderAuditDetail() {
     actions.append(button);
   }
   if (audit.status === "queued") {
-    const dispatch = element("button", "button primary", "立即调度");
-    dispatch.disabled = !state.workspace.queue?.enabled;
+    const dispatch = element("button", "button primary", "立即开始");
+    dispatch.disabled = !state.runtime?.runner?.enabled;
     dispatch.title = dispatch.disabled
-      ? "请先在设置中激活排队机制"
-      : "跳过队列间隔立即启动此任务；仍遵守并发上限";
+      ? "运行驱动未启用"
+      : "人工立即启动：跳过队列间隔、激活状态和并发名额";
     dispatch.addEventListener("click", () => requestAuditAction(audit, "dispatch"));
     actions.append(dispatch);
   }
@@ -321,7 +332,7 @@ function renderAuditDetail() {
   }
   const logs = element("div", "runner-log");
   logs.append(element("p", "eyebrow", "RECENT AGENT OUTPUT"), element("pre", "", "正在读取最近输出…"));
-  panel.replaceChildren(head, facts, stages, actions, logs);
+  panel.replaceChildren(head, facts, stages, ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
   loadAuditLogs(audit.id, logs).catch(error => { logs.querySelector("pre").textContent = error.message; });
 }
 
@@ -456,7 +467,7 @@ async function requestAuditAction(audit, action) {
       headers: { "Content-Type": "application/json", "If-Match": `"${audit.version}"`, "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ action }),
     });
-    toast(`已提交${({ pause: "暂停", resume: "恢复", recover: "断点恢复", cancel: "取消", dispatch: "立即调度" })[action]}操作`);
+    toast(`已提交${({ pause: "暂停", resume: "恢复", recover: "断点恢复", cancel: "取消", dispatch: "立即开始" })[action]}操作`);
     await load();
   } catch (error) { showError(error); }
 }
@@ -516,25 +527,43 @@ async function submitDeleteAudit(event) {
 
 function renderFindings() {
   const query = $("finding-query").value.trim().toLowerCase();
-  const findings = state.workspace.findings.filter(item => !query || `${item.id} ${item.title} ${item.repository_name ?? ""} ${item.repository_id ?? ""} ${item.audit_id} ${item.location.path ?? ""}`.toLowerCase().includes(query));
-  const [value, body] = table(["等级", "漏洞发现", "关联 Repo", "审计 / 维度", "位置", "处理状态", "验证状态"]);
+  const findings = state.workspace.findings.filter(item => !query || `${item.id} ${item.title} ${item.description ?? ""} ${item.repository_name ?? ""} ${item.repository_id ?? ""} ${item.audit_id} ${item.location?.path ?? ""} ${(item.evidence ?? []).map(evidence => evidence.text).join(" ")}`.toLowerCase().includes(query));
+  const value = element("div", "finding-card-list");
+  const positioned = findings.filter(finding => finding.location_complete).length;
+  value.append(element("p", "finding-list-summary", `共 ${findings.length} 条漏洞发现；${positioned} 条已提供文件与行号定位。`));
   for (const finding of findings) {
-    const row = element("tr");
-    cell(row, finding.severity, `severity ${finding.severity}`);
-    const identity = element("td");
+    const card = element("article", `finding-card${finding.location_complete ? "" : " location-missing"}`);
+    const header = element("header", "finding-card-header");
+    const identity = element("div", "finding-card-identity");
+    identity.append(element("span", `severity ${finding.severity}`, finding.severity), element("small", "mono", finding.id));
     const open = element("button", "finding-link", finding.title);
     open.type = "button";
     open.addEventListener("click", () => openFinding(finding));
-    identity.append(open, element("small", "mono", finding.id)); row.append(identity);
-    const repository = element("td");
-    repository.append(element("strong", "", finding.repository_name ?? "未知 Repo"), element("small", "mono", finding.repository_id ?? "未记录 repository_id"));
-    row.append(repository);
-    cell(row, `${finding.audit_id} · ${finding.dimension ?? "—"}`);
-    cell(row, `${finding.location.path ?? "—"}${finding.location.line ? `:${finding.location.line}` : ""}`, "mono");
-    const workflowCell = element("td"); workflowCell.append(status(finding.workflow?.status ?? "unreviewed")); row.append(workflowCell);
-    const stateCell = element("td"); stateCell.append(status(finding.status)); row.append(stateCell);
-    body.append(row);
+    identity.append(open);
+    const statuses = element("div", "finding-card-statuses");
+    statuses.append(status(finding.workflow?.status ?? "unreviewed"), status(finding.status));
+    header.append(identity, statuses);
+    const locationText = finding.location?.path
+      ? `${finding.location.path}${finding.location.line ? `:${finding.location.line}${finding.location.line_end ? `-${finding.location.line_end}` : ""}` : ""}`
+      : "未提供源码定位";
+    const location = element("p", `finding-card-location mono${finding.location_complete ? "" : " missing"}`, locationText);
+    const summary = element("p", "finding-card-summary", finding.description || "未提供漏洞判断摘要。");
+    const facts = element("div", "finding-card-facts");
+    facts.append(
+      element("span", "", `Repo：${finding.repository_name ?? "未知"}`),
+      element("span", "", `审计：${finding.audit_id}`),
+      element("span", "", `维度：${finding.dimension ?? "未标注"}`),
+      element("span", "", `证据：${finding.evidence?.length ?? 0} 条`),
+    );
+    const footer = element("footer", "finding-card-footer");
+    footer.append(element("small", "", finding.remediation ? `修复：${short(finding.remediation, 110)}` : "未提供修复建议"));
+    const action = element("button", "button secondary", "查看证据与处理");
+    action.addEventListener("click", () => openFinding(finding));
+    footer.append(action);
+    card.append(header, location, summary, facts, footer);
+    value.append(card);
   }
+  if (!findings.length) value.append(element("div", "empty-state", "没有符合条件的漏洞发现。"));
   $("finding-table").replaceChildren(value);
 }
 
@@ -544,29 +573,66 @@ function findingSection(label, value) {
   return section;
 }
 
+function sourceLocationText(location) {
+  if (!location?.path) return "未提供文件位置";
+  return `${location.path}${location.line ? `:${location.line}${location.line_end ? `-${location.line_end}` : ""}` : ""}`;
+}
+
+function findingLocationsSection(finding) {
+  const section = element("section", "finding-section");
+  section.append(element("h3", "", "源码定位"));
+  const locations = element("ol", "finding-location-list");
+  for (const location of finding.locations ?? []) {
+    const item = element("li");
+    item.append(element("strong", "mono", sourceLocationText(location)));
+    if (location.role) item.append(element("small", "", location.role));
+    if (location.detail) item.append(element("p", "", location.detail));
+    locations.append(item);
+  }
+  if (!locations.childElementCount) {
+    locations.append(element("li", "missing", "该制品没有提供可用的源码定位；需要回查来源制品。"));
+  }
+  section.append(locations);
+  return section;
+}
+
+function findingEvidenceSection(finding) {
+  const section = element("section", "finding-section");
+  section.append(element("h3", "", "关键证据"));
+  const evidence = element("ol", "finding-evidence-list");
+  for (const item of finding.evidence ?? []) {
+    const entry = element("li");
+    entry.append(element("strong", "", item.kind), element("p", "", item.text));
+    if (item.location?.path) entry.append(element("small", "mono", sourceLocationText(item.location)));
+    evidence.append(entry);
+  }
+  if (!evidence.childElementCount) evidence.append(element("li", "missing", "来源制品未提供结构化证据。"));
+  section.append(evidence);
+  return section;
+}
+
 function openFinding(finding) {
   state.selectedFindingResourceId = finding.resource_id;
   $("finding-detail-title").textContent = finding.title;
   $("finding-detail-subtitle").textContent = `${finding.repository_name ?? "未知 Repo"} · ${finding.audit_id} · ${finding.id}`;
   const facts = $("finding-detail-facts");
   facts.replaceChildren();
-  [["关联 Repo", finding.repository_name], ["Repository ID", finding.repository_id], ["审计 ID", finding.audit_id], ["等级", finding.severity], ["CVSS", finding.cvss_score], ["维度", finding.dimension], ["漏洞类型", finding.vulnerability_type_id], ["处理状态", statusText(finding.workflow?.status)], ["验证状态", finding.status], ["来源制品", finding.source_path]].forEach(([label, value]) => {
+  [["关联 Repo", finding.repository_name], ["Repository ID", finding.repository_id], ["审计 ID", finding.audit_id], ["等级", finding.severity], ["CVSS", finding.cvss_score], ["维度", finding.dimension], ["漏洞类型", finding.vulnerability_type_id], ["主定位", sourceLocationText(finding.location)], ["处理状态", statusText(finding.workflow?.status)], ["验证状态", statusText(finding.status)], ["来源制品", finding.source_path]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
-  const locations = element("div", "finding-locations");
-  for (const location of finding.locations ?? []) {
-    locations.append(element("p", "mono", `${location.path ?? "—"}${location.line ? `:${location.line}${location.line_end ? `-${location.line_end}` : ""}` : ""}${location.detail ? ` · ${location.detail}` : ""}`));
-  }
-  if (!locations.childElementCount) locations.append(element("p", "", "未记录源码位置。"));
   const sourceNote = finding.source_finding_ids?.length
     ? `关联来源：${finding.source_finding_ids.join("、")}。${finding.contradiction_count ? `存在 ${finding.contradiction_count} 条矛盾记录。` : "未记录矛盾。"}`
     : finding.contradiction_count ? `存在 ${finding.contradiction_count} 条矛盾记录。` : "未记录来源 finding 关联。";
+  const impact = [finding.impact, finding.severity_rationale].filter(Boolean).join("\n") || null;
+  const analysis = [finding.reachability && `可达性：${finding.reachability}`, finding.attacker_influence && `攻击者影响：${finding.attacker_influence}`, finding.guards && `已检查防护：${finding.guards}`].filter(Boolean).join("\n") || null;
   $("finding-detail-body").replaceChildren(
     findingSection("漏洞说明", finding.description),
+    findingLocationsSection(finding),
+    findingEvidenceSection(finding),
+    findingSection("影响与严重性依据", impact),
+    findingSection("可达性与防护", analysis),
     findingSection("修复建议", finding.remediation),
     findingSection("残余不确定性", finding.residual_uncertainty),
-    findingSection("证据位置", null),
-    locations,
     findingSection("关联与矛盾", sourceNote),
   );
   const form = $("finding-workflow-form");
@@ -580,7 +646,7 @@ function openFinding(finding) {
 function statusText(value) {
   const labels = {
     unreviewed: "未处理", confirmed: "已确认", rejected: "已排除", insufficient_evidence: "证据不足",
-    awaiting_validation: "待动态验证", validated: "验证通过", validation_failed: "验证失败", validation_blocked: "验证受阻", reported: "已入报告",
+    awaiting_validation: "待动态验证", validated: "验证通过", validation_failed: "验证失败", validation_blocked: "验证受阻", reported: "已入报告", supported_static: "静态证实", supported_runtime: "运行时已证实", unvalidated: "未验证",
   };
   return labels[value] ?? value ?? "未处理";
 }

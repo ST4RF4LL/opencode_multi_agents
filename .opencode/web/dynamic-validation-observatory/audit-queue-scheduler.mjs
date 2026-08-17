@@ -282,7 +282,26 @@ export class AuditQueueScheduler {
     if (typeof auditId !== "string" || !auditId.trim()) {
       throw invalid("需要指定要立即调度的审计任务。", "queue-audit-id-invalid");
     }
-    return this.enqueueDispatch({ auditId: auditId.trim(), requireTarget: true });
+    const targetId = auditId.trim();
+    // 这是针对单个任务的人工“立即开始”，而非按队列规则补位：不应受
+    // 队列是否启用、间隔或并发名额影响。用户明确选择任务时，直接交给
+    // Runner 启动；dispatches 仍负责与定时调度串行，避免同一任务竞态启动。
+    const operation = this.dispatches.catch(() => {}).then(async () => {
+      if (this.stopped) {
+        throw Object.assign(new Error("排队调度器已停止，无法立即启动任务。"), { statusCode: 503, code: "queue-scheduler-stopped" });
+      }
+      const queued = this.runner.queueSnapshot().queued;
+      if (!queued.some(audit => audit.id === targetId)) {
+        throw Object.assign(new Error("只有“排队中”的审计任务可以立即开始。"), { statusCode: 409, code: "audit-not-queued" });
+      }
+      const dispatched = await this.runner.dispatchQueuedAudit(targetId);
+      if (!dispatched) {
+        throw Object.assign(new Error("任务状态已变化，请刷新后重试。"), { statusCode: 409, code: "audit-dispatch-raced" });
+      }
+      return dispatched;
+    });
+    this.dispatches = operation;
+    return operation;
   }
 
   async enqueueDispatch({ auditId = null, requireTarget = false } = {}) {

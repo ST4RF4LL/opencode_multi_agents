@@ -29,6 +29,7 @@ class FakeRunner {
     audit.status = audit.mode === "recover" ? "recovering" : "preparing";
     this.dispatched.push(id);
     audit.status = "running";
+    return { ...audit };
   }
 }
 
@@ -86,8 +87,6 @@ try {
   await scheduler.triggerNow();
   assert.deepEqual(runner.dispatched, ["audit-001", "audit-002"]);
 
-  await assert.rejects(scheduler.dispatchAuditNow("audit-003"), error => error.code === "queue-concurrency-full");
-  runner.audits.find(audit => audit.id === "audit-001").status = "completed";
   await scheduler.dispatchAuditNow("audit-003");
   assert.deepEqual(runner.dispatched, ["audit-001", "audit-002", "audit-003"]);
   assert.equal(runner.audits.find(audit => audit.id === "audit-003").status, "running");
@@ -95,6 +94,10 @@ try {
   await scheduler.deactivate();
   assert.equal((await store.get()).enabled, false);
   await assert.rejects(scheduler.triggerNow(), error => error.code === "queue-disabled");
+  runner.audits.push({ id: "audit-004", created_at: "2026-08-14T00:00:04.000Z", status: "queued" });
+  await scheduler.dispatchAuditNow("audit-004");
+  assert.deepEqual(runner.dispatched, ["audit-001", "audit-002", "audit-003", "audit-004"]);
+  assert.equal(runner.audits.find(audit => audit.id === "audit-004").status, "running");
   assert.equal(timers.at(-1).cleared, true);
   await scheduler.shutdown();
 } finally {

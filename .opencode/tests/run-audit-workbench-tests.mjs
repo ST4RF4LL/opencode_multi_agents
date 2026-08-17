@@ -16,7 +16,7 @@ import { DynamicValidationRunner } from "../web/dynamic-validation-observatory/v
 import { EnvironmentHealthService } from "../web/dynamic-validation-observatory/environment-health.mjs";
 import { OpenCodeTmuxMonitor } from "../web/dynamic-validation-observatory/tmux-monitor.mjs";
 import { FindingWorkflowStore } from "../web/dynamic-validation-observatory/finding-workflow.mjs";
-import { buildWorkspaceSnapshot } from "../web/dynamic-validation-observatory/workspace-model.mjs";
+import { buildWorkspaceSnapshot, findingsFromArtifacts, materializeFinalReportFromModel } from "../web/dynamic-validation-observatory/workspace-model.mjs";
 import { createAuditWorkbenchServer, parseArgs } from "../web/dynamic-validation-observatory/server.mjs";
 import { finalReportModelDigest, renderFinalReport } from "../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 import { buildWebXssInputEnvelope, buildWebXssRuntimeRequest } from "./fixtures/web-xss-runtime-fixture.mjs";
@@ -317,6 +317,63 @@ if (mode === "run") {
   assert.deepEqual(snapshot.findings[0].source_finding_ids, ["SOURCE-001"]);
   assert.equal(snapshot.findings[0].locations[0].detail, "缺少 ownership guard");
 
+  // The OpenCode process can end after it has sealed the deterministic model but
+  // before the Markdown renderer writes its output.  The workbench must repair
+  // that exact artifact locally instead of requiring an audit retry.
+  const repairModel = finalReportModel("audit-report-repair");
+  await writeFile(join(reportsRoot, "final", "security-audit-report-model.audit-report-repair.json"), `${JSON.stringify(repairModel, null, 2)}\n`, "utf8");
+  const reportRepair = await materializeFinalReportFromModel({ reportsRoot, auditId: "audit-report-repair" });
+  assert.equal(reportRepair.available, true);
+  assert.equal(reportRepair.materialized, true);
+  assert.equal(reportRepair.artifact.path, "final/security-audit-report.audit-report-repair.md");
+  const repairedSnapshot = await buildWorkspaceSnapshot({ reportsRoot });
+  assert.equal(repairedSnapshot.reports.find(report => report.audit_id === "audit-report-repair").integrity_state, "verified_model");
+
+  const v2Findings = findingsFromArtifacts([{
+    kind: "correlation",
+    audit_id: "audit-finding-v2",
+    path: "correlation/finding-v2.json",
+    data: {
+      canonical_findings: [{
+        finding_schema_version: 2,
+        finding_id: "FIND-V2-001",
+        state: "SUPPORTED_STATIC",
+        classification: {
+          vulnerability_type_id: "JW-AUTHN-01",
+          dimension_claims: [{ dimension: "D2", rationale: "认证边界受影响。" }],
+        },
+        locations: {
+          primary: { file: "src/Auth.java", line_start: 42, line_end: 44, source_digest: "a".repeat(64) },
+        },
+        evidence: {
+          facts: [
+            { kind: "source", claim: "认证头由攻击者控制。", locator: { file: "src/Auth.java", line_start: 42, source_digest: "a".repeat(64) } },
+            { kind: "sink", claim: "令牌解析器在认证边界使用该值。", locator: { file: "src/Auth.java", line_start: 44, source_digest: "a".repeat(64) } },
+          ],
+        },
+        attack_surface: { impact: { outcome: "伪造令牌可能建立攻击者选择的身份。" } },
+        reachability: { state: "static-reachable" },
+        attacker_influence: { state: "direct" },
+        severity: { rationale: "认证边界可达且输入可控。" },
+        remediation: { summary: "在使用声明前校验令牌。" },
+        uncertainty: { assumptions: ["尚未进行运行时部署验证。"] },
+        source_findings: [{ finding_id: "SOURCE-V2-001" }],
+        contradictions: [],
+      }],
+    },
+  }]);
+  assert.equal(v2Findings.length, 1);
+  assert.equal(v2Findings[0].title, "漏洞类型：JW-AUTHN-01");
+  assert.equal(v2Findings[0].location.path, "src/Auth.java");
+  assert.equal(v2Findings[0].location.line, 42);
+  assert.equal(v2Findings[0].location_complete, true);
+  assert.equal(v2Findings[0].locations[1].line, 44);
+  assert.equal(v2Findings[0].description, "伪造令牌可能建立攻击者选择的身份。");
+  assert.equal(v2Findings[0].evidence.length, 2);
+  assert.equal(v2Findings[0].remediation, "在使用声明前校验令牌。");
+  assert.equal(v2Findings[0].residual_uncertainty, "尚未进行运行时部署验证。");
+  assert.equal(v2Findings[0].status, "supported_static");
+
   const malformedReportsRoot = join(temp, "malformed-workspace-reports");
   const malformedAuditId = "audit-malformed-artifact";
   await mkdir(join(malformedReportsRoot, "vulnerability-mining"), { recursive: true });
@@ -451,6 +508,88 @@ if (mode === "run") {
   assert.equal(gatedRunner.getAudit(gatedAudit.id).interruption_reason, "local-audit-todo-incomplete");
   assert.match(gatedRunner.getAudit(gatedAudit.id).error, /2 项 PENDING/);
   await gatedRunner.shutdown();
+
+  // When all scheduled work is terminal but report sealing is malformed, the
+  // watchdog must identify the required name, format and location instead of
+  // presenting a generic retry-only failure.
+  const deliveryDiagnosticChild = new FakeChild();
+  const deliveryDiagnosticRunner = new AuditRunner({
+    stateRoot: join(temp, "delivery-diagnostic-state"),
+    platformRoot,
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    terminalMonitor: {
+      async probe() { return { available: false, message: "未找到 tmux。" }; },
+      async stop() {},
+    },
+    spawnProcess() { return deliveryDiagnosticChild; },
+  });
+  await deliveryDiagnosticRunner.ready;
+  const deliveryDiagnosticAudit = await deliveryDiagnosticRunner.createAudit({ audit_id: "audit-delivery-diagnostic", repository_id: "fixture", ref: "HEAD", allow_dirty: true }, "delivery-diagnostic-request");
+  for (let attempt = 0; attempt < 100 && deliveryDiagnosticRunner.getAudit(deliveryDiagnosticAudit.id)?.status !== "running"; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  await writeFile(join(temp, "delivery-diagnostic-state", deliveryDiagnosticAudit.id, "audit-todo.json"), `${JSON.stringify({
+    schema_version: 1,
+    audit_id: deliveryDiagnosticAudit.id,
+    items: [{ item_id: "todo:delivery-diagnostic", status: "DONE", agent_name: "fixture" }],
+    packets: [],
+  }, null, 2)}\n`, "utf8");
+  await writeFile(join(reportsRoot, "final", "security-audit-report.audit-delivery-diagnostic-draft.md"), "# 错误名称的草稿\n", "utf8");
+  await writeFile(join(reportsRoot, "final", "security-audit-report-model.audit-delivery-diagnostic.json"), "{\n", "utf8");
+  deliveryDiagnosticChild.emit("close", 0, null);
+  for (let attempt = 0; attempt < 500 && !deliveryDiagnosticRunner.getAudit(deliveryDiagnosticAudit.id)?.todo_completion; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  const deliveryDiagnosticResult = deliveryDiagnosticRunner.getAudit(deliveryDiagnosticAudit.id);
+  assert.ok(deliveryDiagnosticResult.todo_completion, JSON.stringify(deliveryDiagnosticResult));
+  const deliveryDiagnosticErrors = deliveryDiagnosticResult.todo_completion.errors.join("\n");
+  assert.equal(deliveryDiagnosticResult.status, "interrupted");
+  assert.match(deliveryDiagnosticErrors, /reports\/final\/security-audit-report\.audit-delivery-diagnostic\.md/);
+  assert.match(deliveryDiagnosticErrors, /Markdown 候选/);
+  assert.match(deliveryDiagnosticErrors, /不是有效 JSON/);
+  await deliveryDiagnosticRunner.shutdown();
+
+  // A server restart loses the child-process handle.  If the task's durable
+  // completion evidence is already valid, startup must converge it to completed
+  // before the UI offers a meaningless retry.
+  const reconciledStateRoot = join(temp, "reconciled-state");
+  const reconciledAuditId = "audit-reconciled-001";
+  const reconciledTodoPath = join(reconciledStateRoot, reconciledAuditId, "audit-todo.json");
+  await mkdir(join(reconciledStateRoot, reconciledAuditId), { recursive: true });
+  await writeFile(join(reconciledStateRoot, reconciledAuditId, "run.json"), `${JSON.stringify({
+    id: reconciledAuditId,
+    name: "重启收敛测试",
+    repository_id: "fixture",
+    repository_name: "测试仓库",
+    status: "interrupted",
+    version: 1,
+    event_sequence: 0,
+    created_at: "2026-08-15T00:00:00.000Z",
+    updated_at: "2026-08-15T00:00:00.000Z",
+    started_at: "2026-08-15T00:00:00.000Z",
+    finished_at: "2026-08-15T00:01:00.000Z",
+    todo_path: reconciledTodoPath,
+    stage_delivery_enforcement: "TODO_ENFORCED",
+    interruption_reason: "workbench-restarted",
+    error: "工作台服务已重启，原 Runner 连接已中断。",
+  }, null, 2)}\n`, "utf8");
+  const reconciledRunner = new AuditRunner({
+    stateRoot: reconciledStateRoot,
+    platformRoot,
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    terminalMonitor: { async stop() {} },
+    todoCompletionVerifier: async () => ({
+      complete: true,
+      errors: [],
+      summary: { total: 1, done: 1, gap: 0, pending: 0, running: 0, failed: 0, progress: 100, complete: true },
+      final_report_path: "final/security-audit-report.audit-reconciled-001.md",
+    }),
+  });
+  await reconciledRunner.ready;
+  assert.equal(reconciledRunner.getAudit(reconciledAuditId).status, "completed");
+  assert.equal(reconciledRunner.getAudit(reconciledAuditId).completion_source, "todo-artifact-verification");
+  assert.equal((await reconciledRunner.eventsSince(reconciledAuditId)).some(event => event.type === "audit.completed"), true);
+  await reconciledRunner.shutdown();
+
   const dynamicStateRoot = join(temp, "dynamic-state");
   const dynamicRunner = new DynamicValidationRunner({
     stateRoot: dynamicStateRoot,
@@ -625,7 +764,7 @@ if (mode === "run") {
     const repositoryResponse = await fetch(`${base}/api/v1/repositories`);
     assert.equal(repositoryResponse.status, 200);
     const repositoryPayload = await repositoryResponse.json();
-    assert.equal(repositoryPayload.items[0].audit_count, 6);
+    assert.equal(repositoryPayload.items[0].audit_count, 9);
     assert.equal(repositoryPayload.items[0].active_audit_count, 0);
     const relativeProjectResponse = await fetch(`${base}/api/v1/repositories`, {
       method: "POST",
