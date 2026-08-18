@@ -774,6 +774,26 @@ if (mode === "run") {
   assert.equal(silentPsmuxTerminal.backend, "psmux");
   assert.match(silentPsmuxTerminal.message, /异步输出/);
 
+  // Some psmux versions can report a successful but temporarily empty pane
+  // capture. The launcher diagnostic stream remains the reliable fallback.
+  const psmuxDiagnosticOutputPath = join(temp, "windows-psmux-diagnostic-output.jsonl");
+  await writeFile(psmuxDiagnosticOutputPath, '{"type":"step_start","sessionID":"ses_psmux_diagnostic"}\n', "utf8");
+  const psmuxDiagnosticMonitor = new OpenCodeTmuxMonitor({
+    stateRoot: join(temp, "windows-psmux-diagnostic-state"),
+    platform: "win32",
+    async execute(_command, args) {
+      assert.equal(args[2], "capture-pane");
+      return { stdout: "", stderr: "" };
+    },
+  });
+  psmuxDiagnosticMonitor.tmuxCommand = "C:\\tools\\psmux.exe";
+  const psmuxDiagnosticOutput = await psmuxDiagnosticMonitor.capture({
+    socket_name: "owa-0123456789abcdef",
+    target: "audit:tui",
+    output_path: psmuxDiagnosticOutputPath,
+  });
+  assert.match(psmuxDiagnosticOutput, /ses_psmux_diagnostic/);
+
   const findingWorkflowRoot = join(temp, "finding-workflow");
   const findingWorkflow = new FindingWorkflowStore({ stateRoot: findingWorkflowRoot });
   await findingWorkflow.ready;

@@ -245,12 +245,13 @@ export class OpenCodeTmuxMonitor {
     this.validateMetadata(terminal);
     try {
       const result = await this.tmux(terminal.socket_name, ["capture-pane", "-p", "-J", "-S", `-${Math.min(Math.max(Number(lines) || 400, 20), 2000)}`, "-t", terminal.target]);
-      return String(result.stdout ?? "").replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
+      const output = String(result.stdout ?? "").replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
+      if (output || !terminal.output_path) return output;
     } catch (error) {
       if (!terminal.output_path) throw error;
-      const output = String(await readFile(terminal.output_path, "utf8")).replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
-      return output.split(/\r?\n/).slice(-Math.min(Math.max(Number(lines) || 400, 20), 2000)).join("\n");
     }
+    const output = String(await readFile(terminal.output_path, "utf8")).replaceAll("\u0000", "").replace(/[ \t]+$/gm, "").trimEnd();
+    return output.split(/\r?\n/).slice(-Math.min(Math.max(Number(lines) || 400, 20), 2000)).join("\n");
   }
 
   async abort(terminal) {
