@@ -510,6 +510,45 @@ if (mode === "run") {
   assert.match(gatedRunner.getAudit(gatedAudit.id).error, /2 项 PENDING/);
   await gatedRunner.shutdown();
 
+  // A live OpenCode run can enter its own wait/continue loop after all durable
+  // work is complete. The watchdog must use only the local todo plus final
+  // report gate, accept a terminal GAP, and terminate that runner itself.
+  const terminalGapChild = new FakeChild();
+  const terminalGapMonitor = new FakeTerminalMonitor();
+  const terminalGapRunner = new AuditRunner({
+    stateRoot: join(temp, "terminal-gap-watchdog-state"),
+    platformRoot,
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    terminalMonitor: terminalGapMonitor,
+    completionWatchdogIntervalMs: 3_600_000,
+    todoCompletionVerifier: async () => ({
+      complete: true,
+      errors: [],
+      summary: { total: 2, done: 1, gap: 1, pending: 0, running: 0, failed: 0, progress: 100, complete: true, next_action: "FINALIZE_WITH_RESIDUAL_GAPS" },
+      final_report_path: "final/security-audit-report.audit-terminal-gap-watchdog.md",
+    }),
+    spawnProcess() { return terminalGapChild; },
+  });
+  await terminalGapRunner.ready;
+  const terminalGapAudit = await terminalGapRunner.createAudit({ audit_id: "audit-terminal-gap-watchdog", repository_id: "fixture", ref: "HEAD", allow_dirty: true }, "terminal-gap-watchdog-request");
+  for (let attempt = 0; attempt < 100 && terminalGapRunner.getAudit(terminalGapAudit.id)?.status !== "running"; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  assert.equal(terminalGapRunner.getAudit(terminalGapAudit.id).status, "running");
+  assert.match(terminalGapMonitor.starts[0].args.at(-1), /FINALIZE_WITH_RESIDUAL_GAPS/);
+  assert.match(terminalGapMonitor.starts[0].args.at(-1), /不得输出“继续”“等待”“下一步”/);
+  assert.equal(await terminalGapRunner.runCompletionWatchdog("test-terminal-gap-watchdog"), 1);
+  for (let attempt = 0; attempt < 100 && !(await terminalGapRunner.eventsSince(terminalGapAudit.id)).some(event => event.type === "audit.runner.stopped"); attempt += 1) await new Promise(resolve => setImmediate(resolve));
+  const terminalGapResult = terminalGapRunner.getAudit(terminalGapAudit.id);
+  assert.equal(terminalGapResult.status, "completed");
+  assert.equal(terminalGapResult.completion_source, "todo-artifact-watchdog");
+  assert.equal(terminalGapResult.todo_summary.gap, 1, "展示用 GAP 不得阻止任务收尾");
+  assert.deepEqual(terminalGapChild.signals, ["SIGTERM"]);
+  assert.equal(terminalGapMonitor.abortCalls.length, 1);
+  assert.equal(terminalGapMonitor.stopCalls, 1);
+  assert.equal((await terminalGapRunner.eventsSince(terminalGapAudit.id)).some(event => event.type === "audit.runner.stopped"), true);
+  await terminalGapRunner.shutdown();
+
   // When all scheduled work is terminal but report sealing is malformed, the
   // watchdog must identify the required name, format and location instead of
   // presenting a generic retry-only failure.
@@ -818,7 +857,7 @@ if (mode === "run") {
     const repositoryResponse = await fetch(`${base}/api/v1/repositories`);
     assert.equal(repositoryResponse.status, 200);
     const repositoryPayload = await repositoryResponse.json();
-    assert.equal(repositoryPayload.items[0].audit_count, 9);
+    assert.equal(repositoryPayload.items[0].audit_count, 10);
     assert.equal(repositoryPayload.items[0].active_audit_count, 0);
     const relativeProjectResponse = await fetch(`${base}/api/v1/repositories`, {
       method: "POST",

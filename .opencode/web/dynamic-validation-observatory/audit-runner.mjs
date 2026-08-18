@@ -25,6 +25,7 @@ const MAX_LOG_READ_BYTES = 256 * 1024;
 const MAX_DELIVERY_CANDIDATES = 8;
 const MAX_ADDITIONAL_INSTRUCTIONS = 12_000;
 const MAX_TEST_ENVIRONMENT_CONTEXT = 24_000;
+const COMPLETION_WATCHDOG_INTERVAL_MS = 15_000;
 const PRIVATE_CONTEXT_FILES = Object.freeze({
   additional_instructions: "additional-instructions.txt",
   test_environment: "test-environment.txt",
@@ -457,11 +458,11 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     "专业 Agent 只写报告和一个工作包 handoff JSON 到 reports/audit-todo/<audit_id>/；handoff 必须逐项标明 DONE 或 GAP、报告相对路径、finding_ids 或 gap_reason。Orchestrator 仅检查该 handoff 的结构和报告是否存在，再调用 audit-todo complete；子代理失败时调用 audit-todo fail，过期 RUNNING 项调用 audit-todo recover 后重新领取。Orchestrator 不得阅读源码、判断漏洞或改写 Finding。",
     "每次 claim/complete/recover 后立刻运行 audit-todo stats，并只以 stats.next_action 决定下一步：CLAIM 才继续领取；RECOVER_OR_WAIT 才处理运行租约；REPAIR_FAILURES 才处理失败。FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 表示所有本地审计项均已终态，必须停止所有领取、等待和 GAP 重试循环，转入关联、裁决、验证与报告收尾。DONE 数小于 total 并不表示还有任务：GAP 是已记录的终态；FINALIZE_WITH_RESIDUAL_GAPS 必须保留 GAP 并输出部分覆盖/残余缺口报告，不能等待用户或 operation timeout。",
     ...privateContextPrompt(audit, contextPaths),
-    "完成可信结构、威胁建模、多视角漏洞挖掘、覆盖门禁、证据关联、发现裁决和最终中文报告封存。",
-    "八个工作台环节仍须各自产出可读的阶段制品，但当前完成门禁以本地任务清单为准：所有调度项必须 DONE 或 GAP，且必须生成最终中文 Markdown 报告。不得调用或等待旧 Coverage Ledger 相关的 stage-delivery / coverage-finalize 门禁。",
+    "完成可信结构、威胁建模、多视角漏洞挖掘、证据关联、发现裁决和最终中文报告封存；不能完成的分析必须作为残余 GAP 记录，不能无限续跑。",
+    "八个工作台环节的制品只供 Web 展示和报告引用，不是完成门禁：缺失、PARTIAL 或 GAP 只能写入残余缺口，绝不能新建嵌套工作、重开终态本地任务、等待用户或触发 operation timeout。唯一完成门禁是本地任务清单所有项为 DONE/GAP，且最终中文 Markdown 报告存在。不得调用或等待旧 Coverage Ledger 相关的 stage-delivery / coverage-finalize 门禁。",
     "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次全任务 120 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
-    "这是无人值守的工作台任务：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明，完成强制交付后必须正常结束本次运行。",
+    "这是无人值守的工作台任务：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明。每次收尾必须运行 audit-todo recover 和 stats；当 next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 时，生成/核验最终报告后立刻结束本次 OpenCode run，不得输出“继续”“等待”“下一步”或请求澄清，也不得创建新的嵌套步骤。",
   ].join("\n");
 }
 
@@ -473,7 +474,7 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     `这是同一任务 ${audit.id} 的第 ${Number(audit.recovery_count ?? 0)} 次断点恢复，目标提交仍固定为 ${audit.commit}；不得生成新的 audit_id。`,
     `唯一被审计源码根目录仍是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
     `先检查 Web 注入的交付目录、临时目录以及本机本地任务清单 ${JSON.stringify(paths.todo_path)}；运行 node \"$AUDIT_TODO_CLI\" recover 和 stats，复用已有 DONE/GAP 项，只领取 PENDING 项。不得删除有效制品，也不要无条件重跑已完成工作包。若 stats.next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS，所有本地审计项都已经终态：不得再等待、重领或重跑 GAP，而是立即从后续交付制品继续收尾；后者须将 GAP 保留为残余缺口并输出部分覆盖报告。`,
-    "优先复用已有阶段制品、最终报告和本地清单中的 DONE/GAP 状态；只恢复 PENDING 或过期 RUNNING 工作包。不得因缺失旧 Coverage Ledger 的 stage-delivery / coverage-finalize 制品而重跑已完成工作包。",
+    "优先复用已有阶段制品、最终报告和本地清单中的 DONE/GAP 状态；只恢复 PENDING 或过期 RUNNING 工作包。阶段制品的缺失、PARTIAL 或 GAP 仅作为 Web 展示和最终报告残余缺口，不能重开终态任务、生成嵌套任务或让运行保持等待。不得因缺失旧 Coverage Ledger 的 stage-delivery / coverage-finalize 制品而重跑已完成工作包。",
     "会话中的历史说明只能作为线索，阶段完成性必须以当前落盘制品及确定性校验结果为准；若发现半写入、摘要不匹配或前后不一致的制品，应重建对应制品后再继续。",
     "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径，不得用当前执行目录替代冻结范围根。",
     ...deliveryRootPrompt(audit, paths),
@@ -481,7 +482,7 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     ...privateContextPrompt(audit, contextPaths),
     "继续完成真实性 routing、覆盖门禁、CVSS、攻击链和最终中文报告封存。先校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复；不得重跑摘要有效的角色。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
-    "这是无人值守的断点恢复：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明，完成强制交付后必须正常结束本次运行。",
+    "这是无人值守的断点恢复：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明。每次收尾必须运行 audit-todo recover 和 stats；当 next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 时，生成/核验最终报告后立刻结束本次 OpenCode run，不得输出“继续”“等待”“下一步”或请求澄清，也不得创建新的嵌套步骤。",
   ].join("\n");
 }
 
@@ -490,7 +491,7 @@ function providerSessionId(value) {
 }
 
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
     this.configPath = configPath ? resolve(configPath) : null;
@@ -518,6 +519,11 @@ export class AuditRunner extends EventEmitter {
     this.contextRedactions = new Map();
     this.queueScheduler = null;
     this.dispatching = new Set();
+    this.completionWatchdogIntervalMs = Number.isFinite(Number(completionWatchdogIntervalMs))
+      ? Math.max(1_000, Number(completionWatchdogIntervalMs))
+      : COMPLETION_WATCHDOG_INTERVAL_MS;
+    this.completionWatchdogTimer = null;
+    this.completionWatchdogRunning = false;
     this.ready = this.initialize();
   }
 
@@ -587,6 +593,7 @@ export class AuditRunner extends EventEmitter {
     }
     await this.reconcileFinalReportArtifacts("startup-watchdog");
     await this.reconcileTerminalCompletions("startup-watchdog");
+    this.startCompletionWatchdog();
   }
 
   reportsRootForAudit(audit) {
@@ -609,13 +616,8 @@ export class AuditRunner extends EventEmitter {
     return verification;
   }
 
-  async completeRecoveredAudit(audit, { reason, completionSource, data = {} }) {
-    if (audit.terminal?.live) {
-      await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(() => {});
-      await this.finalizeTerminal(audit).catch(() => {
-        audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "closed", message: "审计已由完成性校验收敛，终端归档失败。" };
-      });
-    }
+  async completeVerifiedAudit(audit, { reason, completionSource, data = {}, terminateRunner = false }) {
+    const child = terminateRunner ? this.processes.get(audit.id) : null;
     audit.status = "completed";
     audit.pid = null;
     audit.exit_code ??= 0;
@@ -624,20 +626,39 @@ export class AuditRunner extends EventEmitter {
     audit.interruption_reason = null;
     audit.error = null;
     audit.completion_source = completionSource;
-    await this.record(audit, "audit.completed", { reason, completion_source: completionSource, ...data });
+    await this.record(audit, "audit.completed", {
+      reason,
+      completion_source: completionSource,
+      runner_termination_requested: Boolean(child),
+      ...data,
+    });
+    if (audit.terminal?.live) {
+      await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(() => {});
+      if (!child) {
+        await this.finalizeTerminal(audit).catch(() => {
+          audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "closed", message: "审计已由完成性校验收敛，终端归档失败。" };
+        });
+      }
+    }
+    if (child && !child.kill("SIGTERM")) {
+      await this.recordLog(audit, "stderr", "完成性 watchdog 已确认交付完成，但未能向 Runner 发送结束信号。");
+    }
     return true;
   }
 
-  async reconcileManagedCompletion(audit, reason = "watchdog") {
-    if (!audit || audit.status === "completed" || this.processes.has(audit.id) || this.completions.has(audit.id)) return false;
-    if (!RECOVERABLE.has(audit.status)) return false;
+  async reconcileManagedCompletion(audit, reason = "watchdog", { allowRunning = false } = {}) {
+    if (!audit || audit.status === "completed" || this.completions.has(audit.id)) return false;
+    const running = allowRunning && audit.status === "running" && this.processes.has(audit.id);
+    if (this.processes.has(audit.id) && !running) return false;
+    if (!RECOVERABLE.has(audit.status) && !running) return false;
     if (audit.stage_delivery_enforcement === "TODO_ENFORCED") {
       try {
         const verification = await this.verifyTodoCompletion(audit);
         if (!verification.complete) return false;
-        return this.completeRecoveredAudit(audit, {
+        return this.completeVerifiedAudit(audit, {
           reason,
-          completionSource: "todo-artifact-verification",
+          completionSource: running ? "todo-artifact-watchdog" : "todo-artifact-verification",
+          terminateRunner: running,
           data: { final_report_path: audit.todo_completion.final_report_path, report_materialized: audit.todo_completion.final_report_materialized },
         });
       } catch {
@@ -658,7 +679,7 @@ export class AuditRunner extends EventEmitter {
           verified_at: new Date().toISOString(),
         };
         if (!verification.complete) return false;
-        return this.completeRecoveredAudit(audit, {
+        return this.completeVerifiedAudit(audit, {
           reason,
           completionSource: "stage-delivery-verification",
           data: { completed_count: audit.stage_delivery.completed_count },
@@ -668,6 +689,30 @@ export class AuditRunner extends EventEmitter {
       }
     }
     return false;
+  }
+
+  startCompletionWatchdog() {
+    if (!this.enabled || this.completionWatchdogTimer) return;
+    this.completionWatchdogTimer = setInterval(() => {
+      this.runCompletionWatchdog().catch(() => {});
+    }, this.completionWatchdogIntervalMs);
+    this.completionWatchdogTimer.unref?.();
+  }
+
+  async runCompletionWatchdog(reason = "active-run-watchdog") {
+    if (this.completionWatchdogRunning) return 0;
+    this.completionWatchdogRunning = true;
+    try {
+      await this.reconcileFinalReportArtifacts(reason);
+      let completed = 0;
+      for (const audit of this.audits.values()) {
+        if (audit.status !== "running" || !this.processes.has(audit.id)) continue;
+        if (await this.reconcileManagedCompletion(audit, reason, { allowRunning: true })) completed += 1;
+      }
+      return completed;
+    } finally {
+      this.completionWatchdogRunning = false;
+    }
   }
 
   async reconcileLegacyCompletion(audit, reason = "watchdog") {
@@ -681,7 +726,7 @@ export class AuditRunner extends EventEmitter {
       return false;
     }
     if (inferred?.progress !== 100 || inferred.progress_source !== "legacy-artifact-heuristic") return false;
-    return this.completeRecoveredAudit(audit, {
+    return this.completeVerifiedAudit(audit, {
       reason,
       completionSource: "legacy-artifact-heuristic",
       data: { progress: 100 },
@@ -1425,9 +1470,17 @@ export class AuditRunner extends EventEmitter {
     child.once("close", (code, signal) => {
       const completion = startedEvent.then(async () => {
         this.processes.delete(audit.id);
+        audit.pid = null;
+        if (audit.status === "completed" && audit.completion_source === "todo-artifact-watchdog") {
+          audit.exit_code ??= code ?? 0;
+          audit.finished_at ??= new Date().toISOString();
+          await this.finalizeTerminal(audit).catch(error => {
+            audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "error", message: `终端归档失败：${redact(error.message)}` };
+          });
+          return this.record(audit, "audit.runner.stopped", { exit_code: code, signal: signal ?? null, reason: "todo-artifact-watchdog" });
+        }
         audit.exit_code = code;
         audit.finished_at = new Date().toISOString();
-        audit.pid = null;
         if (audit.status === "cancelling" && audit.interruption_reason === "workbench-shutdown") audit.status = "interrupted";
         else if (audit.status === "cancelling") audit.status = "cancelled";
         else if (code === 0 && audit.stage_delivery_enforcement === "ENFORCED") {
@@ -1693,6 +1746,8 @@ export class AuditRunner extends EventEmitter {
 
   async shutdown() {
     await this.ready;
+    if (this.completionWatchdogTimer) clearInterval(this.completionWatchdogTimer);
+    this.completionWatchdogTimer = null;
     for (const [id, child] of this.processes) {
       const audit = this.audits.get(id);
       if (!audit || audit.status === "cancelling") continue;

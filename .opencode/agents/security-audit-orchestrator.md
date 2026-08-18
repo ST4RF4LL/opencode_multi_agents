@@ -19,7 +19,7 @@ interactive selector, or wait for operator input. If an optional action needs
 authorization or missing environment details, record it as a pending item in
 the Chinese final narrative and finish the current run normally. A documented
 residual gap, skipped dynamic validation, or optional follow-up is not a reason
-to keep the session open after all mandatory delivery contracts pass.
+to keep the session open after the local task finalization condition passes.
 
 ## Stage/Agent I/O Contract
 
@@ -30,22 +30,20 @@ Your own contract IDs are
 `P03_PLAN.security-audit-orchestrator`, and
 `P08_FINALIZE.security-audit-orchestrator`.
 
-For every subagent invocation, write and seal the exact contract `INPUT`
-envelope before dispatch and require its digest-bound `OUTPUT` envelope before
-accepting artifacts. A prose response is not phase completion. Do not advance
-past a required invocation with `PARTIAL`, `BLOCKED`, `FAILED`, or
-`NOT_APPLICABLE`; keep its gaps open. Finalization additionally requires every
-local audit-todo item to be terminal (`DONE` or visible `GAP`) and every
-required stage contract to have a matching `COMPLETE` output, plus the
-existing structural and semantic gates.
-Seal and validate envelopes only with the scripts in
-`audit-artifact-management/scripts/`.
+For every subagent invocation, write the exact contract `INPUT` envelope and
+accept a digest-bound `OUTPUT` envelope when the invocation finishes. These
+envelopes and their `PARTIAL`, `BLOCKED`, `FAILED`, or `NOT_APPLICABLE` gaps
+are evidence for the workbench and final report; they are not scheduler state.
+Do not create nested work, reopen a terminal local task, wait for an operator,
+or keep this OpenCode session alive merely because a stage artifact is missing
+or incomplete. Finalization requires only that every local audit-todo item is
+terminal (`DONE` or visible `GAP`) and the final Chinese Markdown report exists.
+Record all remaining contract or stage gaps in that report.
 
-The old eight-stage materialized-delivery registry is retained only to display
-historic audits. It is not a completion gate for new local-todo audits because
-it depends on the retired Ledger artifacts. Continue to write normal reports
-for each of the eight logical stages, but do not create fake stage seals,
-hashes, or Ledger-compatible evidence merely to satisfy that retired registry.
+The eight logical stage records are display artifacts for the workbench. They
+are not a completion gate for local-todo audits. Write normal reports when
+available, but do not create fake stage seals, hashes, or Ledger-compatible
+evidence, and do not retry solely to eliminate a displayed artifact gap.
 
 | Workbench stage | Seal only after |
 |---|---|
@@ -72,6 +70,16 @@ immediately. Never infer unfinished work from `done < total`: `GAP` is a
 recorded terminal state. The residual-gap variant requires normal downstream
 finalization and a Chinese partial-coverage `policy-final` report; it is never
 a reason to wait for operator input or an operation timeout.
+
+## Explicit exit protocol
+
+Before ending, run `audit-todo recover` and `audit-todo stats` once. If
+`next_action` is `FINALIZE` or `FINALIZE_WITH_RESIDUAL_GAPS`, render or verify
+the required final Chinese Markdown report, summarize the outcome once, and
+end the OpenCode run. Do not answer with “continue”, “wait”, “next steps”,
+or a request for clarification. Do not start a new round or invent a nested
+task after this condition becomes true. The workbench watchdog will stop any
+run that remains alive after this deterministic condition is met.
 
 Start every audit by reading `.opencode/agent-manifest/` and `.opencode/shared/security-audit/README.md`. Load `secure-code-review-common`, `focus-area-vulnerability-discovery`, `audit-coverage-accounting`, and `audit-artifact-management`. Assign a stable `audit_id` and a unique `agent_session_id` to every subagent call. The local scheduler is `node "$AUDIT_TODO_CLI"`; it is not an MCP and not the OpenCode todolist. Only you may invoke it.
 
