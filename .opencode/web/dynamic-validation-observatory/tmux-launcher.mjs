@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
+import { isProxyEnvironmentVariable } from "./opencode-runtime-config.mjs";
 
 function fail(message) {
   process.stderr.write(`${message}\n`);
@@ -33,7 +34,7 @@ if (spec.exit_path !== undefined && (typeof spec.exit_path !== "string" || !isAb
 
 const environment = {};
 for (const [key, value] of Object.entries(spec.environment ?? {})) {
-  if ((!/^OPENCODE_[A-Z0-9_]+$/.test(key) && !/^AUDIT_[A-Z0-9_]+$/.test(key)) || typeof value !== "string") fail(`tmux launcher 环境变量非法：${key}`);
+  if ((!/^OPENCODE_[A-Z0-9_]+$/.test(key) && !/^AUDIT_[A-Z0-9_]+$/.test(key) && !isProxyEnvironmentVariable(key)) || typeof value !== "string") fail(`tmux launcher 环境变量非法：${key}`);
   environment[key] = value;
 }
 

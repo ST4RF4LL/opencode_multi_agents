@@ -1,6 +1,32 @@
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
+export const PROXY_ENVIRONMENT_VARIABLES = Object.freeze([
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "all_proxy",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "ALL_PROXY",
+]);
+
+const PROXY_ENVIRONMENT_VARIABLE_SET = new Set(PROXY_ENVIRONMENT_VARIABLES);
+
+export function isProxyEnvironmentVariable(key) {
+  return typeof key === "string" && PROXY_ENVIRONMENT_VARIABLE_SET.has(key);
+}
+
+export function proxyEnvironmentFrom(environment = process.env) {
+  const values = {};
+  for (const key of PROXY_ENVIRONMENT_VARIABLES) {
+    const value = environment?.[key];
+    if (typeof value === "string" && value) values[key] = value;
+  }
+  return values;
+}
+
 function commandPath(value, engineRoot) {
   if (typeof value !== "string" || isAbsolute(value)) return value;
   if (!value.startsWith("./") && !value.startsWith("../") && !value.startsWith(".opencode/") && !value.startsWith(".opencode\\")) return value;

@@ -54,8 +54,8 @@ class FakeTerminalMonitor {
     return { available: true, tmux_version: "tmux 3.test", message: "ready" };
   }
 
-  async start({ audit, repository, executionDirectory, providerSessionId = null, args }) {
-    this.starts.push({ audit_id: audit.id, repository, executionDirectory, providerSessionId, args });
+  async start({ audit, repository, environment, executionDirectory, providerSessionId = null, args }) {
+    this.starts.push({ audit_id: audit.id, repository, environment, executionDirectory, providerSessionId, args });
     return {
       backend: "tmux",
       transport: "opencode-run+terminal-multiplexer",
@@ -421,6 +421,7 @@ if (mode === "run") {
     repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
     configPath: join(repositoryRoot, ".opencode", "opencode.json"),
     enabled: true,
+    environment: { ...process.env, http_proxy: "http://proxy-fixture.test:8080", HTTPS_PROXY: "http://secure-proxy-fixture.test:8443" },
     terminalMonitor,
     spawnProcess(command, args, options) {
       spawnCall = { command, args, options };
@@ -729,7 +730,7 @@ if (mode === "run") {
     audit: { id: "audit-windows-psmux", name: "Windows psmux 集成测试" },
     repository: { path: canonicalRepositoryRoot },
     executionDirectory: canonicalRepositoryRoot,
-    environment: {},
+    environment: { http_proxy: "http://proxy-fixture.test:8080", HTTPS_PROXY: "http://secure-proxy-fixture.test:8443" },
     args: ["run", "--format", "json", "--agent", "security-audit-orchestrator", "--dir", canonicalRepositoryRoot, "--title", "Windows psmux 集成测试", "fixture prompt"],
   });
   assert.equal(windowsTerminal.backend, "psmux");
@@ -739,6 +740,8 @@ if (mode === "run") {
   assert.equal(windowsRunSpec.command, "C:\\tools\\opencode.exe");
   assert.equal(windowsRunSpec.args[0], "run");
   assert.equal(windowsRunSpec.args.includes("serve"), false);
+  assert.equal(windowsRunSpec.environment.http_proxy, "http://proxy-fixture.test:8080");
+  assert.equal(windowsRunSpec.environment.HTTPS_PROXY, "http://secure-proxy-fixture.test:8443");
 
   // psmux may create a valid OpenCode process before its pane exposes any
   // output.  That is not a launch failure and must not trigger the old 60-second
@@ -909,6 +912,7 @@ if (mode === "run") {
     assert.equal(created.task_context.test_environment_enabled, true);
     assert.equal(created.task_context.dynamic_validation_enabled, true);
     assert.equal(JSON.stringify(created).includes("context-attacker-secret"), false);
+    assert.equal(JSON.stringify(created).includes("proxy-fixture.test"), false);
 
     for (let attempt = 0; attempt < 100 && runner.getAudit(created.id)?.status !== "running"; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
     assert.equal(runner.getAudit(created.id).status, "running");
@@ -942,6 +946,10 @@ if (mode === "run") {
     assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_ENABLED, "true");
     assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS, "120");
     assert.equal(spawnCall.options.env.AUDIT_FULL_DYNAMIC_TRIGGER, "MANUAL_ONLY");
+    assert.equal(spawnCall.options.env.http_proxy, "http://proxy-fixture.test:8080");
+    assert.equal(spawnCall.options.env.HTTPS_PROXY, "http://secure-proxy-fixture.test:8443");
+    assert.equal(terminalMonitor.starts[0].environment.http_proxy, "http://proxy-fixture.test:8080");
+    assert.equal(terminalMonitor.starts[0].environment.HTTPS_PROXY, "http://secure-proxy-fixture.test:8443");
     assert.match(spawnCall.options.env.AUDIT_TEST_ENVIRONMENT_CONTEXT_SHA256, /^[a-f0-9]{64}$/);
     const additionalContextPath = join(stateRoot, created.id, "additional-instructions.txt");
     const testEnvironmentContextPath = join(stateRoot, created.id, "test-environment.txt");
@@ -957,6 +965,10 @@ if (mode === "run") {
     const persistedAuditState = await readFile(join(stateRoot, created.id, "run.json"), "utf8");
     assert.equal(persistedAuditState.includes("context-attacker-secret"), false);
     assert.equal(persistedAuditState.includes("context-victim-secret"), false);
+    assert.equal(persistedAuditState.includes("proxy-fixture.test"), false);
+    const proxyEnvironmentPath = join(stateRoot, created.id, "proxy-environment.json");
+    assert.match(await readFile(proxyEnvironmentPath, "utf8"), /proxy-fixture\.test/);
+    assert.equal((await stat(proxyEnvironmentPath)).mode & 0o077, 0);
     assert.equal(spawnCall.options.env.AUDIT_SOURCE_ROOT, canonicalRepositoryRoot);
     assert.equal(spawnCall.options.env.AUDIT_WORKSPACE_ROOT, executionWorkspace);
     assert.equal(spawnCall.options.env.AUDIT_REPORTS_ROOT, reportsRoot);
@@ -1425,6 +1437,9 @@ if (mode === "run") {
   const resumableAuditDirectory = join(resumableStateRoot, resumableAuditId);
   const resumableWorkspace = join(platformRoot, "workspace", "audit-runs", resumableAuditId);
   await mkdir(resumableAuditDirectory, { recursive: true });
+  const resumedProxyEnvironment = { http_proxy: "http://resume-proxy-fixture.test:8080", HTTPS_PROXY: "http://resume-secure-proxy-fixture.test:8443" };
+  const resumedProxyDocument = `${JSON.stringify({ schema_version: 1, environment: resumedProxyEnvironment }, null, 2)}\n`;
+  await writeFile(join(resumableAuditDirectory, "proxy-environment.json"), resumedProxyDocument, { encoding: "utf8", mode: 0o600 });
   await writeFile(join(resumableAuditDirectory, "run.json"), `${JSON.stringify({
     id: resumableAuditId,
     name: "中断恢复测试",
@@ -1444,6 +1459,14 @@ if (mode === "run") {
     allow_dirty: false,
     provider_session_id: "ses_resume_fixture",
     recovery_count: 0,
+    private_runtime: {
+      proxy_environment: {
+        enabled: true,
+        file_name: "proxy-environment.json",
+        sha256: createHash("sha256").update(resumedProxyDocument).digest("hex"),
+        variable_names: Object.keys(resumedProxyEnvironment).sort(),
+      },
+    },
     paths: {
       source_root: canonicalRepositoryRoot,
       workspace_root: resumableWorkspace,
@@ -1470,6 +1493,7 @@ if (mode === "run") {
     repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
     configPath: join(repositoryRoot, ".opencode", "opencode.json"),
     enabled: true,
+    environment: { PATH: process.env.PATH ?? "" },
     terminalMonitor: resumeTerminalMonitor,
     spawnProcess(command, args, options) {
       resumedSpawnCall = { command, args, options };
@@ -1488,8 +1512,13 @@ if (mode === "run") {
   assert.equal(resumedAudit.provider_session_id, "ses_resume_fixture");
   assert.equal(resumeTerminalMonitor.abortCalls.length, 1);
   assert.equal(resumeTerminalMonitor.starts[0].providerSessionId, "ses_resume_fixture");
+  assert.equal(resumeTerminalMonitor.starts[0].environment.http_proxy, resumedProxyEnvironment.http_proxy);
+  assert.equal(resumeTerminalMonitor.starts[0].environment.HTTPS_PROXY, resumedProxyEnvironment.HTTPS_PROXY);
   assert.equal(resumedSpawnCall.command, process.execPath);
   assert.match(resumedSpawnCall.args[0], /terminal-output-relay\.mjs$/);
+  assert.equal(resumedSpawnCall.options.env.http_proxy, resumedProxyEnvironment.http_proxy);
+  assert.equal(resumedSpawnCall.options.env.HTTPS_PROXY, resumedProxyEnvironment.HTTPS_PROXY);
+  assert.equal(JSON.stringify(resumedAudit).includes("resume-proxy-fixture.test"), false);
   const resumeRunArgs = resumeTerminalMonitor.starts[0].args;
   assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--session") + 1], "ses_resume_fixture");
   assert.match(resumeRunArgs.at(-1), /第 1 次断点恢复/);

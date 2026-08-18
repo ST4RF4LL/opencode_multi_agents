@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { appendFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
+import { buildOpenCodeEnvironment, proxyEnvironmentFrom } from "./opencode-runtime-config.mjs";
 import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
 import { auditsFromArtifacts, materializeFinalReportFromModel, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
@@ -29,6 +29,7 @@ const PRIVATE_CONTEXT_FILES = Object.freeze({
   additional_instructions: "additional-instructions.txt",
   test_environment: "test-environment.txt",
 });
+const PRIVATE_PROXY_ENVIRONMENT_FILE = "proxy-environment.json";
 const TERMINAL_OUTPUT_RELAY = fileURLToPath(new URL("./terminal-output-relay.mjs", import.meta.url));
 const STAGE_DELIVERY_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json", import.meta.url));
 const STAGE_AGENT_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json", import.meta.url));
@@ -321,8 +322,24 @@ function contextMetadata(enabled, fileName = null, text = "") {
   };
 }
 
+function proxyEnvironmentDocument(environment) {
+  return `${JSON.stringify({ schema_version: 1, environment }, null, 2)}\n`;
+}
+
+function proxyEnvironmentMetadata(environment) {
+  const names = Object.keys(environment).sort();
+  if (!names.length) return { enabled: false, file_name: null, sha256: null, variable_names: [] };
+  const document = proxyEnvironmentDocument(environment);
+  return {
+    enabled: true,
+    file_name: PRIVATE_PROXY_ENVIRONMENT_FILE,
+    sha256: createHash("sha256").update(document).digest("hex"),
+    variable_names: names,
+  };
+}
+
 function publicAudit(audit) {
-  const { idempotency_digest, action_idempotency_digests, private_context: privateContext, ...value } = audit;
+  const { idempotency_digest, action_idempotency_digests, private_context: privateContext, private_runtime: privateRuntime, ...value } = audit;
   const additional = privateContext?.additional_instructions;
   const environment = privateContext?.test_environment;
   return {
@@ -473,7 +490,7 @@ function providerSessionId(value) {
 }
 
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
     this.configPath = configPath ? resolve(configPath) : null;
@@ -488,10 +505,11 @@ export class AuditRunner extends EventEmitter {
     }));
     this.enabled = enabled;
     this.command = command;
+    this.environment = environment;
     this.spawnProcess = spawnProcess;
     this.stageDeliveryVerifier = stageDeliveryVerifier;
     this.todoCompletionVerifier = todoCompletionVerifier;
-    this.terminalMonitor = terminalMonitor ?? new OpenCodeTmuxMonitor({ stateRoot: this.stateRoot, command: this.command });
+    this.terminalMonitor = terminalMonitor ?? new OpenCodeTmuxMonitor({ stateRoot: this.stateRoot, command: this.command, environment: this.environment });
     this.audits = new Map();
     this.processes = new Map();
     this.completions = new Map();
@@ -925,6 +943,61 @@ export class AuditRunner extends EventEmitter {
     }
   }
 
+  async writePrivateProxyEnvironment(auditId, sourceEnvironment = this.environment) {
+    const directory = join(this.stateRoot, auditId);
+    const environment = proxyEnvironmentFrom(sourceEnvironment);
+    const metadata = proxyEnvironmentMetadata(environment);
+    if (!metadata.enabled) return metadata;
+    await mkdir(directory, { recursive: true });
+    const document = proxyEnvironmentDocument(environment);
+    const temporary = join(directory, `${PRIVATE_PROXY_ENVIRONMENT_FILE}.${process.pid}.${randomUUID()}.tmp`);
+    await writeFile(temporary, document, { encoding: "utf8", mode: 0o600 });
+    await rename(temporary, join(directory, PRIVATE_PROXY_ENVIRONMENT_FILE));
+    return metadata;
+  }
+
+  async verifiedPrivateProxyEnvironment(audit) {
+    const metadata = audit.private_runtime?.proxy_environment;
+    // Audits created before proxy snapshots were introduced keep using the
+    // workbench environment. New audits persist an allowlisted snapshot.
+    if (!metadata) return proxyEnvironmentFrom(this.environment);
+    if (metadata.enabled === false) return {};
+    if (metadata.enabled !== true
+      || metadata.file_name !== PRIVATE_PROXY_ENVIRONMENT_FILE
+      || !/^[a-f0-9]{64}$/.test(metadata.sha256 ?? "")
+      || !Array.isArray(metadata.variable_names)) {
+      throw Object.assign(new Error("任务代理环境元数据无效，拒绝继续。"), { statusCode: 409, code: "audit-proxy-environment-integrity-failed" });
+    }
+    const path = join(this.stateRoot, audit.id, PRIVATE_PROXY_ENVIRONMENT_FILE);
+    let document;
+    try {
+      const info = await stat(path);
+      if (!info.isFile()) throw new Error("not-file");
+      document = await readFile(path, "utf8");
+    } catch {
+      throw Object.assign(new Error("任务代理环境文件缺失或不可读取，拒绝继续。"), { statusCode: 409, code: "audit-proxy-environment-integrity-failed" });
+    }
+    if (createHash("sha256").update(document).digest("hex") !== metadata.sha256) {
+      throw Object.assign(new Error("任务代理环境摘要不匹配，拒绝继续。"), { statusCode: 409, code: "audit-proxy-environment-integrity-failed" });
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(document);
+    } catch {
+      throw Object.assign(new Error("任务代理环境文件格式无效，拒绝继续。"), { statusCode: 409, code: "audit-proxy-environment-integrity-failed" });
+    }
+    const environment = proxyEnvironmentFrom(parsed?.environment);
+    const actualNames = Object.keys(environment).sort();
+    const expectedNames = [...new Set(metadata.variable_names)].sort();
+    if (parsed?.schema_version !== 1
+      || !parsed?.environment || typeof parsed.environment !== "object" || Array.isArray(parsed.environment)
+      || actualNames.length !== Object.keys(parsed.environment).length
+      || JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
+      throw Object.assign(new Error("任务代理环境包含不受支持的变量，拒绝继续。"), { statusCode: 409, code: "audit-proxy-environment-integrity-failed" });
+    }
+    return environment;
+  }
+
   async writePrivateContexts(auditId, contexts) {
     const directory = join(this.stateRoot, auditId);
     await mkdir(directory, { recursive: true });
@@ -982,6 +1055,14 @@ export class AuditRunner extends EventEmitter {
       } catch {
         // Integrity checks at launch provide the behavior gate; missing files add no log redactions.
       }
+    }
+    try {
+      const environment = await this.verifiedPrivateProxyEnvironment(audit);
+      for (const value of Object.values(environment)) {
+        for (const sensitive of sensitiveRedactionValues(value)) values.add(sensitive);
+      }
+    } catch {
+      // A missing or tampered proxy snapshot is handled by the launch gate.
     }
     const result = [...values].sort((left, right) => right.length - left.length);
     this.contextRedactions.set(audit.id, result);
@@ -1205,6 +1286,9 @@ export class AuditRunner extends EventEmitter {
       todo_path: join(this.stateRoot, id, "audit-todo.json"),
     };
     audit.private_context = await this.writePrivateContexts(id, contexts);
+    audit.private_runtime = {
+      proxy_environment: await this.writePrivateProxyEnvironment(id),
+    };
     const todo = await createEmptyAuditTodo({ todoPath: audit.todo_path, auditId: id });
     audit.todo_summary = todo.summary;
     this.audits.set(id, audit);
@@ -1234,8 +1318,9 @@ export class AuditRunner extends EventEmitter {
     await this.record(audit, "audit.workspace.ready", paths);
     const contextPaths = await this.verifiedPrivateContextPaths(audit);
     const quickDynamicEnabled = audit.private_context?.test_environment?.enabled === true && Boolean(contextPaths.test_environment);
+    const proxyEnvironment = await this.verifiedPrivateProxyEnvironment(audit);
     const environment = {
-      ...(await buildOpenCodeEnvironment(repository.config_path)),
+      ...(await buildOpenCodeEnvironment(repository.config_path, { ...this.environment, ...proxyEnvironment })),
       AUDIT_SOURCE_ROOT: paths.source_root,
       AUDIT_SOURCE_BINDING_PATH: paths.source_binding,
       AUDIT_ENGINE_ROOT: resolve(dirname(repository.config_path), ".."),

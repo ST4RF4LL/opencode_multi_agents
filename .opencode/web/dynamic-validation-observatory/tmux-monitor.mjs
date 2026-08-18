@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { resolveExecutablePath, resolvedOpenCodeExecutables } from "./executable-resolution.mjs";
+import { isProxyEnvironmentVariable } from "./opencode-runtime-config.mjs";
 
 const execFileAsync = promisify(execFile);
 const LAUNCHER = fileURLToPath(new URL("./tmux-launcher.mjs", import.meta.url));
@@ -18,7 +19,9 @@ const MIN_ROWS = 12;
 const MAX_ROWS = 120;
 
 function runtimeOverrides(environment) {
-  return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (key.startsWith("OPENCODE_") || /^AUDIT_[A-Z0-9_]+$/.test(key)) && typeof value === "string"));
+  return Object.fromEntries(Object.entries(environment).filter(([key, value]) => (
+    key.startsWith("OPENCODE_") || /^AUDIT_[A-Z0-9_]+$/.test(key) || isProxyEnvironmentVariable(key)
+  ) && typeof value === "string"));
 }
 
 function sessionFromOutput(output) {
