@@ -287,7 +287,8 @@ export function validatePlan(plan) {
   const errors = [];
   if (plan?.schema_version !== PLAN_SCHEMA_VERSION) errors.push(`plan schema_version must be ${PLAN_SCHEMA_VERSION}`);
   if (plan?.coverage_model_version !== COVERAGE_MODEL_VERSION) errors.push(`coverage_model_version must be ${COVERAGE_MODEL_VERSION}`);
-  if (!/^[a-f0-9]{64}$/.test(plan?.inputs?.snapshot_digest ?? "")) errors.push("plan snapshot binding is missing");
+  const directRecon = plan?.inputs?.input_mode === "direct-recon";
+  if (!directRecon && !/^[a-f0-9]{64}$/.test(plan?.inputs?.snapshot_digest ?? "")) errors.push("plan snapshot binding is missing");
   if (!Array.isArray(plan?.checks) || plan.checks.length === 0) errors.push("plan checks must be non-empty");
   if (!Array.isArray(plan?.source_index) || plan.source_index.length === 0) errors.push("plan source_index must be non-empty");
   const sourceIdList = (plan?.source_index ?? []).map(source => source.file_id);

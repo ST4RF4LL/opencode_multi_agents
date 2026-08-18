@@ -21,10 +21,44 @@ function parseArgs(argv) {
     if (!token?.startsWith("--") || value == null) throw new Error(`Invalid argument near ${token ?? "<end>"}`);
     args[token.slice(2)] = value;
   }
-  for (const key of ["audit-id", "snapshot-index", "reports-dir", "adjudication", "attack-chain-report", "output"]) {
+  for (const key of ["audit-id", "reports-dir", "adjudication", "attack-chain-report", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
+  const directRecon = typeof args["recon-dir"] === "string" && args["recon-dir"];
+  if (!directRecon && !args["snapshot-index"]) throw new Error("Required argument missing: --snapshot-index or --recon-dir");
+  if (directRecon && args["snapshot-index"]) throw new Error("--recon-dir 不能与 --snapshot-index 混用。");
+  if (directRecon && !args.catalog) throw new Error("直接 Recon 语义校验需要 --catalog。");
   return args;
+}
+
+async function directReconSnapshot(args) {
+  const recon = resolve(args["recon-dir"]);
+  const coverage = join(recon, "coverage");
+  let entries;
+  try {
+    entries = await readdir(coverage, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(`无法读取 Recon 覆盖清单目录：${coverage}（${error.code ?? error.message}）`);
+  }
+  const functionPaths = entries
+    .filter(entry => entry.isFile() && /^functions-.+\.json$/u.test(entry.name))
+    .map(entry => join(coverage, entry.name))
+    .sort();
+  if (functionPaths.length === 0) throw new Error("Recon 目录中没有 functions-<language>.json 清单。");
+  const scopePath = join(coverage, "scope-manifest.json");
+  const scope = JSON.parse(await readFile(scopePath, "utf8"));
+  return {
+    audit_id: args["audit-id"],
+    scope_digest: scope.scope_digest,
+    input_mode: "direct-recon",
+    scope: { path: scopePath },
+    functions: functionPaths.map(path => ({ path })),
+    catalog: { path: resolve(args.catalog) },
+    semantic: {
+      threat_model: { path: join(recon, "threat-model.json") },
+      focus_areas: { path: join(recon, "focus-areas.json") },
+    },
+  };
 }
 
 function digestObject(value, field = "manifest_digest") {
@@ -82,9 +116,11 @@ async function main() {
   const warnings = [];
   const invalid = [];
   const missing = { entry_points: [], threats: [], primary_assignments: [], focus_lenses: [], discovery_tracks: [], attack_chain: [] };
-  const snapshotPath = resolve(args["snapshot-index"]);
-  const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
-  if (snapshot.audit_id !== args["audit-id"] || snapshot.snapshot_digest !== digestObject(snapshot, "snapshot_digest")) {
+  const snapshotPath = args["snapshot-index"] ? resolve(args["snapshot-index"]) : null;
+  const snapshot = snapshotPath
+    ? JSON.parse(await readFile(snapshotPath, "utf8"))
+    : await directReconSnapshot(args);
+  if (snapshotPath && (snapshot.audit_id !== args["audit-id"] || snapshot.snapshot_digest !== digestObject(snapshot, "snapshot_digest"))) {
     issues.push({ code: "SEMANTIC_SNAPSHOT_INVALID", message: "Snapshot index is modified or bound to another audit" });
   }
   if (!snapshot.semantic?.threat_model?.path || !snapshot.semantic?.focus_areas?.path) {
@@ -95,8 +131,8 @@ async function main() {
   const focusPath = resolve(snapshot.semantic.focus_areas.path);
   const threatBytes = await readFile(threatPath);
   const focusBytes = await readFile(focusPath);
-  if (snapshot.semantic.threat_model.sha256 !== digestBytes(threatBytes)) issues.push({ code: "THREAT_MODEL_SNAPSHOT_HASH_MISMATCH" });
-  if (snapshot.semantic.focus_areas.sha256 !== digestBytes(focusBytes)) issues.push({ code: "FOCUS_AREAS_SNAPSHOT_HASH_MISMATCH" });
+  if (snapshotPath && snapshot.semantic.threat_model.sha256 !== digestBytes(threatBytes)) issues.push({ code: "THREAT_MODEL_SNAPSHOT_HASH_MISMATCH" });
+  if (snapshotPath && snapshot.semantic.focus_areas.sha256 !== digestBytes(focusBytes)) issues.push({ code: "FOCUS_AREAS_SNAPSHOT_HASH_MISMATCH" });
   const threatModel = JSON.parse(threatBytes.toString("utf8"));
   const focusManifest = JSON.parse(focusBytes.toString("utf8"));
   const threatModelErrors = validateThreatModel(threatModel, {
@@ -351,7 +387,16 @@ async function main() {
     scope_digest: snapshot.scope_digest,
     threat_model_digest: threatModel.manifest_digest,
     focus_areas_digest: focusManifest.manifest_digest,
-    inputs: { snapshot_index: snapshotPath, threat_model: threatPath, focus_areas: focusPath, reports_directory: resolve(args["reports-dir"]), adjudication: adjudicationPath, attack_chain_report: attackPath },
+    inputs: {
+      input_mode: snapshotPath ? "legacy-snapshot" : "direct-recon",
+      snapshot_index: snapshotPath,
+      recon_dir: snapshotPath ? null : resolve(args["recon-dir"]),
+      threat_model: threatPath,
+      focus_areas: focusPath,
+      reports_directory: resolve(args["reports-dir"]),
+      adjudication: adjudicationPath,
+      attack_chain_report: attackPath,
+    },
     expected: { entry_points: entryPoints.size, threats: threats.size, focus_areas: focusAreas.size, primary_assignments: expectedPrimary.size, focus_assignment_lens_sessions: expectedSessions.length, trust_boundaries: boundaries.size, assets: assets.size },
     observed: { reports: reports.length, completed_focus_lenses: completedFocusLenses.size },
     missing,

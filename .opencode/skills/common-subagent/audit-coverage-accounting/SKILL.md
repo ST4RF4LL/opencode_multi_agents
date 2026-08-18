@@ -141,41 +141,24 @@ The reconciler computes the complete target universe from the report's frozen as
 
 ## Build and execute Coverage Plan v3
 
-After the sealed Focus Areas partition every file/function/catalog primary assignment, snapshot all inputs, validate catalog v2, and build the immutable sparse plan:
+After the sealed Focus Areas partition every file/function/catalog primary
+assignment, build the scheduler input directly from the frozen Recon directory:
 
 ```sh
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/snapshot-coverage-inputs.mjs \
-  --audit-id <audit-id> \
-  --scope tmp/<audit-id>/recon/coverage/scope-manifest.json \
-  --functions tmp/<audit-id>/recon/coverage/functions-java.json \
-  --functions tmp/<audit-id>/recon/coverage/functions-javascript.json \
-  --functions tmp/<audit-id>/recon/coverage/functions-embedded-web.json \
-  --interfaces tmp/<audit-id>/recon/coverage/interface-manifest.json \
-  --interface-extractors tmp/<audit-id>/recon/coverage/interface-extractor-coverage.json \
-  --catalog .opencode/shared/security-audit/catalogs/application-ai-vulnerability-catalog.json \
-  --threat-model tmp/<audit-id>/recon/threat-model.json \
-  --focus-areas tmp/<audit-id>/recon/focus-areas.json \
-  --output-dir reports/coverage/<audit-id>/inputs
-
-node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/validate-vulnerability-catalog-v2.mjs \
-  --catalog reports/coverage/<audit-id>/inputs/application-ai-vulnerability-catalog.json
-
 node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-coverage-plan.mjs \
   --audit-id <audit-id> \
+  --recon-dir tmp/<audit-id>/recon \
+  --catalog .opencode/shared/security-audit/catalogs/application-ai-vulnerability-catalog.json \
   --coverage-mode observe \
-  --scope reports/coverage/<audit-id>/inputs/scope-manifest.json \
-  --functions reports/coverage/<audit-id>/inputs/functions-java.json \
-  --functions reports/coverage/<audit-id>/inputs/functions-javascript.json \
-  --functions reports/coverage/<audit-id>/inputs/functions-embedded-web.json \
-  --interfaces reports/coverage/<audit-id>/inputs/interface-manifest.json \
-  --interface-extractors reports/coverage/<audit-id>/inputs/interface-extractor-coverage.json \
-  --catalog reports/coverage/<audit-id>/inputs/application-ai-vulnerability-catalog.json \
-  --focus-areas reports/coverage/<audit-id>/inputs/focus-areas.json \
-  --snapshot-index reports/coverage/<audit-id>/inputs/snapshot-index.json \
   --output reports/coverage/coverage-plan.<audit-id>.json
 ```
 
-Repeat `--functions` for every frozen language manifest. The Plan builder accepts only exact paths and byte hashes from the snapshot index; live or stale inputs are rejected. Plans must be rebuilt from a new snapshot and are not upgraded in place. The plan contains:
+`--recon-dir` discovers every `functions-<language>.json` manifest itself. Do
+not call `snapshot-coverage-inputs.mjs` for new audits: it duplicates large
+inputs, expands command lines, and has no value for the local scheduler. The
+Plan builder validates the existing sealed manifests in place and emits only a
+compact command summary. Plans are rebuilt when Recon/Focus Areas change. The
+plan contains:
 
 - one mandatory negative-discovery baseline for every active `domain × vulnerability type × lens`;
 - interface checks only for explicitly `CONFIRMED` interfaces selected by the catalog's versioned applicability profile;
@@ -248,7 +231,7 @@ File evidence uses `kind=source-location` and must bind `file_id`, exact frozen 
 
 ## Verify before reporting
 
-Seal `threat-model.json` and `focus-areas.json` with `seal-semantic-manifest.mjs` before creating the snapshot used by the Plan. Snapshotting preflights the exact primary file/function/catalog partition and rejects missing or duplicate function-manifest membership, so Focus Area omissions fail before Plan construction. It may preserve interface candidates or extractor gaps for a partial, auditable run; those blockers remain unbounded inventory and cannot be finalized as complete.
+Seal `threat-model.json` and `focus-areas.json` with `seal-semantic-manifest.mjs` before building the Plan. The direct Recon planner preflights the exact primary file/function/catalog partition and rejects missing or duplicate function-manifest membership, so Focus Area omissions fail before Plan construction. It may preserve interface candidates or extractor gaps for a partial, auditable run; those blockers remain unbounded inventory and cannot be finalized as complete.
 
 When restarting an audit whose non-cache frozen source hashes are exactly equal to a prior audit, `reseed-semantic-manifests.mjs` may carry forward only the prior threat hypotheses and Focus partition. It marks both artifacts `revalidation_required=true`, removes known local `.atlas/` cache assignments, and never carries forward coverage reports, local task state, Finding states, adjudication, chains, or final-report conclusions. Use it only before the new snapshot and re-run the required semantic review:
 
@@ -262,7 +245,31 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/reseed-s
   --focus-output tmp/<new-audit-id>/recon/focus-areas.json
 ```
 
-After all packets have handed off, run `verify-coverage.mjs` for structural file/function/catalog reconciliation, then run `verify-semantic-coverage.mjs` with the snapshot index, vulnerability-mining reports directory, validated Finding Adjudication manifest, and final Attack-chain report. Use `audit-todo stats` to record task terminality separately, then build the final-report input summary from the plan and local queue:
+After all packets have handed off, use `audit-todo stats` to confirm task
+terminality. The structural verifier and, after adjudication/final chains, the
+semantic verifier both read the same Recon directory directly; neither accepts
+or creates a snapshot index:
+
+```sh
+node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-coverage.mjs \
+  --root "$AUDIT_SOURCE_ROOT" \
+  --audit-id <audit-id> \
+  --recon-dir tmp/<audit-id>/recon \
+  --reports-dir reports/vulnerability-mining \
+  --catalog .opencode/shared/security-audit/catalogs/application-ai-vulnerability-catalog.json \
+  --output reports/coverage/coverage-structural-v1.<audit-id>.json
+
+node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-semantic-coverage.mjs \
+  --audit-id <audit-id> \
+  --recon-dir tmp/<audit-id>/recon \
+  --catalog .opencode/shared/security-audit/catalogs/application-ai-vulnerability-catalog.json \
+  --reports-dir reports/vulnerability-mining \
+  --adjudication reports/adjudication/security-finding-adjudicator.<audit-id>.r<round>.json \
+  --attack-chain-report reports/attack-chains/security-attack-chain-hunter.<audit-id>.r<round>.json \
+  --output reports/coverage/semantic-coverage.<audit-id>.json
+```
+
+Then build the final-report input summary from the plan and local queue:
 
 ```sh
 node .opencode/scripts/build-local-audit-summary.mjs \

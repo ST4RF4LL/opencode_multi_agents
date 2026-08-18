@@ -48,11 +48,43 @@ function parseArgs(argv) {
     if (key === "functions") args.functions.push(value);
     else args[key] = value;
   }
-  for (const key of ["root", "audit-id", "scope", "interfaces", "interface-extractors", "snapshot-index", "reports-dir", "catalog", "output"]) {
+  for (const key of ["root", "audit-id", "reports-dir", "catalog", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
-  if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
+  const directRecon = typeof args["recon-dir"] === "string" && args["recon-dir"];
+  if (!directRecon) {
+    for (const key of ["scope", "interfaces", "interface-extractors", "snapshot-index"]) {
+      if (!args[key]) throw new Error(`Required argument missing: --${key}`);
+    }
+    if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
+  } else if (["scope", "interfaces", "interface-extractors", "snapshot-index"].some(key => args[key]) || args.functions.length > 0) {
+    throw new Error("--recon-dir 不能与 --scope、--functions、--interfaces、--interface-extractors 或 --snapshot-index 混用。");
+  }
   return args;
+}
+
+async function resolveReconInputs(args) {
+  if (!args["recon-dir"]) return args;
+  const recon = resolve(args["recon-dir"]);
+  const coverage = join(recon, "coverage");
+  let entries;
+  try {
+    entries = await readdir(coverage, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(`无法读取 Recon 覆盖清单目录：${coverage}（${error.code ?? error.message}）`);
+  }
+  const functions = entries
+    .filter(entry => entry.isFile() && /^functions-.+\.json$/u.test(entry.name))
+    .map(entry => join(coverage, entry.name))
+    .sort();
+  if (functions.length === 0) throw new Error("Recon 目录中没有 functions-<language>.json 清单。");
+  return {
+    ...args,
+    scope: join(coverage, "scope-manifest.json"),
+    interfaces: join(coverage, "interface-manifest.json"),
+    "interface-extractors": join(coverage, "interface-extractor-coverage.json"),
+    functions,
+  };
 }
 
 function pushIssue(issues, code, message, details = {}) {
@@ -245,37 +277,39 @@ async function buildCurrentScope(root, auditId, frozenScope) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const args = await resolveReconInputs(parseArgs(process.argv.slice(2)));
   const root = resolve(args.root);
   const outputPath = resolve(args.output);
   const scope = JSON.parse(await readFile(resolve(args.scope), "utf8"));
   const catalog = JSON.parse(await readFile(resolve(args.catalog), "utf8"));
   const issues = [];
 
-  const snapshotIndexPath = resolve(args["snapshot-index"]);
-  try {
-    const snapshot = JSON.parse(await readFile(snapshotIndexPath, "utf8"));
-    if (snapshot.audit_id !== args["audit-id"] || snapshot.scope_digest !== scope.scope_digest || snapshot.snapshot_digest !== snapshotDigest(snapshot)) {
-      pushIssue(issues, "SNAPSHOT_INDEX_INVALID", "Durable coverage snapshot index is modified, incomplete, or bound to another audit");
+  const snapshotIndexPath = args["snapshot-index"] ? resolve(args["snapshot-index"]) : null;
+  if (snapshotIndexPath) {
+    try {
+      const snapshot = JSON.parse(await readFile(snapshotIndexPath, "utf8"));
+      if (snapshot.audit_id !== args["audit-id"] || snapshot.scope_digest !== scope.scope_digest || snapshot.snapshot_digest !== snapshotDigest(snapshot)) {
+        pushIssue(issues, "SNAPSHOT_INDEX_INVALID", "Durable coverage snapshot index is modified, incomplete, or bound to another audit");
+      }
+      const requestedFunctions = args.functions.map(path => resolve(path)).sort();
+      const indexedFunctions = (snapshot.functions ?? []).map(item => resolve(item.path)).sort();
+      if (resolve(snapshot.scope?.path ?? "") !== resolve(args.scope)
+        || resolve(snapshot.interfaces?.path ?? "") !== resolve(args.interfaces)
+        || resolve(snapshot.interface_extractors?.path ?? "") !== resolve(args["interface-extractors"])
+        || resolve(snapshot.catalog?.path ?? "") !== resolve(args.catalog)
+        || !exactStringSet(requestedFunctions, indexedFunctions)) {
+        pushIssue(issues, "SNAPSHOT_INPUT_SET_MISMATCH", "Verifier inputs do not exactly equal the durable snapshot index");
+      }
+      if (snapshot.scope?.sha256 !== await fileDigest(resolve(args.scope))) pushIssue(issues, "SNAPSHOT_SCOPE_HASH_MISMATCH", "Durable scope snapshot hash mismatch");
+      if (snapshot.interfaces?.sha256 !== await fileDigest(resolve(args.interfaces))) pushIssue(issues, "SNAPSHOT_INTERFACE_HASH_MISMATCH", "Durable interface snapshot hash mismatch");
+      if (snapshot.interface_extractors?.sha256 !== await fileDigest(resolve(args["interface-extractors"]))) pushIssue(issues, "SNAPSHOT_INTERFACE_EXTRACTOR_HASH_MISMATCH", "Durable interface extractor verification hash mismatch");
+      if (snapshot.catalog?.sha256 !== await fileDigest(resolve(args.catalog))) pushIssue(issues, "SNAPSHOT_CATALOG_HASH_MISMATCH", "Durable catalog snapshot hash mismatch");
+      for (const item of snapshot.functions ?? []) {
+        if (item.sha256 !== await fileDigest(resolve(item.path))) pushIssue(issues, "SNAPSHOT_FUNCTION_HASH_MISMATCH", "Durable function snapshot hash mismatch", { language: item.language, path: item.path });
+      }
+    } catch (error) {
+      pushIssue(issues, "SNAPSHOT_VALIDATION_FAILED", error.message, { snapshot_index: snapshotIndexPath });
     }
-    const requestedFunctions = args.functions.map(path => resolve(path)).sort();
-    const indexedFunctions = (snapshot.functions ?? []).map(item => resolve(item.path)).sort();
-    if (resolve(snapshot.scope?.path ?? "") !== resolve(args.scope)
-      || resolve(snapshot.interfaces?.path ?? "") !== resolve(args.interfaces)
-      || resolve(snapshot.interface_extractors?.path ?? "") !== resolve(args["interface-extractors"])
-      || resolve(snapshot.catalog?.path ?? "") !== resolve(args.catalog)
-      || !exactStringSet(requestedFunctions, indexedFunctions)) {
-      pushIssue(issues, "SNAPSHOT_INPUT_SET_MISMATCH", "Verifier inputs do not exactly equal the durable snapshot index");
-    }
-    if (snapshot.scope?.sha256 !== await fileDigest(resolve(args.scope))) pushIssue(issues, "SNAPSHOT_SCOPE_HASH_MISMATCH", "Durable scope snapshot hash mismatch");
-    if (snapshot.interfaces?.sha256 !== await fileDigest(resolve(args.interfaces))) pushIssue(issues, "SNAPSHOT_INTERFACE_HASH_MISMATCH", "Durable interface snapshot hash mismatch");
-    if (snapshot.interface_extractors?.sha256 !== await fileDigest(resolve(args["interface-extractors"]))) pushIssue(issues, "SNAPSHOT_INTERFACE_EXTRACTOR_HASH_MISMATCH", "Durable interface extractor verification hash mismatch");
-    if (snapshot.catalog?.sha256 !== await fileDigest(resolve(args.catalog))) pushIssue(issues, "SNAPSHOT_CATALOG_HASH_MISMATCH", "Durable catalog snapshot hash mismatch");
-    for (const item of snapshot.functions ?? []) {
-      if (item.sha256 !== await fileDigest(resolve(item.path))) pushIssue(issues, "SNAPSHOT_FUNCTION_HASH_MISMATCH", "Durable function snapshot hash mismatch", { language: item.language, path: item.path });
-    }
-  } catch (error) {
-    pushIssue(issues, "SNAPSHOT_VALIDATION_FAILED", error.message, { snapshot_index: snapshotIndexPath });
   }
 
   if (scope.audit_id !== args["audit-id"]) pushIssue(issues, "SCOPE_AUDIT_ID_MISMATCH", "Scope audit_id does not match requested audit");
@@ -754,6 +788,7 @@ async function main() {
     required_lenses: LENSES,
     active_domains: [...activeDomains].sort(),
     inputs: {
+      input_mode: snapshotIndexPath ? "legacy-snapshot" : "direct-recon",
       root,
       scope_manifest: resolve(args.scope),
       snapshot_index: snapshotIndexPath,

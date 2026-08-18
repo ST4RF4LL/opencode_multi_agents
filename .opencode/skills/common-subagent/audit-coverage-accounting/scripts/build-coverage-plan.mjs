@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import {
   COVERAGE_EXECUTION_MODEL,
   COVERAGE_MODEL_VERSION,
@@ -35,14 +35,57 @@ function parseArgs(argv) {
     if (key === "functions") args.functions.push(value);
     else args[key] = value;
   }
-  for (const key of ["audit-id", "scope", "interfaces", "interface-extractors", "catalog", "focus-areas", "snapshot-index", "output"]) {
+  for (const key of ["audit-id", "catalog", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
   }
-  if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
+  const directRecon = typeof args["recon-dir"] === "string" && args["recon-dir"];
+  if (!directRecon) {
+    for (const key of ["scope", "interfaces", "interface-extractors", "focus-areas", "snapshot-index"]) {
+      if (!args[key]) throw new Error(`Required argument missing: --${key}`);
+    }
+    if (args.functions.length === 0) throw new Error("At least one --functions manifest is required");
+  } else if (["scope", "interfaces", "interface-extractors", "focus-areas", "snapshot-index"].some(key => args[key]) || args.functions.length > 0) {
+    throw new Error("--recon-dir 不能与 --scope、--functions、--interfaces、--interface-extractors、--focus-areas 或 --snapshot-index 混用。");
+  }
   if (!COVERAGE_POLICY_MODES.includes(args["coverage-mode"])) {
     throw new Error(`--coverage-mode must be one of: ${COVERAGE_POLICY_MODES.join(", ")}`);
   }
   return args;
+}
+
+// New local-todo audits use one short command.  The recon directory is already
+// the frozen source of truth, so copying every manifest into reports/coverage
+// and spelling every language path on the command line adds no scheduling value.
+async function resolveReconInputs(args) {
+  if (!args["recon-dir"]) return args;
+  const recon = resolve(args["recon-dir"]);
+  const coverage = join(recon, "coverage");
+  let entries;
+  try {
+    entries = await readdir(coverage, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(`无法读取 Recon 覆盖清单目录：${coverage}（${error.code ?? error.message}）`);
+  }
+  const functions = entries
+    .filter(entry => entry.isFile() && /^functions-.+\.json$/u.test(entry.name))
+    .map(entry => join(coverage, entry.name))
+    .sort();
+  if (functions.length === 0) throw new Error("Recon 目录中没有 functions-<language>.json 清单。");
+  return {
+    ...args,
+    scope: join(coverage, "scope-manifest.json"),
+    interfaces: join(coverage, "interface-manifest.json"),
+    "interface-extractors": join(coverage, "interface-extractor-coverage.json"),
+    "focus-areas": join(recon, "focus-areas.json"),
+    functions,
+  };
+}
+
+function summarizedErrors(prefix, errors, limit = 20) {
+  const values = [...new Set(errors.map(value => String(value)))];
+  const visible = values.slice(0, limit);
+  const omitted = values.length - visible.length;
+  return `${prefix}:\n- ${visible.join("\n- ")}${omitted > 0 ? `\n- …另有 ${omitted} 项，已省略以避免占满上下文。` : ""}`;
 }
 
 function requiredCheck(subjectKind, subjectId, entry, domain, lens, catalog, focusAreaId, extra = {}) {
@@ -82,17 +125,17 @@ async function assertSnapshotFile(path, entry, label) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const [scope, interfaces, extractorCoverage, catalog, focusAreas, snapshot] = await Promise.all([
+  const args = await resolveReconInputs(parseArgs(process.argv.slice(2)));
+  const [scope, interfaces, extractorCoverage, catalog, focusAreas] = await Promise.all([
     readManifest(args.scope),
     readManifest(args.interfaces),
     readManifest(args["interface-extractors"]),
     readManifest(args.catalog),
     readManifest(args["focus-areas"]),
-    readManifest(args["snapshot-index"]),
   ]);
+  const snapshot = args["snapshot-index"] ? await readManifest(args["snapshot-index"]) : null;
   const catalogErrors = validateCatalogV2(catalog);
-  if (catalogErrors.length > 0) throw new Error(`Catalog v2 is invalid:\n- ${catalogErrors.join("\n- ")}`);
+  if (catalogErrors.length > 0) throw new Error(summarizedErrors("Catalog v2 is invalid", catalogErrors));
   if (scope.audit_id !== args["audit-id"] || scope.manifest_digest !== objectDigest(scope) || !scope.complete) {
     throw new Error("Scope manifest is incomplete, modified, or bound to another audit");
   }
@@ -109,17 +152,19 @@ async function main() {
     || focusAreas.manifest_digest !== objectDigest(focusAreas)) {
     throw new Error("Focus Area manifest is modified or scope-mismatched");
   }
-  if (snapshot.schema_version !== 2 || snapshot.audit_id !== args["audit-id"] || snapshot.scope_digest !== scope.scope_digest
-    || snapshot.snapshot_digest !== objectDigest(snapshot, ["snapshot_digest"])) {
-    throw new Error("Snapshot index is modified or scope-mismatched");
+  if (snapshot) {
+    if (snapshot.schema_version !== 2 || snapshot.audit_id !== args["audit-id"] || snapshot.scope_digest !== scope.scope_digest
+      || snapshot.snapshot_digest !== objectDigest(snapshot, ["snapshot_digest"])) {
+      throw new Error("Snapshot index is modified or scope-mismatched");
+    }
+    await Promise.all([
+      assertSnapshotFile(args.scope, snapshot.scope, "scope"),
+      assertSnapshotFile(args.interfaces, snapshot.interfaces, "interfaces"),
+      assertSnapshotFile(args["interface-extractors"], snapshot.interface_extractors, "interface extractors"),
+      assertSnapshotFile(args.catalog, snapshot.catalog, "catalog"),
+      assertSnapshotFile(args["focus-areas"], snapshot.semantic?.focus_areas, "Focus Areas"),
+    ]);
   }
-  await Promise.all([
-    assertSnapshotFile(args.scope, snapshot.scope, "scope"),
-    assertSnapshotFile(args.interfaces, snapshot.interfaces, "interfaces"),
-    assertSnapshotFile(args["interface-extractors"], snapshot.interface_extractors, "interface extractors"),
-    assertSnapshotFile(args.catalog, snapshot.catalog, "catalog"),
-    assertSnapshotFile(args["focus-areas"], snapshot.semantic?.focus_areas, "Focus Areas"),
-  ]);
 
   const functionInputs = [];
   const functionManifests = [];
@@ -131,23 +176,29 @@ async function main() {
       || !manifest.complete || manifest.manifest_digest !== objectDigest(manifest)) {
       throw new Error(`Function manifest is incomplete, modified, or scope-mismatched: ${path}`);
     }
-    const snapshotEntry = snapshot.functions?.find(item => item.language === manifest.language);
-    await assertSnapshotFile(path, snapshotEntry, `function manifest ${manifest.language}`);
+    if (snapshot) {
+      const snapshotEntry = snapshot.functions?.find(item => item.language === manifest.language);
+      await assertSnapshotFile(path, snapshotEntry, `function manifest ${manifest.language}`);
+    }
     functionInputs.push({ language: manifest.language, manifest_digest: manifest.manifest_digest, functions: manifest.functions.length });
     functionManifests.push(manifest);
     for (const fileId of manifest.expected_files ?? []) expectedFiles.add(fileId);
     for (const fn of manifest.functions ?? []) functionIds.add(fn.function_id);
   }
-  if (functionManifests.length !== (snapshot.functions?.length ?? 0)) {
+  if (snapshot && functionManifests.length !== (snapshot.functions?.length ?? 0)) {
     throw new Error("Coverage Plan function manifest set does not exactly match the snapshot index");
   }
   const membership = functionManifestMembership(scope, functionManifests);
   if (membership.missing.length > 0 || membership.duplicates.length > 0) {
-    throw new Error(`Coverage Plan requires complete function inventory: missing=${membership.missing.map(file => file.path).join(",") || "none"}; duplicate=${membership.duplicates.join(",") || "none"}`);
+    const issues = [
+      ...membership.missing.map(file => `缺失函数清单：${file.path}`),
+      ...membership.duplicates.map(value => `重复函数清单：${value}`),
+    ];
+    throw new Error(summarizedErrors("Coverage Plan requires complete function inventory", issues));
   }
 
   const focusErrors = validateFocusAreaPartition({ scope, functionManifests, catalog, focusAreas });
-  if (focusErrors.length > 0) throw new Error(`Focus Area primary assignments are invalid:\n- ${focusErrors.join("\n- ")}`);
+  if (focusErrors.length > 0) throw new Error(summarizedErrors("Focus Area primary assignments are invalid", focusErrors));
 
   const domains = activeDomains(scope);
   const domainSourceIds = new Map(domains.map(domain => [
@@ -319,7 +370,7 @@ async function main() {
     scope_digest: scope.scope_digest,
     required_lenses: LENSES,
     inputs: {
-      snapshot_digest: snapshot.snapshot_digest,
+      ...(snapshot ? { snapshot_digest: snapshot.snapshot_digest, input_mode: "legacy-snapshot" } : { input_mode: "direct-recon" }),
       scope_manifest_digest: scope.manifest_digest,
       interface_manifest_digest: interfaces.manifest_digest,
       interface_extractor_manifest_digest: extractorCoverage.manifest_digest,

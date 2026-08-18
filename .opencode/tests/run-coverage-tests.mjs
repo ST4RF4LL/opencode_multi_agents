@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { chmod, cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -632,6 +632,30 @@ async function main() {
       throw new Error("Compact threat-routing index does not preserve the complete entity universe");
     }
     const { threatModelPath, focusAreasPath } = await makeSemanticManifests(coverage, scope, manifests, catalog);
+    const directRecon = join(work, "direct-recon");
+    const directReconCoverage = join(directRecon, "coverage");
+    await mkdir(directReconCoverage, { recursive: true });
+    await Promise.all([
+      cp(scopePath, join(directReconCoverage, "scope-manifest.json")),
+      cp(interfacesPath, join(directReconCoverage, "interface-manifest.json")),
+      cp(interfaceExtractorsPath, join(directReconCoverage, "interface-extractor-coverage.json")),
+      cp(threatModelPath, join(directRecon, "threat-model.json")),
+      cp(focusAreasPath, join(directRecon, "focus-areas.json")),
+      ...functionPaths.map(path => cp(path, join(directReconCoverage, basename(path)))),
+    ]);
+    const directReconPlanPath = join(coverage, "coverage-plan-direct-recon.json");
+    run("build-coverage-plan.mjs", [
+      "--audit-id", AUDIT_ID,
+      "--recon-dir", directRecon,
+      "--catalog", CATALOG,
+      "--output", directReconPlanPath,
+    ]);
+    const directReconPlan = JSON.parse(await readFile(directReconPlanPath, "utf8"));
+    if (directReconPlan.inputs?.input_mode !== "direct-recon" || directReconPlan.inputs?.snapshot_digest
+      || !directReconPlan.complete || directReconPlan.coverage_units.length === 0
+      || validatePlan(directReconPlan).length > 0) {
+      throw new Error("Direct Recon planner did not replace the legacy snapshot input path");
+    }
     const aiSurfacesPath = join(coverage, "ai-surfaces.json");
     await writeFile(aiSurfacesPath, `${JSON.stringify({
       schema_version: 1,
@@ -856,6 +880,20 @@ async function main() {
     if (positive.expected.external_interfaces !== interfaceManifest.interfaces.length
       || positive.interface_extractor_verification?.complete !== true) {
       throw new Error("Coverage verification did not preserve the exact external-interface universe");
+    }
+    const directReconVerificationPath = join(coverage, "verification-direct-recon.json");
+    run("verify-coverage.mjs", [
+      "--root", root,
+      "--audit-id", AUDIT_ID,
+      "--recon-dir", directRecon,
+      "--reports-dir", positiveReports,
+      "--catalog", CATALOG,
+      "--output", directReconVerificationPath,
+    ]);
+    const directReconVerification = JSON.parse(await readFile(directReconVerificationPath, "utf8"));
+    if (!directReconVerification.complete || directReconVerification.inputs?.input_mode !== "direct-recon"
+      || directReconVerification.inputs?.snapshot_index !== null) {
+      throw new Error("Direct Recon structural verification did not replace the snapshot input path");
     }
 
     const staleGapReports = join(work, "reports-stale-gap");

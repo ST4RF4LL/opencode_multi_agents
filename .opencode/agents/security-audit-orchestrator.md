@@ -147,7 +147,7 @@ focus_area/trust_boundary/asset × system attack-chain pass
 
 ### Phase 3: PLAN
 
-8. Resolve every interface `CANDIDATE` to evidence-bound `CONFIRMED` or `REJECTED`, snapshot the sealed Focus Areas and validate catalog v2. Build `reports/coverage/coverage-plan.<audit_id>.json` only as a deterministic source of Focus Area × owner/domain assignments; it is not a per-check work queue.
+8. Resolve every interface `CANDIDATE` to evidence-bound `CONFIRMED` or `REJECTED`. Build `reports/coverage/coverage-plan.<audit_id>.json` directly from `tmp/<audit_id>/recon` with `build-coverage-plan.mjs --recon-dir`; do not call `snapshot-coverage-inputs.mjs`, copy inputs, or enumerate language manifests on the command line. The Plan is only a deterministic source of Focus Area × owner/domain assignments, not a per-check work queue.
 9. Initialize the local queue once: `node "$AUDIT_TODO_CLI" init --todo "$AUDIT_TODO_PATH" --audit-id <audit_id> --plan reports/coverage/coverage-plan.<audit_id>.json`. It creates one item per `focus_area × owner/domain`; all three lenses are internal requirements of the same item. Never enumerate all items in this conversation.
 10. Route source packets to language specialists:
    - C/C++ or native → `c-cpp-source-auditor`.

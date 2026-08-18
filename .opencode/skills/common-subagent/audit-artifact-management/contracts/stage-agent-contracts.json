@@ -95,7 +95,7 @@
         "optional_payload_fields": []
       },
       "output": {
-        "required_artifact_types": ["coverage-input-snapshot", "coverage-plan", "audit-todo"],
+        "required_artifact_types": ["coverage-plan", "audit-todo"],
         "optional_artifact_types": [],
         "required_payload_fields": ["plan_digest", "required_checks", "focus_packets", "discovery_packets", "gaps"],
         "optional_payload_fields": []

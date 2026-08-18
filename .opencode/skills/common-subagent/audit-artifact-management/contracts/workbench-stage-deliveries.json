@@ -381,18 +381,6 @@
           "condition_id": null
         },
         {
-          "artifact_type": "coverage-input-snapshot",
-          "requirement": "REQUIRED",
-          "cardinality": "ONE",
-          "source_stage_ids": ["threat"],
-          "producer": "security-audit-orchestrator",
-          "path_template": "reports/coverage/{audit_id}/inputs/snapshot-index.json",
-          "validation_level": "DETERMINISTIC",
-          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_verification/durable_input_snapshot",
-          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/snapshot-coverage-inputs.mjs",
-          "condition_id": null
-        },
-        {
           "artifact_type": "coverage-plan",
           "requirement": "REQUIRED",
           "cardinality": "ONE",
@@ -405,15 +393,15 @@
           "condition_id": null
         },
         {
-          "artifact_type": "coverage-ledger",
+          "artifact_type": "audit-todo",
           "requirement": "REQUIRED",
           "cardinality": "ONE",
           "source_stage_ids": ["threat"],
-          "producer": "coverage-ledger-mcp",
-          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
-          "validation_level": "DETERMINISTIC",
-          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
-          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/platform/audit-runs/{audit_id}/audit-todo.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/scripts/audit-todo-core.mjs",
+          "validator_ref": null,
           "condition_id": null
         }
       ],
@@ -429,22 +417,22 @@
         {
           "validator_id": "plan-stage-handoffs",
           "requirement": "REQUIRED",
-          "artifact_types": ["coverage-input-snapshot", "coverage-plan", "coverage-ledger"],
+          "artifact_types": ["coverage-plan", "audit-todo"],
           "validator_ref": ".opencode/skills/common-subagent/audit-artifact-management/scripts/validate-stage-agent-envelope.mjs",
-          "pass_condition": "P02 与 P03 输出信封均为 COMPLETE，Plan 和 Ledger 绑定同一 scope digest。",
+          "pass_condition": "P02 与 P03 输出信封均为 COMPLETE，直接 Recon Plan 与本地任务清单绑定同一 audit_id。",
           "condition_id": null
         }
       ],
       "completion_gate": {
-        "required_output_types": ["threat-model", "focus-areas", "coverage-input-snapshot", "coverage-plan", "coverage-ledger"],
+        "required_output_types": ["threat-model", "focus-areas", "coverage-plan", "audit-todo"],
         "required_validator_ids": ["threat-model-contract", "plan-stage-handoffs"],
         "requires_predecessors_complete": true,
         "requires_zero_gaps": true
       },
       "recovery_policy": {
-        "anchor_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "coverage-ledger"],
+        "anchor_artifact_types": ["threat-model", "focus-areas", "coverage-plan", "audit-todo"],
         "invalidate_on_input_change": true,
-        "resume_rule": "输入摘要不变时复用已封存威胁模型、Focus Area、Plan 和 Ledger；任何上游资产摘要变化都必须重建本环节。"
+        "resume_rule": "Recon 与 Focus Area 未变化时复用 Plan 和本地任务清单；任何上游资产变化都必须重建本环节。"
       },
       "integration_notes": [
         "工作台不单列覆盖计划阶段，因此 WB03 同时聚合 P02 威胁建模与 P03 计划初始化。"
@@ -522,15 +510,15 @@
           "condition_id": null
         },
         {
-          "artifact_type": "coverage-ledger",
+          "artifact_type": "audit-todo",
           "requirement": "REQUIRED",
           "cardinality": "ONE",
           "source_stage_ids": ["threat"],
-          "producer": "coverage-ledger-mcp",
-          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
-          "validation_level": "DETERMINISTIC",
-          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
-          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/platform/audit-runs/{audit_id}/audit-todo.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/scripts/audit-todo-core.mjs",
+          "validator_ref": null,
           "condition_id": null
         },
         {
@@ -834,15 +822,15 @@
           "condition_id": null
         },
         {
-          "artifact_type": "coverage-ledger",
+          "artifact_type": "audit-todo",
           "requirement": "REQUIRED",
           "cardinality": "ONE",
           "source_stage_ids": ["threat"],
-          "producer": "coverage-ledger-mcp",
-          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
-          "validation_level": "DETERMINISTIC",
-          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
-          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/platform/audit-runs/{audit_id}/audit-todo.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/scripts/audit-todo-core.mjs",
+          "validator_ref": null,
           "condition_id": null
         },
         {
@@ -989,15 +977,15 @@
           "condition_id": null
         },
         {
-          "artifact_type": "coverage-ledger",
+          "artifact_type": "audit-todo",
           "requirement": "REQUIRED",
           "cardinality": "ONE",
           "source_stage_ids": ["threat"],
-          "producer": "coverage-ledger-mcp",
-          "path_template": "reports/coverage/{audit_id}/ledger/coverage-ledger.jsonl",
-          "validation_level": "DETERMINISTIC",
-          "contract_ref": ".opencode/agent-manifest/artifact-policy.json#/reports/coverage_ledger",
-          "validator_ref": ".opencode/skills/common-subagent/audit-coverage-accounting/scripts/coverage-ledger-core.mjs",
+          "producer": "security-audit-orchestrator",
+          "path_template": "reports/platform/audit-runs/{audit_id}/audit-todo.json",
+          "validation_level": "SCHEMA",
+          "contract_ref": ".opencode/scripts/audit-todo-core.mjs",
+          "validator_ref": null,
           "condition_id": null
         },
         {
@@ -1494,5 +1482,5 @@
       "description": "关联阶段存在 blocking gap、矛盾或定向 follow-up packet 时，回到多维审计执行增量补审。"
     }
   ],
-  "registry_digest": "6c02198bd5495263baa139ec21584986ceed603da44ae621104a16c7e7bc8883"
+  "registry_digest": "e6d3b5217b18fd67692c1ddd0d840d4651a2a019a28d3c5e1ea08a9da412209a"
 }
