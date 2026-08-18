@@ -13,6 +13,7 @@ const state = {
   liveRefresh: null,
   validationEventSource: null,
   validationLiveRefresh: null,
+  liveLoad: null,
   terminalRefresh: null,
   terminalResize: null,
   terminalObserver: null,
@@ -120,7 +121,8 @@ function setView(view) {
   document.querySelectorAll(".nav button[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === view));
   $("page-title").textContent = VIEW_META[view][0];
   $("breadcrumb").textContent = VIEW_META[view][1];
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  renderActiveView();
+  window.scrollTo(0, 0);
 }
 
 function metric(label, value, note) {
@@ -850,14 +852,31 @@ function renderSettings() {
   });
 }
 
-function renderAll() {
-  renderDashboard(); renderProjects(); renderAudits(); renderFindings(); renderReports(); renderValidationRequests(); renderValidationList(); renderRuntime(); renderSettings();
+function renderShell() {
+  const summary = state.workspace.summary;
   const enabled = Boolean(state.runtime?.runner?.enabled);
   $("runner-state").textContent = enabled ? "运行驱动已启用" : "只读观测模式";
   $("runner-pulse").classList.toggle("online", enabled);
   $("engine-caption").textContent = `${state.repositories.length} 个审计项目 · ${state.workspace.artifacts.length} 个制品`;
   $("new-audit").disabled = !enabled;
   $("new-audit").title = enabled ? "创建审计" : "请运行 npm --prefix .opencode run start:audit-workbench:runner";
+  $("active-audit-badge").textContent = summary.active_audits ?? 0;
+  $("finding-badge").textContent = summary.finding_count ?? 0;
+}
+
+function renderActiveView() {
+  const renderers = {
+    dashboard: renderDashboard,
+    projects: renderProjects,
+    audits: renderAudits,
+    findings: renderFindings,
+    reports: renderReports,
+    validation: () => { renderValidationRequests(); renderValidationList(); },
+    runtime: renderRuntime,
+    settings: renderSettings,
+  };
+  renderers[state.view]?.();
+  renderShell();
 }
 
 function connectEventStream() {
@@ -871,7 +890,7 @@ function connectEventStream() {
     if (state.liveRefresh) return;
     state.liveRefresh = window.setTimeout(() => {
       state.liveRefresh = null;
-      load().catch(showError);
+      refreshLiveWorkspace().catch(showError);
     }, 800);
   };
 }
@@ -887,7 +906,7 @@ function connectValidationEventStream() {
     if (state.validationLiveRefresh) return;
     state.validationLiveRefresh = window.setTimeout(() => {
       state.validationLiveRefresh = null;
-      load().catch(showError);
+      refreshLiveWorkspace().catch(showError);
     }, 800);
   };
 }
@@ -897,6 +916,31 @@ function showError(error) {
   value.textContent = error.message;
   value.hidden = false;
   toast(error.message);
+}
+
+async function refreshLiveWorkspace() {
+  if (state.liveLoad) return state.liveLoad;
+  const request = (async () => {
+    $("global-error").hidden = true;
+    const requests = [api("/api/v1/workspace")];
+    // Validation has two supplementary collections.  Keep them current only
+    // while that page is visible; status output from a static audit should not
+    // repeatedly scan validation records or rebuild that page in the background.
+    if (state.view === "validation") requests.push(api("/api/runs"), api("/api/v1/validation-requests"));
+    const [workspace, validation, validationRequests] = await Promise.all(requests);
+    state.workspace = workspace;
+    if (validation) state.validationRuns = validation.runs;
+    if (validationRequests) state.validationRequests = validationRequests.items;
+    renderActiveView();
+    connectEventStream();
+    connectValidationEventStream();
+  })();
+  state.liveLoad = request;
+  try {
+    return await request;
+  } finally {
+    if (state.liveLoad === request) state.liveLoad = null;
+  }
 }
 
 async function load() {
@@ -910,7 +954,9 @@ async function load() {
   state.validationRequests = validationRequests.items;
   state.runtime = runtime;
   state.environment = environment;
-  renderAll();
+  // Keep the initial paint small as well: hidden pages can contain long audit,
+  // finding and report tables.  They are rendered when the operator opens them.
+  renderActiveView();
   connectEventStream();
   connectValidationEventStream();
 }

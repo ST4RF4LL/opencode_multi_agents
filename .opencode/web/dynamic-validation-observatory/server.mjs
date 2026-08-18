@@ -309,44 +309,58 @@ export function createAuditWorkbenchServer({
     return null;
   }
 
+  // The UI used to request /workspace and /repositories together.  Both build a
+  // complete artifact snapshot, so a single browser refresh could recursively
+  // scan the same reports twice.  Share only concurrent work (rather than a
+  // time-based cache) to keep mutations immediately observable.
+  let snapshotInFlight = null;
   async function snapshot() {
-    await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready]);
-    await runner.reconcileTerminalCompletions("workspace-watchdog");
-    const runnerAudits = await runner.listAuditsWithTodo();
-    const validationByRepository = new Map();
-    await Promise.all(runtimeSources().map(async ({ repository, root }) => {
-      validationByRepository.set(repository.id, await listValidationRuns(root));
-    }));
-    const sources = runner.artifactSources();
-    const snapshots = [];
-    for (const source of sources) {
-      const sourceRuns = runnerAudits.filter(audit => audit.repository_id === source.repository_id);
-      const value = await buildWorkspaceSnapshot({ reportsRoot: source.reports_root, validationRuns: validationByRepository.get(source.repository_id) ?? [], runnerAudits: sourceRuns });
-      value.audits = value.audits.map(audit => ({
-        ...audit,
-        repository_id: audit.repository_id ?? source.repository_id,
-        repository_name: audit.repository_name ?? source.repository_name,
+    if (snapshotInFlight) return snapshotInFlight;
+    const operation = (async () => {
+      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready]);
+      await runner.reconcileTerminalCompletions("workspace-watchdog");
+      const runnerAudits = await runner.listAuditsWithTodo();
+      const validationByRepository = new Map();
+      await Promise.all(runtimeSources().map(async ({ repository, root }) => {
+        validationByRepository.set(repository.id, await listValidationRuns(root));
       }));
-      value.findings = value.findings.map(finding => {
-        const resourceId = scopedResourceId(source.repository_id, `${finding.audit_id}\0${finding.id}`);
-        return { ...finding, resource_id: resourceId, repository_id: source.repository_id, repository_name: source.repository_name, workflow: findingWorkflow.get(resourceId) };
-      });
-      value.reports = value.reports.map(report => ({
-        ...report,
-        id: scopedResourceId(source.repository_id, report.id),
-        repository_id: source.repository_id,
-        repository_name: source.repository_name,
-      }));
-      value.artifacts = value.artifacts.map(artifact => ({
-        ...artifact,
-        id: scopedResourceId(source.repository_id, artifact.id),
-        repository_id: source.repository_id,
-      }));
-      snapshots.push(value);
+      const sources = runner.artifactSources();
+      const snapshots = [];
+      for (const source of sources) {
+        const sourceRuns = runnerAudits.filter(audit => audit.repository_id === source.repository_id);
+        const value = await buildWorkspaceSnapshot({ reportsRoot: source.reports_root, validationRuns: validationByRepository.get(source.repository_id) ?? [], runnerAudits: sourceRuns });
+        value.audits = value.audits.map(audit => ({
+          ...audit,
+          repository_id: audit.repository_id ?? source.repository_id,
+          repository_name: audit.repository_name ?? source.repository_name,
+        }));
+        value.findings = value.findings.map(finding => {
+          const resourceId = scopedResourceId(source.repository_id, `${finding.audit_id}\0${finding.id}`);
+          return { ...finding, resource_id: resourceId, repository_id: source.repository_id, repository_name: source.repository_name, workflow: findingWorkflow.get(resourceId) };
+        });
+        value.reports = value.reports.map(report => ({
+          ...report,
+          id: scopedResourceId(source.repository_id, report.id),
+          repository_id: source.repository_id,
+          repository_name: source.repository_name,
+        }));
+        value.artifacts = value.artifacts.map(artifact => ({
+          ...artifact,
+          id: scopedResourceId(source.repository_id, artifact.id),
+          repository_id: source.repository_id,
+        }));
+        snapshots.push(value);
+      }
+      const merged = mergeSnapshots(snapshots);
+      merged.queue = await queueScheduler.snapshot();
+      return merged;
+    })();
+    snapshotInFlight = operation;
+    try {
+      return await operation;
+    } finally {
+      if (snapshotInFlight === operation) snapshotInFlight = null;
     }
-    const merged = mergeSnapshots(snapshots);
-    merged.queue = await queueScheduler.snapshot();
-    return merged;
   }
 
   async function reportContent(reportId) {

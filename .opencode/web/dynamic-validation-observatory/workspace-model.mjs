@@ -574,7 +574,16 @@ export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [],
     readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
   ]);
   const registryStages = Array.isArray(registry.stages) ? registry.stages : [];
-  const stageDeliveriesByAudit = new Map(await Promise.all([...auditIds].map(async auditId => {
+  const runnerById = new Map(runnerAudits.map(audit => [audit.id, audit]));
+  // A verification walks the delivery tree for an audit.  Most current audits are
+  // driven by the local todo, where stage manifests are deliberately optional;
+  // historical audits without stage-delivery artifacts also have nothing to
+  // verify.  Restrict the expensive check to its two meaningful cases.
+  const stageDeliveryAuditIds = [...auditIds].filter(auditId => (
+    runnerById.get(auditId)?.stage_delivery_enforcement === "ENFORCED"
+    || artifacts.some(artifact => artifact.audit_id === auditId && artifact.kind === "stage-deliveries")
+  ));
+  const stageDeliveriesByAudit = new Map(await Promise.all(stageDeliveryAuditIds.map(async auditId => {
     try {
       return [auditId, await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry })];
     } catch (error) {
