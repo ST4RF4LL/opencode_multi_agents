@@ -549,6 +549,47 @@ if (mode === "run") {
   assert.equal((await terminalGapRunner.eventsSince(terminalGapAudit.id)).some(event => event.type === "audit.runner.stopped"), true);
   await terminalGapRunner.shutdown();
 
+  // A known OpenCode timeout is recoverable.  The watchdog must interrupt the
+  // stale run, retain its provider session and artifacts, then launch exactly
+  // one automatic checkpoint recovery.
+  const timeoutFirstChild = new FakeChild();
+  const timeoutRecoveredChild = new FakeChild();
+  const timeoutMonitor = new FakeTerminalMonitor();
+  let timeoutSpawnCount = 0;
+  const timeoutRunner = new AuditRunner({
+    stateRoot: join(temp, "timeout-recovery-state"),
+    platformRoot,
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    terminalMonitor: timeoutMonitor,
+    completionWatchdogIntervalMs: 3_600_000,
+    todoCompletionVerifier: async () => ({
+      complete: false,
+      errors: ["仍有 1 项 PENDING。"],
+      summary: { total: 1, done: 0, gap: 0, pending: 1, running: 0, failed: 0, progress: 0, complete: false, next_action: "CLAIM" },
+      final_report_path: null,
+    }),
+    spawnProcess() { timeoutSpawnCount += 1; return timeoutSpawnCount === 1 ? timeoutFirstChild : timeoutRecoveredChild; },
+  });
+  await timeoutRunner.ready;
+  const timeoutAudit = await timeoutRunner.createAudit({ audit_id: "audit-timeout-recovery", repository_id: "fixture", ref: "HEAD", allow_dirty: true }, "timeout-recovery-request");
+  for (let attempt = 0; attempt < 100 && timeoutRunner.getAudit(timeoutAudit.id)?.status !== "running"; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  timeoutFirstChild.stdout.write("Error: The operation timed out\n");
+  for (let attempt = 0; attempt < 1_000 && (timeoutSpawnCount !== 2 || timeoutRunner.getAudit(timeoutAudit.id)?.status !== "running" || timeoutRunner.getAudit(timeoutAudit.id)?.recovery_count !== 1 || timeoutRunner.getAudit(timeoutAudit.id)?.timeout_recovery?.state !== "restarted"); attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  const timeoutResult = timeoutRunner.getAudit(timeoutAudit.id);
+  assert.equal(timeoutSpawnCount, 2, "超时 watchdog 必须只启动一次断点恢复");
+  assert.equal(timeoutResult.status, "running");
+  assert.equal(timeoutResult.recovery_count, 1);
+  assert.equal(timeoutResult.timeout_recovery.state, "restarted");
+  assert.equal(timeoutResult.timeout_recovery.attempts, 1);
+  assert.deepEqual(timeoutFirstChild.signals, ["SIGTERM"]);
+  assert.equal(timeoutMonitor.abortCalls.length, 1);
+  const timeoutEvents = await timeoutRunner.eventsSince(timeoutAudit.id);
+  assert.equal(timeoutEvents.some(event => event.type === "audit.timeout.detected"), true);
+  assert.equal(timeoutEvents.some(event => event.type === "audit.timeout.recovery.started"), true);
+  await timeoutRunner.shutdown();
+
   // When all scheduled work is terminal but report sealing is malformed, the
   // watchdog must identify the required name, format and location instead of
   // presenting a generic retry-only failure.
@@ -857,7 +898,7 @@ if (mode === "run") {
     const repositoryResponse = await fetch(`${base}/api/v1/repositories`);
     assert.equal(repositoryResponse.status, 200);
     const repositoryPayload = await repositoryResponse.json();
-    assert.equal(repositoryPayload.items[0].audit_count, 10);
+    assert.equal(repositoryPayload.items[0].audit_count, 11);
     assert.equal(repositoryPayload.items[0].active_audit_count, 0);
     const relativeProjectResponse = await fetch(`${base}/api/v1/repositories`, {
       method: "POST",
@@ -1454,6 +1495,10 @@ if (mode === "run") {
     const appSource = await appResponse.text();
     const stylesSource = await stylesResponse.text();
     assert.match(appSource, /npm --prefix \.opencode run start:audit-workbench:runner/);
+    assert.match(appSource, /runner-log-line/);
+    assert.match(appSource, /output\.scrollTop = output\.scrollHeight/);
+    assert.match(stylesSource, /runner-log-line\.historical/);
+    assert.match(stylesSource, /runner-log-line\.recent/);
     assert.match(appSource, /删除任务/);
     assert.match(appSource, /断点恢复/);
     assert.match(appSource, /ResizeObserver/);

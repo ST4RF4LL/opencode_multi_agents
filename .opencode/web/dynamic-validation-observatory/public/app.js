@@ -333,7 +333,7 @@ function renderAuditDetail() {
     actions.append(remove);
   }
   const logs = element("div", "runner-log");
-  logs.append(element("p", "eyebrow", "RECENT AGENT OUTPUT"), element("pre", "", "正在读取最近输出…"));
+  logs.append(element("p", "eyebrow", "RECENT AGENT OUTPUT"), element("pre", "runner-log-output", "正在读取最近输出…"));
   panel.replaceChildren(head, facts, stages, ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
   loadAuditLogs(audit.id, logs).catch(error => { logs.querySelector("pre").textContent = error.message; });
 }
@@ -341,7 +341,19 @@ function renderAuditDetail() {
 async function loadAuditLogs(auditId, container) {
   const items = (await api(`/api/v1/audits/${encodeURIComponent(auditId)}/logs?limit=80`)).items;
   if (state.selectedAuditId !== auditId) return;
-  container.querySelector("pre").textContent = items.length ? items.map(item => `${item.occurred_at} [${item.source}] ${item.message}`).join("\n") : "当前没有 Runner 输出；历史制品审计不会生成进程日志。";
+  const output = container.querySelector("pre");
+  if (!items.length) {
+    output.textContent = "当前没有 Runner 输出；历史制品审计不会生成进程日志。";
+    return;
+  }
+  const recentStart = Math.max(0, items.length - 12);
+  const fragment = document.createDocumentFragment();
+  items.forEach((item, index) => {
+    const line = element("span", `runner-log-line ${index >= recentStart ? "recent" : "historical"}`, `${item.occurred_at} [${item.source}] ${item.message}`);
+    fragment.append(line);
+  });
+  output.replaceChildren(fragment);
+  window.requestAnimationFrame(() => { output.scrollTop = output.scrollHeight; });
 }
 
 function setTerminalStatus(payload) {
