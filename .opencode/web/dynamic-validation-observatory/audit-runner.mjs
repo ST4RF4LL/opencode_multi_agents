@@ -1458,14 +1458,14 @@ export class AuditRunner extends EventEmitter {
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           this.captureProviderSession(audit, line).catch(() => {});
-          this.markOperationTimeoutObserved(audit, source, line);
+          this.observeOperationTimeout(audit, source, line);
           this.recordLog(audit, source, line).catch(() => {});
         }
       });
       stream?.on("end", () => {
         if (!buffer) return;
         this.captureProviderSession(audit, buffer).catch(() => {});
-        this.markOperationTimeoutObserved(audit, source, buffer);
+        this.observeOperationTimeout(audit, source, buffer);
         this.recordLog(audit, source, buffer).catch(() => {});
       });
     };
@@ -1578,20 +1578,33 @@ export class AuditRunner extends EventEmitter {
     const entry = { occurred_at: new Date().toISOString(), source, message };
     await appendFile(join(this.stateRoot, audit.id, "runner.log.jsonl"), `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
     await this.record(audit, "agent.output", entry, { bumpVersion: false });
-    if (OPERATION_TIMEOUT_PATTERN.test(message)) this.handleOperationTimeout(audit, entry).catch(() => {});
+    this.observeOperationTimeout(audit, source, message, entry);
   }
 
   markOperationTimeoutObserved(audit, source, line) {
-    if (!audit || !OPERATION_TIMEOUT_PATTERN.test(String(line ?? ""))) return;
+    if (!audit || !OPERATION_TIMEOUT_PATTERN.test(String(line ?? ""))) return null;
     const prior = audit.timeout_recovery ?? {};
-    if (["interrupting", "waiting-for-runner-exit", "waiting-to-recover", "recovering"].includes(prior.state)) return;
+    if (["interrupting", "waiting-for-runner-exit", "waiting-to-recover", "recovering"].includes(prior.state)) return null;
+    const entry = {
+      occurred_at: new Date().toISOString(),
+      source,
+      message: "The operation timed out",
+    };
     audit.timeout_recovery = {
       ...prior,
       state: "observed",
-      last_observed_at: new Date().toISOString(),
+      last_observed_at: entry.occurred_at,
       last_message: "The operation timed out",
       last_source: source,
     };
+    return entry;
+  }
+
+  observeOperationTimeout(audit, source, line, recordedEntry = null) {
+    const entry = this.markOperationTimeoutObserved(audit, source, line);
+    if (!entry) return false;
+    this.handleOperationTimeout(audit, recordedEntry ?? entry).catch(() => {});
+    return true;
   }
 
   async handleOperationTimeout(audit, entry) {
@@ -1682,10 +1695,24 @@ export class AuditRunner extends EventEmitter {
   }
 
   async runOperationTimeoutRecovery(auditId, attempt) {
-    const audit = this.audits.get(auditId);
+    let audit = this.audits.get(auditId);
     if (!audit || audit.status !== "interrupted" || audit.timeout_recovery?.attempts !== attempt) {
       this.timeoutRecoveryPending.delete(auditId);
       return false;
+    }
+    // The close handler schedules recovery before its completion promise's
+    // finally handler removes this entry.  Waiting here prevents recovery from
+    // rejecting itself as a residual Runner/completion and makes the timeout
+    // path deterministic instead of timing dependent.
+    const closing = this.completions.get(auditId);
+    if (closing) {
+      await closing.catch(() => {});
+      await new Promise(resolve => setImmediate(resolve));
+      audit = this.audits.get(auditId);
+      if (!audit || audit.status !== "interrupted" || audit.timeout_recovery?.attempts !== attempt) {
+        this.timeoutRecoveryPending.delete(auditId);
+        return false;
+      }
     }
     audit.timeout_recovery = { ...audit.timeout_recovery, state: "recovering", last_recovery_requested_at: new Date().toISOString() };
     await this.record(audit, "audit.timeout.recovery.requested", { attempt });
