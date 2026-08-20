@@ -106,7 +106,7 @@ const platformRoot = join(temp, "platform");
 const reportsRoot = join(platformRoot, "reports", "repositories", "fixture");
 const stateRoot = join(platformRoot, "reports", "platform", "audit-runs");
 const runtimeRoot = join(reportsRoot, "validation-handoff", "runtime");
-const globalModelConfig = join(temp, "opencode-global.json");
+const globalModelConfig = join(temp, "opencode-global.jsonc");
 
 function finalReportModel(auditId) {
   const model = {
@@ -169,9 +169,13 @@ try {
       "nested-provider": { models: { "vendor/model-v2": {} } },
     },
   }, null, 2)}\n`, "utf8");
-  await writeFile(globalModelConfig, `${JSON.stringify({
-    provider: { "global-provider": { models: { "global-audit": {} } } },
-  }, null, 2)}\n`, "utf8");
+  await writeFile(globalModelConfig, `\uFEFF{
+    // JSONC is a supported OpenCode configuration format.
+    "provider": {
+      "global-provider": { "models": { "global-audit": {} } },
+    },
+  }
+`, "utf8");
   await writeFile(join(repositoryRoot, "README.md"), "fixture\n", "utf8");
   await writeFile(join(operatorSelectedRoot, "README.md"), "operator selected fixture\n", "utf8");
   await writeFile(join(reportsRoot, "coverage", "coverage-plan.audit-history.json"), JSON.stringify({

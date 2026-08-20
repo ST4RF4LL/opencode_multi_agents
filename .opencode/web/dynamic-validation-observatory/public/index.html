@@ -67,7 +67,7 @@
               <div class="section-title"><div><p class="eyebrow">OPENCODE MODEL</p><h2>使用模型</h2></div><span id="model-settings-status" class="status">读取中</span></div>
               <form id="model-settings-form" class="settings-form">
                 <label>使用模型<select name="model" id="opencode-model-select" required></select></label>
-                <p class="settings-note">模型清单读取自 <code>.opencode/opencode.json</code>、<code>~/.config/opencode.json</code>（兼容路径）及 OpenCode 标准全局配置 <code>~/.config/opencode/opencode.json</code>。选择具体模型后，后续新建任务会在创建时固化该选择，并以 <code>opencode run --model provider/model</code> 启动；“默认”不传递 <code>--model</code>。</p>
+                <p class="settings-note">模型清单读取自 <code>.opencode/opencode.json(c)</code>、<code>~/.config/opencode.json(c)</code>（兼容路径）及 OpenCode 标准全局配置 <code>~/.config/opencode/opencode.json(c)</code>；支持 UTF-8 BOM、注释和尾逗号。选择具体模型后，后续新建任务会在创建时固化该选择，并以 <code>opencode run --model provider/model</code> 启动；“默认”不传递 <code>--model</code>。</p>
                 <div id="model-settings-error" class="notice error" hidden></div>
                 <div class="dialog-actions"><button id="save-model-settings" class="button secondary" type="submit">保存模型设置</button></div>
               </form>

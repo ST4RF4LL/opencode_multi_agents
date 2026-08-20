@@ -15,6 +15,69 @@ function invalid(message, code = "opencode-model-settings-invalid") {
   return Object.assign(new Error(message), { statusCode: 422, code });
 }
 
+function stripJsonComments(source) {
+  let output = "";
+  let quoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (quoted) {
+      output += character;
+      if (character === "\\") output += source[++index] ?? "";
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') {
+      quoted = true;
+      output += character;
+      continue;
+    }
+    if (character === "/" && source[index + 1] === "/") {
+      index += 2;
+      while (index < source.length && source[index] !== "\n" && source[index] !== "\r") index += 1;
+      output += source[index] ?? "";
+      continue;
+    }
+    if (character === "/" && source[index + 1] === "*") {
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index += 1;
+      if (index < source.length) index += 1;
+      continue;
+    }
+    output += character;
+  }
+  return output;
+}
+
+function stripTrailingCommas(source) {
+  let output = "";
+  let quoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (quoted) {
+      output += character;
+      if (character === "\\") output += source[++index] ?? "";
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') {
+      quoted = true;
+      output += character;
+      continue;
+    }
+    if (character === ",") {
+      let next = index + 1;
+      while (/\s/u.test(source[next] ?? "")) next += 1;
+      if (source[next] === "}" || source[next] === "]") continue;
+    }
+    output += character;
+  }
+  return output;
+}
+
+function parseConfig(source) {
+  return JSON.parse(stripTrailingCommas(stripJsonComments(String(source).replace(/^\uFEFF/u, ""))));
+}
+
 function modelId(value, provider = null) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -105,7 +168,7 @@ export class OpenCodeModelCatalog {
     const sources = [];
     for (const path of this.configPaths) {
       try {
-        const config = JSON.parse(await readFile(path, "utf8"));
+        const config = parseConfig(await readFile(path, "utf8"));
         if (!config || typeof config !== "object" || Array.isArray(config)) {
           sources.push({ path, status: "invalid", model_count: 0, message: "配置根必须是 JSON 对象。" });
           continue;

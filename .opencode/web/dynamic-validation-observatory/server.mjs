@@ -245,8 +245,11 @@ export function createAuditWorkbenchServer({
   const modelCatalog = suppliedModelCatalog ?? new OpenCodeModelCatalog({
     configPaths: modelConfigPaths ?? [
       resolve(platformConfigPath),
+      resolve(dirname(platformConfigPath), "opencode.jsonc"),
       join(xdgConfigHome, "opencode.json"),
+      join(xdgConfigHome, "opencode.jsonc"),
       join(xdgConfigHome, "opencode", "opencode.json"),
+      join(xdgConfigHome, "opencode", "opencode.jsonc"),
     ],
   });
   const modelSettingsStore = suppliedModelSettingsStore ?? new OpenCodeModelSettingsStore({
