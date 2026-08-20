@@ -7,6 +7,7 @@ import { appendFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildOpenCodeEnvironment, proxyEnvironmentFrom } from "./opencode-runtime-config.mjs";
+import { DEFAULT_MODEL_SELECTION, normalizeOpenCodeModel } from "./opencode-model-settings.mjs";
 import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
 import { auditsFromArtifacts, materializeFinalReportFromModel, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
@@ -1329,6 +1330,9 @@ export class AuditRunner extends EventEmitter {
       exit_code: null,
       error: null,
       allow_dirty: input.allow_dirty === true,
+      // Snapshot the settings-page selection onto the audit.  Queued tasks and
+      // checkpoint recovery must never inherit a later interactive CLI change.
+      model: normalizeOpenCodeModel(input.model),
       provider_session_id: null,
       recovery_count: 0,
       stage_delivery_enforcement: "TODO_ENFORCED",
@@ -1351,6 +1355,7 @@ export class AuditRunner extends EventEmitter {
     await this.record(audit, "audit.queued", {
       repository_id: repository.id,
       commit,
+      model: audit.model ?? DEFAULT_MODEL_SELECTION,
       additional_instructions_enabled: audit.private_context.additional_instructions.enabled,
       test_environment_enabled: audit.private_context.test_environment.enabled,
     });
@@ -1400,6 +1405,7 @@ export class AuditRunner extends EventEmitter {
     let args = [
       "run", "--format", "json",
       ...(sessionId ? ["--session", sessionId] : []),
+      ...(audit.model ? ["--model", audit.model] : []),
       "--agent", "security-audit-orchestrator",
       "--dir", paths.workspace_root,
       "--title", audit.name,

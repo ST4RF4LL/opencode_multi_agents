@@ -3,6 +3,7 @@
 import { createServer as createHttpServer } from "node:http";
 import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import MarkdownIt from "markdown-it";
@@ -11,6 +12,7 @@ import { AuditRunner } from "./audit-runner.mjs";
 import { EnvironmentHealthService } from "./environment-health.mjs";
 import { FindingWorkflowStore } from "./finding-workflow.mjs";
 import { listValidationRequests, listValidationRunDetails, listValidationRuns } from "./model.mjs";
+import { DEFAULT_MODEL_SELECTION, OpenCodeModelCatalog, OpenCodeModelSettingsStore } from "./opencode-model-settings.mjs";
 import { buildWorkspaceSnapshot } from "./workspace-model.mjs";
 import { DynamicValidationRunner } from "./validation-runner.mjs";
 
@@ -227,6 +229,10 @@ export function createAuditWorkbenchServer({
   queueSettingsPath = null,
   queueSettingsStore: suppliedQueueSettingsStore = null,
   queueScheduler: suppliedQueueScheduler = null,
+  modelSettingsPath = null,
+  modelSettingsStore: suppliedModelSettingsStore = null,
+  modelCatalog: suppliedModelCatalog = null,
+  modelConfigPaths = null,
 } = {}) {
   const resolvedRuntimeRoot = resolve(runtimeRoot);
   const runner = suppliedRunner ?? new AuditRunner({ stateRoot, platformRoot: PROJECT_ROOT, repositories, configPath: platformConfigPath, enabled: runnerEnabled });
@@ -235,6 +241,17 @@ export function createAuditWorkbenchServer({
   });
   const queueScheduler = suppliedQueueScheduler ?? new AuditQueueScheduler({ runner, settingsStore: queueSettingsStore });
   runner.setQueueScheduler(queueScheduler);
+  const xdgConfigHome = resolve(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"));
+  const modelCatalog = suppliedModelCatalog ?? new OpenCodeModelCatalog({
+    configPaths: modelConfigPaths ?? [
+      resolve(platformConfigPath),
+      join(xdgConfigHome, "opencode.json"),
+      join(xdgConfigHome, "opencode", "opencode.json"),
+    ],
+  });
+  const modelSettingsStore = suppliedModelSettingsStore ?? new OpenCodeModelSettingsStore({
+    path: modelSettingsPath ?? join(dirname(resolve(stateRoot)), "opencode-model-settings.json"),
+  });
   const dynamicRunner = suppliedDynamicRunner ?? new DynamicValidationRunner({
     stateRoot: dynamicStateRoot ?? join(dirname(stateRoot), "dynamic-validation-runs"),
     enabled: dynamicRunnerEnabled,
@@ -309,6 +326,21 @@ export function createAuditWorkbenchServer({
     return null;
   }
 
+  async function modelSettingsSnapshot() {
+    const [catalog, settings] = await Promise.all([modelCatalog.snapshot(), modelSettingsStore.get()]);
+    const selected = settings.model ?? DEFAULT_MODEL_SELECTION;
+    return {
+      selected_model: selected,
+      options: [
+        { value: DEFAULT_MODEL_SELECTION, label: "默认" },
+        ...catalog.models.map(model => ({ value: model, label: model })),
+      ],
+      sources: catalog.sources,
+      selection_available: selected === DEFAULT_MODEL_SELECTION || catalog.models.includes(selected),
+      updated_at: settings.updated_at,
+    };
+  }
+
   // The UI used to request /workspace and /repositories together.  Both build a
   // complete artifact snapshot, so a single browser refresh could recursively
   // scan the same reports twice.  Share only concurrent work (rather than a
@@ -317,7 +349,7 @@ export function createAuditWorkbenchServer({
   async function snapshot() {
     if (snapshotInFlight) return snapshotInFlight;
     const operation = (async () => {
-      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready]);
+      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready]);
       await runner.reconcileTerminalCompletions("workspace-watchdog");
       const runnerAudits = await runner.listAuditsWithTodo();
       const validationByRepository = new Map();
@@ -419,6 +451,18 @@ export function createAuditWorkbenchServer({
         json(response, 200, { queue: await queueScheduler.snapshot() });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/v1/settings/model") {
+        json(response, 200, { model: await modelSettingsSnapshot() });
+        return;
+      }
+      if (request.method === "PUT" && url.pathname === "/api/v1/settings/model") {
+        assertSafeMutation(request);
+        const body = await requestJson(request);
+        const catalog = await modelCatalog.snapshot();
+        await modelSettingsStore.update(body.model, catalog.models);
+        json(response, 200, { model: await modelSettingsSnapshot() });
+        return;
+      }
       if (request.method === "PUT" && url.pathname === "/api/v1/settings/queue") {
         assertSafeMutation(request);
         json(response, 200, { queue: await queueScheduler.updateSettings(await requestJson(request)) });
@@ -460,7 +504,10 @@ export function createAuditWorkbenchServer({
       }
       if (request.method === "POST" && url.pathname === "/api/v1/audits") {
         assertSafeMutation(request);
-        const audit = await runner.createAudit(await requestJson(request), request.headers["idempotency-key"]);
+        const [input, settings] = await Promise.all([requestJson(request), modelSettingsStore.get()]);
+        // The selected value is server-owned: a browser cannot inject arbitrary
+        // flags into the OpenCode command by posting its own `model` field.
+        const audit = await runner.createAudit({ ...input, model: settings.model }, request.headers["idempotency-key"]);
         json(response, 202, audit, { Location: `/api/v1/audits/${encodeURIComponent(audit.id)}`, ETag: `"${audit.version}"` });
         return;
       }
@@ -621,13 +668,14 @@ export function createAuditWorkbenchServer({
         const source = runner.artifactSources().find(item => item.repository_id === repository.id);
         const root = runtimeSources().find(item => item.repository.id === repository.id)?.root;
         const executionPaths = await runner.ensureExecutionWorkspace(descriptor.audit_id, repository.id);
+        const audit = runner.getAudit(descriptor.audit_id);
         const run = await dynamicRunner.create({
           input,
           repository,
           reportsRoot: source.reports_root,
           runtimeRoot: root,
           executionPaths,
-          requestDescriptor: { ...descriptor, request_id: descriptor.id, id: descriptor.job_id },
+          requestDescriptor: { ...descriptor, request_id: descriptor.id, id: descriptor.job_id, model: audit?.model ?? null },
           idempotencyKey: request.headers["idempotency-key"],
         });
         json(response, 202, run, { Location: `/api/v1/validations/${encodeURIComponent(run.id)}`, ETag: `"${run.version}"` });

@@ -62,7 +62,17 @@
           </section>
 
           <section id="view-settings" class="view">
-            <div class="page-heading"><div><p class="eyebrow">WORKBENCH SETTINGS</p><h2>设置</h2><p>排队由工作台定时调度；不以页面进度或漏洞 TODO 百分比作为启动依据。</p></div></div>
+            <div class="page-heading"><div><p class="eyebrow">WORKBENCH SETTINGS</p><h2>设置</h2><p>为工作台任务固定 OpenCode 模型，并配置定时排队策略。</p></div></div>
+            <article class="panel settings-panel">
+              <div class="section-title"><div><p class="eyebrow">OPENCODE MODEL</p><h2>使用模型</h2></div><span id="model-settings-status" class="status">读取中</span></div>
+              <form id="model-settings-form" class="settings-form">
+                <label>使用模型<select name="model" id="opencode-model-select" required></select></label>
+                <p class="settings-note">模型清单读取自 <code>.opencode/opencode.json</code>、<code>~/.config/opencode.json</code>（兼容路径）及 OpenCode 标准全局配置 <code>~/.config/opencode/opencode.json</code>。选择具体模型后，后续新建任务会在创建时固化该选择，并以 <code>opencode run --model provider/model</code> 启动；“默认”不传递 <code>--model</code>。</p>
+                <div id="model-settings-error" class="notice error" hidden></div>
+                <div class="dialog-actions"><button id="save-model-settings" class="button secondary" type="submit">保存模型设置</button></div>
+              </form>
+              <dl id="model-settings-facts" class="detail-facts"></dl>
+            </article>
             <article class="panel settings-panel">
               <div class="section-title"><div><p class="eyebrow">AUDIT QUEUE</p><h2>任务序列排队</h2></div><span id="queue-status" class="status">读取中</span></div>
               <form id="queue-settings-form" class="settings-form">

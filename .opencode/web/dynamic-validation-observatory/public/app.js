@@ -5,6 +5,7 @@ const state = {
   validationRequests: [],
   runtime: null,
   environment: { capabilities: [], components: [], platform: {}, configuration: {} },
+  modelSettings: { selected_model: "default", options: [{ value: "default", label: "默认" }], sources: [], selection_available: true },
   selectedAuditId: null,
   selectedValidationId: null,
   selectedFindingResourceId: null,
@@ -275,7 +276,7 @@ function renderAuditDetail() {
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
-  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
+  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], ["OpenCode 模型", audit.model ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const stages = element("ol", "stage-list");
@@ -843,6 +844,29 @@ function renderRuntime() {
 }
 
 function renderSettings() {
+  const model = state.modelSettings ?? { selected_model: "default", options: [{ value: "default", label: "默认" }], sources: [] };
+  const modelForm = $("model-settings-form");
+  const modelSelect = modelForm.elements.model;
+  if (document.activeElement !== modelSelect) {
+    const options = model.options ?? [];
+    modelSelect.replaceChildren(...options.map(item => {
+      const option = element("option", "", item.label); option.value = item.value; return option;
+    }));
+    if ([...modelSelect.options].some(option => option.value === model.selected_model)) modelSelect.value = model.selected_model;
+    else modelSelect.value = "default";
+  }
+  const modelStatus = $("model-settings-status");
+  modelStatus.className = `status ${model.selection_available === false ? "warning" : "ready"}`;
+  modelStatus.textContent = model.selection_available === false ? "已选模型不可用" : model.selected_model === "default" ? "默认" : "已固定";
+  const modelFacts = $("model-settings-facts");
+  modelFacts.replaceChildren();
+  [
+    ["当前选择", model.selected_model === "default" ? "默认（不传 --model）" : model.selected_model],
+    ["可选模型", `${Math.max(0, (model.options?.length ?? 1) - 1)} 个`],
+    ["配置来源", (model.sources ?? []).map(source => `${source.path}（${source.status === "ready" ? `${source.model_count} 个模型` : source.status === "missing" ? "未配置" : "无效"}`).join("；") || "未配置"],
+  ].forEach(([label, value]) => {
+    const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", label === "配置来源" ? "mono" : "", value)); modelFacts.append(wrapper);
+  });
   const queue = state.workspace.queue ?? { enabled: false, interval_hours: 1, concurrency: 1 };
   const form = $("queue-settings-form");
   if (document.activeElement !== form.elements.interval_hours) form.elements.interval_hours.value = String(queue.interval_hours ?? 1);
@@ -957,8 +981,8 @@ async function refreshLiveWorkspace() {
 
 async function load() {
   $("global-error").hidden = true;
-  const [workspace, repositories, validation, validationRequests, runtime, environment] = await Promise.all([
-    api("/api/v1/workspace"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"),
+  const [workspace, repositories, validation, validationRequests, runtime, environment, modelSettings] = await Promise.all([
+    api("/api/v1/workspace"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"),
   ]);
   state.workspace = workspace;
   state.repositories = repositories.items;
@@ -966,6 +990,7 @@ async function load() {
   state.validationRequests = validationRequests.items;
   state.runtime = runtime;
   state.environment = environment;
+  state.modelSettings = modelSettings.model;
   // Keep the initial paint small as well: hidden pages can contain long audit,
   // finding and report tables.  They are rendered when the operator opens them.
   renderActiveView();
@@ -1150,6 +1175,27 @@ async function submitQueueSettings(event) {
   } finally { button.disabled = false; }
 }
 
+async function submitModelSettings(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $("save-model-settings");
+  button.disabled = true;
+  $("model-settings-error").hidden = true;
+  try {
+    const response = await api("/api/v1/settings/model", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: form.elements.model.value }),
+    });
+    state.modelSettings = response.model;
+    renderSettings();
+    toast("OpenCode 模型设置已保存；新建任务将固定使用该选择");
+  } catch (error) {
+    $("model-settings-error").textContent = error.message;
+    $("model-settings-error").hidden = false;
+  } finally { button.disabled = false; }
+}
+
 async function toggleQueue() {
   const enabled = Boolean(state.workspace.queue?.enabled);
   const button = $("toggle-queue");
@@ -1185,6 +1231,7 @@ $("refresh").addEventListener("click", () => load().then(() => toast("制品与�
 $("dispatch-queue").addEventListener("click", () => dispatchQueueNow().catch(showError));
 $("finding-query").addEventListener("input", renderFindings);
 $("audit-form").addEventListener("submit", submitAudit);
+$("model-settings-form").addEventListener("submit", submitModelSettings);
 $("queue-settings-form").addEventListener("submit", submitQueueSettings);
 $("toggle-queue").addEventListener("click", () => toggleQueue().catch(showError));
 for (const checkbox of $("audit-form").querySelectorAll(".enable-switch input[type=checkbox]")) {

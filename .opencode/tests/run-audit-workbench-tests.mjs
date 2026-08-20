@@ -106,6 +106,7 @@ const platformRoot = join(temp, "platform");
 const reportsRoot = join(platformRoot, "reports", "repositories", "fixture");
 const stateRoot = join(platformRoot, "reports", "platform", "audit-runs");
 const runtimeRoot = join(reportsRoot, "validation-handoff", "runtime");
+const globalModelConfig = join(temp, "opencode-global.json");
 
 function finalReportModel(auditId) {
   const model = {
@@ -161,7 +162,16 @@ try {
   await mkdir(join(reportsRoot, "final"), { recursive: true });
   await mkdir(join(reportsRoot, "stage-deliveries", "audit-history", "sets"), { recursive: true });
   await mkdir(runtimeRoot, { recursive: true });
-  await writeFile(join(repositoryRoot, ".opencode", "opencode.json"), "{}\n", "utf8");
+  await writeFile(join(repositoryRoot, ".opencode", "opencode.json"), `${JSON.stringify({
+    model: "project-provider/project-default",
+    provider: {
+      "project-provider": { models: { "project-default": {}, "project-review": {} } },
+      "nested-provider": { models: { "vendor/model-v2": {} } },
+    },
+  }, null, 2)}\n`, "utf8");
+  await writeFile(globalModelConfig, `${JSON.stringify({
+    provider: { "global-provider": { models: { "global-audit": {} } } },
+  }, null, 2)}\n`, "utf8");
   await writeFile(join(repositoryRoot, "README.md"), "fixture\n", "utf8");
   await writeFile(join(operatorSelectedRoot, "README.md"), "operator selected fixture\n", "utf8");
   await writeFile(join(reportsRoot, "coverage", "coverage-plan.audit-history.json"), JSON.stringify({
@@ -913,7 +923,15 @@ if (mode === "run") {
   await findingWorkflow.ready;
   let findingResourceId;
 
-  const server = createAuditWorkbenchServer({ stateRoot, runtimeRoot, runner, dynamicRunner, environmentService, findingWorkflow });
+  const server = createAuditWorkbenchServer({
+    stateRoot,
+    runtimeRoot,
+    runner,
+    dynamicRunner,
+    environmentService,
+    findingWorkflow,
+    modelConfigPaths: [join(repositoryRoot, ".opencode", "opencode.json"), globalModelConfig],
+  });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
@@ -970,6 +988,25 @@ if (mode === "run") {
     const environment = await environmentResponse.json();
     assert.equal(environment.capabilities.find(item => item.id === "static").status, "ready");
     assert.equal(environment.components.find(item => item.id === "chrome").status, "ready");
+
+    const modelSettingsResponse = await fetch(`${base}/api/v1/settings/model`);
+    assert.equal(modelSettingsResponse.status, 200);
+    const initialModelSettings = (await modelSettingsResponse.json()).model;
+    assert.equal(initialModelSettings.selected_model, "default");
+    assert.deepEqual(initialModelSettings.options.map(option => option.value), ["default", "global-provider/global-audit", "nested-provider/vendor/model-v2", "project-provider/project-default", "project-provider/project-review"]);
+    const invalidModelSelection = await fetch(`${base}/api/v1/settings/model`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "unconfigured/provider" }),
+    });
+    assert.equal(invalidModelSelection.status, 422);
+    const saveModelSelection = await fetch(`${base}/api/v1/settings/model`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "global-provider/global-audit" }),
+    });
+    assert.equal(saveModelSelection.status, 200);
+    assert.equal((await saveModelSelection.json()).model.selected_model, "global-provider/global-audit");
 
     findingResourceId = workspace.findings[0].resource_id;
     const workflowResponse = await fetch(`${base}/api/v1/findings/${findingResourceId}/workflow`, {
@@ -1031,6 +1068,7 @@ if (mode === "run") {
         repository_id: "fixture",
         ref: "HEAD",
         allow_dirty: true,
+        model: "browser-controlled/ignored",
         additional_instructions_enabled: true,
         additional_instructions: "只验证 XSS 漏洞；其他类型只记录静态证据。",
         test_environment_enabled: true,
@@ -1040,6 +1078,7 @@ if (mode === "run") {
     assert.equal(createResponse.status, 202);
     const created = await createResponse.json();
     assert.equal(created.id, "audit-live-001");
+    assert.equal(created.model, "global-provider/global-audit");
     assert.equal(created.idempotency_digest, undefined);
     assert.equal(created.private_context, undefined);
     assert.equal(created.task_context.additional_instructions_enabled, true);
@@ -1062,6 +1101,7 @@ if (mode === "run") {
     assert.match(spawnCall.args[0], /terminal-output-relay\.mjs$/);
     const monitoredRunArgs = terminalMonitor.starts[0].args;
     assert.deepEqual(monitoredRunArgs.slice(0, 3), ["run", "--format", "json"]);
+    assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--model") + 1], "global-provider/global-audit");
     assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--agent") + 1], "security-audit-orchestrator");
     assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--dir") + 1], executionWorkspace);
     const monitoredPrompt = monitoredRunArgs.at(-1);
@@ -1266,7 +1306,8 @@ if (mode === "run") {
     assert.equal(activeValidationDescriptor.job.id, dynamicJobId);
     assert.equal(dynamicSpawnCall.command, "opencode");
     assert.equal(dynamicSpawnCall.options.shell, false);
-    assert.equal(dynamicSpawnCall.args[4], "dynamic-vulnerability-validator");
+    assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--agent") + 1], "dynamic-vulnerability-validator");
+    assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--model") + 1], "global-provider/global-audit");
     const dynamicExecutionWorkspace = join(platformRoot, "workspace", "audit-runs", created.id);
     assert.equal(dynamicSpawnCall.options.cwd, dynamicExecutionWorkspace);
     assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--dir") + 1], dynamicExecutionWorkspace);
@@ -1507,6 +1548,8 @@ if (mode === "run") {
     assert.match(indexHtml, /id="terminal-dialog"/);
     assert.match(indexHtml, /data-view="settings"/);
     assert.match(indexHtml, /id="queue-settings-form"/);
+    assert.match(indexHtml, /id="model-settings-form"/);
+    assert.match(indexHtml, /使用模型/);
     assert.match(indexHtml, /队列间隔/);
     assert.match(indexHtml, /激活排队机制/);
     assert.match(indexHtml, /id="opencode-session-id"/);
@@ -1538,6 +1581,7 @@ if (mode === "run") {
     assert.match(appSource, /ResizeObserver/);
     assert.match(appSource, /terminal\/resize/);
     assert.match(appSource, /syncAuditContextControls/);
+    assert.match(appSource, /submitModelSettings/);
     assert.match(appSource, /task_dynamic_validation_enabled/);
     assert.match(appSource, /progress_source/);
     assert.match(appSource, /排队中/);

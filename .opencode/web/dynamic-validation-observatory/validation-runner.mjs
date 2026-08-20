@@ -8,6 +8,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { validateExternalRuntimeValidationRequest } from "../../skills/common-subagent/finding-evidence-contract/scripts/external-runtime-validation-contract.mjs";
 import { validateStageEnvelope } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-agent-contract.mjs";
 import { buildOpenCodeEnvironment } from "./opencode-runtime-config.mjs";
+import { normalizeOpenCodeModel } from "./opencode-model-settings.mjs";
 
 const RUN_ID = /^[a-z0-9][a-z0-9._:-]{2,260}$/i;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -336,7 +337,8 @@ export class DynamicValidationRunner extends EventEmitter {
     await writeFile(authorizationFile, prompt, { encoding: "utf8", mode: 0o600 });
     let child;
     try {
-      child = this.spawnProcess(this.command, ["run", "--format", "json", "--agent", "dynamic-vulnerability-validator", "--dir", executionPaths.workspace_root, "--title", `动态验证 ${run.audit_id}/${run.finding_id}`, "--file", authorizationFile, "请读取所附授权说明并严格按 dynamic-vulnerability-validator 契约执行。"], {
+      const model = normalizeOpenCodeModel(requestDescriptor.model);
+      child = this.spawnProcess(this.command, ["run", "--format", "json", ...(model ? ["--model", model] : []), "--agent", "dynamic-vulnerability-validator", "--dir", executionPaths.workspace_root, "--title", `动态验证 ${run.audit_id}/${run.finding_id}`, "--file", authorizationFile, "请读取所附授权说明并严格按 dynamic-vulnerability-validator 契约执行。"], {
         cwd: executionPaths.workspace_root,
         env: {
           ...await buildOpenCodeEnvironment(repository.config_path),
