@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { strict as assert } from "node:assert";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -91,6 +91,27 @@ try {
   assert.equal(pending.total, 1);
   assert.equal(pending.items[0].item_id, runningItem.item_id);
   assert.equal((await auditTodoSummary(todoPath)).complete, false, "FAILED 项不可被误判为完成");
+
+  const legacyTodoPath = join(root, "state", "legacy-coverage-ledger-todo.json");
+  const legacyTodo = {
+    schema_version: 1,
+    audit_id: "audit-legacy-coverage-ledger",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+    items: [
+      { item_id: "coverage-unit:completed", status: "COMPLETE", focus_area_id: "legacy-focus", domain: "web", agent_name: "web-source-auditor" },
+      { item_id: "coverage-unit:active", status: "IN_PROGRESS", focus_area_id: "legacy-focus", domain: "web", agent_name: "web-source-auditor" },
+      { item_id: "coverage-unit:unknown", status: "RETIRED_STATE", focus_area_id: "legacy-focus", domain: "web", agent_name: "web-source-auditor" },
+    ],
+    packets: [{ packet_id: "retired-packet", status: "RUNNING", item_ids: ["coverage-unit:active"] }],
+  };
+  await writeFile(legacyTodoPath, `${JSON.stringify(legacyTodo, null, 2)}\n`, "utf8");
+  const migratedLegacyTodo = await readAuditTodo(legacyTodoPath);
+  assert.deepEqual(migratedLegacyTodo.items.map(item => item.item_id), ["todo:coverage-unit:completed", "todo:coverage-unit:active", "todo:coverage-unit:unknown"]);
+  assert.deepEqual(migratedLegacyTodo.items.map(item => item.status), ["DONE", "PENDING", "PENDING"]);
+  assert.equal(migratedLegacyTodo.packets.length, 0, "旧 assignment packet 不得作为本地 scheduler packet 恢复");
+  assert.equal(migratedLegacyTodo.legacy_migration.kind, "coverage-ledger-local-todo");
+  assert.equal((await readdir(join(root, "state"))).some(name => name.startsWith("legacy-coverage-ledger-todo.json.legacy-coverage-ledger.")), true, "迁移前必须保留只读备份");
 
   const summaryAuditId = "audit-todo-summary";
   const summaryTodoPath = join(root, "state", "summary-todo.json");

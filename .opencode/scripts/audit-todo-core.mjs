@@ -7,6 +7,7 @@ export const AUDIT_TODO_STATES = Object.freeze(["PENDING", "RUNNING", "DONE", "G
 const TERMINAL_ITEM_STATES = new Set(["DONE", "GAP", "FAILED"]);
 const DEFAULT_LEASE_MINUTES = 30;
 const DEFAULT_MAX_ATTEMPTS = 3;
+const LEGACY_COVERAGE_UNIT_ITEM = /^(?:todo:)?coverage-unit:/;
 
 function now() {
   return new Date().toISOString();
@@ -80,6 +81,66 @@ function validateTodo(todo) {
   return [...new Set(errors)];
 }
 
+function migratedLegacyStatus(value) {
+  const status = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (AUDIT_TODO_STATES.includes(status)) return status;
+  if (["DONE", "COMPLETE", "COMPLETED", "VERIFIED"].includes(status)) return "DONE";
+  if (["GAP", "PARTIAL", "INCONCLUSIVE", "INVALIDATED", "SKIPPED"].includes(status)) return "GAP";
+  if (["FAILED", "ERROR", "CANCELLED", "CANCELED"].includes(status)) return "FAILED";
+  // There is no packet/lease equivalence in the retired Coverage Ledger
+  // workflow. Requeue active or unknown work rather than claiming it finished.
+  return "PENDING";
+}
+
+function migrateLegacyCoverageTodo(todo, errors) {
+  const items = Array.isArray(todo?.items) ? todo.items : [];
+  const legacyItems = items.filter(item => object(item) && LEGACY_COVERAGE_UNIT_ITEM.test(item.item_id));
+  if (legacyItems.length === 0) return null;
+  if (!errors.every(error => /^todo-item-state-invalid:(?:todo:)?coverage-unit:/.test(error))) return null;
+  const migratedAt = now();
+  const migratedItems = items.map(item => {
+    if (!object(item) || !LEGACY_COVERAGE_UNIT_ITEM.test(item.item_id)) return item;
+    const status = migratedLegacyStatus(item.status);
+    return {
+      ...item,
+      item_id: item.item_id.startsWith("todo:") ? item.item_id : `todo:${item.item_id}`,
+      focus_area_id: typeof item.focus_area_id === "string" && item.focus_area_id ? item.focus_area_id : "legacy-coverage",
+      domain: typeof item.domain === "string" && item.domain ? item.domain : "legacy",
+      agent_name: typeof item.agent_name === "string" && item.agent_name ? item.agent_name : "security-audit-orchestrator",
+      assignment_id: typeof item.assignment_id === "string" && item.assignment_id ? item.assignment_id : item.item_id,
+      required_lenses: Array.isArray(item.required_lenses) ? item.required_lenses.filter(value => typeof value === "string") : [],
+      source_set_id: typeof item.source_set_id === "string" ? item.source_set_id : null,
+      expected_check_count: Number.isFinite(Number(item.expected_check_count)) ? Math.max(0, Number(item.expected_check_count)) : 0,
+      status,
+      // Old Coverage Ledger assignments cannot be resumed as local packets.
+      // Resetting them makes the current scheduler claim only unfinished work.
+      packet_id: null,
+      lease_expires_at: null,
+      attempt_count: Number.isInteger(item.attempt_count) && item.attempt_count >= 0 ? item.attempt_count : 0,
+      artifact_path: typeof item.artifact_path === "string" ? item.artifact_path : null,
+      finding_ids: Array.isArray(item.finding_ids) ? item.finding_ids.filter(value => typeof value === "string").slice(0, 500) : [],
+      gap_reason: status === "GAP"
+        ? (typeof item.gap_reason === "string" && item.gap_reason.trim() ? item.gap_reason.trim().slice(0, 4000) : `旧 Coverage Ledger 状态 ${String(item.status ?? "unknown")} 已迁移为 GAP。`)
+        : null,
+      legacy_coverage_status: typeof item.status === "string" ? item.status : null,
+      updated_at: migratedAt,
+    };
+  });
+  return {
+    ...todo,
+    items: migratedItems,
+    // Legacy packet metadata refers to retired assignment tokens and must not
+    // be used to resume work under the local scheduler.
+    packets: [],
+    updated_at: migratedAt,
+    legacy_migration: {
+      kind: "coverage-ledger-local-todo",
+      migrated_at: migratedAt,
+      migrated_item_count: legacyItems.length,
+    },
+  };
+}
+
 async function writeTodo(todoPath, todo) {
   const path = resolve(todoPath);
   const errors = validateTodo(todo);
@@ -92,8 +153,17 @@ async function writeTodo(todoPath, todo) {
 
 export async function readAuditTodo(todoPath, { allowMissing = false } = {}) {
   try {
-    const todo = JSON.parse(await readFile(resolve(todoPath), "utf8"));
+    const path = resolve(todoPath);
+    const source = await readFile(path, "utf8");
+    const todo = JSON.parse(source);
     const errors = validateTodo(todo);
+    const migrated = errors.length > 0 ? migrateLegacyCoverageTodo(todo, errors) : null;
+    if (migrated) {
+      const backup = `${path}.legacy-coverage-ledger.${Date.now()}.${randomUUID()}.json`;
+      await writeFile(backup, source, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await writeTodo(path, migrated);
+      return migrated;
+    }
     if (errors.length > 0) throw new Error(`本地审计任务清单无效：${errors.join(", ")}`);
     return todo;
   } catch (error) {
