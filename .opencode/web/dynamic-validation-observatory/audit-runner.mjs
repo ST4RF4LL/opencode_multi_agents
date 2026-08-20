@@ -29,6 +29,7 @@ const COMPLETION_WATCHDOG_INTERVAL_MS = 15_000;
 const OPERATION_TIMEOUT_PATTERN = /\bthe operation timed out\b/i;
 const OPERATION_TIMEOUT_RECOVERY_REASON = "operation-timed-out";
 const MAX_OPERATION_TIMEOUT_RECOVERIES = 3;
+const OPERATION_TIMEOUT_TERMINATION_GRACE_MS = 10_000;
 const PRIVATE_CONTEXT_FILES = Object.freeze({
   additional_instructions: "additional-instructions.txt",
   test_environment: "test-environment.txt",
@@ -494,7 +495,7 @@ function providerSessionId(value) {
 }
 
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS, operationTimeoutTerminationGraceMs = OPERATION_TIMEOUT_TERMINATION_GRACE_MS } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
     this.configPath = configPath ? resolve(configPath) : null;
@@ -529,6 +530,10 @@ export class AuditRunner extends EventEmitter {
     this.completionWatchdogRunning = false;
     this.timeoutRecoveryPending = new Set();
     this.timeoutRecoveryTimers = new Map();
+    this.timeoutTerminationGraceMs = Number.isFinite(Number(operationTimeoutTerminationGraceMs))
+      ? Math.max(100, Number(operationTimeoutTerminationGraceMs))
+      : OPERATION_TIMEOUT_TERMINATION_GRACE_MS;
+    this.timeoutTerminationTimers = new Map();
     this.ready = this.initialize();
   }
 
@@ -1472,9 +1477,12 @@ export class AuditRunner extends EventEmitter {
     capture(child.stdout, "stdout");
     capture(child.stderr, "stderr");
     child.once("error", error => {
+      if (this.processes.get(audit.id) !== child) return;
       audit.error = redact(error.message);
     });
     child.once("close", (code, signal) => {
+      this.clearOperationTimeoutTerminationGuard(audit.id, child);
+      if (this.processes.get(audit.id) !== child) return;
       const completion = startedEvent.then(async () => {
         this.processes.delete(audit.id);
         audit.pid = null;
@@ -1659,9 +1667,10 @@ export class AuditRunner extends EventEmitter {
     if (audit.terminal?.live) {
       await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(error => this.recordLog(audit, "stderr", `超时 watchdog 无法中止隔离 OpenCode session：${error.message}`));
     }
-    if (child?.kill?.("SIGTERM")) return true;
-
     if (child) {
+      const signalled = child.kill?.("SIGTERM") === true;
+      this.scheduleOperationTimeoutTerminationGuard(audit, child, attempt);
+      if (signalled) return true;
       audit.timeout_recovery = { ...audit.timeout_recovery, state: "waiting-for-runner-exit" };
       await this.record(audit, "audit.timeout.recovery.waiting", { attempt, message: "结束信号未被 Runner 接受，等待其自行退出后恢复。" });
       return false;
@@ -1680,6 +1689,56 @@ export class AuditRunner extends EventEmitter {
     audit.error = "检测到 The operation timed out，Runner 已结束；watchdog 将从当前检查点自动恢复。";
     audit.timeout_recovery = { ...audit.timeout_recovery, state: "waiting-to-recover", last_error: null };
     await this.record(audit, "audit.timeout.recovery.waiting", { attempt, message: audit.error });
+    this.scheduleOperationTimeoutRecovery(audit, attempt);
+    return true;
+  }
+
+  clearOperationTimeoutTerminationGuard(auditId, child = null) {
+    const current = this.timeoutTerminationTimers.get(auditId);
+    if (!current || (child && current.child !== child)) return;
+    clearTimeout(current.timer);
+    this.timeoutTerminationTimers.delete(auditId);
+  }
+
+  scheduleOperationTimeoutTerminationGuard(audit, child, attempt) {
+    if (!audit || !child || this.timeoutTerminationTimers.has(audit.id)) return;
+    const timer = setTimeout(() => {
+      this.timeoutTerminationTimers.delete(audit.id);
+      this.forceOperationTimeoutInterruption(audit.id, child, attempt).catch(() => {});
+    }, this.timeoutTerminationGraceMs);
+    timer.unref?.();
+    this.timeoutTerminationTimers.set(audit.id, { timer, child });
+  }
+
+  async forceOperationTimeoutInterruption(auditId, child, attempt) {
+    const audit = this.audits.get(auditId);
+    if (!audit || this.processes.get(auditId) !== child
+      || audit.interruption_reason !== OPERATION_TIMEOUT_RECOVERY_REASON
+      || audit.timeout_recovery?.attempts !== attempt
+      || !["interrupting", "waiting-for-runner-exit", "waiting-for-runner-close"].includes(audit.timeout_recovery?.state)) {
+      return false;
+    }
+    try { child.kill?.("SIGKILL"); } catch {}
+    this.processes.delete(auditId);
+    audit.pid = null;
+    audit.status = "interrupted";
+    audit.finished_at = new Date().toISOString();
+    audit.interrupted_at = audit.finished_at;
+    audit.error = "检测到 The operation timed out；Runner 中继在宽限期内未退出，已强制收敛并将从当前检查点恢复。";
+    audit.timeout_recovery = {
+      ...audit.timeout_recovery,
+      state: "waiting-to-recover",
+      forced_at: audit.finished_at,
+      last_error: null,
+    };
+    if (audit.terminal?.supported && audit.terminal?.socket_name) {
+      await this.terminalMonitor.stop(audit.terminal).catch(() => {});
+      audit.terminal.live = false;
+      audit.terminal.status = "closed";
+      audit.terminal.message = "超时 Runner 未自行结束，隔离终端已由 watchdog 收敛。";
+      audit.terminal.closed_at = audit.finished_at;
+    }
+    await this.record(audit, "audit.timeout.recovery.waiting", { attempt, forced: true, message: audit.error });
     this.scheduleOperationTimeoutRecovery(audit, attempt);
     return true;
   }
@@ -1851,7 +1910,12 @@ export class AuditRunner extends EventEmitter {
         provider_session_id: existingSessionId,
       };
       await this.record(audit, "audit.recovery.queued", { recovery_count: audit.recovery_count });
-      if (this.queueScheduler && await this.queueScheduler.enqueueNewAudit()) return publicAudit(audit);
+      if (this.queueScheduler) {
+        const queued = typeof this.queueScheduler.enqueueRecoveryAudit === "function"
+          ? await this.queueScheduler.enqueueRecoveryAudit(audit.id)
+          : await this.queueScheduler.enqueueNewAudit();
+        if (queued) return publicAudit(audit);
+      }
       try {
         await this.dispatchQueuedAudit(audit.id);
       } catch (error) {
@@ -1917,6 +1981,8 @@ export class AuditRunner extends EventEmitter {
     this.completionWatchdogTimer = null;
     for (const timer of this.timeoutRecoveryTimers.values()) clearTimeout(timer);
     this.timeoutRecoveryTimers.clear();
+    for (const { timer } of this.timeoutTerminationTimers.values()) clearTimeout(timer);
+    this.timeoutTerminationTimers.clear();
     this.timeoutRecoveryPending.clear();
     for (const [id, child] of this.processes) {
       const audit = this.audits.get(id);

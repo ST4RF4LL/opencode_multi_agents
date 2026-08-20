@@ -25,17 +25,18 @@ const OPENCODE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execFileAsync = promisify(execFile);
 
 class FakeChild extends EventEmitter {
-  constructor() {
+  constructor({ closeOnTerminate = true } = {}) {
     super();
     this.pid = 4242;
     this.stdout = new PassThrough();
     this.stderr = new PassThrough();
     this.signals = [];
+    this.closeOnTerminate = closeOnTerminate;
   }
 
   kill(signal) {
     this.signals.push(signal);
-    if (signal === "SIGTERM") queueMicrotask(() => this.emit("close", null, signal));
+    if (signal === "SIGTERM" && this.closeOnTerminate) queueMicrotask(() => this.emit("close", null, signal));
     return true;
   }
 }
@@ -585,10 +586,43 @@ if (mode === "run") {
   assert.equal(timeoutResult.timeout_recovery.attempts, 1);
   assert.deepEqual(timeoutFirstChild.signals, ["SIGTERM"]);
   assert.equal(timeoutMonitor.abortCalls.length, 1);
-  const timeoutEvents = await timeoutRunner.eventsSince(timeoutAudit.id);
+  let timeoutEvents = [];
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    timeoutEvents = await timeoutRunner.eventsSince(timeoutAudit.id);
+    if (timeoutEvents.some(event => event.type === "audit.timeout.recovery.started")) break;
+    await new Promise(resolve => setTimeout(resolve, 2));
+  }
   assert.equal(timeoutEvents.some(event => event.type === "audit.timeout.detected"), true);
   assert.equal(timeoutEvents.some(event => event.type === "audit.timeout.recovery.started"), true);
   await timeoutRunner.shutdown();
+
+  // psmux/Windows can acknowledge SIGTERM while leaving the output relay alive.
+  // That stale child must not occupy the concurrency slot forever or overwrite
+  // the newer recovery Runner when it eventually exits.
+  const stuckTimeoutChild = new FakeChild({ closeOnTerminate: false });
+  const forcedRecoveryChild = new FakeChild();
+  const stuckTimeoutMonitor = new FakeTerminalMonitor();
+  let stuckTimeoutSpawnCount = 0;
+  const stuckTimeoutRunner = new AuditRunner({
+    stateRoot: join(temp, "stuck-timeout-recovery-state"),
+    platformRoot: join(temp, "stuck-timeout-platform"),
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    environment: { PATH: process.env.PATH ?? "" },
+    terminalMonitor: stuckTimeoutMonitor,
+    operationTimeoutTerminationGraceMs: 100,
+    spawnProcess() { stuckTimeoutSpawnCount += 1; return stuckTimeoutSpawnCount === 1 ? stuckTimeoutChild : forcedRecoveryChild; },
+  });
+  await stuckTimeoutRunner.ready;
+  const stuckTimeoutAudit = await stuckTimeoutRunner.createAudit({ audit_id: "audit-stuck-timeout-recovery", repository_id: "fixture", ref: "HEAD", allow_dirty: true }, "stuck-timeout-recovery-request");
+  for (let attempt = 0; attempt < 100 && stuckTimeoutRunner.getAudit(stuckTimeoutAudit.id)?.status !== "running"; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  stuckTimeoutChild.stdout.write("Error: The operation timed out\n");
+  for (let attempt = 0; attempt < 1_000 && (stuckTimeoutSpawnCount !== 2 || stuckTimeoutRunner.getAudit(stuckTimeoutAudit.id)?.status !== "running" || stuckTimeoutRunner.getAudit(stuckTimeoutAudit.id)?.timeout_recovery?.state !== "restarted"); attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  assert.equal(stuckTimeoutSpawnCount, 2, "未 close 的超时中继必须在宽限期后恢复");
+  assert.deepEqual(stuckTimeoutChild.signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(stuckTimeoutRunner.getAudit(stuckTimeoutAudit.id).status, "running");
+  await stuckTimeoutRunner.shutdown();
 
   // When all scheduled work is terminal but report sealing is malformed, the
   // watchdog must identify the required name, format and location instead of

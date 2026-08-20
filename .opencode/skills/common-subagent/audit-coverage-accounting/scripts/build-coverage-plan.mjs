@@ -22,7 +22,6 @@ import {
   sourceSetId,
   validateCatalogV2,
   validateFocusAreaPartition,
-  validatePlan,
 } from "./coverage-v2-common.mjs";
 
 function parseArgs(argv) {
@@ -206,8 +205,13 @@ async function main() {
     (scope.files ?? []).filter(file => file.review_required
       && (domain === "ai" || file.owner_agent === DOMAIN_AGENTS[domain])).map(file => file.file_id).sort(),
   ]));
+  const applicableEntriesByDomain = new Map(domains.map(domain => [
+    domain,
+    catalog.entries.filter(entry => entryAppliesToDomain(entry, domain, catalog)),
+  ]));
   const catalogFocus = new Map();
   const fileFocus = new Map();
+  const unitAssignments = [];
   function bindUnique(map, key, focusAreaId, kind) {
     const prior = map.get(key);
     if (prior && prior !== focusAreaId) throw new Error(`${kind} is assigned to multiple Focus Areas: ${key}`);
@@ -216,25 +220,43 @@ async function main() {
   for (const focusArea of focusAreas.focus_areas ?? []) {
     for (const assignment of focusArea.assignments ?? []) {
       const domain = assignment.catalog_domain;
+      if (domains.includes(domain)) unitAssignments.push({ focus_area_id: focusArea.focus_area_id, domain, assignment });
       for (const catalogId of assignment.catalog_ids ?? []) bindUnique(catalogFocus, `${domain}|${catalogId}`, focusArea.focus_area_id, "Catalog type");
       const coverageDomain = assignment.file_function_domain === "ai" ? "ai" : assignment.language;
       for (const fileId of assignment.file_ids ?? []) bindUnique(fileFocus, `${coverageDomain}|${fileId}`, focusArea.focus_area_id, "Interface source file");
     }
   }
   const checks = [];
+  const checksByFocusDomain = new Map();
+  const addCheck = check => {
+    checks.push(check);
+    const key = `${check.focus_area_id}\u0000${check.domain}`;
+    const values = checksByFocusDomain.get(key) ?? [];
+    values.push(check);
+    checksByFocusDomain.set(key, values);
+  };
   const sourceSets = new Map();
+  const sourceSetIdsByMembers = new Map();
   const bindSourceSet = fileIds => {
     const canonical = [...fileIds].sort();
+    const memberKey = canonical.join("\u0000");
+    const existing = sourceSetIdsByMembers.get(memberKey);
+    if (existing) return existing;
     const id = sourceSetId(canonical);
     sourceSets.set(id, { source_set_id: id, file_ids: canonical });
+    sourceSetIdsByMembers.set(memberKey, id);
     return id;
   };
+  const domainSourceSetIds = new Map(domains.map(domain => [
+    domain,
+    bindSourceSet(domainSourceIds.get(domain)),
+  ]));
   for (const domain of domains) {
-    for (const entry of catalog.entries.filter(item => entryAppliesToDomain(item, domain, catalog))) {
+    for (const entry of applicableEntriesByDomain.get(domain)) {
       const focusAreaId = catalogFocus.get(`${domain}|${entry.id}`);
       if (!focusAreaId) throw new Error(`Catalog type lacks a unique primary Focus Area assignment: ${domain}|${entry.id}`);
-      for (const lens of LENSES) checks.push(requiredCheck("catalog-domain", `domain:${domain}`, entry, domain, lens, catalog, focusAreaId, {
-        required_source_set_id: bindSourceSet(domainSourceIds.get(domain)),
+      for (const lens of LENSES) addCheck(requiredCheck("catalog-domain", `domain:${domain}`, entry, domain, lens, catalog, focusAreaId, {
+        required_source_set_id: domainSourceSetIds.get(domain),
         required_source_count: domainSourceIds.get(domain).length,
         required_catalog_ids: [entry.id],
         required_interface_ids: [],
@@ -263,7 +285,7 @@ async function main() {
     for (const domain of interfaceDomains(item).filter(candidate => domains.includes(candidate))) {
       const focusAreaId = fileFocus.get(`${domain}|${item.file_id}`);
       if (!focusAreaId) throw new Error(`Interface source lacks a unique primary Focus Area assignment: ${domain}|${item.file_id}`);
-      for (const entry of catalog.entries.filter(candidate => entryAppliesToDomain(candidate, domain, catalog))) {
+      for (const entry of applicableEntriesByDomain.get(domain)) {
         const applicability = interfaceApplicability(entry, domain, item, catalog);
         const intersects = entry.dimensions.some(dimension => itemDimensions.has(dimension));
         for (const lens of LENSES) {
@@ -290,7 +312,7 @@ async function main() {
     const interfaceIds = items.map(item => item.interface_id);
     const sourceFileIds = [...new Set(items.map(item => item.file_id))].sort();
     const subjectId = interfaceGroupId(group.focus_area_id, group.domain, group.entry.id, interfaceIds);
-    checks.push(requiredCheck("interface", subjectId, group.entry, group.domain, group.lens, catalog, group.focus_area_id, {
+    addCheck(requiredCheck("interface", subjectId, group.entry, group.domain, group.lens, catalog, group.focus_area_id, {
       applicability_reason: "explicit-interface-rule-and-dimension-intersection",
       applicability_rule_ids: [...group.rule_ids].sort(),
       interface_directions: [...new Set(items.map(item => item.direction))].sort(),
@@ -304,19 +326,21 @@ async function main() {
 
   checks.sort((left, right) => left.check_id.localeCompare(right.check_id));
   const coverageUnits = [];
-  for (const focusArea of focusAreas.focus_areas ?? []) {
-    for (const assignment of focusArea.assignments ?? []) {
-      const domain = assignment.catalog_domain;
-      if (!domains.includes(domain)) continue;
-      const unitChecks = checks.filter(check => check.applicability === "REQUIRED"
-        && check.focus_area_id === focusArea.focus_area_id && check.domain === domain);
+  for (const { focus_area_id: focusAreaId, domain, assignment } of unitAssignments) {
+      const unitChecks = checksByFocusDomain.get(`${focusAreaId}\u0000${domain}`) ?? [];
       if (unitChecks.length === 0) continue;
       const checkIds = unitChecks.map(check => check.check_id).sort();
-      const sourceFileIds = [...new Set(unitChecks.flatMap(check => {
-        const sourceSet = sourceSets.get(check.required_source_set_id);
-        if (!sourceSet) throw new Error(`Coverage unit check references an unknown source set: ${check.check_id}`);
-        return sourceSet.file_ids;
-      }))].sort();
+      const baselineCheck = unitChecks.find(check => check.subject_kind === "catalog-domain");
+      const baselineSourceSet = baselineCheck ? sourceSets.get(baselineCheck.required_source_set_id) : null;
+      if (baselineCheck && !baselineSourceSet) throw new Error(`Coverage unit check references an unknown source set: ${baselineCheck.check_id}`);
+      const sourceFileIds = baselineSourceSet
+        ? baselineSourceSet.file_ids
+        : [...new Set(unitChecks.flatMap(check => {
+          const sourceSet = sourceSets.get(check.required_source_set_id);
+          if (!sourceSet) throw new Error(`Coverage unit check references an unknown source set: ${check.check_id}`);
+          return sourceSet.file_ids;
+        }))].sort();
+      const unitSourceSetId = baselineSourceSet?.source_set_id ?? bindSourceSet(sourceFileIds);
       const catalogIds = new Set(unitChecks.map(check => check.vulnerability_type_id));
       const interfaceIds = new Set(unitChecks.flatMap(check => check.required_interface_ids ?? []));
       const policyTags = new Set();
@@ -328,24 +352,23 @@ async function main() {
       if (unitChecks.some(check => /^(?:JW-(?:ACCESS|AUTHN)-|AI-(?:ACCESS|IDENTITY|TOOL)-)/.test(check.vulnerability_type_id))) {
         policyTags.add("identity-or-privilege");
       }
-      const unitId = coverageUnitId(assignment.assignment_id, focusArea.focus_area_id, domain, checkIds);
+      const unitId = coverageUnitId(assignment.assignment_id, focusAreaId, domain, checkIds);
       coverageUnits.push({
         unit_id: unitId,
         assignment_id: assignment.assignment_id,
-        focus_area_id: focusArea.focus_area_id,
+        focus_area_id: focusAreaId,
         domain,
         agent_name: assignment.agent_name,
         required_lenses: LENSES,
         check_ids: checkIds,
         check_set_sha256: sha256(JSON.stringify(checkIds)),
         required_check_count: checkIds.length,
-        required_source_set_id: bindSourceSet(sourceFileIds),
+        required_source_set_id: unitSourceSetId,
         required_source_count: sourceFileIds.length,
         required_catalog_count: catalogIds.size,
         required_interface_count: interfaceIds.size,
         policy_tags: [...policyTags].sort(),
       });
-    }
   }
   coverageUnits.sort((left, right) => left.unit_id.localeCompare(right.unit_id));
   const releaseRequiredUnitIds = coverageUnits
@@ -438,8 +461,6 @@ async function main() {
     claim_boundary: catalog.coverage_model.claim_boundary,
   };
   plan.manifest_digest = objectDigest(plan);
-  const errors = validatePlan(plan);
-  if (errors.length > 0) throw new Error(`Generated coverage plan is invalid:\n- ${errors.join("\n- ")}`);
   const output = resolve(args.output);
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, `${JSON.stringify(plan, null, 2)}\n`, "utf8");

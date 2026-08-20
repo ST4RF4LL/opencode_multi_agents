@@ -36,7 +36,12 @@ export function sha256(value) {
 }
 
 export function objectDigest(value, omitted = ["manifest_digest"]) {
-  const copy = structuredClone(value);
+  // Digests only omit top-level fields. A deep clone duplicates large Coverage
+  // Plans (including every check and source set) immediately before JSON
+  // serialization, which can exceed OpenCode's fixed per-tool timeout without
+  // adding integrity. A shallow copy keeps the serialized bytes identical
+  // while avoiding that extra full-plan traversal and allocation.
+  const copy = Array.isArray(value) ? [...value] : { ...value };
   for (const field of omitted) delete copy[field];
   return sha256(JSON.stringify(copy));
 }
@@ -338,6 +343,11 @@ export function validatePlan(plan) {
   }
   const checkIds = new Set();
   const lensGroups = new Map();
+  const counts = Object.fromEntries(APPLICABILITY_STATES.map(state => [state, 0]));
+  const requiredChecks = new Map();
+  let catalogRequired = 0;
+  let interfaceRequired = 0;
+  let interfaceMemberships = 0;
   for (const check of plan?.checks ?? []) {
     const expectedId = coverageCheckId(check.subject_kind, check.subject_id, check.vulnerability_type_id, check.domain, check.lens);
     if (check.check_id !== expectedId) errors.push(`invalid check id: ${check.check_id}`);
@@ -350,6 +360,15 @@ export function validatePlan(plan) {
     if (check.applicability === "NOT_APPLICABLE" && typeof check.applicability_reason !== "string") errors.push(`N/A reason missing: ${check.check_id}`);
     if (check.subject_kind === "catalog-domain" && check.applicability !== "REQUIRED") errors.push(`catalog-domain must be required: ${check.check_id}`);
     if (check.subject_kind === "catalog-domain" && check.negative_discovery_required !== true) errors.push(`negative discovery missing: ${check.check_id}`);
+    if (APPLICABILITY_STATES.includes(check.applicability)) counts[check.applicability] += 1;
+    if (check.applicability === "REQUIRED") {
+      requiredChecks.set(check.check_id, check);
+      if (check.subject_kind === "catalog-domain") catalogRequired += 1;
+      if (check.subject_kind === "interface") {
+        interfaceRequired += 1;
+        interfaceMemberships += check.required_interface_ids?.length ?? 0;
+      }
+    }
     if (check.applicability === "REQUIRED") {
       const sourceSet = sourceSets.get(check.required_source_set_id);
       if (!sourceSet || !Number.isInteger(check.required_source_count) || check.required_source_count < 1
@@ -396,17 +415,11 @@ export function validatePlan(plan) {
     lensGroups.set(groupKey, group);
   }
   for (const [key, lenses] of lensGroups) if (!exactArray(lenses, LENSES)) errors.push(`tri-lens group incomplete: ${key}`);
-  const counts = Object.fromEntries(APPLICABILITY_STATES.map(state => [
-    state,
-    (plan?.checks ?? []).filter(check => check.applicability === state).length,
-  ]));
   if (!exactArray(plan?.required_lenses, LENSES)) errors.push("plan required_lenses must contain the three canonical lenses");
   if (plan?.summary?.atomic_checks !== (plan?.checks?.length ?? 0)) errors.push("plan atomic check count mismatch");
   if (plan?.summary?.required !== counts.REQUIRED) errors.push("plan required count mismatch");
   if (plan?.summary?.not_applicable !== counts.NOT_APPLICABLE) errors.push("plan N/A count mismatch");
   if (plan?.summary?.unknown !== counts.UNKNOWN) errors.push("plan unknown count mismatch");
-  const catalogRequired = (plan?.checks ?? []).filter(check => check.subject_kind === "catalog-domain" && check.applicability === "REQUIRED").length;
-  const interfaceRequired = (plan?.checks ?? []).filter(check => check.subject_kind === "interface" && check.applicability === "REQUIRED").length;
   if (plan?.summary?.catalog_domain_required !== catalogRequired) errors.push("plan catalog-domain required count mismatch");
   if (plan?.summary?.interface_required !== interfaceRequired) errors.push("plan interface required count mismatch");
   const inventory = plan?.inventory;
@@ -450,9 +463,6 @@ export function validatePlan(plan) {
   if ((inventory?.resolved_files ?? -1) + (inventory?.gap_files ?? -1) !== inventory?.eligible_files) errors.push("interface inventory file accounting mismatch");
   if (plan?.complete !== (counts.UNKNOWN === 0 && expectedBounded)) errors.push("plan completeness mismatch");
   if (plan?.summary?.interface_memberships_required !== undefined) {
-    const interfaceMemberships = (plan?.checks ?? [])
-      .filter(check => check.subject_kind === "interface" && check.applicability === "REQUIRED")
-      .reduce((sum, check) => sum + (check.required_interface_ids?.length ?? 0), 0);
     if (plan.summary.interface_memberships_required !== interfaceMemberships) {
       errors.push("plan interface membership count mismatch");
     }
@@ -461,9 +471,6 @@ export function validatePlan(plan) {
     if (plan.execution_model !== COVERAGE_EXECUTION_MODEL) errors.push("invalid coverage execution model");
     if (!COVERAGE_POLICY_MODES.includes(plan?.coverage_policy?.mode)) errors.push("invalid coverage policy mode");
     if (plan?.coverage_policy?.assurance_requires_all_checks !== true) errors.push("coverage assurance policy must require all checks");
-    const requiredChecks = new Map((plan?.checks ?? [])
-      .filter(check => check.applicability === "REQUIRED")
-      .map(check => [check.check_id, check]));
     const observedCheckIds = new Set();
     const unitIds = new Set();
     const units = plan?.coverage_units ?? [];
@@ -498,11 +505,15 @@ export function validatePlan(plan) {
         if (observedCheckIds.has(checkId)) errors.push(`coverage check belongs to multiple units: ${checkId}`);
         observedCheckIds.add(checkId);
       }
-      const expectedSourceIds = [...new Set(unitChecks.filter(Boolean)
-        .flatMap(check => sourceFileIdsForCheck(plan, check)))].sort();
+      const baselineCheck = unitChecks.find(check => check?.subject_kind === "catalog-domain");
+      const baselineSourceSet = sourceSets.get(baselineCheck?.required_source_set_id);
+      const expectedSourceIdList = baselineSourceSet
+        ? baselineSourceSet.file_ids
+        : [...new Set(unitChecks.filter(Boolean)
+          .flatMap(check => sourceSets.get(check.required_source_set_id)?.file_ids ?? []))].sort();
       const unitSourceSet = sourceSets.get(unit.required_source_set_id);
-      if (!unitSourceSet || unit.required_source_count !== expectedSourceIds.length
-        || JSON.stringify(unitSourceSet.file_ids) !== JSON.stringify(expectedSourceIds)) {
+      if (!unitSourceSet || unit.required_source_count !== expectedSourceIdList.length
+        || JSON.stringify(unitSourceSet.file_ids) !== JSON.stringify(expectedSourceIdList)) {
         errors.push(`coverage unit source set mismatch: ${unit.unit_id}`);
       }
       const expectedCatalogCount = new Set(unitChecks.filter(Boolean).map(check => check.vulnerability_type_id)).size;

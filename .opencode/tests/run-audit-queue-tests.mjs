@@ -87,7 +87,10 @@ try {
   await scheduler.triggerNow();
   assert.deepEqual(runner.dispatched, ["audit-001", "audit-002"]);
 
-  await scheduler.dispatchAuditNow("audit-003");
+  // A timeout recovery should use the slot it just released immediately. It
+  // must not wait for the regular queue interval (30 minutes in this fixture).
+  runner.audits.find(audit => audit.id === "audit-001").status = "interrupted";
+  await scheduler.enqueueRecoveryAudit("audit-003");
   assert.deepEqual(runner.dispatched, ["audit-001", "audit-002", "audit-003"]);
   assert.equal(runner.audits.find(audit => audit.id === "audit-003").status, "running");
 

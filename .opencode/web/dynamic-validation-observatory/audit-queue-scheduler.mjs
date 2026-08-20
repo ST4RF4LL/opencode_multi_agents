@@ -241,6 +241,19 @@ export class AuditQueueScheduler {
     return true;
   }
 
+  async enqueueRecoveryAudit(auditId) {
+    await this.ready;
+    const queue = await this.settingsStore.get();
+    if (!queue.enabled) return false;
+    // A retry already owned a concurrency slot immediately before its Runner
+    // failed. Do not turn a recoverable 30-second OpenCode timeout into an
+    // hours-long queue delay; start that exact queued audit now when a slot is
+    // available. If every slot has genuinely been refilled meanwhile, the
+    // normal interval timer remains responsible for it.
+    await this.enqueueDispatch({ auditId });
+    return true;
+  }
+
   async activate() {
     await this.ready;
     await this.settingsStore.activate();
