@@ -259,6 +259,20 @@ export function createAuditWorkbenchServer({
   // a task that has not started (including a retry/recovery) aligned with the
   // current workbench setting, while a process already running is untouched.
   runner.setModelResolver(async () => (await modelSettingsStore.get()).model);
+  // Tasks that were already queued when the workbench restarted still contain
+  // their last persisted display value. Serialize refreshes so an initial
+  // refresh cannot overwrite a newer settings-save refresh.
+  let queuedModelSync = Promise.resolve();
+  function syncQueuedAuditModels() {
+    const operation = queuedModelSync.catch(() => {}).then(async () => {
+      await Promise.all([runner.ready, modelSettingsStore.ready]);
+      const settings = await modelSettingsStore.get();
+      return runner.syncQueuedAuditModels(settings.model);
+    });
+    queuedModelSync = operation;
+    return operation;
+  }
+  const initialQueuedModelSync = syncQueuedAuditModels();
   const dynamicRunner = suppliedDynamicRunner ?? new DynamicValidationRunner({
     stateRoot: dynamicStateRoot ?? join(dirname(stateRoot), "dynamic-validation-runs"),
     enabled: dynamicRunnerEnabled,
@@ -356,7 +370,7 @@ export function createAuditWorkbenchServer({
   async function snapshot() {
     if (snapshotInFlight) return snapshotInFlight;
     const operation = (async () => {
-      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready]);
+      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready, initialQueuedModelSync]);
       await runner.reconcileTerminalCompletions("workspace-watchdog");
       const runnerAudits = await runner.listAuditsWithTodo();
       const validationByRepository = new Map();
@@ -466,8 +480,8 @@ export function createAuditWorkbenchServer({
         assertSafeMutation(request);
         const body = await requestJson(request);
         const catalog = await modelCatalog.snapshot();
-        const settings = await modelSettingsStore.update(body.model, catalog.models);
-        await runner.syncQueuedAuditModels(settings.model);
+        await modelSettingsStore.update(body.model, catalog.models);
+        await syncQueuedAuditModels();
         json(response, 200, { model: await modelSettingsSnapshot() });
         return;
       }
