@@ -492,6 +492,41 @@ if (mode === "run") {
   assert.match(sourceBinding.binding_digest, /^[a-f0-9]{64}$/);
   await fallbackRunner.shutdown();
 
+  // A queued audit must not retain the setting from its creation time.  The
+  // selected model is refreshed while it waits, then read again when its
+  // `opencode run` command is actually constructed.
+  let queuedModelSelection = "global-provider/global-audit";
+  const queuedChild = new FakeChild();
+  const queuedTerminalMonitor = new FakeTerminalMonitor();
+  const queuedRunner = new AuditRunner({
+    stateRoot: join(temp, "queued-model-state"),
+    platformRoot: join(temp, "queued-model-platform"),
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    modelResolver: async () => queuedModelSelection,
+    terminalMonitor: queuedTerminalMonitor,
+    spawnProcess() { return queuedChild; },
+  });
+  queuedRunner.setQueueScheduler({ async enqueueNewAudit() { return true; } });
+  await queuedRunner.ready;
+  const queuedAudit = await queuedRunner.createAudit({
+    audit_id: "audit-queued-model-001",
+    repository_id: "fixture",
+    ref: "HEAD",
+    allow_dirty: true,
+    model: queuedModelSelection,
+  }, "queued-model-request-001");
+  assert.equal(queuedRunner.getAudit(queuedAudit.id).status, "queued");
+  assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "global-provider/global-audit");
+  queuedModelSelection = "project-provider/project-default";
+  assert.equal(await queuedRunner.syncQueuedAuditModels(queuedModelSelection), 1);
+  assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "project-provider/project-default");
+  queuedModelSelection = "project-provider/project-review";
+  await queuedRunner.dispatchQueuedAudit(queuedAudit.id);
+  assert.equal(queuedTerminalMonitor.starts[0].args[queuedTerminalMonitor.starts[0].args.indexOf("--model") + 1], "project-provider/project-review");
+  await queuedRunner.shutdown();
+
   const gatedChild = new FakeChild();
   const gatedRunner = new AuditRunner({
     stateRoot: join(temp, "gated-state"),
@@ -1643,6 +1678,7 @@ if (mode === "run") {
     exit_code: null,
     error: null,
     allow_dirty: false,
+    model: "global-provider/global-audit",
     provider_session_id: "ses_resume_fixture",
     recovery_count: 0,
     private_runtime: {
@@ -1673,6 +1709,7 @@ if (mode === "run") {
   const resumeTerminalMonitor = new FakeTerminalMonitor();
   const resumedChild = new FakeChild();
   let resumedSpawnCall = null;
+  let recoveryModelSelection = "global-provider/global-audit";
   const resumableRunner = new AuditRunner({
     stateRoot: resumableStateRoot,
     platformRoot,
@@ -1680,6 +1717,7 @@ if (mode === "run") {
     configPath: join(repositoryRoot, ".opencode", "opencode.json"),
     enabled: true,
     environment: { PATH: process.env.PATH ?? "" },
+    modelResolver: async () => recoveryModelSelection,
     terminalMonitor: resumeTerminalMonitor,
     spawnProcess(command, args, options) {
       resumedSpawnCall = { command, args, options };
@@ -1692,9 +1730,11 @@ if (mode === "run") {
   assert.equal(interruptedAudit.interruption_reason, "workbench-restarted");
   assert.equal(interruptedAudit.terminal.live, true);
   assert.equal(resumeTerminalMonitor.stopCalls, 0, "服务重载不应擅自终止仍可查看的精确 tmux 会话");
+  recoveryModelSelection = "project-provider/project-review";
   const resumedAudit = await resumableRunner.action(resumableAuditId, "recover", interruptedAudit.version, "resume-action-001");
   assert.equal(resumedAudit.status, "running");
   assert.equal(resumedAudit.recovery_count, 1);
+  assert.equal(resumedAudit.model, "project-provider/project-review");
   assert.equal(resumedAudit.provider_session_id, "ses_resume_fixture");
   assert.equal(resumeTerminalMonitor.abortCalls.length, 1);
   assert.equal(resumeTerminalMonitor.starts[0].providerSessionId, "ses_resume_fixture");
@@ -1707,6 +1747,7 @@ if (mode === "run") {
   assert.equal(JSON.stringify(resumedAudit).includes("resume-proxy-fixture.test"), false);
   const resumeRunArgs = resumeTerminalMonitor.starts[0].args;
   assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--session") + 1], "ses_resume_fixture");
+  assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--model") + 1], "project-provider/project-review");
   assert.match(resumeRunArgs.at(-1), /第 1 次断点恢复/);
   assert.match(resumeRunArgs.at(-1), /不得删除有效制品/);
   assert.match(resumeRunArgs.at(-1), /不得调用 question 工具/);

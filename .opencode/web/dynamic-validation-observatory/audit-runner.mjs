@@ -496,7 +496,7 @@ function providerSessionId(value) {
 }
 
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS, operationTimeoutTerminationGraceMs = OPERATION_TIMEOUT_TERMINATION_GRACE_MS } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, modelResolver = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS, operationTimeoutTerminationGraceMs = OPERATION_TIMEOUT_TERMINATION_GRACE_MS } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
     this.configPath = configPath ? resolve(configPath) : null;
@@ -523,6 +523,8 @@ export class AuditRunner extends EventEmitter {
     this.writeQueues = new Map();
     this.contextRedactions = new Map();
     this.queueScheduler = null;
+    this.modelResolver = null;
+    this.setModelResolver(modelResolver);
     this.dispatching = new Set();
     this.completionWatchdogIntervalMs = Number.isFinite(Number(completionWatchdogIntervalMs))
       ? Math.max(1_000, Number(completionWatchdogIntervalMs))
@@ -951,6 +953,29 @@ export class AuditRunner extends EventEmitter {
     this.queueScheduler = queueScheduler;
   }
 
+  setModelResolver(modelResolver) {
+    if (modelResolver !== null && typeof modelResolver !== "function") throw new TypeError("模型解析器必须是函数或 null。");
+    this.modelResolver = modelResolver;
+  }
+
+  async modelForLaunch(audit) {
+    const configured = this.modelResolver ? await this.modelResolver(audit) : audit.model;
+    return normalizeOpenCodeModel(configured);
+  }
+
+  async syncQueuedAuditModels(model) {
+    const selectedModel = normalizeOpenCodeModel(model);
+    const queued = [...this.audits.values()].filter(audit => audit.status === "queued" && audit.model !== selectedModel);
+    for (const audit of queued) {
+      audit.model = selectedModel;
+      await this.record(audit, "audit.model.updated", {
+        model: selectedModel ?? DEFAULT_MODEL_SELECTION,
+        reason: "settings-updated-while-queued",
+      });
+    }
+    return queued.length;
+  }
+
   queueSnapshot() {
     const audits = [...this.audits.values()];
     return {
@@ -1330,8 +1355,9 @@ export class AuditRunner extends EventEmitter {
       exit_code: null,
       error: null,
       allow_dirty: input.allow_dirty === true,
-      // Snapshot the settings-page selection onto the audit.  Queued tasks and
-      // checkpoint recovery must never inherit a later interactive CLI change.
+      // This is the model currently selected when the audit is created.  The
+      // command itself resolves the latest system selection immediately before
+      // each launch, so queued and recovery work follows current settings.
       model: normalizeOpenCodeModel(input.model),
       provider_session_id: null,
       recovery_count: 0,
@@ -1401,11 +1427,19 @@ export class AuditRunner extends EventEmitter {
     const sessionId = providerSessionId(existingSessionId ?? audit.provider_session_id ?? audit.terminal?.provider_session_id);
     await this.redactionsForAudit(audit);
     const prompt = resume ? recoveryPrompt(audit, repository, paths, contextPaths) : auditPrompt(audit, repository, paths, contextPaths);
+    const model = await this.modelForLaunch(audit);
+    if (audit.model !== model) {
+      audit.model = model;
+      await this.record(audit, "audit.model.applied", {
+        model: model ?? DEFAULT_MODEL_SELECTION,
+        reason: resume ? "recovery-launch" : "launch",
+      });
+    }
     let command = this.command;
     let args = [
       "run", "--format", "json",
       ...(sessionId ? ["--session", sessionId] : []),
-      ...(audit.model ? ["--model", audit.model] : []),
+      ...(model ? ["--model", model] : []),
       "--agent", "security-audit-orchestrator",
       "--dir", paths.workspace_root,
       "--title", audit.name,

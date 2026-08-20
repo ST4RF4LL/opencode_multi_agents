@@ -171,7 +171,7 @@ npm --prefix .opencode run start:audit-workbench
 
 需要由 Web 端启动 OpenCode 时，必须显式开启 Runner。工作台启动后不会默认把自身源码当成审计项目；在“审计项目”页面点击“指定目录”，填写工作台所在机器可访问的源码绝对路径。目标目录需要是已 checkout 的 Git 工作树，但不需要复制工作台的 `.opencode/`；Agent、Skill 和 MCP 使用本工作台自己的受控配置。
 
-在“设置”的“使用模型”中可为 Web 任务选择 `默认` 或已配置的 `provider/model`。清单从工作台的 `.opencode/opencode.json(c)`、兼容路径 `~/.config/opencode.json(c)` 及 OpenCode 标准全局配置 `~/.config/opencode/opencode.json(c)` 读取，并兼容 UTF-8 BOM、注释和尾逗号；选择具体模型后，工作台会把它固化到新建审计，并以 `opencode run --model provider/model` 启动，因此后续切换交互式 OpenCode 的默认模型不会影响该审计或其断点恢复。
+在“设置”的“使用模型”中可为 Web 任务选择 `默认` 或已配置的 `provider/model`。清单从工作台的 `.opencode/opencode.json(c)`、兼容路径 `~/.config/opencode.json(c)` 及 OpenCode 标准全局配置 `~/.config/opencode/opencode.json(c)` 读取，并兼容 UTF-8 BOM、注释和尾逗号；未开始的审计、重试和断点恢复会在实际启动时读取当前选择，并以 `opencode run --model provider/model` 启动。已经运行的进程不受设置变更影响；选择“默认”时不传递 `--model`。
 
 ```sh
 npm --prefix .opencode run start:audit-workbench:runner

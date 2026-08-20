@@ -255,6 +255,10 @@ export function createAuditWorkbenchServer({
   const modelSettingsStore = suppliedModelSettingsStore ?? new OpenCodeModelSettingsStore({
     path: modelSettingsPath ?? join(dirname(resolve(stateRoot)), "opencode-model-settings.json"),
   });
+  // Resolve immediately before every `opencode run`.  This deliberately keeps
+  // a task that has not started (including a retry/recovery) aligned with the
+  // current workbench setting, while a process already running is untouched.
+  runner.setModelResolver(async () => (await modelSettingsStore.get()).model);
   const dynamicRunner = suppliedDynamicRunner ?? new DynamicValidationRunner({
     stateRoot: dynamicStateRoot ?? join(dirname(stateRoot), "dynamic-validation-runs"),
     enabled: dynamicRunnerEnabled,
@@ -462,7 +466,8 @@ export function createAuditWorkbenchServer({
         assertSafeMutation(request);
         const body = await requestJson(request);
         const catalog = await modelCatalog.snapshot();
-        await modelSettingsStore.update(body.model, catalog.models);
+        const settings = await modelSettingsStore.update(body.model, catalog.models);
+        await runner.syncQueuedAuditModels(settings.model);
         json(response, 200, { model: await modelSettingsSnapshot() });
         return;
       }
@@ -510,6 +515,7 @@ export function createAuditWorkbenchServer({
         const [input, settings] = await Promise.all([requestJson(request), modelSettingsStore.get()]);
         // The selected value is server-owned: a browser cannot inject arbitrary
         // flags into the OpenCode command by posting its own `model` field.
+        // The runner resolves it again when the queued task actually launches.
         const audit = await runner.createAudit({ ...input, model: settings.model }, request.headers["idempotency-key"]);
         json(response, 202, audit, { Location: `/api/v1/audits/${encodeURIComponent(audit.id)}`, ETag: `"${audit.version}"` });
         return;
