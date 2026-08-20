@@ -884,8 +884,9 @@ function renderSettings() {
   facts.replaceChildren();
   [
     ["等待任务", `${queue.queued_count ?? 0} 个`],
-    ["占用并发", `${queue.active_count ?? 0}/${queue.concurrency ?? 1}`],
-    ["可用名额", `${queue.available_slots ?? 0} 个`],
+    ["运行中任务", `${queue.active_count ?? 0} 个`],
+    ["下轮计划启动", `${queue.next_batch_size ?? Math.min(queue.concurrency ?? 1, queue.queued_count ?? 0)} 个新任务`],
+    ["上轮结果", `启动 ${queue.last_dispatch_started_count ?? 0} 个；失败 ${queue.last_dispatch_failed_count ?? 0} 个`],
     ["下次调度", queue.enabled ? formatDate(queue.next_dispatch_at) : "排队机制未激活"],
   ].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value)); facts.append(wrapper);

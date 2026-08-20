@@ -11,6 +11,8 @@ const DEFAULT_QUEUE = Object.freeze({
   updated_at: null,
   last_dispatch_at: null,
   next_dispatch_at: null,
+  last_dispatch_started_count: 0,
+  last_dispatch_failed_count: 0,
 });
 const MAX_TIMEOUT_MS = 2_147_000_000;
 
@@ -48,6 +50,14 @@ function normalizeTimestamp(value, label) {
   return value;
 }
 
+function normalizeDispatchCount(value, label) {
+  if (value === undefined || value === null) return 0;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw invalid(`${label}必须是非负整数。`, "queue-settings-invalid");
+  }
+  return value;
+}
+
 function normalizeQueue(value = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw invalid("队列设置必须是对象。", "queue-settings-invalid");
@@ -63,6 +73,8 @@ function normalizeQueue(value = {}) {
     updated_at: normalizeTimestamp(value.updated_at, "更新时间"),
     last_dispatch_at: normalizeTimestamp(value.last_dispatch_at, "上次调度时间"),
     next_dispatch_at: normalizeTimestamp(value.next_dispatch_at, "下次调度时间"),
+    last_dispatch_started_count: normalizeDispatchCount(value.last_dispatch_started_count, "上轮启动数量"),
+    last_dispatch_failed_count: normalizeDispatchCount(value.last_dispatch_failed_count, "上轮失败数量"),
   };
 }
 
@@ -152,10 +164,12 @@ export class QueueSettingsStore {
     });
   }
 
-  async schedule({ lastDispatchAt, nextDispatchAt } = {}) {
+  async schedule({ lastDispatchAt, nextDispatchAt, startedCount, failedCount } = {}) {
     return this.mutate(queue => {
       queue.last_dispatch_at = normalizeTimestamp(lastDispatchAt, "上次调度时间");
       queue.next_dispatch_at = normalizeTimestamp(nextDispatchAt, "下次调度时间");
+      if (startedCount !== undefined) queue.last_dispatch_started_count = normalizeDispatchCount(startedCount, "上轮启动数量");
+      if (failedCount !== undefined) queue.last_dispatch_failed_count = normalizeDispatchCount(failedCount, "上轮失败数量");
     });
   }
 }
@@ -245,12 +259,9 @@ export class AuditQueueScheduler {
     await this.ready;
     const queue = await this.settingsStore.get();
     if (!queue.enabled) return false;
-    // A retry already owned a concurrency slot immediately before its Runner
-    // failed. Do not turn a recoverable 30-second OpenCode timeout into an
-    // hours-long queue delay; start that exact queued audit now when a slot is
-    // available. If every slot has genuinely been refilled meanwhile, the
-    // normal interval timer remains responsible for it.
-    await this.enqueueDispatch({ auditId });
+    // Recovery is deliberately outside the periodic new-task batch. It must
+    // not consume a batch slot or move the next scheduled batch time.
+    await this.enqueueDispatch({ auditId, reschedule: false });
     return true;
   }
 
@@ -317,7 +328,7 @@ export class AuditQueueScheduler {
     return operation;
   }
 
-  async enqueueDispatch({ auditId = null, requireTarget = false } = {}) {
+  async enqueueDispatch({ auditId = null, requireTarget = false, reschedule = true } = {}) {
     const operation = this.dispatches.catch(() => {}).then(async () => {
       if (this.stopped) return;
       const queue = await this.settingsStore.get();
@@ -326,23 +337,42 @@ export class AuditQueueScheduler {
         return;
       }
       const snapshot = this.runner.queueSnapshot();
-      const capacity = Math.max(0, queue.concurrency - snapshot.active_count);
       const candidates = auditId ? snapshot.queued.filter(audit => audit.id === auditId) : snapshot.queued;
       if (requireTarget && !candidates.length) {
         throw Object.assign(new Error("只有“排队中”的审计任务可以立即调度。"), { statusCode: 409, code: "audit-not-queued" });
       }
-      if (requireTarget && capacity < 1) {
-        throw Object.assign(new Error("当前并发名额已满；请等待运行任务结束或在设置中提高并发。"), { statusCode: 409, code: "queue-concurrency-full" });
-      }
       let dispatchedTarget = null;
-      for (const audit of candidates.slice(0, capacity)) {
-        const dispatched = await this.runner.dispatchQueuedAudit(audit.id);
-        if (audit.id === auditId) dispatchedTarget = dispatched;
+      let startedCount = 0;
+      let failedCount = 0;
+      let targetError = null;
+      // `concurrency` is retained as the persisted field name for backward
+      // compatibility, but represents the number of new tasks in this batch.
+      // Existing active or interrupted tasks never reduce this batch size.
+      const selected = candidates.slice(0, auditId ? 1 : queue.concurrency);
+      for (const audit of selected) {
+        try {
+          const dispatched = await this.runner.dispatchQueuedAudit(audit.id);
+          startedCount += 1;
+          if (audit.id === auditId) dispatchedTarget = dispatched;
+        } catch (error) {
+          failedCount += 1;
+          if (audit.id === auditId) targetError = error;
+        }
       }
-      const dispatchedAt = nowIso(this.clock);
-      const nextAt = new Date(this.clock() + queue.interval_hours * 60 * 60 * 1000).toISOString();
-      const persisted = await this.settingsStore.schedule({ lastDispatchAt: dispatchedAt, nextDispatchAt: nextAt });
-      this.arm(Date.parse(persisted.next_dispatch_at));
+      if (reschedule) {
+        const dispatchedAt = nowIso(this.clock);
+        const nextAt = new Date(this.clock() + queue.interval_hours * 60 * 60 * 1000).toISOString();
+        const persisted = await this.settingsStore.schedule({
+          lastDispatchAt: dispatchedAt,
+          nextDispatchAt: nextAt,
+          startedCount,
+          failedCount,
+        });
+        this.arm(Date.parse(persisted.next_dispatch_at));
+      }
+      if (requireTarget && !dispatchedTarget) {
+        throw Object.assign(new Error(`指定任务启动失败：${targetError?.message ?? "任务状态已变化。"}`), { statusCode: 502, code: "audit-dispatch-failed" });
+      }
       return dispatchedTarget;
     });
     this.dispatches = operation;
@@ -357,7 +387,7 @@ export class AuditQueueScheduler {
       ...queue,
       queued_count: runner.queued.length,
       active_count: runner.active_count,
-      available_slots: Math.max(0, queue.concurrency - runner.active_count),
+      next_batch_size: Math.min(queue.concurrency, runner.queued.length),
     };
   }
 

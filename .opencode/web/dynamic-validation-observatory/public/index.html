@@ -78,9 +78,9 @@
               <form id="queue-settings-form" class="settings-form">
                 <div class="form-row">
                   <label>队列间隔 <span class="field-unit">小时</span><input name="interval_hours" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
-                  <label>并发 <span class="field-unit">个</span><input name="concurrency" type="number" min="1" step="1" inputmode="numeric" required></label>
+                  <label>每轮启动 <span class="field-unit">个新任务</span><input name="concurrency" type="number" min="1" step="1" inputmode="numeric" required></label>
                 </div>
-                <p class="settings-note">激活后立即按并发上限启动一批任务，之后每到一个间隔时点再补充启动。排队任务按创建时间先进先出；已运行任务结束后也等待下一个时点。</p>
+                <p class="settings-note">激活后立即新启动一批任务，之后每到一个间隔时点再新启动设定数量的排队任务。排队任务按创建时间先进先出；已有运行、中断或未结束任务均不占用下一轮名额。</p>
                 <div id="queue-settings-error" class="notice error" hidden></div>
                 <div class="dialog-actions"><button id="save-queue-settings" class="button secondary" type="submit">保存设置</button><button id="toggle-queue" class="button primary" type="button">激活排队机制</button></div>
               </form>
