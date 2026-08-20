@@ -1641,7 +1641,8 @@ if (mode === "run") {
     await once(server, "close");
   }
 
-  assert.throws(() => parseArgs(["--host", "0.0.0.0"]), /loopback/);
+  assert.equal(parseArgs(["--host", "0.0.0.0"]).host, "0.0.0.0");
+  assert.throws(() => parseArgs(["--host", "192.168.1.10"]), /0\.0\.0\.0/);
   assert.throws(() => parseArgs(["--repo", "bad-format"]), /id=\/absolute\/path/);
   assert.throws(() => parseArgs(["--repo", "fixture=relative/path"]), /id=\/absolute\/path/);
   assert.equal(parseArgs([]).repositories.length, 0);

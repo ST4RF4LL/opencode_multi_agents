@@ -110,7 +110,7 @@ opencode
 npm --prefix .opencode run start:audit-workbench
 ```
 
-然后访问 `http://127.0.0.1:4173`。服务只允许监听 loopback 地址。默认不会启动 OpenCode，也不会执行新的动态验证。
+然后访问 `http://127.0.0.1:4173`。默认监听 loopback；内网部署可在 npm 脚本后追加 `-- --host 0.0.0.0`，或设置 `AUDIT_WORKBENCH_HOST=0.0.0.0`。默认不会启动 OpenCode，也不会执行新的动态验证。
 
 允许通过 Web 创建静态审计任务时，启动 Runner，然后在“审计项目”页面指定工作台所在机器上的源码绝对目录。目标目录不需要包含 `.opencode/opencode.json`；工作台使用自身已生成的配置，并默认要求目标是干净的 Git 工作树：
 

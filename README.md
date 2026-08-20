@@ -200,7 +200,7 @@ npm --prefix .opencode run start:audit-workbench:full -- \
 
 动态页面只允许调度所属任务在创建时已启用测试环境、已经密封且尚无结果的 `JW-INJECT-06` request。操作员必须在表单中再次确认 localhost 授权测试环境，提供两个不同的专用测试账号及登录/清理步骤。逐次提交的凭证进入独立的临时 OpenCode 数据目录；日志按实际提交值再次脱敏，进程结束后删除整个临时会话目录。创建任务时填写的自由格式环境上下文则会持久保存到删除该任务为止，因此只能使用专用测试凭证。服务不会杀死或重置全局 Chrome 进程。
 
-可使用 `--port` / `AUDIT_WORKBENCH_PORT` 修改端口；通过 npm 追加 `--port`、`--repo` 等参数时同样要放在 `--` 之后。服务拒绝监听非 loopback 地址。原有 `start:dynamic-validation-web` 命令作为只读兼容别名保留；对应的免开关入口为 `start:dynamic-validation-web:runner` 和 `start:dynamic-validation-web:full`。详见 [Web 工作台架构](docs/audit-workbench.md)。创建静态审计任务不会自动触发动态验证；只有操作员在动态验证表单中的单独显式提交才构成调度请求。
+可使用 `--port` / `AUDIT_WORKBENCH_PORT` 修改端口；通过 npm 追加 `--port`、`--repo` 等参数时同样要放在 `--` 之后。默认监听 loopback；内网部署可显式传入 `--host 0.0.0.0`，或设置 `AUDIT_WORKBENCH_HOST=0.0.0.0`。原有 `start:dynamic-validation-web` 命令作为只读兼容别名保留；对应的免开关入口为 `start:dynamic-validation-web:runner` 和 `start:dynamic-validation-web:full`。详见 [Web 工作台架构](docs/audit-workbench.md)。创建静态审计任务不会自动触发动态验证；只有操作员在动态验证表单中的单独显式提交才构成调度请求。
 
 ## Local analysis and MCP defaults
 

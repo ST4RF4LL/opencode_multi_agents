@@ -24,7 +24,7 @@ const DEFAULT_STATE_ROOT = join(PROJECT_ROOT, "reports", "platform", "audit-runs
 const DEFAULT_OPENCODE_CONFIG = join(PROJECT_ROOT, ".opencode", "opencode.json");
 const DEFAULT_STAGE_REGISTRY = join(PROJECT_ROOT, ".opencode", "skills", "common-subagent", "audit-artifact-management", "contracts", "stage-agent-contracts.json");
 const DEFAULT_ROLES = join(PROJECT_ROOT, ".opencode", "agent-manifest", "roles.json");
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const BIND_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
 const MAX_REQUEST_BODY = 64 * 1024;
 const MAX_REPORT_BODY = 8 * 1024 * 1024;
 const markdownRenderer = new MarkdownIt({ html: false, linkify: false, typographer: false, breaks: false });
@@ -778,7 +778,7 @@ export function parseArgs(argv) {
       options.repositories.push({ id: value.slice(0, separator), path });
     } else throw new Error(`Unknown argument: ${option}`);
   }
-  if (!LOOPBACK_HOSTS.has(options.host)) throw new Error("工作台只能监听 loopback 地址");
+  if (!BIND_HOSTS.has(options.host)) throw new Error("工作台只支持 localhost、loopback 地址或 0.0.0.0 监听");
   if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error("Invalid port");
   return options;
 }
