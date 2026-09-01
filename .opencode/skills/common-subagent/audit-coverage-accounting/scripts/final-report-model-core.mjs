@@ -38,7 +38,7 @@ function sourceValid(source) {
 export function validateFinalReportModel(model) {
   const errors = [];
   if (!isObject(model)) return ["final-report-model-not-object"];
-  if (model.schema_version !== 1) errors.push("final-report-model-schema-version-invalid");
+  if (![1, 2].includes(model.schema_version)) errors.push("final-report-model-schema-version-invalid");
   if (!nonEmptyString(model.audit_id) || !validDigest(model.scope_digest)) errors.push("final-report-model-audit-or-scope-invalid");
   if (!new Set(["FINAL", "POLICY_FINAL", "PARTIAL_FINAL", "CHECKPOINT"]).has(model.report_kind)) errors.push("final-report-model-kind-invalid");
   if (!isObject(model.inputs) || !["coverage_summary", "adjudication_input", "adjudication", "truth_validation_intake", "quick_dynamic_results", "affirmative_review", "negative_review", "moderator_review", "validation_routing", "cvss_assessment", "attack_chains"]
@@ -78,6 +78,18 @@ export function validateFinalReportModel(model) {
   for (const finding of model.findings ?? []) {
     const attackSurfaceErrors = validateAttackSurface(finding?.attack_surface);
     const attackSurfaceReviewErrors = validateAttackSurfaceReview(finding?.attack_surface_review, finding?.preliminary_state);
+    const reportDetailInvalid = model.schema_version === 2 && (
+      !nonEmptyString(finding?.title) || !nonEmptyString(finding?.vulnerability_type_id)
+      || !nonEmptyString(finding?.domain) || !nonEmptyString(finding?.decision_rationale)
+      || !isObject(finding?.primary_location) || !nonEmptyString(finding?.primary_location?.file)
+      || !Number.isInteger(finding?.primary_location?.line_start)
+      || !Array.isArray(finding?.evidence_facts) || finding.evidence_facts.length === 0
+      || finding.evidence_facts.some(fact => !isObject(fact) || !nonEmptyString(fact.claim)
+        || !isObject(fact.locator) || !nonEmptyString(fact.locator.file) || !Number.isInteger(fact.locator.line_start))
+      || !isObject(finding?.reachability) || !nonEmptyString(finding?.reachability?.state)
+      || !isObject(finding?.attacker_influence) || !nonEmptyString(finding?.attacker_influence?.state)
+      || !isObject(finding?.remediation) || !nonEmptyString(finding?.remediation?.summary)
+    );
     if (!isObject(finding) || !nonEmptyString(finding.finding_id) || findingIds.has(finding.finding_id)
       || !ADMITTED_FINDING_STATES.has(finding.state) || !PRELIMINARY_SUPPORTED_STATES.has(finding.preliminary_state)
       || !validDigest(finding.finding_object_digest) || !sourceValid(finding.source)
@@ -85,7 +97,7 @@ export function validateFinalReportModel(model) {
       || attackSurfaceReviewErrors.length > 0 || !sourceValid(finding.attack_surface_review_source)
       || !isObject(finding.validation) || finding.validation.final_verdict !== "TRUE_POSITIVE" || !sourceValid(finding.validation.source)
       || !isObject(finding.cvss) || !nonEmptyString(finding.cvss.vector) || !Number.isFinite(finding.cvss.base_score)
-      || !nonEmptyString(finding.cvss.severity) || !sourceValid(finding.cvss.source)) {
+      || !nonEmptyString(finding.cvss.severity) || !sourceValid(finding.cvss.source) || reportDetailInvalid) {
       errors.push("final-report-model-finding-invalid");
     } else findingIds.add(finding.finding_id);
   }
@@ -133,6 +145,77 @@ function markdownText(value) {
 
 function factIndexes(value) {
   return Array.isArray(value) && value.length > 0 ? value.join(", ") : "none";
+}
+
+function locationText(location) {
+  if (!isObject(location) || !nonEmptyString(location.file) || !Number.isInteger(location.line_start)) return "位置未记录";
+  const end = Number.isInteger(location.line_end) && location.line_end !== location.line_start ? `-${location.line_end}` : "";
+  return `${location.file}:${location.line_start}${end}`;
+}
+
+function findingTitle(finding) {
+  return nonEmptyString(finding.title) ? finding.title : finding.finding_id;
+}
+
+function evidenceKindLabel(kind) {
+  return ({ source: "输入来源", sink: "危险操作", config: "配置证据", guard: "保护措施", control: "控制证据" })[kind] ?? "证据";
+}
+
+function evidenceStateLabel(value) {
+  return ({
+    CONFIRMED: "已证实",
+    PARTIAL: "部分证实",
+    UNCONFIRMED: "未证实",
+    REACHABLE: "可达",
+    LATENT: "潜在可达",
+    UNREACHABLE: "不可达",
+  })[value] ?? markdownText(value ?? "N/A");
+}
+
+function renderFindingDetail(finding) {
+  const evidenceFacts = Array.isArray(finding.evidence_facts) ? finding.evidence_facts : [];
+  const evidence = evidenceFacts.length === 0
+    ? ["- 未在最终模型中保留逐条定位证据；请查看来源绑定。"]
+    : evidenceFacts.map(fact => `- **${evidenceKindLabel(fact.kind)}** · \`${markdownText(locationText(fact.locator))}\`：${markdownText(fact.claim)}`);
+  const preconditions = finding.attack_surface?.preconditions?.length
+    ? finding.attack_surface.preconditions.map(item => `- ${markdownText(item.description)}（${markdownText(item.feasibility)}）`)
+    : ["- 未记录额外利用前提。"];
+  const guards = finding.attack_surface?.controls?.filter(item => item.state !== "ABSENT") ?? [];
+  return [
+    `### [${markdownText(finding.cvss.severity)} ${finding.cvss.base_score}] ${markdownText(findingTitle(finding))}`,
+    "",
+    `- **Finding ID**：\`${markdownText(finding.finding_id)}\``,
+    `- **漏洞类型**：\`${markdownText(finding.vulnerability_type_id ?? "N/A")}\`（${markdownText(finding.domain ?? "N/A")}）`,
+    `- **主要漏洞位置**：\`${markdownText(locationText(finding.primary_location))}\``,
+    `- **可达性**：${evidenceStateLabel(finding.reachability?.state)}；**攻击者控制**：${evidenceStateLabel(finding.attacker_influence?.state)}`,
+    `- **CVSS 3.1**：\`${markdownText(finding.cvss.vector)}\``,
+    "",
+    "#### 问题说明",
+    "",
+    markdownText(finding.decision_rationale ?? finding.attack_surface?.impact?.outcome ?? "未记录裁决说明。"),
+    "",
+    "#### 代码位置与证据链",
+    "",
+    ...evidence,
+    "",
+    "#### 安全影响",
+    "",
+    markdownText(finding.attack_surface?.impact?.outcome ?? "未记录安全影响。"),
+    "",
+    "#### 利用前提与现有保护",
+    "",
+    ...preconditions,
+    ...(guards.length ? guards.map(item => `- 现有保护：${markdownText(item.description)}（${markdownText(item.state)}）`) : ["- 未发现能够阻断该路径的有效保护措施。"]),
+    "",
+    "#### 修复建议",
+    "",
+    markdownText(finding.remediation?.summary ?? "请结合代码位置实施输入约束、上下文安全处理和最小权限控制。"),
+    "",
+    `#### 验证结论：${markdownText(finding.validation?.final_verdict ?? finding.state)}`,
+    "",
+    markdownText(finding.validation?.route === "QUICK_DYNAMIC" ? "该结论包含快速动态证据。" : "该结论由静态正方、反方与 Moderator 三方复核得出；完整动态验证需在工作台中由用户逐次授权。"),
+    "",
+  ];
 }
 
 function renderAttackSurfaceFinding(finding) {
@@ -185,8 +268,8 @@ export function renderFinalReport(model) {
     return `| ${metric.metric_id} | ${fraction} | ${percentage} | ${state} |`;
   });
   const findingRows = model.findings.length === 0
-    ? ["| _无_ | N/A | N/A | N/A |"]
-    : model.findings.map(finding => `| ${finding.finding_id} | ${finding.state} | ${finding.cvss.base_score} (${finding.cvss.severity}) | ${finding.finding_object_digest} |`);
+    ? ["| _无_ | N/A | N/A | N/A | N/A |"]
+    : model.findings.map(finding => `| ${finding.finding_id} | ${markdownText(findingTitle(finding))} | ${finding.cvss.base_score} (${finding.cvss.severity}) | \`${markdownText(locationText(finding.primary_location))}\` | ${markdownText(finding.vulnerability_type_id ?? "N/A")} |`);
   const chainRows = model.chains.length === 0
     ? ["| _无_ | N/A | N/A |"]
     : model.chains.map(chain => `| ${chain.chain_id} | ${chain.assessment_state} | ${chain.first_blocking_step_id ?? "N/A"} |`);
@@ -196,9 +279,12 @@ export function renderFinalReport(model) {
   const rejectedChainRows = model.rejected_chains.length === 0
     ? ["| _无_ | N/A |"]
     : model.rejected_chains.map(chain => `| ${chain.chain_id} | ${chain.assessment_state} |`);
-  const attackSurfaceSections = model.findings.length === 0
+  const attackSurfaceRows = model.findings.length === 0
+    ? ["| _无_ | N/A | N/A | N/A | N/A |"]
+    : model.findings.map(finding => `| ${markdownText(finding.finding_id)} | \`${markdownText(locationText(finding.primary_location))}\` | ${markdownText(finding.attack_surface.exposure.state)} · ${markdownText(finding.attack_surface.exposure.surface)} | ${markdownText(finding.attack_surface.boundary_crossing.state)} · ${markdownText(finding.attack_surface.boundary_crossing.from)} → ${markdownText(finding.attack_surface.boundary_crossing.to)} | ${markdownText(finding.attack_surface.impact.outcome)} |`);
+  const findingDetailSections = model.findings.length === 0
     ? ["_没有通过真实性路由的漏洞。_", ""]
-    : model.findings.flatMap(renderAttackSurfaceFinding);
+    : model.findings.flatMap(renderFindingDetail);
   return [
     `<!-- GENERATED: final-report-model ${model.manifest_digest} -->`,
     model.report_kind === "FINAL" ? "# 安全审计报告"
@@ -216,40 +302,54 @@ export function renderFinalReport(model) {
           ? ["", "本报告满足配置的流程策略，但未验证检查仍是显式覆盖缺口，不能表述为完整覆盖。"]
       : []),
     "",
-    "## 机器派生覆盖情况",
+    "## 管理摘要",
+    "",
+    `本次审计确认 ${model.findings.length} 个 Finding；以下内容按 CVSS 基础分从高到低排列。每项首先给出源码文件和行号，再给出证据链、影响、利用前提与修复建议。`,
+    "",
+    "## 漏洞清单",
+    "",
+    "| ID | 漏洞名称 | CVSS 3.1 | 主要位置 | 类型 |",
+    "|---|---|---:|---|---|",
+    ...findingRows,
+    "",
+    "## 漏洞详情",
+    "",
+    ...findingDetailSections,
+    "## 审计方法与覆盖附录",
+    "",
+    "### 机器派生覆盖情况",
     "",
     "| 指标 | 已验证/要求 | 比例 | 状态 |",
     "|---|---:|---:|---|",
     ...metricRows,
     "",
-    "## 真实性验证路由",
+    "### 真实性验证路由",
     "",
     `快速动态与本地三方共处理 ${model.truth_validation.summary.total} 项：真实漏洞 ${model.truth_validation.summary.true_positive}，误报 ${model.truth_validation.summary.false_positive}，证据不足 ${model.truth_validation.summary.inconclusive}。完整动态验证保持人工触发。`,
     "",
-    "## 已确认漏洞",
+    "### 逐项攻击面证据",
     "",
-    "| ID | 终局裁定 | CVSS 3.1 基础分 | Finding 对象摘要 |",
-    "|---|---|---:|---|",
-    ...findingRows,
+    "详细的攻击面、反证、盲点与来源绑定保留在最终 JSON 模型中；本附录只保留人工处置所需的定位和边界摘要。",
     "",
-    "## 逐项攻击面证据",
+    "| Finding | 主要位置 | 暴露面 | 边界跨越 | 影响 |",
+    "|---|---|---|---|---|",
+    ...attackSurfaceRows,
     "",
-    ...attackSurfaceSections,
-    "## 攻击链",
+    "### 攻击链",
     "",
     "| ID | 评估 | 首个阻断步骤 |",
     "|---|---|---|",
     ...chainRows,
     "",
-    "## 排除项与剩余结果",
+    "### 排除项与剩余结果",
     "",
-    "### 排除或证据不足的候选",
+    "#### 排除或证据不足的候选",
     "",
     "| ID | 结果 |",
     "|---|---|",
     ...excludedFindingRows,
     "",
-    "### 已反驳攻击链",
+    "#### 已反驳攻击链",
     "",
     "| ID | 结果 |",
     "|---|---|",

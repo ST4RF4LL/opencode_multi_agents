@@ -2,21 +2,23 @@
 
 ## 1. 目标与状态
 
-本方案定义 `dynamic-vulnerability-validator` 的首个可用验证器：针对
-`JW-INJECT-06`（服务端渲染与 DOM XSS）的显式、授权、本机动态验证。
+本方案定义 `dynamic-vulnerability-validator` 的本机 Web 验证器：接受漏洞目录中
+`applies_to` 包含 `web` 的类型。`JW-INJECT-06`（服务端渲染与 DOM XSS）保留专用
+强校验，其余类型使用通用 Web 结果契约。
 
 它是静态审计流程的条件旁路阶段，而不是自动化攻击功能：只有用户明确要求
-动态验证，且提供完整的本机测试环境、两个测试账号、登录步骤和清理步骤时，
-才可以执行。它生成与静态 Finding 绑定的补充证据，不会自动改写静态 Finding、
+动态验证并提供授权的本机 loopback 测试环境时才可以执行。账号与登录/清理步骤
+按目标实际需要选填。它生成与静态 Finding 绑定的补充证据，不会自动改写静态 Finding、
 裁决、攻击链或最终报告。
 
 当前方案已确定的边界如下：
 
 - 浏览器后端仅为 Chrome DevTools MCP；不得使用或静默回退到 `agent-browser`。
-- 使用可见 Chrome，便于构建和调试阶段观察；不使用 headless。
+- 桌面环境优先使用可见 Chrome；无桌面的 Linux 服务器仅允许受管的隔离 headless Chrome。
+- 构建和部署只使用 Windows/Linux 原生进程；禁用 Docker、Podman、Compose、容器镜像及任何容器运行回退。
 - 仅允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP(S) 测试目标。
 - 暂不支持 Docker 容器内部域名、远程 staging、生产、第三方站点或真实用户。
-- 初期只支持 Web XSS；其他漏洞类型保持 `NOT_RUN`，以后单独设计和开放。
+- Web 目录类型已开放；不属于 Web 范围的类型仍拒绝调度。需要破坏性、拒绝服务、进程崩溃、文件覆盖或外部目标访问才能确认的步骤不得执行，应返回 `INCONCLUSIVE` 或 `NOT_RUN`。
 
 `vulnerability-validator` 现在负责终稿前的真实性路由：任务 opt-in 时先委派
 `quick-dynamic-validator` 做全任务最多 120 秒的 loopback 快速确认，再把未确认项
@@ -34,7 +36,7 @@ sealed external-runtime-validation request
           │
           ├─ 用户未显式请求动态验证：不执行
           │
-          └─ 用户显式请求，并在 prompt 提供本机 URL、账号、登录和清理步骤
+          └─ 用户显式请求，并在 prompt 提供本机 URL 与可选账号/操作说明
                     │
                     ▼
           primary orchestrator 创建条件阶段 handoff
@@ -51,9 +53,9 @@ sealed external-runtime-validation request
 动态验证位于条件阶段 `P08_RUNTIME_VALIDATION`。它不属于正常审计完成的前置条件，
 也不会因存在静态 finding 或 request 而自动触发。
 
-若用户已明确要求动态验证但缺少测试 URL、两个账号、登录或清理指令，只有
-`security-audit-orchestrator` 可以暂停并向用户追问；
-`dynamic-vulnerability-validator` 必须返回 `BLOCKED`，不得自行发现环境或索要信息。
+若缺少有效的授权测试 URL，动态验证不得启动。账号、登录或清理指令不是全局
+必填项；当某个证明步骤确实依赖缺失的身份、权限边界或安全清理路径时，
+`dynamic-vulnerability-validator` 对该步骤返回 `INCONCLUSIVE` 或 `NOT_RUN`，不得自行发现环境或索要凭证。
 
 ## 3. Chrome DevTools MCP
 
@@ -66,7 +68,7 @@ sealed external-runtime-validation request
   "command": [
     "npx",
     "-y",
-    "chrome-devtools-mcp@latest",
+    "chrome-devtools-mcp@1.8.0",
     "--isolated=true",
     "--redact-network-headers=true",
     "--no-usage-statistics",
@@ -78,13 +80,16 @@ sealed external-runtime-validation request
 }
 ```
 
-使用 `@latest` 是明确产品决定。为保持证据可追溯性，每个验证结果必须记录本次
-实际观测到的 MCP 版本；不能假设不同日期的工具行为相同。
+发布配置固定为已验证的 `1.8.0`，每个验证结果仍需记录实际观测版本。动态 Runner
+通过 Browser Session Broker 为当前任务覆盖这一基础 MCP 定义：低影响桌面任务可以
+使用 `--auto-connect` 并创建独立 tab 或 named isolated context；Web XSS、双账号、
+持久化写入、下载、权限、代理等任务必须升级为 `--isolated=true`。Linux 没有桌面
+环境时，隔离实例增加 `--headless=true`。任何模式都只允许关闭 Broker 登记的 page、
+context 或隔离实例，禁止通过系统级 kill Chrome/Chromium 进程重置环境。
 
-不得加入 `--headless`、`--autoConnect`、`--browser-url`、`--ws-endpoint`
-或持久化 `--user-data-dir`。`--isolated=true` 必须创建临时 profile，避免访问
-用户的日常浏览器 profile。浏览器状态恢复只允许关闭本次 MCP 创建的 page 或
-isolated context；禁止通过系统级 kill Chrome/Chromium 进程重置环境。
+共享标签页连接还有独立就绪门禁：Chrome 主版本必须不低于 144，用户已经为所选
+profile 开启远程调试，并明确确认控制器能够看到该 profile 的其他页面。缺少任一项时
+Broker 拒绝分配共享会话；即使连接成功，也不得枚举、操作或关闭未登记为本任务所有的页面。
 
 全局配置默认拒绝 `chrome-devtools_*` 工具，只有 `quick-dynamic-validator` 与
 `dynamic-vulnerability-validator` 的前置权限块可以使用它们。`initial.sh` 仅探测 MCP
@@ -95,10 +100,10 @@ isolated context；禁止通过系统级 kill Chrome/Chromium 进程重置环境
 动态验证的最小输入是：
 
 - 已封存且通过共享校验的 `EXTERNAL_RUNTIME_VALIDATION_REQUEST`。
-- claim 为 `JW-INJECT-06`。
+- claim 的漏洞类型在目录中声明 `applies_to: web`；`JW-INJECT-06` 路由到 XSS 专用验证器，其他类型路由到通用 Web 验证器。
 - 当前 user prompt 中提供的 loopback 测试 URL。
-- 两个不同的授权测试账号：`attacker` 与 `victim`。
-- 可执行的登录步骤和应用内清理步骤。
+- 可选账号模式：匿名、单一共享测试身份，或不同的 `attacker` 与 `victim` 身份。
+- 可选的登录步骤和应用内清理步骤。
 
 登录步骤可以引用项目或全局 Skill；Skill 只能包含流程说明，不得包含密码等凭证。
 账号名、密码、验证码或其他认证数据由当前 user prompt 直接提供，只能在本次活跃
@@ -107,15 +112,16 @@ isolated context；禁止通过系统级 kill Chrome/Chromium 进程重置环境
 
 运行前，Agent 创建并密封 localhost target binding。该文件只记录授权来源、
 base URL、允许 origin、账号角色、登录说明来源和清理策略；不记录任何凭证值。
-校验器拒绝非 loopback URL、目标字段中的 URL 凭证、secret-shaped 字段、非用户
-显式授权、非两个不同测试账号或没有清理说明的绑定。
+校验器拒绝非 loopback URL、目标字段中的 URL 凭证、secret-shaped 字段和非用户
+显式授权。只有 `distinct_test_accounts=true` 且实际使用不同隔离身份时才允许跨用户结论；
+缺少安全清理路径时不得为了证明漏洞而创建持久写入。
 
 ## 5. Web-XSS 验证流程
 
 Agent 对每个 request 只验证一个 finding，并按以下顺序工作：
 
 1. 校验 request、target binding 和 URL 允许范围。
-2. 为 attacker 与 victim 分别创建不同的命名 `isolatedContext`，并分别完成登录。
+2. 按账号模式创建任务所需页面。只有提供两个不同身份时才分别创建隔离上下文并完成登录；
    attacker 的 cookie、storage 或页面状态不能复用为 victim 证据。
 3. 在提交 payload 前保存最小化 baseline：必要的 DOM 摘录、相关 console 状态和
    脱敏请求元数据。
@@ -126,8 +132,8 @@ Agent 对每个 request 只验证一个 finding，并按以下顺序工作：
 6. 观察应用重新渲染后的 marker 执行。proof marker 只能设置良性的 DOM 属性或
    内存标记；不得弹窗、外联、读取 token/cookie/个人数据、访问无关记录或建立持久化。
 7. 刷新页面或离开后重新进入，确认同一 marker 再次执行。
-8. 在独立 victim context 中，以不同授权测试账号访问相同内容，确认同一 marker
-   再次执行。
+8. 仅当提供不同 victim 身份时，才在独立 victim context 中访问相同内容并确认同一 marker
+   再次执行；否则最高只能形成同身份证据。
 9. 使用用户提供的应用内清理路径删除测试数据；刷新或重新访问确认是否已移除。
 10. 写入最小化、脱敏的证据并通过确定性校验器密封结果。
 
@@ -179,8 +185,8 @@ reports/validation-handoff/runtime/<audit_id>/<finding_id>/evidence/
 共享 runtime-validation result contract，并增加：
 
 - `environment_binding_digest`
-- `browser_backend`：固定为 `chrome-devtools-mcp`、`chrome-devtools-mcp@latest`、
-  实际版本、`headless=false`、`isolated=true`
+- `browser_backend`：固定为 `chrome-devtools-mcp`、`chrome-devtools-mcp@1.8.0`、
+  实际版本、实际 `headless` 状态及 `isolated=true`
 - `xss_verification`：验证等级、proof ID、应用输入/执行、刷新、attacker/victim
   context、不同账号、victim 执行和清理状态
 - `network_trace`：按时间顺序引用关键步骤的脱敏 HTTP exchange，覆盖请求方法、
@@ -233,15 +239,21 @@ node .opencode/skills/dynamic-vulnerability-validator-subagent/web-xss-runtime-v
 - `.opencode/agents/security-audit-orchestrator.md`：仅在显式请求、信息完整时的
   dispatch 规则，以及缺失信息时仅主 Agent 可询问的规则。
 - `README.md`、`docs/installation.md`、`initial.sh`：安装、健康检查和使用说明。
-- `.opencode/web/dynamic-validation-observatory/`：只读本机 Web 服务，聚合 runtime
-  结果并展示环境、Bug、观察与请求/响应证据链。
+- `.opencode/web/dynamic-validation-observatory/`：动态 core、Browser Session Broker 与
+  本机 Web 服务，聚合 runtime 结果并只读展示、筛选和导出脱敏请求证据链。
+- `.opencode/scripts/dynamic-validation-cli.mjs`：独立 `doctor`、`run`、`list`
+  和 `serve` 入口，不依赖静态审计队列。
 
 ## 11. 验证与验收
 
 默认回归必须不访问任何浏览器或测试环境，至少覆盖：
 
-- 配置已启用 `chrome-devtools`，使用 `@latest`、隔离模式，并且没有 headless、
-  remote attach 或持久 profile 参数。
+- 基础配置使用固定 Chrome DevTools MCP 版本和隔离模式；Broker 的共享连接、隔离
+  context 与 Linux headless 决策分别经过策略测试。
+- 平台不暴露人工发送、改包、重放或取消请求的接口；发包记录来自动态验证的浏览器网络
+  证据并保持只读，HAR/OpenCollection 导出会再次执行脱敏，人工操作交给 Bruno。
+- 浏览器网络证据使用 `HTTP_EXCHANGE_V2`；历史 v1 浏览器工件只在读取时
+  转换，新的 Web-XSS 证据必须携带 `source=chrome_devtools_mcp` 和 `evidence_binding`。
 - 全局默认拒绝 Chrome MCP，只有快速动态与人工完整动态两个验证 Agent 拥有对应工具权限。
 - 非 loopback target、含凭证字段的 target binding、缺少用户显式授权、缺少两个
   不同测试账号或缺少清理说明都会被拒绝。
@@ -262,6 +274,6 @@ node .opencode/skills/dynamic-vulnerability-validator-subagent/web-xss-runtime-v
 
 - 支持 Docker 容器内部 hostname 或远程 staging。
 - 使用 `agent-browser` 作为并行或替代浏览器后端。
-- 增加 XSS 以外的动态验证器。
+- 为代码执行、文件覆盖、资源耗尽或进程崩溃增加允许破坏性确认的验证模式。
 - 将 runtime result 自动或半自动导入 adjudication、attack-chain 或 final report。
-- 允许持久化测试账号配置、秘密管理集成或远程浏览器调试端口。
+- 允许持久化测试账号配置、秘密管理集成或非本机浏览器调试端口。

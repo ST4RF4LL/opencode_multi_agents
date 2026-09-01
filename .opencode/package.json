@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "npm run test:config && npm run test:audit-todo && npm run test:audit-queue && npm run test:stage-agent-contract && npm run test:stage-delivery-contract && npm run test:truth-validation-contract && npm run test:threat-model-contract && npm run test:semgrep && npm run test:finding-contract && npm run test:external-runtime-validation-contract && npm run test:dynamic-validation-contract && npm run test:dynamic-validation-web && npm run test:audit-workbench && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
+    "test": "npm run test:config && npm run test:audit-todo && npm run test:audit-queue && npm run test:stage-agent-contract && npm run test:stage-delivery-contract && npm run test:truth-validation-contract && npm run test:threat-model-contract && npm run test:semgrep && npm run test:finding-contract && npm run test:external-runtime-validation-contract && npm run test:dynamic-validation-contract && npm run test:dynamic-validation-core && npm run test:dynamic-validation-web && npm run test:audit-workbench && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
     "test:config": "node tests/validate-configuration.mjs",
     "test:audit-todo": "node tests/run-audit-todo-tests.mjs",
     "test:audit-queue": "node tests/run-audit-queue-tests.mjs",
@@ -11,7 +11,8 @@
     "test:semgrep": "node tests/run-semgrep-tests.mjs",
     "test:finding-contract": "node tests/run-finding-contract-tests.mjs",
     "test:external-runtime-validation-contract": "node tests/run-external-runtime-validation-contract-tests.mjs",
-    "test:dynamic-validation-contract": "node tests/run-dynamic-validation-contract-tests.mjs",
+    "test:dynamic-validation-contract": "node tests/run-dynamic-validation-contract-tests.mjs && node tests/run-web-runtime-validation-tests.mjs",
+    "test:dynamic-validation-core": "node tests/run-dynamic-validation-core-tests.mjs",
     "test:dynamic-validation-web": "node tests/run-dynamic-validation-observatory-tests.mjs",
     "test:audit-workbench": "node tests/run-audit-workbench-tests.mjs",
     "start:audit-workbench": "node web/dynamic-validation-observatory/server.mjs",
@@ -20,6 +21,9 @@
     "start:dynamic-validation-web": "node web/dynamic-validation-observatory/server.mjs",
     "start:dynamic-validation-web:runner": "node web/dynamic-validation-observatory/server.mjs --enable-runner",
     "start:dynamic-validation-web:full": "node web/dynamic-validation-observatory/server.mjs --enable-runner --enable-dynamic-validation",
+    "dynval": "node scripts/dynamic-validation-cli.mjs",
+    "dynval:doctor": "node scripts/dynamic-validation-cli.mjs doctor",
+    "dynval:serve": "node scripts/dynamic-validation-cli.mjs serve",
     "test:finding-adjudication": "node tests/run-finding-adjudication-tests.mjs",
     "test:cvss-assessment": "node tests/run-cvss-assessment-tests.mjs",
     "test:adjudication-regressions": "node tests/run-adjudication-regression-tests.mjs",
@@ -31,6 +35,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/plugin": "1.14.30",
+    "fflate": "^0.8.3",
     "markdown-it": "^15.0.0",
     "yaml": "^2.9.0"
   }

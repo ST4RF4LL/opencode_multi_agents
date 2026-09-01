@@ -1,0 +1,29 @@
+name: Dynamic validation platform contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  platform-contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: .opencode/package-lock.json
+      - run: npm ci --prefix .opencode
+      - run: npm --prefix .opencode run test:dynamic-validation-contract
+      - run: npm --prefix .opencode run test:dynamic-validation-core
+      - run: npm --prefix .opencode run test:dynamic-validation-web
+      - run: npm --prefix .opencode run test:config

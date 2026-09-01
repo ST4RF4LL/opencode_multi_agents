@@ -22,14 +22,15 @@ The request policy always forbids production targets, third-party targets, real
 credentials, unauthorized persistence, and data destruction. Network access is limited to
 denied, loopback-only, or test-fixture-only operation.
 
-## Explicit localhost Web-XSS sidecar
+## Explicit localhost Web sidecar
 
 `dynamic-vulnerability-validator` may consume a valid request only when the
 user explicitly asks for dynamic validation and supplies a loopback URL, two
-test accounts, login instructions, and cleanup instructions. It currently
-accepts only `JW-INJECT-06`, uses visible isolated `chrome-devtools-mcp@latest`,
-and writes a digest-bound target/result companion under
-`reports/validation-handoff/runtime/`.
+test accounts, login instructions, and cleanup instructions. It accepts catalog
+types whose `applies_to` includes `web`, uses the controller-selected
+`chrome-devtools-mcp`, and writes a digest-bound target/result companion under
+`reports/validation-handoff/runtime/`. `JW-INJECT-06` uses the XSS-specific
+contract; other Web types use the generic non-destructive Web contract.
 
 A safe marker stored in authorized test data solely to prove stored XSS is not
 the prohibited persistence category. Backdoors, footholds, unrelated state,

@@ -15,6 +15,10 @@ import { listValidationRequests, listValidationRunDetails, listValidationRuns } 
 import { DEFAULT_MODEL_SELECTION, OpenCodeModelCatalog, OpenCodeModelSettingsStore } from "./opencode-model-settings.mjs";
 import { buildWorkspaceSnapshot } from "./workspace-model.mjs";
 import { DynamicValidationRunner } from "./validation-runner.mjs";
+import { RequestHistoryStore } from "./request-history-store.mjs";
+import { buildOpenCollectionArchive } from "./bruno-exporter.mjs";
+import { buildHar } from "./har-exporter.mjs";
+import { materializeManualValidationRequests } from "./manual-validation-request-materializer.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(HERE, "../../..");
@@ -49,6 +53,16 @@ function json(response, status, value, headers = {}) {
     "Content-Length": Buffer.byteLength(body),
     "Cache-Control": "no-store",
     ...headers,
+  });
+  response.end(body);
+}
+
+function binary(response, status, body, contentType, filename) {
+  response.writeHead(status, {
+    "Content-Type": contentType,
+    "Content-Length": body.length,
+    "Content-Disposition": `attachment; filename="${filename.replaceAll('"', '')}"`,
+    "Cache-Control": "no-store",
   });
   response.end(body);
 }
@@ -233,6 +247,8 @@ export function createAuditWorkbenchServer({
   modelSettingsStore: suppliedModelSettingsStore = null,
   modelCatalog: suppliedModelCatalog = null,
   modelConfigPaths = null,
+  requestStateRoot = null,
+  requestHistoryStore: suppliedRequestHistoryStore = null,
 } = {}) {
   const resolvedRuntimeRoot = resolve(runtimeRoot);
   const runner = suppliedRunner ?? new AuditRunner({ stateRoot, platformRoot: PROJECT_ROOT, repositories, configPath: platformConfigPath, enabled: runnerEnabled });
@@ -286,6 +302,9 @@ export function createAuditWorkbenchServer({
   const findingWorkflow = suppliedFindingWorkflow ?? new FindingWorkflowStore({
     stateRoot: findingStateRoot ?? join(dirname(stateRoot), "finding-workflow"),
   });
+  const requestHistory = suppliedRequestHistoryStore ?? new RequestHistoryStore({
+    stateRoot: requestStateRoot ?? join(dirname(resolve(stateRoot)), "dynamic-request-workbench"),
+  });
 
   function runtimeSources() {
     const artifacts = new Map(runner.artifactSources().map(source => [source.repository_id, source.reports_root]));
@@ -295,6 +314,12 @@ export function createAuditWorkbenchServer({
   async function validationRequests() {
     const values = [];
     for (const { repository, root } of runtimeSources()) {
+      const reportsRoot = runner.artifactSources().find(source => source.repository_id === repository.id)?.reports_root;
+      if (reportsRoot) {
+        for (const audit of runner.listAudits().filter(item => item.repository_id === repository.id && item.status === "completed")) {
+          await materializeManualValidationRequests({ reportsRoot, auditId: audit.id, repositoryId: repository.id, commit: audit.commit });
+        }
+      }
       for (const request of await listValidationRequests(root)) values.push({
         ...request,
         job_id: scopedResourceId(repository.id, request.id),
@@ -305,15 +330,23 @@ export function createAuditWorkbenchServer({
     const jobs = new Map(dynamicRunner.listRuns().map(run => [run.id, run]));
     return Promise.all(values.map(async request => {
       const legacyJob = jobs.get(request.id);
+      const audit = runner.getAudit(request.audit_id);
+      const auditManaged = Boolean(audit && audit.repository_id === request.repository_id);
       const policy = await runner.dynamicValidationPolicy(request.audit_id, request.repository_id);
+      const blockerMessages = {
+        "request-invalid": "动态验证请求未通过摘要或字段校验。",
+        "validation-type-unsupported": "该漏洞类型不属于当前 Web 动态验证范围。",
+        "validation-result-exists": "该漏洞已有动态验证结果，默认拒绝覆盖。",
+      };
       return {
         ...request,
         artifact_dispatch_ready: request.dispatch_ready,
-        dispatch_ready: request.dispatch_ready && policy.enabled,
-        task_dynamic_validation_enabled: policy.enabled,
-        dispatch_blocked_reason: !policy.enabled
-          ? (policy.reason === "test-environment-disabled" ? "任务创建时未启用测试环境信息。" : "任务没有可用的测试环境上下文。")
-          : request.dispatch_ready ? null : "动态验证请求尚未密封、类型不受支持或已有结果。",
+        audit_managed: auditManaged,
+        task_test_environment_preconfigured: policy.enabled,
+        dispatch_ready: request.dispatch_ready && auditManaged,
+        dispatch_blocked_reason: !auditManaged
+          ? "动态验证请求不属于当前工作台受管审计。"
+          : request.dispatch_ready ? null : request.dispatch_blockers.map(code => blockerMessages[code] ?? code).join(" "),
         job: jobs.get(request.job_id) ?? (legacyJob?.repository_id === request.repository_id ? legacyJob : null),
       };
     }));
@@ -330,6 +363,26 @@ export function createAuditWorkbenchServer({
       });
     }
     return values.sort((a, b) => String(b.recorded_at ?? "").localeCompare(String(a.recorded_at ?? "")));
+  }
+
+  async function httpExchanges() {
+    const records = new Map((await requestHistory.list({ limit: 500 })).map(exchange => [exchange.exchange_id, exchange]));
+    for (const { repository, root } of runtimeSources()) {
+      for (const run of await listValidationRunDetails(root)) {
+        for (const exchange of run.network?.exchanges ?? []) records.set(exchange.exchange_id, {
+          ...exchange,
+          audit_id: run.audit_id,
+          finding_id: run.finding?.id ?? null,
+          repository_id: repository.id,
+          repository_name: repository.name,
+        });
+      }
+    }
+    return [...records.values()].sort((left, right) => String(right.started_at ?? "").localeCompare(String(left.started_at ?? "")));
+  }
+
+  async function httpExchange(exchangeId) {
+    return (await httpExchanges()).find(exchange => exchange.exchange_id === exchangeId) ?? null;
   }
 
   async function validationRun(resourceId) {
@@ -456,7 +509,7 @@ export function createAuditWorkbenchServer({
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (request.method === "GET" && (url.pathname === "/api/health" || url.pathname === "/api/v1/runtime/health")) {
-        json(response, 200, { ok: true, service: "opencode-audit-workbench", runner: runner.health(), dynamic_runner: dynamicRunner.health() });
+        json(response, 200, { ok: true, service: "opencode-audit-workbench", runner: runner.health(), dynamic_runner: dynamicRunner.health(), request_history: { mode: "read_only" } });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/environment") {
@@ -517,6 +570,18 @@ export function createAuditWorkbenchServer({
         assertSafeMutation(request);
         const repository = await runner.addRepository(await requestJson(request), request.headers["idempotency-key"]);
         json(response, 201, repository, { Location: `/api/v1/repositories/${encodeURIComponent(repository.id)}` });
+        return;
+      }
+      const repositoryDelete = url.pathname.match(/^\/api\/v1\/repositories\/([^/]+)$/);
+      if (request.method === "DELETE" && repositoryDelete) {
+        assertSafeMutation(request);
+        const repositoryId = decodeURIComponent(repositoryDelete[1]);
+        const body = await requestJson(request);
+        if (body.confirmation !== repositoryId) throw Object.assign(new Error("删除确认必须与项目 ID 完全一致。"), { statusCode: 422, code: "repository-delete-confirmation-invalid" });
+        const repository = (await repositoriesSnapshot()).find(item => item.id === repositoryId);
+        if (!repository) throw Object.assign(new Error("审计项目不存在。"), { statusCode: 404, code: "repository-not-found" });
+        if ((repository.audit_count ?? 0) > 0) throw Object.assign(new Error("该项目仍有关联审计；请先删除这些审计任务。"), { statusCode: 409, code: "repository-has-audits" });
+        json(response, 200, await runner.removeRepository(repositoryId));
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/audits") {
@@ -676,6 +741,55 @@ export function createAuditWorkbenchServer({
         json(response, 200, { items, count: items.length });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/v1/http-exchanges") {
+        const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit")) || 100, 500));
+        const items = (await httpExchanges()).slice(0, limit);
+        json(response, 200, { items, count: items.length });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/v1/http-exchanges/export/bruno") {
+        assertSafeMutation(request);
+        const body = await requestJson(request);
+        if (!Array.isArray(body.exchange_ids) || body.exchange_ids.length < 1 || body.exchange_ids.length > 100) {
+          throw Object.assign(new Error("Bruno 导出必须选择 1-100 条记录。"), { statusCode: 422, code: "bruno-export-selection-invalid" });
+        }
+        const ids = [...new Set(body.exchange_ids.map(value => String(value)))];
+        if (ids.some(id => !/^http_[A-Za-z0-9-]+$/.test(id))) {
+          throw Object.assign(new Error("Bruno 导出的 exchange ID 无效。"), { statusCode: 422, code: "bruno-export-id-invalid" });
+        }
+        const available = new Map((await httpExchanges()).map(exchange => [exchange.exchange_id, exchange]));
+        const exchanges = ids.map(id => available.get(id) ?? null);
+        const missingIndex = exchanges.findIndex(value => !value);
+        if (missingIndex >= 0) {
+          throw Object.assign(new Error(`没有找到 HTTP exchange：${ids[missingIndex]}`), { statusCode: 404, code: "exchange-not-found" });
+        }
+        const archive = buildOpenCollectionArchive(exchanges);
+        binary(response, 200, archive.bytes, "application/zip", archive.filename);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/v1/http-exchanges/export/har") {
+        assertSafeMutation(request);
+        const body = await requestJson(request);
+        if (!Array.isArray(body.exchange_ids) || body.exchange_ids.length < 1 || body.exchange_ids.length > 100) {
+          throw Object.assign(new Error("HAR 导出必须选择 1-100 条记录。"), { statusCode: 422, code: "har-export-selection-invalid" });
+        }
+        const ids = [...new Set(body.exchange_ids.map(value => String(value)))];
+        if (ids.some(id => !/^http_[A-Za-z0-9-]+$/.test(id))) throw Object.assign(new Error("HAR 导出的 exchange ID 无效。"), { statusCode: 422, code: "har-export-id-invalid" });
+        const available = new Map((await httpExchanges()).map(exchange => [exchange.exchange_id, exchange]));
+        const exchanges = ids.map(id => available.get(id) ?? null);
+        const missingIndex = exchanges.findIndex(value => !value);
+        if (missingIndex >= 0) throw Object.assign(new Error(`没有找到 HTTP exchange：${ids[missingIndex]}`), { statusCode: 404, code: "exchange-not-found" });
+        const archive = buildHar(exchanges);
+        binary(response, 200, archive.bytes, "application/json", archive.filename);
+        return;
+      }
+      const exchangeDetail = url.pathname.match(/^\/api\/v1\/http-exchanges\/([^/]+)$/);
+      if (request.method === "GET" && exchangeDetail) {
+        const value = await httpExchange(decodeURIComponent(exchangeDetail[1]));
+        if (!value) json(response, 404, { error: "exchange-not-found" });
+        else json(response, 200, { exchange: value });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/v1/validations") {
         assertSafeMutation(request);
         const input = await requestJson(request);
@@ -684,9 +798,6 @@ export function createAuditWorkbenchServer({
         const requests = await validationRequests();
         const descriptor = requests.find(item => item.id === input.validation_request_id && item.repository_id === repository.id);
         if (!descriptor) throw Object.assign(new Error("没有找到动态验证请求。"), { statusCode: 404, code: "validation-request-not-found" });
-        if (!descriptor.task_dynamic_validation_enabled) {
-          throw Object.assign(new Error("该审计任务创建时未启用测试环境信息，禁止触发动态验证。"), { statusCode: 409, code: "audit-dynamic-validation-disabled" });
-        }
         if (!descriptor.artifact_dispatch_ready) throw Object.assign(new Error("没有找到可调度的密封动态验证请求。"), { statusCode: 422, code: "validation-request-not-ready" });
         const source = runner.artifactSources().find(item => item.repository_id === repository.id);
         const root = runtimeSources().find(item => item.repository.id === repository.id)?.root;

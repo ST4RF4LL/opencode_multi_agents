@@ -75,6 +75,8 @@ async function main() {
   const agentFiles = (await readdir(join(OPENCODE, "agents"))).filter(name => name.endsWith(".md")).map(name => name.slice(0, -3)).sort();
   assert(sameSet(roleAgents, agentFiles), `roles.json and agent Markdown files differ: roles=${roleAgents} files=${agentFiles}`);
   assert(roleAgents.includes(config.default_agent), "default_agent is not declared in roles.json");
+  assert(config.subagent_depth === 2, "OpenCode subagent_depth must allow vulnerability-validator to launch the three truth-review roles without allowing deeper nesting");
+  assert(config.experimental?.subagent_depth === undefined, "subagent_depth must use the supported top-level OpenCode config field");
   assert(rootGitignore.split(/\r?\n/).includes(".opencode/opencode.json"), "local .opencode/opencode.json must be ignored");
   assert(await exists(join(OPENCODE, "opencode.json.bak")), "portable OpenCode config template is missing");
   const templateText = JSON.stringify(config);
@@ -380,7 +382,7 @@ async function main() {
   assert(!("vuln_judger" in mcpMap.servers) && !("vuln-judger" in mcpMap.servers), "mcp-map must not retain an external truth-review server");
   const chromeMcp = config.mcp["chrome-devtools"];
   assert(chromeMcp?.enabled === true && chromeMcp.type === "local", "Chrome DevTools MCP must be enabled locally");
-  assert(sameSet(chromeMcp.command, ["npx", "-y", "chrome-devtools-mcp@latest", "--isolated=true", "--redact-network-headers=true", "--no-usage-statistics", "--no-performance-crux"]),
+  assert(sameSet(chromeMcp.command, ["npx", "-y", "chrome-devtools-mcp@1.8.0", "--isolated=true", "--redact-network-headers=true", "--no-usage-statistics", "--no-performance-crux"]),
     "Chrome DevTools MCP command must use latest, isolation, redaction, and visible Chrome defaults");
   assert(!chromeMcp.command.some(argument => /headless|agent-browser|browser-url|ws-endpoint|auto-?connect|user-data-dir/i.test(argument)),
     "Chrome DevTools MCP must not use headless, agent-browser, an existing browser endpoint, or a persistent profile");
@@ -400,6 +402,12 @@ async function main() {
     assert(sameSet(mcpMap.agents[agent], []), `${agent} must not receive an MCP server`);
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
     assert(text.includes('permission:\n  "*": deny\n'), `${agent} must deny inherited tools before allowing its local workflow tools`);
+  }
+  for (const agent of ["vulnerability-affirmative", "vulnerability-negative", "vulnerability-moderator"]) {
+    const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
+    assert(/^\s*edit: allow\s*$/m.test(text), `${agent} must allow absolute Web-workspace artifact targets`);
+    assert(text.includes("不得先创建 placeholder") && text.includes("立即返回 `BLOCKED`"),
+      `${agent} must avoid partial artifacts and fail fast on deterministic write denial`);
   }
   assert(quickValidatorText.includes('permission:\n  "*": deny\n'), "quick dynamic validator must deny inherited tools before allowing Chrome DevTools");
   assert(/^\s*"chrome-devtools_\*": deny\s*$/m.test(validatorText)

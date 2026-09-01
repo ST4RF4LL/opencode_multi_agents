@@ -296,6 +296,7 @@ function publicRepository(repository, facts = {}, activity = {}) {
     active_audit_count: activity.active_audit_count ?? 0,
     last_audit_at: activity.last_audit_at ?? null,
     last_audit_status: activity.last_audit_status ?? null,
+    removable: activity.removable ?? true,
   };
 }
 
@@ -505,6 +506,7 @@ export class AuditRunner extends EventEmitter {
     this.temporaryRoot = join(this.platformRoot, "tmp", "repositories");
     this.executionRoot = join(this.platformRoot, "workspace", "audit-runs");
     this.repositoryRegistryPath = join(this.stateRoot, "repositories.json");
+    this.startupRepositoryIds = new Set(repositories.map(repository => repository.id));
     this.repositories = new Map(repositories.map(repository => {
       const normalized = normalizeRepository(repository, this.configPath);
       return [normalized.id, normalized];
@@ -822,6 +824,27 @@ export class AuditRunner extends EventEmitter {
     return publicRepository(repository, await this.repositoryFacts(repository));
   }
 
+  async removeRepository(repositoryId) {
+    await this.ready;
+    const repository = this.repositories.get(repositoryId);
+    if (!repository) throw Object.assign(new Error("审计项目不存在。"), { statusCode: 404, code: "repository-not-found" });
+    if (this.startupRepositoryIds.has(repositoryId)) {
+      throw Object.assign(new Error("该项目由工作台启动参数配置，不能在网页中删除。"), { statusCode: 409, code: "repository-startup-managed" });
+    }
+    const audits = [...this.audits.values()].filter(audit => audit.repository_id === repositoryId);
+    if (audits.length) {
+      throw Object.assign(new Error("该项目仍有关联审计；请先删除这些审计任务。"), { statusCode: 409, code: "repository-has-audits" });
+    }
+    this.repositories.delete(repositoryId);
+    await this.persistRepositories();
+    return {
+      repository_id: repositoryId,
+      deleted: true,
+      source_directory_deleted: false,
+      artifacts_deleted: false,
+    };
+  }
+
   async repositoryFacts(repository) {
     const config = await configFacts(repository.config_path);
     try {
@@ -846,6 +869,7 @@ export class AuditRunner extends EventEmitter {
         active_audit_count: audits.filter(audit => ACTIVE.has(audit.status)).length,
         last_audit_at: audits[0]?.updated_at ?? null,
         last_audit_status: audits[0]?.status ?? null,
+        removable: !this.startupRepositoryIds.has(repository.id),
       }));
     }
     return values;

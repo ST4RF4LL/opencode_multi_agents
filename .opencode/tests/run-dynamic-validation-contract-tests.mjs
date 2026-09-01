@@ -68,7 +68,7 @@ function result(level = "STORED_CROSS_USER") {
     environment_binding_digest: target().binding_digest,
     browser_backend: {
       name: "chrome-devtools-mcp",
-      package: "chrome-devtools-mcp@latest",
+      package: "chrome-devtools-mcp@1.8.0",
       resolved_version: "test-version",
       headless: false,
       isolated: true,
@@ -100,7 +100,7 @@ function result(level = "STORED_CROSS_USER") {
       sensitive_headers_redacted: true,
       exchanges: [
         {
-          exchange_id: "http-001",
+          exchange_id: "http_browser-001",
           artifact_id: "ev-http-001",
           sequence: 1,
           phase: "APP_INPUT_SUBMISSION",
@@ -116,21 +116,21 @@ function body(text, mediaType = "application/json") {
     media_type: mediaType,
     text,
     sha256: createHash("sha256").update(text).digest("hex"),
+    size: Buffer.byteLength(text),
     truncated: false,
   };
 }
 
 function exchange() {
   return {
-    schema_version: 1,
-    artifact_type: "SANITIZED_HTTP_EXCHANGE",
-    exchange_id: "http-001",
-    sequence: 1,
-    phase: "APP_INPUT_SUBMISSION",
-    step_id: "submit-marker",
+    schema_version: 2,
+    artifact_type: "HTTP_EXCHANGE_V2",
+    exchange_id: "http_browser-001",
+    parent_exchange_id: null,
+    request_session_id: "attacker-context",
+    source: "chrome_devtools_mcp",
     started_at: "2026-08-08T14:32:06.000Z",
     duration_ms: 184,
-    browser_context_id: "attacker-context",
     request: {
       method: "POST",
       url: "http://127.0.0.1:8080/api/profile",
@@ -147,11 +147,9 @@ function exchange() {
       body: body('{"updated":true}'),
       error: null,
     },
-    capture: {
-      source: "chrome-devtools-mcp",
-      request_id: "cdp-request-001",
-      sanitized: true,
-    },
+    redirect_chain: [],
+    evidence_binding: { artifact_id: "ev-http-001", sequence: 1, phase: "APP_INPUT_SUBMISSION", step_id: "submit-marker", browser_context_id: "attacker-context" },
+    sanitized: true,
   };
 }
 
@@ -162,6 +160,22 @@ function has(errors, expected) {
 const validTarget = target();
 assert.deepEqual(validateLocalhostTargetBinding(validTarget, REQUEST), []);
 assert.deepEqual(validateWebXssRuntimeResult(result(), validTarget), []);
+const sharedTarget = target({
+  accounts: { attacker_role: "attacker", victim_role: "victim", distinct_test_accounts: false },
+  login: { instructions_source: "not-provided", credentials_source: "not-provided" },
+  cleanup: { mode: "ATTEMPT_AND_REPORT", instructions_provided: false },
+});
+assert.deepEqual(validateLocalhostTargetBinding(sharedTarget, REQUEST), []);
+const sharedAccountResult = result("STORED_SAME_USER");
+sharedAccountResult.environment_binding_digest = sharedTarget.binding_digest;
+sharedAccountResult.xss_verification.preferred_goal_met = false;
+sharedAccountResult.xss_verification.distinct_test_accounts = false;
+sharedAccountResult.xss_verification.victim_execution_observed = false;
+sharedAccountResult.xss_verification.victim_context_id = null;
+assert.deepEqual(validateWebXssRuntimeResult(sharedAccountResult, sharedTarget), []);
+const headlessLinux = result();
+headlessLinux.browser_backend.headless = true;
+assert.deepEqual(validateWebXssRuntimeResult(headlessLinux, validTarget), []);
 assert.deepEqual(validateNetworkTraceMetadata(result()), []);
 assert.deepEqual(validateSanitizedHttpExchange(exchange(), validTarget), []);
 
@@ -183,7 +197,7 @@ has(validateWebXssRuntimeResult(missingReload, validTarget), "web-xss-result-sto
 
 const sharedContext = result();
 sharedContext.xss_verification.victim_context_id = sharedContext.xss_verification.attacker_context_id;
-has(validateWebXssRuntimeResult(sharedContext, validTarget), "web-xss-result-contexts-not-distinct");
+has(validateWebXssRuntimeResult(sharedContext, validTarget), "web-xss-result-distinct-account-contexts-invalid");
 
 const cleanupFailed = result();
 cleanupFailed.xss_verification.cleanup = {
@@ -212,4 +226,12 @@ const secretBody = exchange();
 secretBody.request.body = body('{"password":"plain-text"}');
 has(validateSanitizedHttpExchange(secretBody, validTarget), "web-xss-http-exchange-request-invalid");
 
-process.stdout.write(`${JSON.stringify({ complete: true, validator: "web-xss", cases: 13 })}\n`);
+const mismatchedSession = exchange();
+mismatchedSession.request_session_id = "other-context";
+has(validateSanitizedHttpExchange(mismatchedSession, validTarget), "web-xss-http-exchange-v2-metadata-invalid");
+
+const wrongBodySize = exchange();
+wrongBodySize.response.body.size += 1;
+has(validateSanitizedHttpExchange(wrongBodySize, validTarget), "web-xss-http-exchange-response-invalid");
+
+process.stdout.write(`${JSON.stringify({ complete: true, validator: "web-xss", cases: 18 })}\n`);

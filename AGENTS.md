@@ -8,3 +8,4 @@
 - Use unique, non-destructive proof markers. Do not read or exfiltrate credentials, tokens, personal data, or unrelated records. Never create backdoors, system persistence, or reusable weaponized payloads.
 - Attempt to remove stored test payloads through the authorized application cleanup path. Cleanup failure does not erase an otherwise valid finding; record the still-present payload, affected test scope, failed cleanup evidence, and required manual remediation.
 - Use Chrome DevTools MCP for the current implementation. Do not use or silently fall back to `agent-browser`.
+- Build, deploy, test, and run this platform directly on the supported Windows/Linux host. Do not use or introduce Docker, Podman, Compose, container images, containerized Chrome, or a container-runtime fallback. Docker/Compose files found inside an audited target may still be read as source artifacts, but must not be executed by this platform.

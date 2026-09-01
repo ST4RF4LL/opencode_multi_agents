@@ -197,9 +197,10 @@ auto-promote a returned outcome into this project's adjudication or final
 report; that import belongs to the later project.
 
 On a separate explicit manual workbench request, this workspace may invoke
-`dynamic-vulnerability-validator` for `JW-INJECT-06` against a user-supplied
-loopback application. It uses visible isolated Chrome DevTools MCP, two distinct
-test accounts, a bounded safe stored marker, and a sanitized target binding.
+`dynamic-vulnerability-validator` for catalog types whose `applies_to` includes
+`web` against a user-supplied loopback application. It uses Chrome DevTools MCP,
+two distinct test accounts, non-destructive proof, and a sanitized target binding.
+`JW-INJECT-06` retains its bounded stored-marker and specialized result contract.
 This full-validation sidecar is not part of the eight-stage gate and has the
 same non-promotion boundary. Credential values remain in the private task
 context/session and never enter a durable artifact.

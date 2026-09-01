@@ -4,7 +4,7 @@
 
 工作台是现有 OpenCode 多 Agent 安全审计体系的本地控制面与统一交付界面。漏洞挖掘、覆盖核算、证据关联、裁决和报告封存仍由现有 Agent、Skill、MCP 与确定性校验器完成；Web 服务负责安全地创建审计运行、记录进程状态、聚合可信制品并提供一致的查询界面。
 
-动态验证分成两层。创建任务时未启用“测试环境信息”，审计主链不会启动浏览器，所有初步支持项直接进入本地三方静态复核；启用后，主链获准执行一次、全任务最多 120 秒的 loopback 快速动态确认，未确认项仍进入三方。完整动态验证不属于普通审计的自动阶段：操作员还要启用动态 Runner，并在“完整动态验证”页面逐次明确请求、确认授权的 localhost 环境、提供两个不同测试账号及登录/清理步骤。完整结果是 sidecar，不自动改写 routing、finding、攻击链或终稿。
+动态验证分成两层。创建任务时未启用“测试环境信息”，审计主链不会启动浏览器，所有初步支持项直接进入本地三方静态复核；启用后，主链获准执行一次、全任务最多 120 秒的 loopback 快速动态确认，未确认项仍进入三方。完整动态验证不属于普通审计的自动阶段：操作员还要启用动态 Runner，并在“完整动态验证”页面逐次明确请求、确认授权的 localhost 环境；账号及登录/清理步骤按目标实际需要选填。完整结果是 sidecar，不自动改写 routing、finding、攻击链或终稿。
 
 ## 2. 统一资源模型
 
@@ -40,7 +40,7 @@ npm --prefix .opencode run start:audit-workbench:runner
 3. 请求 ref 使用 `git rev-parse --verify` 解析，且必须等于当前 checkout 的 `HEAD`；服务不会自动 checkout。
 4. 默认拒绝含未提交修改的工作树。界面可以显式选择允许脏工作树，并在运行记录中绑定实际 `HEAD`。
 5. `audit_id` 使用有限字符集并全局去重；创建接口要求 `Idempotency-Key`。
-6. “测试目标补充说明”与“测试环境信息”分别使用独立 ENABLE。未启用的 textarea 不进入请求；启用后必须包含非空文本。补充说明作为任务要求与侧重点，但不能扩大授权范围；测试环境开关是快速动态的任务级显式授权，也是后续人工完整动态的必要前提。
+6. “测试目标补充说明”与“测试环境信息”分别使用独立 ENABLE。未启用的 textarea 不进入请求；启用后必须包含非空文本。补充说明作为任务要求与侧重点，但不能扩大授权范围；测试环境开关只控制主审计中的快速动态。后续人工完整动态可在验证页补录环境和账号，并通过独立的逐次授权门禁启动。
 7. Runner 创建工作台侧执行目录，并设置 `AUDIT_SOURCE_ROOT`、`AUDIT_WORKSPACE_ROOT`、`AUDIT_REPORTS_ROOT` 与 `AUDIT_TMP_ROOT`。所有源码、Git 与扫描命令必须显式使用只读源码根；所有输出只允许进入工作台侧 `reports`/`tmp` 命名空间。
 8. 有 tmux/psmux 时，工作台为每个审计创建独立 `-L owa-<digest>` namespace，并在精确的 `audit:tui` 窗口直接运行 `opencode run --format json`。工作台通过任务状态目录中的只读输出中继消费同一进程的 JSONL 与退出状态，不再启动 `opencode serve`、`opencode attach` 或 loopback HTTP API。Windows 自动尝试 `tmux.exe`、`psmux.exe`、`pmux.exe`，并使用绝对 `opencode.exe` 路径。
 9. OpenCode 与 multiplexer launcher 均使用参数数组和 `shell=false`；浏览器文本不会拼接为 shell 命令。tmux/psmux 不可用或 `opencode run` 能力不足时，Runner 回退到普通子进程运行同一组 `opencode run` 参数，但仍在工作台执行目录运行；静态审计仍可执行，只是没有终端监控。
@@ -83,17 +83,17 @@ npm --prefix .opencode run start:audit-workbench:full -- \
   --repo application=/absolute/path/to/application
 ```
 
-调度接口只接受当前仓库 `reports/validation-handoff/runtime/` 下已经通过确定性契约的密封 request 和 `P08_RUNTIME_VALIDATION.dynamic-vulnerability-validator` INPUT envelope。当前只接受 `JW-INJECT-06`，并执行以下额外门禁：
+调度接口只接受当前仓库 `reports/validation-handoff/runtime/` 下已经通过确定性契约的密封 request 和 `P08_RUNTIME_VALIDATION.dynamic-vulnerability-validator` INPUT envelope。漏洞类型必须在目录中声明 `applies_to: web`；`JW-INJECT-06` 使用 XSS 专用强校验，其余类型使用通用 Web 契约。额外门禁如下：
 
-1. request 所属审计必须由当前 Runner 管理，且创建时已启用“测试环境信息”；对应私密上下文文件必须存在并通过 SHA-256 校验。旧任务、未启用任务和上下文损坏任务均返回任务级阻断。
+1. request 所属审计必须由当前 Runner 管理。创建时未启用“测试环境信息”不阻止完整动态验证，操作员可以在当前表单补录并逐次授权。
 2. 目标 URL 必须是 `http` 或 `https` 的 `localhost`、`127.0.0.1` 或 `[::1]`。
 3. 操作员必须勾选显式动态验证请求和专用测试环境确认。
-4. Attacker 与 victim 账号必须不同；用户名、密码、登录说明和清理说明均为本次请求必填。
+4. 账号与登录/清理说明可选：全部留空为匿名模式，只提供一组或同一身份为共享模式，两个不同身份才允许形成跨用户证据。
 5. 当前仓库 HEAD 必须与密封 request 的 source commit 一致。
 6. 已存在结果的 request 默认拒绝覆盖；同一 finding 同时最多一个动态运行。
 7. 直接调用固定 `dynamic-vulnerability-validator`，该 Agent 只能使用 Chrome DevTools MCP、只能写 runtime evidence 路径，且不能调用 `agent-browser`。
 
-动态验证表单逐次提交的结构化凭证不会写入工作台运行状态、事件或日志。动态 Runner 为每次调用创建独立 `XDG_DATA_HOME` / `XDG_STATE_HOME`，仅复制 OpenCode 运行所需的本机认证文件；这些逐次输入只存在于该临时会话。日志会同时按字段形态和本次实际账号/密码值脱敏。运行完成后删除整个临时会话目录并记录清理状态。创建审计时自由填写的“测试环境信息”是另一份持久任务上下文，可能包含专用测试凭证，会按上一节所述以 `0600` 私密文件保存至任务删除；不要填写真实用户、生产或第三方凭证。服务重启时只清理状态文件中记录且严格位于系统临时目录、名称带 `opencode-dynval-` 前缀的精确目录；不会扫描、终止或重置 Chrome/Chromium 进程。
+动态验证表单逐次提交的结构化凭证不会写入工作台运行状态、事件或 Runner 日志；日志会同时按字段形态和本次实际账号/密码值脱敏。Runner 使用 `0600` 临时授权说明文件把当前输入交给 OpenCode，运行完成后删除该文件及任务临时目录。OpenCode session 写入本机正常 session 库并保留 provider session id，页面提供 `opencode -s <session-id>` 恢复命令；该受信本机 session 可能包含 Agent 使用测试凭证时的交互历史，因此只能使用专用测试资产。创建审计时自由填写的“测试环境信息”是另一份持久任务上下文，可能包含专用测试凭证，会按上一节所述以 `0600` 私密文件保存至任务删除。服务重启时只清理状态文件中记录且严格位于系统临时目录、名称带 `opencode-dynval-` 前缀的精确目录；不会扫描、终止或重置 Chrome/Chromium 进程。
 
 动态验证结果读取按服务端登记仓库逐一扫描工作台侧 `reports/repositories/<repository-id>/validation-handoff/runtime/`，并为 Web 资源生成仓库作用域 ID。迁移期间可继续在受控 Windows 验证环境生成契约化、脱敏的 runtime evidence；结果同步回该工作台命名空间后，无需重新执行验证即可统一校验和展示。
 
@@ -104,8 +104,10 @@ npm --prefix .opencode run start:audit-workbench:full -- \
 - `GET /api/v1/workspace`：一次返回统一工作区快照。
 - `GET /api/v1/repositories`：返回已登记审计项目及其规范化目录和就绪度。
 - `POST /api/v1/repositories`：登记操作员指定的工作台主机绝对目录；需要 JSON、同源写请求和 `Idempotency-Key`。
+- `DELETE /api/v1/repositories/:repositoryId`：移除操作员在网页登记的项目；请求体中的 `confirmation` 必须与项目 ID 完全一致。该操作不会删除源码目录或磁盘制品；项目存在关联审计时需先删除审计任务，由启动参数配置的项目不能在网页删除。
 - `GET /api/v1/environment`：返回缓存的运行环境组件与能力状态；`?refresh=1` 强制重新探测。
 - `GET|POST /api/v1/audits`：查询或创建审计。创建请求可包含 `additional_instructions_enabled` / `additional_instructions` 与 `test_environment_enabled` / `test_environment_context`；响应只返回 task-context enable 与长度摘要，不回显原文。
+- 创建任务时的 `test_environment_context` 只决定主审计是否执行快速动态；完整动态验证允许在验证页后续补录 loopback 环境及可选账号、登录与清理说明，并逐次授权。
 - `GET /api/v1/audits/{audit_id}`：返回审计快照和 `ETag`。
 - `POST /api/v1/audits/{audit_id}/actions`：按 `If-Match` 版本执行暂停、进程恢复、断点恢复或取消；断点恢复使用 `{"action":"recover"}`。
 - `DELETE /api/v1/audits/{audit_id}`：删除已结束任务及其工作台受控资源；前端确认弹窗自动提交与路径一致的 JSON `confirmation`，并使用 `If-Match` 防止误删已变化的任务。
@@ -115,6 +117,9 @@ npm --prefix .opencode run start:audit-workbench:full -- \
 - `POST /api/v1/findings/{resource_id}/workflow`：使用 `If-Match` 和 `Idempotency-Key` 保存人工处理状态与备注。
 - `GET /api/v1/reports/{report_id}`：按服务端资源 ID 校验 SHA-256 后读取最终报告正文；浏览器不能提交文件路径。
 - `GET /api/v1/reports/{report_id}/download`：下载摘要校验通过的原始 Markdown 交付件。
+- `GET /api/v1/http-exchanges`：只读汇总动态验证通过 Chrome DevTools MCP 形成的脱敏 HTTP exchange，并兼容读取旧版工作台留下的历史记录；不提供主动发包或重放。
+- `POST /api/v1/http-exchanges/export/bruno`：将明确选择的 1–100 条脱敏 HTTP exchange 导出为 OpenCollection ZIP，人工改包和重放完全交给 Bruno；凭据使用 `process.env` 占位符，响应只保留最小审计元数据。
+- `POST /api/v1/http-exchanges/export/har`：将明确选择的 1–100 条脱敏 HTTP exchange 导出为 HAR 1.2；Cookie 数组保持为空，敏感查询参数、请求头和正文会再次脱敏。
 - `GET /api/v1/validation-requests`：密封的完整动态验证请求及可调度状态。
 - `POST /api/v1/validations`：在逐次完整显式授权门禁后启动隔离的完整动态验证。
 - `GET /api/runs`、`GET /api/runs/{id}`：兼容动态验证证据查询。

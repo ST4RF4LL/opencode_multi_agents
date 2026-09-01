@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:opencode:dynamic-validation:platform-acceptance:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_type", "acceptance_id", "platform", "recorded_at", "host", "authorization", "p2_browser_ownership", "p4_bruno_desktop", "operator_confirmation", "evidence_digest"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "DYNAMIC_VALIDATION_PLATFORM_ACCEPTANCE" },
+    "acceptance_id": { "type": "string", "pattern": "^dynval-(windows|linux)-[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "platform": { "enum": ["windows", "linux"] },
+    "recorded_at": { "type": ["string", "null"], "format": "date-time" },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os_version", "architecture", "node_version", "chrome_version", "chrome_devtools_mcp_version", "bruno_desktop_version"],
+      "properties": {
+        "os_version": { "type": "string" }, "architecture": { "type": "string" }, "node_version": { "type": "string" },
+        "chrome_version": { "type": "string" }, "chrome_devtools_mcp_version": { "type": "string" }, "bruno_desktop_version": { "type": "string" }
+      }
+    },
+    "authorization": {
+      "type": "object", "additionalProperties": false, "required": ["explicit", "loopback_only", "target_origin"],
+      "properties": { "explicit": { "type": "boolean" }, "loopback_only": { "type": "boolean" }, "target_origin": { "type": "string" } }
+    },
+    "p2_browser_ownership": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "chrome_144_or_newer", "remote_debugging_confirmed", "profile_visibility_warning_confirmed", "task_page_created", "task_page_closed", "preexisting_pages_unchanged", "risk_escalated_to_isolated_browser", "isolated_browser_closed", "shared_chrome_remained_running", "headless_isolated_verified", "global_chrome_termination_used", "container_runtime_used", "cleanup_failures", "proof_sha256"],
+      "properties": {
+        "status": { "enum": ["PENDING", "PASS", "FAIL", "SKIPPED"] },
+        "chrome_144_or_newer": { "type": "boolean" }, "remote_debugging_confirmed": { "type": "boolean" }, "profile_visibility_warning_confirmed": { "type": "boolean" },
+        "task_page_created": { "type": "boolean" }, "task_page_closed": { "type": "boolean" }, "preexisting_pages_unchanged": { "type": "boolean" },
+        "risk_escalated_to_isolated_browser": { "type": "boolean" }, "isolated_browser_closed": { "type": "boolean" }, "shared_chrome_remained_running": { "type": "boolean" },
+        "headless_isolated_verified": { "type": ["boolean", "null"] }, "global_chrome_termination_used": { "type": "boolean" }, "container_runtime_used": { "const": false },
+        "cleanup_failures": { "type": "array", "items": { "type": "string" } },
+        "proof_sha256": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+      }
+    },
+    "p4_bruno_desktop": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "archive_sha256", "opened_as_opencollection", "request_semantics_preserved", "repeated_query_parameters_preserved", "environment_values_supplied_locally", "secrets_absent_from_collection", "requests_executed_against_loopback", "expected_responses_observed", "temporary_env_removed", "proof_sha256"],
+      "properties": {
+        "status": { "enum": ["PENDING", "PASS", "FAIL", "SKIPPED"] }, "archive_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "opened_as_opencollection": { "type": "boolean" }, "request_semantics_preserved": { "type": "boolean" }, "repeated_query_parameters_preserved": { "type": "boolean" },
+        "environment_values_supplied_locally": { "type": "boolean" }, "secrets_absent_from_collection": { "type": "boolean" },
+        "requests_executed_against_loopback": { "type": "boolean" }, "expected_responses_observed": { "type": "boolean" }, "temporary_env_removed": { "type": "boolean" },
+        "proof_sha256": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+      }
+    },
+    "operator_confirmation": { "type": "boolean" },
+    "evidence_digest": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+  }
+}

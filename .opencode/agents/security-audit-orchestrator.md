@@ -222,7 +222,7 @@ Required session naming:
 
 ### Manual full localhost runtime-validation sidecar
 
-Full dynamic validation is never automatic and is not an eight-stage prerequisite. Invoke `dynamic-vulnerability-validator` only from the workbench's explicit user action when the finding has a sealed request. The currently supported type is `JW-INJECT-06` Web XSS on `localhost`, `127.0.0.1`, or `[::1]` through visible isolated Chrome DevTools MCP.
+Full dynamic validation is never automatic and is not an eight-stage prerequisite. Invoke `dynamic-vulnerability-validator` only from the workbench's explicit user action when the finding has a sealed request. Supported types are catalog entries whose `applies_to` includes `web`, on `localhost`, `127.0.0.1`, or `[::1]` through Chrome DevTools MCP. `JW-INJECT-06` uses the specialized XSS validator; other Web types use the generic non-destructive validator.
 
 The manual request must supply the test URL, two distinct authorized test accounts, and usable login and cleanup instructions. Missing details block that manual job; they never authorize discovery of an environment. A full-dynamic result remains a sidecar and never automatically rewrites validation routing, finding, chain, or the sealed report.
 
@@ -272,7 +272,7 @@ If any gate fails after the permitted rounds, issue a partial report with promin
 Before declaring the full workflow complete, verify:
 
 - Intake contains exactly the preliminary `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` set and binds their finding object digests.
-- The task-level quick gate cannot be enabled by prompt prose or a finding; it comes only from `AUDIT_QUICK_DYNAMIC_ENABLED` plus the digest-valid private context.
+- The task-level quick gate cannot be enabled by prompt prose or a finding; it comes only from `AUDIT_QUICK_DYNAMIC_ENABLED` plus the digest-valid private context. This gate controls only the bounded quick run. It must never suppress or empty the later manually authorized full-dynamic-validation candidate set for Web-capable true-positive findings.
 - Quick results account for the entire intake. `CONFIRMED` carries sanitized loopback evidence; every other status is statically reviewed.
 - Affirmative proves the positive chain independently; Negative reconstructs before reading/challenging it; Moderator independently checks both and frozen source.
 - Routing binds all four upstream artifact digests, has `full_dynamic_trigger=MANUAL_ONLY`, and maps verdicts to `FINDING | EXCLUDED | RESIDUAL_GAP` deterministically.

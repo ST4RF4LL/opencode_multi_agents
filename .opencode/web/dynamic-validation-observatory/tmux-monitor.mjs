@@ -127,6 +127,16 @@ export class OpenCodeTmuxMonitor {
 
   async tmux(socketName, args, options = {}) {
     if (!SAFE_SOCKET.test(socketName)) throw new Error("tmux socket 名称非法。");
+    // A persisted audit can call stop/capture before start() after the
+    // workbench process restarts.  At that point the executable cache is
+    // intentionally empty, so resolve it lazily instead of passing null to
+    // child_process.execFile().
+    if (!this.tmuxCommand) await this.probe();
+    if (!this.tmuxCommand) {
+      throw Object.assign(new Error(`${this.platform === "win32" ? "psmux/tmux" : "tmux"} 可执行文件不可用。`), {
+        code: "terminal-multiplexer-unavailable",
+      });
+    }
     return this.execute(this.tmuxCommand, ["-L", socketName, ...args], { encoding: "utf8", timeout: 10_000, maxBuffer: 2 * 1024 * 1024, ...options });
   }
 

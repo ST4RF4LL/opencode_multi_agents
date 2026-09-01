@@ -50,7 +50,7 @@ export async function buildOpenCodeEnvironment(configPath, baseEnvironment = pro
     ...baseEnvironment,
     OPENCODE_CONFIG: absoluteConfigPath,
     OPENCODE_CONFIG_DIR: configDirectory,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify({ mcp }),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({ mcp, subagent_depth: 2 }),
     OPENCODE_DISABLE_PROJECT_CONFIG: "true",
   };
 }

@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { unzipSync } from "fflate";
 import {
   getValidationRun,
   listValidationRuns,
@@ -112,13 +113,20 @@ try {
   const detail = await getValidationRun(runtimeRoot, "audit-001::finding-001");
   assert.equal(detail.environment.source_repository, "fixture-repository");
   assert.equal(detail.finding.verification_level, "STORED_CROSS_USER");
+  assert.equal(detail.network.exchanges[0].schema_version, 2);
+  assert.equal(detail.network.exchanges[0].artifact_type, "HTTP_EXCHANGE_V2");
+  assert.equal(detail.network.exchanges[0].source, "chrome_devtools_mcp");
+  assert.equal(detail.network.exchanges[0].evidence_binding.artifact_id, "ev-http-001");
   assert.equal(detail.network.exchanges[0].request.headers[1].value, "[REDACTED]");
   assert.equal(detail.network.exchanges[0].response.headers[0].value, "[REDACTED]");
   assert.equal(JSON.stringify(detail).includes("must-not-leak"), false);
   assert.equal(sanitizeForWeb({ password: "secret" }).password, "[REDACTED]");
   assert.equal(sanitizeForWeb('{"access_token":"must-not-leak"}').includes("must-not-leak"), false);
 
-  const server = createValidationObservatoryServer({ runtimeRoot, stateRoot: join(temp, "state") });
+  const server = createValidationObservatoryServer({
+    runtimeRoot,
+    stateRoot: join(temp, "state"),
+  });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
@@ -134,16 +142,67 @@ try {
 
     const indexResponse = await fetch(`http://127.0.0.1:${address.port}/`);
     assert.equal(indexResponse.status, 200);
-    assert.match(await indexResponse.text(), /DeepHole·JAVA/);
+    const indexHtml = await indexResponse.text();
+    assert.match(indexHtml, /DeepHole·JAVA/);
+    assert.match(indexHtml, /发包记录/);
+    assert.match(indexHtml, /人工发包请使用 Bruno/);
+    assert.doesNotMatch(indexHtml, /HTTP 请求工作台/);
+    assert.doesNotMatch(indexHtml, /发送请求/);
 
     const postResponse = await fetch(`http://127.0.0.1:${address.port}/api/runs`, { method: "POST" });
     assert.equal(postResponse.status, 405);
+
+    const exchangeList = await fetch(`http://127.0.0.1:${address.port}/api/v1/http-exchanges`);
+    assert.equal(exchangeList.status, 200);
+    const exchangeHistory = await exchangeList.json();
+    assert.equal(exchangeHistory.count, 1);
+    assert.equal(exchangeHistory.items[0].source, "chrome_devtools_mcp");
+    assert.equal(exchangeHistory.items[0].audit_id, "audit-001");
+    assert.equal(exchangeHistory.items[0].repository_id, "workspace");
+    assert.equal(JSON.stringify(exchangeHistory).includes("must-not-leak"), false);
+    const recordedExchange = exchangeHistory.items[0];
+
+    const exportResponse = await fetch(`http://127.0.0.1:${address.port}/api/v1/http-exchanges/export/bruno`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exchange_ids: [recordedExchange.exchange_id] }),
+    });
+    assert.equal(exportResponse.status, 200);
+    assert.equal(exportResponse.headers.get("content-type"), "application/zip");
+    assert.match(exportResponse.headers.get("content-disposition"), /dynamic-validation-.*\.zip/);
+    const exportedFiles = unzipSync(new Uint8Array(await exportResponse.arrayBuffer()));
+    assert(Object.keys(exportedFiles).some(path => path.endsWith("/opencollection.yml")));
+
+    const harResponse = await fetch(`http://127.0.0.1:${address.port}/api/v1/http-exchanges/export/har`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exchange_ids: [recordedExchange.exchange_id] }),
+    });
+    assert.equal(harResponse.status, 200);
+    assert.match(harResponse.headers.get("content-disposition"), /dynamic-validation-.*\.har/);
+    const har = await harResponse.json();
+    assert.equal(har.log.version, "1.2");
+    assert.equal(JSON.stringify(har).includes("must-not-leak"), false);
+
+    const missingExport = await fetch(`http://127.0.0.1:${address.port}/api/v1/http-exchanges/export/bruno`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exchange_ids: ["http_missing"] }),
+    });
+    assert.equal(missingExport.status, 404);
+
+    const removedSessionApi = await fetch(`http://127.0.0.1:${address.port}/api/v1/request-sessions`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    assert.equal(removedSessionApi.status, 405);
+    const removedReplayApi = await fetch(`http://127.0.0.1:${address.port}/api/v1/http-exchanges/${recordedExchange.exchange_id}/replay`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    assert.equal(removedReplayApi.status, 405);
   } finally {
     server.close();
     await once(server, "close");
   }
 
-  process.stdout.write(`${JSON.stringify({ complete: true, service: "dynamic-validation-observatory", cases: 13 })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, service: "dynamic-validation-observatory", cases: 36 })}\n`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

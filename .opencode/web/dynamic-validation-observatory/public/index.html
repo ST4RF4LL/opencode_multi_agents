@@ -51,7 +51,30 @@
 
           <section id="view-reports" class="view"><div class="page-heading"><div><p class="eyebrow">REPORT DELIVERY</p><h2>审计报告</h2><p>最终中文 Markdown 报告、模型绑定状态与内容摘要记录。</p></div></div><div id="report-grid" class="report-grid"></div></section>
 
-          <section id="view-validation" class="view"><div class="page-heading"><div><p class="eyebrow">AUTHORIZED RUNTIME EVIDENCE</p><h2>完整动态验证</h2><p>该页面只负责人工触发的完整验证；审计主链中的 120 秒快速动态与本地三方静态复核由八环节交付门禁自动记录。</p></div></div><article class="panel request-panel"><div class="section-title"><div><p class="eyebrow">SEALED REQUESTS</p><h2>待人工验证请求</h2></div><span id="dynamic-runner-caption" class="status">读取中</span></div><div id="validation-request-list" class="request-list"></div></article><div class="split validation-split"><article class="panel"><div class="section-title"><div><p class="eyebrow">RESULTS</p><h2>完整验证结果</h2></div></div><div id="validation-list" class="audit-list"></div></article><aside id="validation-detail" class="panel detail-panel"><div class="empty-state">选择一次验证查看环境和脱敏 HTTP 证据。</div></aside></div></section>
+          <section id="view-validation" class="view">
+            <div class="page-heading"><div><p class="eyebrow">AUTHORIZED RUNTIME EVIDENCE</p><h2>完整动态验证</h2><p>任务创建时未填写测试环境也可在本页补录并逐次授权；人工发包请使用 Bruno，平台仅展示和导出脱敏发包记录。</p></div></div>
+            <article class="panel request-history-panel">
+              <div class="section-title request-history-title">
+                <div><p class="eyebrow">READ-ONLY HTTP EVIDENCE</p><h2>发包记录</h2><p>记录来自动态验证的 Chrome DevTools MCP 网络证据；平台不提供发送、改包或重放功能。</p></div>
+                <div class="request-export-toolbar">
+                  <label>方法<select id="exchange-method-filter"><option value="">全部</option><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>OPTIONS</option></select></label>
+                  <label>状态<input id="exchange-status-filter" inputmode="numeric" placeholder="如 200"></label>
+                  <label>来源<select id="exchange-source-filter"><option value="">全部</option><option value="chrome_devtools_mcp">浏览器捕获</option><option value="active_request">历史工作台记录</option></select></label>
+                  <label>搜索<input id="exchange-query-filter" placeholder="URL / 请求体 / ID"></label>
+                  <label class="check"><input id="select-all-exchanges" type="checkbox">全选当前列表</label>
+                  <span id="selected-exchange-count">已选择 0 条</span>
+                  <button id="clear-exchange-selection" type="button" class="button secondary">清空</button>
+                  <button id="compare-selected-exchanges" type="button" class="button secondary" disabled>比较 2 条</button>
+                  <button id="export-selected-har" type="button" class="button secondary" disabled>导出 HAR</button>
+                  <button id="export-selected-bruno" type="button" class="button primary" disabled>导出所选 OpenCollection</button>
+                </div>
+              </div>
+              <div id="exchange-diff-panel" class="exchange-diff-panel" hidden></div>
+              <div id="request-exchange-list" class="exchange-list"></div>
+            </article>
+            <article class="panel request-panel"><div class="section-title"><div><p class="eyebrow">SEALED REQUESTS</p><h2>待人工验证请求</h2></div><span id="dynamic-runner-caption" class="status">读取中</span></div><div id="validation-request-list" class="request-list"></div></article>
+            <div class="split validation-split"><article class="panel"><div class="section-title"><div><p class="eyebrow">RESULTS</p><h2>完整验证结果</h2></div></div><div id="validation-list" class="audit-list"></div></article><aside id="validation-detail" class="panel detail-panel"><div class="empty-state">选择一次验证查看环境和脱敏 HTTP 证据。</div></aside></div>
+          </section>
 
           <section id="view-runtime" class="view">
             <div class="page-heading"><div><p class="eyebrow">PLATFORM READINESS</p><h2>运行环境</h2><p id="environment-caption">正在检查操作系统、OpenCode、静态分析器和浏览器能力…</p></div></div>
@@ -112,7 +135,7 @@
               <label class="enable-switch"><input name="test_environment_enabled" type="checkbox" aria-controls="test-environment-context"><span>ENABLE</span></label>
             </div>
             <label class="context-textarea" for="test-environment-context">环境上下文<textarea id="test-environment-context" name="test_environment_context" maxlength="24000" autocomplete="off" spellcheck="false" placeholder="URL: http://127.0.0.1:8080&#10;测试账号: ...&#10;测试密码: ...&#10;登录/数据清理说明: ..." disabled></textarea></label>
-            <p class="context-note">未启用时不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用即明确授权审计主链执行一次、全任务最多 120 秒的 loopback 快速动态确认；信息按敏感上下文保存且不在任务 API 中回显。完整动态验证仍需在验证页逐次手动触发。</p>
+            <p class="context-note">未启用或未填写时，主审计不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用即明确授权审计主链执行一次、全任务最多 120 秒的 loopback 快速动态确认；信息按敏感上下文保存且不在任务 API 中回显。完整动态验证资格不受此开关限制，可在验证页补录环境并逐次授权。</p>
           </section>
         </div>
         <div id="audit-form-error" class="notice error" hidden></div>
@@ -129,6 +152,14 @@
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-project>取消</button><button id="submit-project" class="button primary" type="submit">登记项目</button></div>
       </form>
     </dialog>
+    <dialog id="delete-project-dialog">
+      <form id="delete-project-form">
+        <div class="dialog-heading"><div><p class="eyebrow">REMOVE AUDIT TARGET</p><h2>删除审计项目</h2></div><button type="button" class="icon-button" data-close-delete-project>×</button></div>
+        <p class="delete-warning">将从工作台移除项目 <strong id="delete-project-name"></strong>（<span id="delete-project-id" class="mono"></span>）的登记信息。源码目录和磁盘文件不会被删除；存在关联审计时必须先删除审计任务。</p>
+        <div id="delete-project-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-delete-project>取消</button><button id="submit-delete-project" class="button danger" type="submit">确认删除项目</button></div>
+      </form>
+    </dialog>
     <dialog id="delete-audit-dialog">
       <form id="delete-audit-form">
         <div class="dialog-heading"><div><p class="eyebrow">DELETE AUDIT</p><h2>删除审计任务</h2></div><button type="button" class="icon-button" data-close-delete-audit>×</button></div>
@@ -142,15 +173,25 @@
         <div class="dialog-heading"><div><p class="eyebrow">LOCALHOST VALIDATION</p><h2>授权动态验证</h2><p id="validation-form-subtitle"></p></div><button type="button" class="icon-button" data-close-validation>×</button></div>
         <input name="validation_request_id" type="hidden"><input name="repository_id" type="hidden">
         <label>授权测试 URL<input name="target_base_url" type="url" placeholder="http://127.0.0.1:8080" required></label>
-        <div class="form-row"><label>Attacker 测试账号<input name="attacker_username" autocomplete="off" required></label><label>Attacker 密码<input name="attacker_password" type="password" autocomplete="new-password" required></label></div>
-        <div class="form-row"><label>Victim 测试账号<input name="victim_username" autocomplete="off" required></label><label>Victim 密码<input name="victim_password" type="password" autocomplete="new-password" required></label></div>
-        <label>登录步骤<textarea name="login_instructions" maxlength="4000" placeholder="说明登录入口、字段和成功判据，不要填写无关数据。" required></textarea></label>
-        <label>清理步骤<textarea name="cleanup_instructions" maxlength="4000" placeholder="说明如何通过应用正常路径删除测试 payload。" required></textarea></label>
+        <label>浏览器环境<select name="browser_mode"><option value="auto">自动选择（推荐）</option><option value="shared_tab">现有 Chrome 独立标签页</option><option value="isolated_context">现有 Chrome 隔离上下文</option><option value="isolated_browser">独立临时 Chrome</option></select></label>
+        <p class="notice">账号信息为可选：全部留空表示匿名验证；只填一组或填写同一账号表示共享账号验证；填写两个不同账号才允许形成跨用户证据。</p>
+        <div class="form-row"><label>Attacker 测试账号（可选）<input name="attacker_username" autocomplete="off"></label><label>Attacker 密码（可选）<input name="attacker_password" type="password" autocomplete="new-password"></label></div>
+        <div class="form-row"><label>Victim 测试账号（可选）<input name="victim_username" autocomplete="off"></label><label>Victim 密码（可选）<input name="victim_password" type="password" autocomplete="new-password"></label></div>
+        <label>登录步骤（可选）<textarea name="login_instructions" maxlength="4000" placeholder="需要登录时，可说明登录入口、字段和成功判据。"></textarea></label>
+        <label>清理步骤（可选）<textarea name="cleanup_instructions" maxlength="4000" placeholder="会产生测试数据时，可说明如何通过应用正常路径清理。"></textarea></label>
         <label class="check"><input name="explicit_authorization" type="checkbox" required>我明确请求执行本次动态验证，并确认目标仅为 loopback。</label>
-        <label class="check"><input name="test_environment" type="checkbox" required>我确认环境和两个账号均为专用测试资产，不包含真实用户或生产数据。</label>
-        <div class="notice">凭证只传给本次隔离 OpenCode 会话；会话使用临时数据目录，结束后删除。日志和持久制品不得保存凭证值。</div>
+        <label class="check"><input name="test_environment" type="checkbox" required>我确认该环境以及任何已填写账号均为专用测试资产，不包含真实用户或生产数据。</label>
+        <div class="notice">Web XSS、身份隔离或持久化操作会自动升级到独立临时 Chrome，不能降级；低影响验证可使用现有 Chrome 的任务独立标签页。凭证只传给本次 OpenCode 会话，日志和持久制品不得保存凭证值。</div>
         <div id="validation-form-error" class="notice error" hidden></div>
-        <div class="dialog-actions"><button type="button" class="button secondary" data-close-validation>取消</button><button id="submit-validation" class="button primary" type="submit">启动隔离验证</button></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-validation>取消</button><button id="submit-validation" class="button primary" type="submit">启动动态验证</button></div>
+      </form>
+    </dialog>
+    <dialog id="cancel-validation-dialog">
+      <form id="cancel-validation-form">
+        <div class="dialog-heading"><div><p class="eyebrow">STOP VALIDATION</p><h2>停止动态验证</h2></div><button type="button" class="icon-button" data-close-cancel-validation>×</button></div>
+        <p class="delete-warning">将停止验证 <strong id="cancel-validation-id" class="mono"></strong>。只终止该验证任务并关闭它创建的浏览器会话；不会终止其他 Chrome 进程，也不会删除已有审计制品。</p>
+        <div id="cancel-validation-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-cancel-validation>继续运行</button><button id="submit-cancel-validation" class="button danger" type="submit">确认停止</button></div>
       </form>
     </dialog>
     <dialog id="report-dialog" class="report-dialog">

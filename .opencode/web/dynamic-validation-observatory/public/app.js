@@ -3,6 +3,8 @@ const state = {
   repositories: [],
   validationRuns: [],
   validationRequests: [],
+  requestExchanges: [],
+  selectedRequestExchangeIds: new Set(),
   runtime: null,
   environment: { capabilities: [], components: [], platform: {}, configuration: {} },
   modelSettings: { selected_model: "default", options: [{ value: "default", label: "默认" }], sources: [], selection_available: true },
@@ -21,6 +23,8 @@ const state = {
   terminalGrid: null,
   terminalAuditId: null,
   pendingDeleteAuditId: null,
+  pendingDeleteRepositoryId: null,
+  pendingCancelValidationId: null,
 };
 
 const VIEW_META = {
@@ -204,10 +208,17 @@ function renderProjects() {
     row.append(activity);
     cell(row, !repository.configured ? "缺少配置" : repository.config_valid ? "JSON 有效" : "JSON 无效");
     const action = element("td");
-    const button = element("button", "text-button", "创建审计 →");
-    button.disabled = !repository.ready || !state.runtime?.runner?.enabled;
-    button.addEventListener("click", () => openAuditDialog(repository.id));
-    action.append(button);
+    const create = element("button", "text-button", "创建审计 →");
+    create.disabled = !repository.ready || !state.runtime?.runner?.enabled;
+    create.addEventListener("click", () => openAuditDialog(repository.id));
+    const remove = element("button", "text-button danger-text", "删除项目");
+    remove.disabled = repository.removable === false || (repository.audit_count ?? 0) > 0;
+    remove.title = repository.removable === false
+      ? "该项目由工作台启动参数管理，不能从网页删除。"
+      : (repository.audit_count ?? 0) > 0 ? "请先删除该项目的全部审计任务。" : "只移除工作台登记，不删除源码目录。";
+    remove.addEventListener("click", () => openDeleteProjectDialog(repository));
+    action.className = "project-actions";
+    action.append(create, remove);
     row.append(action);
     body.append(row);
   }
@@ -491,6 +502,44 @@ async function requestAuditAction(audit, action) {
   } catch (error) { showError(error); }
 }
 
+function openCancelValidationDialog(request) {
+  state.pendingCancelValidationId = request.job?.id ?? null;
+  $("cancel-validation-id").textContent = `${request.audit_id} / ${request.finding_id}`;
+  $("cancel-validation-form-error").hidden = true;
+  $("cancel-validation-dialog").showModal();
+}
+
+function closeCancelValidationDialog() {
+  state.pendingCancelValidationId = null;
+  $("cancel-validation-dialog").close();
+}
+
+async function submitCancelValidation(event) {
+  event.preventDefault();
+  const request = state.validationRequests.find(item => item.job?.id === state.pendingCancelValidationId);
+  const error = $("cancel-validation-form-error");
+  if (!request || request.job?.status !== "running") {
+    error.textContent = "该动态验证已不在运行，请关闭后刷新。";
+    error.hidden = false;
+    return;
+  }
+  const button = $("submit-cancel-validation");
+  button.disabled = true;
+  try {
+    await api(`/api/v1/validations/${encodeURIComponent(request.job.id)}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    closeCancelValidationDialog();
+    toast("已提交停止动态验证操作");
+    await load();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    error.hidden = false;
+  } finally { button.disabled = false; }
+}
+
 async function dispatchQueueNow() {
   const button = $("dispatch-queue");
   button.disabled = true;
@@ -510,6 +559,45 @@ function openDeleteAuditDialog(audit) {
   $("delete-audit-id").textContent = audit.id;
   $("delete-audit-form-error").hidden = true;
   $("delete-audit-dialog").showModal();
+}
+
+function openDeleteProjectDialog(repository) {
+  state.pendingDeleteRepositoryId = repository.id;
+  $("delete-project-name").textContent = repository.name;
+  $("delete-project-id").textContent = repository.id;
+  $("delete-project-form-error").hidden = true;
+  $("delete-project-dialog").showModal();
+}
+
+function closeDeleteProjectDialog() {
+  state.pendingDeleteRepositoryId = null;
+  $("delete-project-dialog").close();
+}
+
+async function submitDeleteProject(event) {
+  event.preventDefault();
+  const repository = state.repositories.find(item => item.id === state.pendingDeleteRepositoryId);
+  const error = $("delete-project-form-error");
+  if (!repository) {
+    error.textContent = "待删除的审计项目已不存在，请关闭后刷新。";
+    error.hidden = false;
+    return;
+  }
+  const button = $("submit-delete-project");
+  button.disabled = true;
+  try {
+    await api(`/api/v1/repositories/${encodeURIComponent(repository.id)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmation: repository.id }),
+    });
+    closeDeleteProjectDialog();
+    toast(`已移除审计项目 ${repository.name}；源码目录未删除`);
+    await load();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    error.hidden = false;
+  } finally { button.disabled = false; }
 }
 
 function closeDeleteAuditDialog() {
@@ -769,20 +857,43 @@ function renderValidationRequests() {
     const header = element("header");
     const identity = element("div");
     identity.append(element("h3", "", `${request.audit_id} / ${request.finding_id}`), element("small", "mono", request.vulnerability_type_id));
-    header.append(identity, status(request.job?.status ?? (request.result_present ? "completed" : !request.task_dynamic_validation_enabled ? "blocked" : request.dispatch_ready ? "queued" : "failed")));
+    header.append(identity, status(request.job?.status ?? (request.result_present ? "completed" : request.dispatch_ready ? "queued" : "failed")));
     item.append(header, element("p", "", request.summary ?? "没有保存验证请求摘要。"));
+    if (request.audit_managed && !request.task_test_environment_preconfigured && !request.result_present) {
+      item.append(element("p", "request-guidance", "任务创建时未录入测试环境；可在本页授权表单中补录后启动完整动态验证。"));
+    }
     if (request.dispatch_blocked_reason && !request.result_present) item.append(element("p", "request-blocker", request.dispatch_blocked_reason));
+    if (request.job?.provider_session_id) {
+      const session = element("p", "request-session");
+      const command = `opencode -s ${request.job.provider_session_id}`;
+      session.append(element("span", "", "OpenCode session："), element("code", "mono", command));
+      const copy = element("button", "text-button", "复制命令");
+      copy.type = "button";
+      copy.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(command);
+        toast("OpenCode session 命令已复制");
+      });
+      session.append(copy);
+      item.append(session);
+    }
     const footer = element("footer");
     footer.append(element("span", "", `${request.repository_name} · ${short(request.source_commit)}`));
-    const button = element("button", "button primary", request.job?.status === "running" ? "验证运行中" : request.result_present ? "已有结果" : !request.task_dynamic_validation_enabled ? "任务未启用" : "授权并启动");
-    button.disabled = !enabled || !request.dispatch_ready || ["preparing", "running", "cancelling"].includes(request.job?.status);
-    button.title = request.dispatch_blocked_reason ?? "";
-    button.addEventListener("click", () => openValidationDialog(request));
-    footer.append(button);
+    if (["running", "cancelling"].includes(request.job?.status)) {
+      const stopButton = element("button", "button danger", request.job.status === "cancelling" ? "正在停止…" : "停止验证");
+      stopButton.disabled = request.job.status === "cancelling";
+      stopButton.addEventListener("click", () => openCancelValidationDialog(request));
+      footer.append(stopButton);
+    } else {
+      const button = element("button", "button primary", request.result_present ? "已有结果" : request.task_test_environment_preconfigured ? "授权并启动" : "补录环境并启动");
+      button.disabled = !enabled || !request.dispatch_ready || request.job?.status === "preparing";
+      button.title = request.dispatch_blocked_reason ?? "";
+      button.addEventListener("click", () => openValidationDialog(request));
+      footer.append(button);
+    }
     item.append(footer);
     list.append(item);
   }
-  if (!state.validationRequests.length) list.append(element("div", "empty-state", "没有发现密封的动态验证请求。"));
+  if (!state.validationRequests.length) list.append(element("div", "empty-state", "没有发现可进行完整动态验证的 Web 漏洞。"));
 }
 
 function exchangeText(exchange) {
@@ -791,6 +902,130 @@ function exchangeText(exchange) {
   const responseHeaders = (exchange.response.headers ?? []).map(item => `${item.name}: ${item.value}`).join("\n");
   const responseBody = exchange.response.body?.text ?? "";
   return `${exchange.request.method} ${exchange.request.url}\n${requestHeaders}${requestBody ? `\n\n${requestBody}` : ""}\n\nHTTP ${exchange.response.status ?? "ERR"} ${exchange.response.status_text ?? ""}\n${responseHeaders}${responseBody ? `\n\n${responseBody}` : ""}`;
+}
+
+async function copyExchange(exchange) {
+  await navigator.clipboard.writeText(exchangeText(exchange));
+  toast("脱敏请求/响应已复制");
+}
+
+async function downloadBruno(exchangeIds) {
+  return downloadExchangeExport("/api/v1/http-exchanges/export/bruno", exchangeIds, "dynamic-validation-open-collection.zip", "OpenCollection");
+}
+
+async function downloadHar(exchangeIds) {
+  return downloadExchangeExport("/api/v1/http-exchanges/export/har", exchangeIds, "dynamic-validation.har", "HAR");
+}
+
+async function downloadExchangeExport(path, exchangeIds, fallbackFilename, label) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ exchange_ids: exchangeIds }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message ?? `${label} 导出失败：HTTP ${response.status}`);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? fallbackFilename;
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  toast(`已导出 ${exchangeIds.length} 条请求的 ${label}`);
+}
+
+function filteredRequestExchanges() {
+  const method = $("exchange-method-filter").value;
+  const statusValue = $("exchange-status-filter").value.trim();
+  const source = $("exchange-source-filter").value;
+  const query = $("exchange-query-filter").value.trim().toLowerCase();
+  return state.requestExchanges.filter(exchange => {
+    if (method && exchange.request.method !== method) return false;
+    if (statusValue && String(exchange.response?.status ?? "ERR") !== statusValue) return false;
+    if (source && exchange.source !== source) return false;
+    if (query && !`${exchange.exchange_id} ${exchange.request.url} ${exchange.request.body?.text ?? ""} ${exchange.response?.body?.text ?? ""}`.toLowerCase().includes(query)) return false;
+    return true;
+  });
+}
+
+function flattened(value, prefix = "") {
+  if (Array.isArray(value)) return Object.fromEntries(value.flatMap((item, index) => Object.entries(flattened(item, `${prefix}[${index}]`))));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => Object.entries(flattened(item, prefix ? `${prefix}.${key}` : key))));
+  return { [prefix || "value"]: value === null ? "null" : String(value ?? "") };
+}
+
+function compareSelectedExchanges() {
+  const exchanges = [...state.selectedRequestExchangeIds].map(id => state.requestExchanges.find(exchange => exchange.exchange_id === id)).filter(Boolean);
+  if (exchanges.length !== 2) return;
+  const [left, right] = exchanges;
+  const leftFields = flattened({ request: left.request, response: left.response, redirect_chain: left.redirect_chain });
+  const rightFields = flattened({ request: right.request, response: right.response, redirect_chain: right.redirect_chain });
+  const fields = [...new Set([...Object.keys(leftFields), ...Object.keys(rightFields)])].sort();
+  const table = element("table");
+  const head = element("tr");
+  ["字段", left.exchange_id, right.exchange_id].forEach(label => head.append(element("th", "", label)));
+  table.append(head);
+  for (const field of fields) {
+    const changed = leftFields[field] !== rightFields[field];
+    const row = element("tr");
+    row.append(element("td", "mono", field), element("td", changed ? "changed mono" : "mono", leftFields[field] ?? "—"), element("td", changed ? "changed mono" : "mono", rightFields[field] ?? "—"));
+    table.append(row);
+  }
+  const panel = $("exchange-diff-panel");
+  panel.replaceChildren(element("h3", "", "结构化差异预览"), table);
+  panel.hidden = false;
+}
+
+function updateExchangeSelectionControls() {
+  const selected = state.selectedRequestExchangeIds.size;
+  const visible = filteredRequestExchanges();
+  const all = visible.length > 0 && visible.every(exchange => state.selectedRequestExchangeIds.has(exchange.exchange_id));
+  $("selected-exchange-count").textContent = `已选择 ${selected} 条`;
+  $("export-selected-bruno").disabled = selected < 1;
+  $("export-selected-har").disabled = selected < 1;
+  $("compare-selected-exchanges").disabled = selected !== 2;
+  $("clear-exchange-selection").disabled = selected < 1;
+  $("select-all-exchanges").checked = all;
+  $("select-all-exchanges").indeterminate = selected > 0 && !all;
+  $("select-all-exchanges").disabled = visible.length < 1;
+}
+
+function renderRequestHistory() {
+  const available = new Set(state.requestExchanges.map(exchange => exchange.exchange_id));
+  state.selectedRequestExchangeIds = new Set([...state.selectedRequestExchangeIds].filter(id => available.has(id)));
+  const list = $("request-exchange-list");
+  list.replaceChildren();
+  const visibleExchanges = filteredRequestExchanges();
+  for (const exchange of visibleExchanges) {
+    const row = element("div", "request-exchange-row");
+    const selection = element("label", "request-exchange-selection");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.selectedRequestExchangeIds.has(exchange.exchange_id);
+    checkbox.setAttribute("aria-label", `选择 ${exchange.request.method} ${exchange.request.url}`);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) state.selectedRequestExchangeIds.add(exchange.exchange_id);
+      else state.selectedRequestExchangeIds.delete(exchange.exchange_id);
+      updateExchangeSelectionControls();
+    });
+    selection.append(checkbox);
+    const detail = element("details", "exchange request-exchange");
+    const path = new URL(exchange.request.url).pathname;
+    detail.append(element("summary", "", `${exchange.request.method} ${path} · ${exchange.response.status ?? "ERR"} · ${formatDate(exchange.started_at)}`));
+    detail.append(element("pre", "", exchangeText(exchange)));
+    const actions = element("div", "request-exchange-actions");
+    const copy = element("button", "button secondary", "复制"); copy.type = "button"; copy.addEventListener("click", () => copyExchange(exchange).catch(showError));
+    const exportBruno = element("button", "button secondary", "导出 OpenCollection"); exportBruno.type = "button"; exportBruno.addEventListener("click", () => downloadBruno([exchange.exchange_id]).catch(showError));
+    actions.append(copy, exportBruno); detail.append(actions); row.append(selection, detail); list.append(row);
+  }
+  if (!visibleExchanges.length) list.append(element("div", "empty-state", state.requestExchanges.length ? "没有符合筛选条件的记录。" : "尚无 HTTP exchange 记录。"));
+  updateExchangeSelectionControls();
 }
 
 async function selectValidation(id) {
@@ -912,7 +1147,7 @@ function renderActiveView() {
     audits: renderAudits,
     findings: renderFindings,
     reports: renderReports,
-    validation: () => { renderValidationRequests(); renderValidationList(); },
+    validation: () => { renderRequestHistory(); renderValidationRequests(); renderValidationList(); },
     runtime: renderRuntime,
     settings: renderSettings,
   };
@@ -967,11 +1202,12 @@ async function refreshLiveWorkspace() {
     // Validation has two supplementary collections.  Keep them current only
     // while that page is visible; status output from a static audit should not
     // repeatedly scan validation records or rebuild that page in the background.
-    if (state.view === "validation") requests.push(api("/api/runs"), api("/api/v1/validation-requests"));
-    const [workspace, validation, validationRequests] = await Promise.all(requests);
+    if (state.view === "validation") requests.push(api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/http-exchanges?limit=100"));
+    const [workspace, validation, validationRequests, exchanges] = await Promise.all(requests);
     state.workspace = workspace;
     if (validation) state.validationRuns = validation.runs;
     if (validationRequests) state.validationRequests = validationRequests.items;
+    if (exchanges) state.requestExchanges = exchanges.items;
     renderActiveView();
     connectEventStream();
     connectValidationEventStream();
@@ -986,8 +1222,8 @@ async function refreshLiveWorkspace() {
 
 async function load() {
   $("global-error").hidden = true;
-  const [workspace, repositories, validation, validationRequests, runtime, environment, modelSettings] = await Promise.all([
-    api("/api/v1/workspace"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"),
+  const [workspace, repositories, validation, validationRequests, runtime, environment, modelSettings, exchanges] = await Promise.all([
+    api("/api/v1/workspace"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"), api("/api/v1/http-exchanges?limit=100"),
   ]);
   state.workspace = workspace;
   state.repositories = repositories.items;
@@ -996,6 +1232,7 @@ async function load() {
   state.runtime = runtime;
   state.environment = environment;
   state.modelSettings = modelSettings.model;
+  state.requestExchanges = exchanges.items;
   // Keep the initial paint small as well: hidden pages can contain long audit,
   // finding and report tables.  They are rendered when the operator opens them.
   renderActiveView();
@@ -1017,7 +1254,6 @@ async function refreshEnvironment() {
 
 function openValidationDialog(request) {
   if (!state.runtime?.dynamic_runner?.enabled) { toast("动态验证 Runner 未启用。"); return; }
-  if (!request.task_dynamic_validation_enabled) { toast("该任务创建时未启用测试环境信息，动态验证已被阻止。"); return; }
   const form = $("validation-form");
   form.reset();
   form.elements.validation_request_id.value = request.id;
@@ -1039,6 +1275,7 @@ async function submitValidation(event) {
     victim_account: { username: data.get("victim_username"), password: data.get("victim_password") },
     login_instructions: data.get("login_instructions"),
     cleanup_instructions: data.get("cleanup_instructions"),
+    browser_mode: data.get("browser_mode"),
     explicit_authorization: data.get("explicit_authorization") === "on",
     test_environment: data.get("test_environment") === "on",
   };
@@ -1230,6 +1467,8 @@ document.querySelectorAll("[data-close-report]").forEach(button => button.addEve
 document.querySelectorAll("[data-close-finding]").forEach(button => button.addEventListener("click", () => $("finding-dialog").close()));
 document.querySelectorAll("[data-close-terminal]").forEach(button => button.addEventListener("click", closeTerminal));
 document.querySelectorAll("[data-close-delete-audit]").forEach(button => button.addEventListener("click", closeDeleteAuditDialog));
+document.querySelectorAll("[data-close-delete-project]").forEach(button => button.addEventListener("click", closeDeleteProjectDialog));
+document.querySelectorAll("[data-close-cancel-validation]").forEach(button => button.addEventListener("click", closeCancelValidationDialog));
 $("new-audit").addEventListener("click", () => openAuditDialog());
 $("add-project").addEventListener("click", openProjectDialog);
 $("refresh").addEventListener("click", () => load().then(() => toast("制品与运行状态已刷新")).catch(showError));
@@ -1244,8 +1483,26 @@ for (const checkbox of $("audit-form").querySelectorAll(".enable-switch input[ty
 }
 $("project-form").addEventListener("submit", submitProject);
 $("validation-form").addEventListener("submit", submitValidation);
+$("select-all-exchanges").addEventListener("change", event => {
+  const visibleIds = filteredRequestExchanges().map(exchange => exchange.exchange_id);
+  if (event.currentTarget.checked) state.selectedRequestExchangeIds = new Set([...state.selectedRequestExchangeIds, ...visibleIds]);
+  else for (const id of visibleIds) state.selectedRequestExchangeIds.delete(id);
+  renderRequestHistory();
+});
+$("clear-exchange-selection").addEventListener("click", () => {
+  state.selectedRequestExchangeIds.clear();
+  renderRequestHistory();
+});
+$("export-selected-bruno").addEventListener("click", () => downloadBruno([...state.selectedRequestExchangeIds]).catch(showError));
+$("export-selected-har").addEventListener("click", () => downloadHar([...state.selectedRequestExchangeIds]).catch(showError));
+$("compare-selected-exchanges").addEventListener("click", compareSelectedExchanges);
+for (const id of ["exchange-method-filter", "exchange-status-filter", "exchange-source-filter", "exchange-query-filter"]) {
+  $(id).addEventListener(id.includes("filter") ? "input" : "change", renderRequestHistory);
+}
 $("finding-workflow-form").addEventListener("submit", submitFindingWorkflow);
 $("delete-audit-form").addEventListener("submit", submitDeleteAudit);
+$("delete-project-form").addEventListener("submit", submitDeleteProject);
+$("cancel-validation-form").addEventListener("submit", submitCancelValidation);
 $("refresh-environment").addEventListener("click", () => refreshEnvironment().catch(showError));
 $("refresh-terminal").addEventListener("click", () => state.terminalAuditId && refreshTerminal(state.terminalAuditId).catch(showError));
 window.addEventListener("resize", scheduleTerminalResize);

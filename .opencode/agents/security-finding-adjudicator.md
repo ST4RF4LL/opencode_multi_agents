@@ -88,8 +88,10 @@ Every input candidate must have exactly one decision. Validate the manifest with
 evaluation, and a refuted counterclaim. `REJECTED` requires a supported
 counterclaim and reason. `INCONCLUSIVE` requires explicit blocking questions.
 
-When a static or inconclusive decision needs later runtime evidence, the output
-may also bind an external runtime-validation request generated from
+For every `SUPPORTED_STATIC` or `INCONCLUSIVE` decision whose vulnerability
+catalog entry applies to `web`, the output must preserve enough evidence to
+materialize an external runtime-validation request, regardless of
+`AUDIT_QUICK_DYNAMIC_ENABLED`. The output may also bind a request generated from
 `external-runtime-validation-contract.mjs`. Export the request only; do not run
 it, contact a target, or promote a future result inside this workflow.
 

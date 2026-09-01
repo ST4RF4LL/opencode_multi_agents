@@ -94,9 +94,11 @@ export JOERN_GNUBIN=""
 
 finding 真实性复核由项目内 `vulnerability-affirmative`、`vulnerability-negative`、`vulnerability-moderator` 三个独立 OpenCode session 完成，不需要额外 Python 服务、Web UI 或全局 review MCP。
 
-项目模板已配置 `npx -y chrome-devtools-mcp@latest --isolated=true`。它只暴露给快速动态和人工完整动态两个验证 Agent，并且仅在调用浏览器工具时启动可见 Chrome，因此首次动态验证需要 npm 网络访问或已有 npx 缓存。不要添加 `--headless`、`--autoConnect`、`--browser-url`、持久化 `--user-data-dir` 或 `agent-browser` 回退。当前目标只允许 `localhost`、`127.0.0.1` 和 `[::1]`。
+项目模板已固定使用 `npx -y chrome-devtools-mcp@1.8.0 --isolated=true`。动态 Runner 会按任务生成 MCP 覆盖配置：低影响桌面任务可以连接用户已授权远程调试的 Chrome，新建独立标签页或 isolated context；共享标签页要求 Chrome 144+、已开启远程调试，并在连接前确认控制器可见所选 profile 的其他页面。Broker 只登记、操作和关闭本任务页面。Web XSS、双账号、持久化写入及其他高影响任务强制升级为临时隔离浏览器。无桌面的 Linux 服务器使用隔离 headless Chrome。不得配置 `agent-browser` 回退，当前目标只允许 `localhost`、`127.0.0.1` 和 `[::1]`。
 
 ## 3. 验证并启动
+
+本平台当前只采用原生主机部署，禁止使用 Docker、Podman、Compose 或容器镜像运行工作台和动态验证组件。Windows PC 直接安装并运行 Node.js、OpenCode 与 Chrome；Linux 服务器直接安装并运行 Node.js、OpenCode 与 Chrome/Chromium。不要为了补齐依赖或隔离浏览器而启动容器；缺少原生依赖时环境检查应报告受阻。
 
 ```sh
 ./initial.sh
@@ -131,9 +133,9 @@ npm --prefix .opencode run start:audit-workbench:runner -- \
 
 工作台不会因为省略 `--repo` 就审计自身；此时项目列表为空，等待操作员指定目录。使用基础启动脚本自行传递开关时，必须在 npm 脚本名后加入参数分隔符：`npm --prefix .opencode run start:audit-workbench -- --enable-runner`。缺少中间的 `--` 时，npm 会把 `--enable-runner` 当成自身配置，服务端实际上收不到该开关。
 
-创建审计时，“测试目标补充说明”和“测试环境信息”可以分别 ENABLE；前者只调整任务要求和侧重点。未启用测试环境时，主链不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用测试环境即授权主链执行一次、全任务最多 120 秒的 loopback 快速动态确认；未确认、超时或受阻的项目仍转入静态三方。创建任务时的自由格式环境上下文会以 `0600` 私密文件保存到任务删除，只应填写专用测试凭证。
+创建审计时，“测试目标补充说明”和“测试环境信息”可以分别 ENABLE；前者只调整任务要求和侧重点。未启用测试环境时，主链不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用测试环境即授权主链执行一次、全任务最多 120 秒的 loopback 快速动态确认；未确认、超时或受阻的项目仍转入静态三方。创建任务时的自由格式环境上下文会以 `0600` 私密文件保存到任务删除，只应填写专用测试凭证。完整动态验证不受创建时开关限制，可在验证页补录环境、专用账号及登录/清理说明后逐次授权。
 
-完整动态验证始终不自动运行。需要通过 Web 手动触发时，使用 `npm --prefix .opencode run start:audit-workbench:full`，或在基础命令的 `--` 后同时加入 `--enable-runner --enable-dynamic-validation`。操作员仍需在“完整动态验证”页面选择一条密封且待处理的 XSS request，并逐次填写 loopback URL、两个不同测试账号、登录步骤和清理步骤；结果作为 sidecar，不自动改写主链 routing 或终稿。
+完整动态验证始终不自动运行。需要通过 Web 手动触发时，使用 `npm --prefix .opencode run start:audit-workbench:full`，或在基础命令的 `--` 后同时加入 `--enable-runner --enable-dynamic-validation`。操作员需在“完整动态验证”页面选择一条密封且待处理的 Web request，并逐次填写 loopback URL、确认授权测试环境；账号、登录步骤和清理步骤可选。匿名或共享账号模式不能形成跨用户证据，缺少当前证明所必需的信息时相应步骤只能返回 `INCONCLUSIVE`/`NOT_RUN`。结果作为 sidecar，不自动改写主链 routing 或终稿。
 
 `initial.sh` 会直接解析并检查 OpenGrep/Semgrep、`joern`、`joern-parse`、Java 及可选 GNU coreutils，同时检查核心 CLI、项目依赖、本地和全局 OpenCode 配置，以及 Coverage Ledger MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
 

@@ -12,7 +12,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { AuditRunner } from "../web/dynamic-validation-observatory/audit-runner.mjs";
-import { DynamicValidationRunner } from "../web/dynamic-validation-observatory/validation-runner.mjs";
+import { DynamicValidationRunner, validateAuthorization } from "../web/dynamic-validation-observatory/validation-runner.mjs";
 import { EnvironmentHealthService } from "../web/dynamic-validation-observatory/environment-health.mjs";
 import { OpenCodeTmuxMonitor } from "../web/dynamic-validation-observatory/tmux-monitor.mjs";
 import { FindingWorkflowStore } from "../web/dynamic-validation-observatory/finding-workflow.mjs";
@@ -23,6 +23,36 @@ import { buildWebXssInputEnvelope, buildWebXssRuntimeRequest } from "./fixtures/
 
 const OPENCODE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execFileAsync = promisify(execFile);
+
+const anonymousAuthorization = validateAuthorization({
+  target_base_url: "http://127.0.0.1:8080/path",
+  explicit_authorization: true,
+  test_environment: true,
+});
+assert.equal(anonymousAuthorization.accountMode, "anonymous");
+assert.equal(anonymousAuthorization.attacker, null);
+assert.equal(anonymousAuthorization.victim, null);
+assert.equal(anonymousAuthorization.loginInstructions, "");
+assert.equal(anonymousAuthorization.cleanupInstructions, "");
+const sharedAuthorization = validateAuthorization({
+  target_base_url: "http://localhost:3000",
+  attacker_account: { username: "shared-user", password: "shared-password" },
+  victim_account: { username: "shared-user", password: "shared-password" },
+  explicit_authorization: true,
+  test_environment: true,
+});
+assert.equal(sharedAuthorization.accountMode, "shared");
+assert.equal(sharedAuthorization.attacker.username, "shared-user");
+assert.equal(sharedAuthorization.victim.username, "shared-user");
+const oneAccountAuthorization = validateAuthorization({
+  target_base_url: "http://[::1]:8080",
+  victim_account: { username: "only-user", password: "only-password" },
+  explicit_authorization: true,
+  test_environment: true,
+});
+assert.equal(oneAccountAuthorization.accountMode, "shared");
+assert.equal(oneAccountAuthorization.attacker.username, "only-user");
+assert.equal(oneAccountAuthorization.victim.username, "only-user");
 
 class FakeChild extends EventEmitter {
   constructor({ closeOnTerminate = true } = {}) {
@@ -775,6 +805,7 @@ if (mode === "run") {
   assert.equal(repositories[0].readiness, "ready");
   assert.equal(repositories[0].dirty, false);
   assert.equal(repositories[0].audit_count, 0);
+  assert.equal(repositories[0].removable, false);
   assert.equal(repositories[0].directory, canonicalRepositoryRoot);
 
   const fakeBin = join(temp, "fake-bin");
@@ -860,6 +891,33 @@ if (mode === "run") {
   assert.equal(windowsMonitorProbe.opencode_command, "C:\\tools\\opencode.exe");
   assert.equal(windowsMonitorProbe.multiplexer_command, "C:\\tools\\psmux.exe");
   assert(windowsMonitorCalls.every(call => call.command !== "opencode" && call.command !== "tmux"));
+
+  // A freshly restarted workbench may need to clean up persisted terminal
+  // metadata before start() has populated the executable cache.  This must
+  // probe lazily instead of calling execFile(null, ...).
+  const lazyMonitorCalls = [];
+  const lazyRestartMonitor = new OpenCodeTmuxMonitor({
+    stateRoot: join(temp, "windows-psmux-lazy-restart-state"),
+    platform: "win32",
+    environment: { PATH: "C:\\tools", PATHEXT: ".EXE" },
+    async resolveCommand(command) {
+      const value = String(command).toLowerCase();
+      if (value === "opencode.exe") return "C:\\tools\\opencode.exe";
+      if (value === "psmux.exe") return "C:\\tools\\psmux.exe";
+      return null;
+    },
+    async execute(command, args) {
+      lazyMonitorCalls.push({ command, args });
+      if (/opencode\.exe$/i.test(command)) return { stdout: "--format --session --agent --dir --title\n", stderr: "" };
+      if (/psmux\.exe$/i.test(command) && args[0] === "-V") return { stdout: "psmux 3.test\n", stderr: "" };
+      if (/psmux\.exe$/i.test(command) && args[2] === "kill-server") return { stdout: "", stderr: "" };
+      throw new Error(`unexpected lazy restart command: ${command}`);
+    },
+  });
+  await lazyRestartMonitor.stop({ socket_name: lazyRestartMonitor.socketName("audit-lazy-restart"), target: "audit:tui" });
+  assert.equal(lazyRestartMonitor.tmuxCommand, "C:\\tools\\psmux.exe");
+  assert.equal(lazyMonitorCalls.at(-1).command, "C:\\tools\\psmux.exe");
+  assert.equal(lazyMonitorCalls.at(-1).args[2], "kill-server");
 
   const windowsStartCalls = [];
   const windowsStartMonitor = new OpenCodeTmuxMonitor({
@@ -1009,6 +1067,7 @@ if (mode === "run") {
     assert.equal(selectedProject.directory, canonicalOperatorSelectedRoot);
     assert.equal(selectedProject.configured, true);
     assert.equal(selectedProject.ready, true);
+    assert.equal(selectedProject.removable, true);
     const duplicateProjectResponse = await fetch(`${base}/api/v1/repositories`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": "project-002" },
@@ -1018,6 +1077,28 @@ if (mode === "run") {
     assert.equal((await duplicateProjectResponse.json()).id, selectedProject.id);
     const projectsAfterRegistration = await (await fetch(`${base}/api/v1/repositories`)).json();
     assert.equal(projectsAfterRegistration.count, 2);
+    const invalidProjectDelete = await fetch(`${base}/api/v1/repositories/${selectedProject.id}`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmation: "wrong-project" }),
+    });
+    assert.equal(invalidProjectDelete.status, 422);
+    const projectDelete = await fetch(`${base}/api/v1/repositories/${selectedProject.id}`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmation: selectedProject.id }),
+    });
+    assert.equal(projectDelete.status, 200);
+    assert.deepEqual(await projectDelete.json(), { repository_id: selectedProject.id, deleted: true, source_directory_deleted: false, artifacts_deleted: false });
+    assert.equal((await stat(operatorSelectedRoot)).isDirectory(), true);
+    assert.equal((await (await fetch(`${base}/api/v1/repositories`)).json()).count, 1);
+    const startupProjectDelete = await fetch(`${base}/api/v1/repositories/fixture`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmation: "fixture" }),
+    });
+    assert.equal(startupProjectDelete.status, 409);
+    const restoredProjectResponse = await fetch(`${base}/api/v1/repositories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "project-003" },
+      body: JSON.stringify({ path: operatorSelectedRoot, name: "操作员指定项目" }),
+    });
+    assert.equal(restoredProjectResponse.status, 201);
+    assert.equal((await restoredProjectResponse.json()).id, selectedProject.id);
     const historyReport = workspace.reports.find(item => item.audit_id === "audit-history");
     assert.match(historyReport.id, /^[a-f0-9]{24}$/);
     assert.notEqual(historyReport.id, snapshot.reports.find(item => item.audit_id === "audit-history").id);
@@ -1136,7 +1217,9 @@ if (mode === "run") {
     assert.equal(spawnCall.options.env.OPENCODE_CONFIG_DIR, join(canonicalRepositoryRoot, ".opencode"));
     assert.equal(spawnCall.options.env.OPENCODE_DISABLE_PROJECT_CONFIG, "true");
     assert.equal(typeof spawnCall.options.env.OPENCODE_CONFIG_CONTENT, "string");
-    assert.equal(Object.hasOwn(JSON.parse(spawnCall.options.env.OPENCODE_CONFIG_CONTENT).mcp, "coverage_ledger"), false);
+    const runtimeOpenCodeConfig = JSON.parse(spawnCall.options.env.OPENCODE_CONFIG_CONTENT);
+    assert.equal(Object.hasOwn(runtimeOpenCodeConfig.mcp, "coverage_ledger"), false);
+    assert.equal(runtimeOpenCodeConfig.subagent_depth, 2);
     assert.match(spawnCall.args[0], /terminal-output-relay\.mjs$/);
     const monitoredRunArgs = terminalMonitor.starts[0].args;
     assert.deepEqual(monitoredRunArgs.slice(0, 3), ["run", "--format", "json"]);
@@ -1261,27 +1344,9 @@ if (mode === "run") {
     const requestList = await requestListResponse.json();
     assert.equal(requestList.count, 1);
     assert.equal(requestList.items[0].dispatch_ready, false);
-    assert.equal(requestList.items[0].task_dynamic_validation_enabled, false);
+    assert.equal(requestList.items[0].audit_managed, false);
+    assert.equal(requestList.items[0].task_test_environment_preconfigured, false);
     assert.equal(requestList.items[0].artifact_dispatch_ready, true);
-
-    const disabledValidationResponse = await fetch(`${base}/api/v1/validations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": "dynamic-disabled" },
-      body: JSON.stringify({
-        validation_request_id: "web-xss-fixture::FIND-WEB-XSS-001",
-        repository_id: "fixture",
-        target_base_url: "http://127.0.0.1:8080/profile",
-        attacker_account: { username: "attacker", password: "secret-a" },
-        victim_account: { username: "victim", password: "secret-b" },
-        login_instructions: "测试登录。",
-        cleanup_instructions: "删除测试数据。",
-        explicit_authorization: true,
-        test_environment: true,
-      }),
-    });
-    assert.equal(disabledValidationResponse.status, 409);
-    assert.equal((await disabledValidationResponse.json()).error, "audit-dynamic-validation-disabled");
-    assert.equal(dynamicSpawnCall, null);
 
     const enabledValidationAuditRoot = join(runtimeRoot, created.id);
     await mkdir(enabledValidationAuditRoot, { recursive: true });
@@ -1289,14 +1354,19 @@ if (mode === "run") {
     const enabledRequestPath = join(enabledValidationAuditRoot, "request.json");
     const enabledRequestBytes = `${JSON.stringify(enabledValidationRequest, null, 2)}\n`;
     await writeFile(enabledRequestPath, enabledRequestBytes, "utf8");
-    const enabledValidationEnvelope = buildWebXssInputEnvelope({ request: enabledValidationRequest, requestPath: enabledRequestPath, requestBytes: enabledRequestBytes });
-    await writeFile(join(enabledValidationAuditRoot, "envelope-input.json"), `${JSON.stringify(enabledValidationEnvelope, null, 2)}\n`, "utf8");
+    const initialEnvironmentMetadata = runner.audits.get(created.id).private_context.test_environment;
+    runner.audits.get(created.id).private_context.test_environment = {
+      enabled: false, file_name: null, sha256: null, byte_length: 0, character_length: 0,
+    };
     const enabledValidationRequestId = `${created.id}::FIND-WEB-XSS-001`;
     const enabledRequestList = await (await fetch(`${base}/api/v1/validation-requests`)).json();
     const enabledDescriptor = enabledRequestList.items.find(item => item.id === enabledValidationRequestId);
     assert.equal(enabledRequestList.count, 2);
     assert.equal(enabledDescriptor.dispatch_ready, true);
-    assert.equal(enabledDescriptor.task_dynamic_validation_enabled, true);
+    assert.equal(enabledDescriptor.envelope_path, null);
+    assert.equal(enabledDescriptor.audit_managed, true);
+    assert.equal(enabledDescriptor.task_test_environment_preconfigured, false);
+    runner.audits.get(created.id).private_context.test_environment = initialEnvironmentMetadata;
 
     const remoteValidationResponse = await fetch(`${base}/api/v1/validations`, {
       method: "POST",
@@ -1313,7 +1383,8 @@ if (mode === "run") {
         test_environment: true,
       }),
     });
-    assert.equal(remoteValidationResponse.status, 422);
+    const remoteValidationBody = await remoteValidationResponse.clone().json();
+    assert.equal(remoteValidationResponse.status, 422, JSON.stringify(remoteValidationBody));
     assert.equal(dynamicSpawnCall, null);
 
     const validationResponse = await fetch(`${base}/api/v1/validations`, {
@@ -1345,6 +1416,7 @@ if (mode === "run") {
     assert.equal(activeValidationDescriptor.job.id, dynamicJobId);
     assert.equal(dynamicSpawnCall.command, "opencode");
     assert.equal(dynamicSpawnCall.options.shell, false);
+    assert.equal(dynamicSpawnCall.args[1], "请读取所附授权说明并严格按 dynamic-vulnerability-validator 契约执行。");
     assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--agent") + 1], "dynamic-vulnerability-validator");
     assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--model") + 1], "global-provider/global-audit");
     const dynamicExecutionWorkspace = join(platformRoot, "workspace", "audit-runs", created.id);
@@ -1352,12 +1424,20 @@ if (mode === "run") {
     assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--dir") + 1], dynamicExecutionWorkspace);
     assert.equal(dynamicSpawnCall.options.env.AUDIT_SOURCE_ROOT, canonicalRepositoryRoot);
     assert.equal(dynamicSpawnCall.options.env.AUDIT_REPORTS_ROOT, reportsRoot);
-    assert.notEqual(dynamicSpawnCall.options.env.XDG_DATA_HOME, process.env.XDG_DATA_HOME);
+    assert.equal(dynamicSpawnCall.options.env.XDG_DATA_HOME, process.env.XDG_DATA_HOME);
+    assert.equal(dynamicSpawnCall.options.env.XDG_STATE_HOME, process.env.XDG_STATE_HOME);
     assert.equal(JSON.stringify(dynamicSpawnCall.args).includes("attacker-secret-value"), false);
     assert.equal(JSON.stringify(dynamicSpawnCall.args).includes("victim-secret-value"), false);
     const authorizationFile = dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--file") + 1];
+    assert.equal(dynamicSpawnCall.args.at(-1), authorizationFile);
     assert.match(await readFile(authorizationFile, "utf8"), /attacker-secret-value/);
     assert.equal((await stat(authorizationFile)).mode & 0o077, 0);
+    const materializedEnvelope = JSON.parse(await readFile(join(enabledValidationAuditRoot, "FIND-WEB-XSS-001.envelope-input.json"), "utf8"));
+    assert.equal(materializedEnvelope.payload.explicit_user_request, true);
+    assert.equal(materializedEnvelope.payload.attacker_account_supplied, true);
+    assert.equal(materializedEnvelope.payload.victim_account_supplied, true);
+    assert.equal(materializedEnvelope.payload.localhost_target, "http://127.0.0.1:8080");
+    dynamicChild.stdout.write('{"type":"step_start","sessionID":"ses_dynamicfixture001","part":{"sessionID":"ses_dynamicfixture001"}}\n');
     dynamicChild.stdout.write('{"password":"attacker-secret-value","token":"victim-secret-value"}\n');
     await writeFile(join(enabledValidationAuditRoot, "FIND-WEB-XSS-001.result.json"), "{}\n", "utf8");
     dynamicChild.emit("close", 0, null);
@@ -1365,10 +1445,12 @@ if (mode === "run") {
     assert.equal(dynamicRunner.getRun(dynamicJobId).status, "completed");
     assert.equal(dynamicRunner.getRun(dynamicJobId).ephemeral_cleanup, "SUCCEEDED");
     assert.equal(dynamicRunner.getRun(dynamicJobId).result_validation, "PASSED");
+    assert.equal(dynamicRunner.getRun(dynamicJobId).provider_session_id, "ses_dynamicfixture001");
     const dynamicLog = await readFile(join(dynamicRunner.directory(dynamicJobId), "runner.log.jsonl"), "utf8");
     assert.equal(dynamicLog.includes("attacker-secret-value"), false);
     assert.equal(dynamicLog.includes("victim-secret-value"), false);
-    await assert.rejects(stat(resolve(dynamicSpawnCall.options.env.XDG_DATA_HOME, "..")), error => error.code === "ENOENT");
+    assert.equal(dynamicRunner.health().persistent_opencode_sessions, true);
+    assert.equal(dynamicRunner.health().ephemeral_authorization_files, true);
     const validationRunsResponse = await fetch(`${base}/api/runs`);
     assert.equal(validationRunsResponse.status, 200);
     const validationRuns = await validationRunsResponse.json();
@@ -1595,13 +1677,21 @@ if (mode === "run") {
     assert.match(indexHtml, />OpenCode 会话直连</);
     assert.match(indexHtml, /id="delete-audit-dialog"/);
     assert.match(indexHtml, />确认删除</);
+    assert.match(indexHtml, /id="delete-project-dialog"/);
+    assert.match(indexHtml, />确认删除项目</);
     assert.match(indexHtml, /name="additional_instructions_enabled"/);
     assert.match(indexHtml, /name="additional_instructions"/);
     assert.match(indexHtml, /name="test_environment_enabled"/);
     assert.match(indexHtml, /name="test_environment_context"/);
-    assert.match(indexHtml, /未启用时不会启动浏览器/);
+    assert.match(indexHtml, /未启用或未填写时，主审计不会启动浏览器/);
+    assert.match(indexHtml, /完整动态验证资格不受此开关限制/);
     assert.match(indexHtml, /全任务最多 120 秒/);
-    assert.match(indexHtml, /完整动态验证仍需在验证页逐次手动触发/);
+    assert.match(indexHtml, /可在验证页补录环境并逐次授权/);
+    assert.match(indexHtml, /id="export-selected-bruno"/);
+    assert.match(indexHtml, /导出所选 OpenCollection/);
+    assert.match(indexHtml, /人工发包请使用 Bruno/);
+    assert.doesNotMatch(indexHtml, /HTTP 请求工作台/);
+    assert.doesNotMatch(indexHtml, />发送请求</);
     assert.doesNotMatch(indexHtml, /输入完整 audit_id/);
     assert.doesNotMatch(indexHtml, /<script(?![^>]+src=)[^>]*>/i);
     const appResponse = await fetch(`${base}/app.js`);
@@ -1616,12 +1706,20 @@ if (mode === "run") {
     assert.match(stylesSource, /runner-log-line\.historical/);
     assert.match(stylesSource, /runner-log-line\.recent/);
     assert.match(appSource, /删除任务/);
+    assert.match(appSource, /删除项目/);
+    assert.match(appSource, /\/api\/v1\/repositories\//);
+    assert.match(appSource, /submitDeleteProject/);
     assert.match(appSource, /断点恢复/);
     assert.match(appSource, /ResizeObserver/);
     assert.match(appSource, /terminal\/resize/);
     assert.match(appSource, /syncAuditContextControls/);
     assert.match(appSource, /submitModelSettings/);
-    assert.match(appSource, /task_dynamic_validation_enabled/);
+    assert.match(appSource, /task_test_environment_preconfigured/);
+    assert.match(appSource, /opencode -s/);
+    assert.match(appSource, /\/api\/v1\/http-exchanges\/export\/bruno/);
+    assert.match(appSource, /selectedRequestExchangeIds/);
+    assert.doesNotMatch(appSource, /\/api\/v1\/request-sessions/);
+    assert.doesNotMatch(appSource, /\/replay/);
     assert.match(appSource, /progress_source/);
     assert.match(appSource, /排队中/);
     assert.match(appSource, /立即调度/);

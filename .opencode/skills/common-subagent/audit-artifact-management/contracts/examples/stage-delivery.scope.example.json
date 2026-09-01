@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "registry_id": "workbench-stage-deliveries-v1",
-  "registry_digest": "6c02198bd5495263baa139ec21584986ceed603da44ae621104a16c7e7bc8883",
+  "registry_digest": "e6d3b5217b18fd67692c1ddd0d840d4651a2a019a28d3c5e1ea08a9da412209a",
   "template_id": "WB01_SCOPE_FREEZE",
   "stage_id": "scope",
   "stage_order": 1,
@@ -73,5 +73,5 @@
     "predecessors_complete": true,
     "complete": true
   },
-  "manifest_digest": "b6e2fe746ea5c13337573e71833a242b5f7f167def6805cd18bf8d0892dbda63"
+  "manifest_digest": "4ef4d1c70e1a8351b71e80c2f848c5eb734dcd03964a5cf3e617df2f22906c7b"
 }

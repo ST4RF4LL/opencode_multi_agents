@@ -1875,10 +1875,18 @@ async function main() {
     run("verify-final-report.mjs", ["--model", finalReportModelPath, "--markdown", finalReportPath]);
     const finalReportModel = JSON.parse(await readFile(finalReportModelPath, "utf8"));
     const finalReport = await readFile(finalReportPath, "utf8");
-    if (finalReportModel.findings.length !== 1 || finalReportModel.chains.length !== 1
+    if (finalReportModel.schema_version !== 2
+      || finalReportModel.findings.length !== 1 || finalReportModel.chains.length !== 1
+      || finalReportModel.findings[0].primary_location?.file !== attestedFinding.locations.primary.file
+      || finalReportModel.findings[0].evidence_facts?.length !== attestedFinding.evidence.facts.length
       || finalReportModel.findings[0].attack_surface?.schema_version !== 1
       || !finalReportModel.findings[0].attack_surface_source?.json_pointer?.endsWith("/finding/attack_surface")
-      || !finalReport.includes("## 逐项攻击面证据")
+      || !finalReport.includes("## 漏洞清单")
+      || !finalReport.includes("## 漏洞详情")
+      || !finalReport.includes("主要漏洞位置")
+      || !finalReport.includes(`${attestedFinding.locations.primary.file}:${attestedFinding.locations.primary.line_start}`)
+      || !finalReport.includes("代码位置与证据链")
+      || !finalReport.includes("### 逐项攻击面证据")
       || !finalReport.includes("fixture HTTP request parameter")
       || finalReport.includes("CONFIRMED") || !finalReport.includes("GENERATED: final-report-model")) {
       throw new Error("Final report model did not preserve only adjudicated, provenance-bound results");

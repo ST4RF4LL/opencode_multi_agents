@@ -110,9 +110,20 @@ async function main() {
     if (!candidateRecord) throw new Error(`Adjudication decision has no bound candidate: ${decision.finding_id}`);
     const row = {
       finding_id: decision.finding_id,
+      title: candidateRecord.candidate.finding.title
+        ?? candidateRecord.candidate.finding.classification.vulnerability_type_id
+        ?? decision.finding_id,
+      vulnerability_type_id: candidateRecord.candidate.finding.classification.vulnerability_type_id,
+      domain: candidateRecord.candidate.finding.routing.domain,
       state: decision.state,
       preliminary_state: decision.state,
       finding_object_digest: decision.finding_object_digest,
+      decision_rationale: decision.decision_rationale,
+      primary_location: structuredClone(candidateRecord.candidate.finding.locations.primary),
+      evidence_facts: structuredClone(candidateRecord.candidate.finding.evidence.facts),
+      reachability: structuredClone(candidateRecord.candidate.finding.reachability),
+      attacker_influence: structuredClone(candidateRecord.candidate.finding.attacker_influence),
+      remediation: structuredClone(candidateRecord.candidate.finding.remediation),
       source: decisionSource(index),
       attack_surface: structuredClone(candidateRecord.candidate.finding.attack_surface),
       attack_surface_source: candidateSource(candidateRecord.index),
@@ -159,7 +170,7 @@ async function main() {
     else acceptedChains.push(row);
   });
   const model = {
-    schema_version: 1,
+    schema_version: 2,
     audit_id: args["audit-id"],
     scope_digest: summary.scope_digest,
     report_kind: args.mode === "final" ? "FINAL"
@@ -192,7 +203,7 @@ async function main() {
       cvss_assessment: resolve(args.cvss),
       attack_chains: resolve(args.chains),
     },
-    findings: findings.sort((left, right) => left.finding_id.localeCompare(right.finding_id)),
+    findings: findings.sort((left, right) => right.cvss.base_score - left.cvss.base_score || left.finding_id.localeCompare(right.finding_id)),
     excluded_findings: excludedFindings.sort((left, right) => left.finding_id.localeCompare(right.finding_id)),
     chains: acceptedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),
     rejected_chains: rejectedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),

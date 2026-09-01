@@ -20,7 +20,7 @@
 - `vulnerability-validator`: 在终稿前编排 finding 真实性路由；按任务开关生成快速动态结果，并把所有未确认项依次交给本地正方、反方和 Moderator。
 - `quick-dynamic-validator`: 仅在创建任务时显式 ENABLE 测试环境后，使用 Chrome DevTools MCP 对授权 loopback 环境执行一次、全任务最多 120 秒的非破坏性快速确认。
 - `vulnerability-affirmative` / `vulnerability-negative` / `vulnerability-moderator`: 使用三个独立 OpenCode session 对未确认 finding 做正方举证、反方挑战和终局静态裁定。
-- `dynamic-vulnerability-validator`: 仅在用户从工作台手动触发时，使用可见、隔离的 Chrome DevTools MCP 对 localhost 上的 `JW-INJECT-06` Web-XSS 做完整动态验证，优先证明刷新后仍存在且影响第二测试账号的 stored XSS；结果不自动改写主链。
+- `dynamic-vulnerability-validator`: 仅在用户从工作台手动触发时，使用 Chrome DevTools MCP 对 localhost 上目录中标记为 `applies_to: web` 的漏洞做完整动态验证；XSS 使用专用强校验，其他 Web 类型使用通用非破坏性契约，结果不自动改写主链。
 - `security-skill-optimizer`: 根据摘要绑定的 routing 与 Moderator 证据优化审计 skill、Joern 规则、漏洞案例和误报案例。
 
 为降低大型仓库的威胁分析前置耗时，Recon 默认使用 Git tracked + untracked/non-ignored 范围，Joern 只解析对应语言的临时源码投影，函数清单按 scope digest 自动复用，并额外生成紧凑的 `threat-routing-index.json`。威胁建模默认只执行一次 bootstrap，消费制品路径与紧凑索引，不重复运行 `.mjs` 构建器；只有已提供 Owner 答案或明确要求访谈时才执行 refine。
@@ -155,7 +155,7 @@ Orchestrator 先完成初步语义裁决，再调用 `vulnerability-validator`�
 @security-attack-chain-hunter 对已完成的 Focus Area 结果执行系统级跨边界攻击链挖掘。
 @security-evidence-correlator 关联当前 audit_id 的三视角结果并生成覆盖缺口。
 @vulnerability-validator 对初步支持的 finding 构建 truth-validation intake；按任务开关生成 quick result，并依次执行本地正方、反方、Moderator，输出完整 validation routing。
-@dynamic-vulnerability-validator 使用当前 prompt 提供的 localhost 测试环境、两个测试账号和登录/清理步骤，对一个已封存的 JW-INJECT-06 runtime-validation request 做人工完整动态验证。
+@dynamic-vulnerability-validator 使用当前 prompt 提供的 localhost 测试环境以及可选的匿名、共享或双账号上下文，对一个已封存且属于 Web 范围的 runtime-validation request 做人工完整动态验证。
 @security-skill-optimizer 根据已完成且摘要有效的 validation routing 与 Moderator 证据优化 skill、Joern 规则和案例库。
 ```
 
@@ -187,7 +187,7 @@ npm --prefix .opencode run start:audit-workbench:runner -- \
 
 如果使用基础脚本手工追加参数，npm 的参数分隔符 `--` 不能省略：`npm ... run start:audit-workbench -- --enable-runner`；写成 `npm ... run start:audit-workbench --enable-runner` 会被 npm 当成自身配置并吞掉。
 
-项目登记接口接收操作员明确填写的绝对目录并在服务端规范化、校验和持久化；后续创建审计时，浏览器只提交登记后的项目 ID、audit ID 和 Git ref，不能临时替换目录或拼接 shell 命令。创建界面还提供两个独立 ENABLE：“测试目标补充说明”会把自由文本追加为本任务要求与侧重点；“测试环境信息”保存 URL、专用测试账号等上下文，并授权主链执行一次、全任务最多 120 秒的 loopback 快速动态确认。未启用后者时不会启动浏览器，所有初步支持项直接进入本地三方静态复核；人工完整动态也会被服务端拒绝。两份原文只保存为任务状态目录下的 `0600` 私密文件，API 仅返回开关与长度；prompt 和断点恢复按文件路径、SHA-256 绑定，不在任务 JSON、事件或日志中复制原文。服务端不会自动 checkout，默认拒绝脏工作树和未位于目标 ref 的项目。被测仓库只作为只读源码根使用，Runner 不再把它作为 OpenCode 当前目录，也不得在其中创建 `reports/`、`tmp/` 或运行缓存。每个任务在本项目 `workspace/audit-runs/<audit-id>/` 下获得执行目录，制品和临时目录分别落到本项目 `reports/repositories/<repository-id>/` 与 `tmp/repositories/<repository-id>/`；这些目录均已被 Git 忽略。运行日志、状态和有序事件写入服务端管理的 `reports/platform/audit-runs/`，SSE 用于实时刷新。tmux/psmux 模式为每个审计使用独立 `-L` namespace，并把实际的 `opencode run --format json` 固定到 `audit:tui`；工作台通过只读输出中继消费同一进程的 JSONL 和退出状态，不再启动 `opencode serve` 或调用本机 HTTP API。暂停、恢复和取消只作用于工作台持有的输出中继和该审计的精确 multiplexer/OpenCode run，不扫描或终止其他会话。终端复用器不可用时静态审计仍直接运行同一组 `opencode run` 参数，只是没有实时窗口。
+项目登记接口接收操作员明确填写的绝对目录并在服务端规范化、校验和持久化；后续创建审计时，浏览器只提交登记后的项目 ID、audit ID 和 Git ref，不能临时替换目录或拼接 shell 命令。创建界面还提供两个独立 ENABLE：“测试目标补充说明”会把自由文本追加为本任务要求与侧重点；“测试环境信息”保存 URL、专用测试账号等上下文，并授权主链执行一次、全任务最多 120 秒的 loopback 快速动态确认。未启用后者时主审计不会启动浏览器，所有初步支持项直接进入本地三方静态复核；这不影响之后在“完整动态验证”页面补录环境、账号和操作说明并逐次授权。两份原文只保存为任务状态目录下的 `0600` 私密文件，API 仅返回开关与长度；prompt 和断点恢复按文件路径、SHA-256 绑定，不在任务 JSON、事件或日志中复制原文。服务端不会自动 checkout，默认拒绝脏工作树和未位于目标 ref 的项目。被测仓库只作为只读源码根使用，Runner 不再把它作为 OpenCode 当前目录，也不得在其中创建 `reports/`、`tmp/` 或运行缓存。每个任务在本项目 `workspace/audit-runs/<audit-id>/` 下获得执行目录，制品和临时目录分别落到本项目 `reports/repositories/<repository-id>/` 与 `tmp/repositories/<repository-id>/`；这些目录均已被 Git 忽略。运行日志、状态和有序事件写入服务端管理的 `reports/platform/audit-runs/`，SSE 用于实时刷新。tmux/psmux 模式为每个审计使用独立 `-L` namespace，并把实际的 `opencode run --format json` 固定到 `audit:tui`；工作台通过只读输出中继消费同一进程的 JSONL 和退出状态，不再启动 `opencode serve` 或调用本机 HTTP API。暂停、恢复和取消只作用于工作台持有的输出中继和该审计的精确 multiplexer/OpenCode run，不扫描或终止其他会话。终端复用器不可用时静态审计仍直接运行同一组 `opencode run` 参数，只是没有实时窗口。
 
 Runner 异常退出、工作台重启或任务被取消后，任务会保留原 `audit_id`、执行工作区、落盘制品、事件历史和 OpenCode provider session id。任务详情中的“断点恢复”会先确认源码仍位于原提交，并对创建时要求干净的工作树继续执行脏状态门禁；随后只关闭该任务自己的旧 tmux socket，优先用 `--session` 续接原 OpenCode 会话，再要求 Agent 校验已有制品并从最早未完成阶段继续。旧版本没有记录 session id 的任务仍可基于同一工作区和制品恢复。每次恢复都会记录恢复次数、时间、模式和有序事件；“新建重试”则仍会创建全新的 audit id，两者语义不同。
 
@@ -198,9 +198,26 @@ npm --prefix .opencode run start:audit-workbench:full -- \
   --repo application=/absolute/path/to/application
 ```
 
-动态页面只允许调度所属任务在创建时已启用测试环境、已经密封且尚无结果的 `JW-INJECT-06` request。操作员必须在表单中再次确认 localhost 授权测试环境，提供两个不同的专用测试账号及登录/清理步骤。逐次提交的凭证进入独立的临时 OpenCode 数据目录；日志按实际提交值再次脱敏，进程结束后删除整个临时会话目录。创建任务时填写的自由格式环境上下文则会持久保存到删除该任务为止，因此只能使用专用测试凭证。服务不会杀死或重置全局 Chrome 进程。
+动态页面只允许调度属于当前受管审计、已经密封、尚无结果且漏洞目录 `applies_to` 包含 `web` 的 request；创建任务时未填写测试环境也可在此页补录。操作员必须再次确认 localhost 授权测试环境；账号与登录/清理步骤可选，全部留空表示匿名验证，只提供一组或同一身份表示共享账号，两个不同身份才允许形成跨用户证据。XSS 继续使用专用结果契约，其他 Web 类型使用通用契约；缺少当前证明所必需的身份或安全清理路径，以及需要文件覆盖、进程崩溃、资源耗尽或其他禁止动作才能确认时，只能返回 `INCONCLUSIVE`/`NOT_RUN`。日志按实际提交值脱敏，授权说明临时文件在进程结束后删除；OpenCode session 保存在本机正常 session 库中，页面展示可恢复的 `opencode -s <session-id>` 命令。创建任务时填写的自由格式环境上下文则会持久保存到删除该任务为止，因此只能使用专用测试凭证。服务不会杀死或重置全局 Chrome 进程。
 
 可使用 `--port` / `AUDIT_WORKBENCH_PORT` 修改端口；通过 npm 追加 `--port`、`--repo` 等参数时同样要放在 `--` 之后。默认监听 loopback；内网部署可显式传入 `--host 0.0.0.0`，或设置 `AUDIT_WORKBENCH_HOST=0.0.0.0`。原有 `start:dynamic-validation-web` 命令作为只读兼容别名保留；对应的免开关入口为 `start:dynamic-validation-web:runner` 和 `start:dynamic-validation-web:full`。详见 [Web 工作台架构](docs/audit-workbench.md)。创建静态审计任务不会自动触发动态验证；只有操作员在动态验证表单中的单独显式提交才构成调度请求。
+
+动态组件也可以脱离静态审计队列独立运行：
+
+```sh
+npm --prefix .opencode run dynval:doctor
+npm --prefix .opencode run dynval:serve -- --port 4173
+npm --prefix .opencode run dynval -- run --spec /absolute/path/standalone-run.json
+npm --prefix .opencode run dynval -- acceptance template --platform windows --output windows-acceptance.json
+```
+
+`run` 接受已经密封的 runtime request/envelope、仓库与受控制品路径，从而复用相同的动态 Agent 和确定性结果校验，但不需要审计队列。授权开关、loopback 环境或必要账号缺失时直接输出 `SKIPPED`，不会启动浏览器或发包。平台不提供人工发包命令或 Web 请求编辑器。
+
+动态验证页只读展示 Chrome DevTools MCP 捕获的脱敏发包记录，并支持方法、状态、来源、全文筛选和两条记录逐字段比较。人工发包、改包和重放完全交给 Bruno。单条或批量记录可导出为 HAR 1.2，或导出为 OpenCollection 1.0.0 ZIP 供 Bruno 3+ 打开。OpenCollection 导出不依赖 Bruno MCP/CLI；业务字段保持原样，认证头、Cookie、API Key、密码和 token 等凭据转换为 `process.env` 占位符，并附带不含值的 `.env.example`。响应只保留状态、耗时和摘要元数据，不导出响应头或正文。
+
+Windows/Linux 发布前的真实 Chrome 所有权、清理与 Bruno 4 Desktop 验收步骤见 [动态验证跨平台发布验收](docs/dynamic-validation-platform-acceptance.md)。CLI 支持 `acceptance template|seal|verify`，封存时强制在对应目标 OS 上完成，最终同时要求 Windows 与 Linux 证据。缺少授权 loopback 环境时必须记为 `SKIPPED`，不能以启动任意目标或全局终止 Chrome 的方式强行完成验收。
+
+当前构建与部署基线明确禁用 Docker、Podman 及其他容器运行时。本平台不提供 Dockerfile、Compose、容器镜像或容器执行回退：Windows PC 直接运行本机 Node.js、OpenCode 与 Chrome；Linux 服务器直接运行本机 Node.js、OpenCode 和受管 headless Chrome。平台审计器仍会把被测项目中的 Dockerfile/Compose 当作只读源码进行安全审计，但不会执行它们。
 
 ## Local analysis and MCP defaults
 
@@ -208,7 +225,7 @@ Semgrep/OpenGrep 不再注册为 MCP。Agent 通过 `node .opencode/scripts/semg
 
 Joern 不再注册为 MCP。函数清单构建器和审计命令直接调用 `joern-parse` 与 `joern`；默认从 `PATH` 解析，也可在启动 OpenCode 前通过 `JOERN_BIN`、`JOERN_PARSE_BIN`、`JOERN_JAVA_BIN` 和 `JOERN_GNUBIN` 指定本机工具链。Joern 查询应把完整 stdout/stderr 写入 `tmp/`，只把有界摘要带回 agent 上下文。
 
-配置模板默认启用 `coverage_ledger` 和 `chrome-devtools`。后者使用 `npx -y chrome-devtools-mcp@latest` 启动可见、隔离的本机 Chrome，只对 `dynamic-vulnerability-validator` 开放；当前不支持远程、容器域名、headless 或 `agent-browser` 回退。`coverage_ledger` 暴露 Assignment Unit、attestation 和兼容的 check 级工具，串行生成认证哈希链。正常 unit 工作流仅交换计数、事件元数据和服务端派生的冻结 source-set 摘要，单次响应硬限制为 16 KiB；完整 source/接口元数据仅允许按小页做定向诊断。
+配置模板默认启用 `coverage_ledger` 和固定版本的 `chrome-devtools-mcp@1.8.0`。动态 Runner 按风险在现有 Chrome 独立标签页、isolated context 和临时隔离 Chrome 之间选择；共享标签页要求 Chrome 144+、已开启远程调试并由用户确认所选 profile 对控制器可见，Broker 仍只管理本任务登记的页面。Web XSS 等高影响任务强制隔离，无桌面的 Linux 服务器可以使用隔离 headless Chrome。禁止远程、容器域名和 `agent-browser` 回退。`coverage_ledger` 暴露 Assignment Unit、attestation 和兼容的 check 级工具，串行生成认证哈希链。正常 unit 工作流仅交换计数、事件元数据和服务端派生的冻结 source-set 摘要，单次响应硬限制为 16 KiB；完整 source/接口元数据仅允许按小页做定向诊断。
 
 `context7`、`gh_grep`、CodeQL 以及外部 truth-review MCP 占位均已从项目配置中删除。历史 CodeQL 规则文件仅作为离线知识资产保留，不会被 agent 调用。finding 真实性复核完全由项目内 OpenCode Agent 与固定 JSON 契约实现，不要求全局服务。`cpp_index`、`jvm_index`、`python_index` 和 `audit_lab` 仍是可替换占位。
 

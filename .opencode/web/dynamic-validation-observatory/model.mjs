@@ -1,5 +1,8 @@
 import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { normalizeBrowserExchangeV2 } from "./http-exchange.mjs";
+import { webValidationCapability } from "./web-validation-policy.mjs";
+import { validateExternalRuntimeValidationRequest } from "../../skills/common-subagent/finding-evidence-contract/scripts/external-runtime-validation-contract.mjs";
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const SECRET_KEYS = new Set([
@@ -123,30 +126,7 @@ function runSummary(detail) {
 }
 
 function normalizeExchange(exchange, reference) {
-  const request = exchange?.request ?? {};
-  const response = exchange?.response ?? {};
-  return sanitizeForWeb({
-    exchange_id: exchange?.exchange_id ?? reference?.exchange_id,
-    sequence: exchange?.sequence ?? reference?.sequence,
-    phase: exchange?.phase ?? reference?.phase ?? "UNCLASSIFIED",
-    step_id: exchange?.step_id ?? reference?.step_id ?? null,
-    started_at: exchange?.started_at ?? null,
-    duration_ms: exchange?.duration_ms ?? null,
-    browser_context_id: exchange?.browser_context_id ?? null,
-    request: {
-      method: request.method ?? "UNKNOWN",
-      url: request.url ?? "",
-      headers: request.headers ?? [],
-      body: request.body ?? null,
-    },
-    response: {
-      status: response.status ?? null,
-      status_text: response.status_text ?? "",
-      headers: response.headers ?? [],
-      body: response.body ?? null,
-      error: response.error ?? null,
-    },
-  });
+  return normalizeBrowserExchangeV2(sanitizeForWeb(exchange), reference);
 }
 
 async function loadNetwork(result, artifactById, runtimeRoot) {
@@ -317,7 +297,10 @@ export async function listValidationRequests(runtimeRoot) {
         const findingId = request.finding_id;
         if (!findingId) continue;
         const resultPresent = files.some(candidate => candidate.isFile() && candidate.name === `${findingId}.result.json`);
-        const envelopeFile = files.find(candidate => candidate.isFile() && (candidate.name === "envelope-input.json" || candidate.name === `${findingId}.envelope-input.json`));
+        const envelopeFile = files.find(candidate => candidate.isFile() && candidate.name === `${findingId}.envelope-input.json`)
+          ?? (file.name === "request.json" ? files.find(candidate => candidate.isFile() && candidate.name === "envelope-input.json") : null);
+        const capability = await webValidationCapability(request.claim?.vulnerability_type_id);
+        const requestErrors = validateExternalRuntimeValidationRequest(request);
         requests.push(sanitizeForWeb({
           id: runId(request.audit_id ?? auditEntry.name, findingId),
           audit_id: request.audit_id ?? auditEntry.name,
@@ -334,7 +317,14 @@ export async function listValidationRequests(runtimeRoot) {
           request_path: publicArtifactPath(join(auditRoot, file.name), runtimeRoot),
           envelope_path: envelopeFile ? publicArtifactPath(join(auditRoot, envelopeFile.name), runtimeRoot) : null,
           result_present: resultPresent,
-          dispatch_ready: !resultPresent && Boolean(envelopeFile) && request.claim?.vulnerability_type_id === "JW-INJECT-06",
+          validation_type_supported: Boolean(capability),
+          validator: capability?.validator ?? null,
+          dispatch_blockers: [
+            ...(requestErrors.length ? ["request-invalid"] : []),
+            ...(!capability ? ["validation-type-unsupported"] : []),
+            ...(resultPresent ? ["validation-result-exists"] : []),
+          ],
+          dispatch_ready: !resultPresent && requestErrors.length === 0 && Boolean(capability),
         }));
       } catch {
         // Invalid request artifacts remain invisible to dispatch and available on disk for manual diagnosis.
