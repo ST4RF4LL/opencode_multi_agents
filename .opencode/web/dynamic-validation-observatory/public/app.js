@@ -312,7 +312,7 @@ function renderAuditDetail() {
   }
   const actions = element("div", "action-row");
   if (audit.terminal) {
-    const monitorLabel = audit.terminal.live ? "监控 OpenCode" : audit.terminal.status === "archived" ? "查看终端快照" : "终端监控状态";
+    const monitorLabel = audit.terminal.live ? "OpenCode 实时事件" : audit.terminal.status === "archived" ? "查看事件快照" : "事件监控状态";
     const monitor = element("button", "button secondary", monitorLabel);
     monitor.addEventListener("click", () => openTerminal(audit));
     actions.append(monitor);
@@ -349,25 +349,45 @@ function renderAuditDetail() {
     actions.append(remove);
   }
   const logs = element("div", "runner-log");
-  logs.append(element("p", "eyebrow", "RECENT AGENT OUTPUT"), element("pre", "runner-log-output", "正在读取最近输出…"));
+  logs.append(element("p", "eyebrow", "RECENT OPENCODE EVENTS"), element("div", "agent-event-stream", "正在读取最近事件…"));
   panel.replaceChildren(head, facts, stages, ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
-  loadAuditLogs(audit.id, logs).catch(error => { logs.querySelector("pre").textContent = error.message; });
+  loadAuditLogs(audit.id, logs).catch(error => { logs.querySelector(".agent-event-stream").textContent = error.message; });
+}
+
+function eventCode(title, value) {
+  if (!value) return null;
+  const details = element("details", "agent-event-details");
+  details.append(element("summary", "", title), element("pre", "", value));
+  return details;
+}
+
+function renderAgentEvent(item, recent) {
+  const card = element("article", `agent-event ${item.kind ?? "raw"} ${recent ? "recent" : "historical"}`);
+  const header = element("header");
+  const identity = element("span", "agent-event-identity");
+  identity.append(element("strong", "", item.label ?? "OpenCode 事件"));
+  if (item.tool) identity.append(element("code", "", item.tool));
+  header.append(identity);
+  if (item.status) header.append(element("span", `agent-event-status ${item.status}`, item.status));
+  header.append(element("time", "", formatDate(item.occurred_at)));
+  card.append(header);
+  if (item.body) card.append(element("pre", "agent-event-body", item.body));
+  const input = eventCode("查看调用参数", item.detail);
+  if (input) card.append(input);
+  return card;
 }
 
 async function loadAuditLogs(auditId, container) {
   const items = (await api(`/api/v1/audits/${encodeURIComponent(auditId)}/logs?limit=80`)).items;
   if (state.selectedAuditId !== auditId) return;
-  const output = container.querySelector("pre");
+  const output = container.querySelector(".agent-event-stream");
   if (!items.length) {
     output.textContent = "当前没有 Runner 输出；历史制品审计不会生成进程日志。";
     return;
   }
   const recentStart = Math.max(0, items.length - 12);
   const fragment = document.createDocumentFragment();
-  items.forEach((item, index) => {
-    const line = element("span", `runner-log-line ${index >= recentStart ? "recent" : "historical"}`, `${item.occurred_at} [${item.source}] ${item.message}`);
-    fragment.append(line);
-  });
+  items.forEach((item, index) => fragment.append(renderAgentEvent(item, index >= recentStart)));
   output.replaceChildren(fragment);
   window.requestAnimationFrame(() => { output.scrollTop = output.scrollHeight; });
 }
@@ -470,7 +490,7 @@ async function refreshTerminal(auditId) {
 function openTerminal(audit) {
   state.terminalAuditId = audit.id;
   $("terminal-title").textContent = `OpenCode · ${audit.name}`;
-  $("terminal-subtitle").textContent = `${audit.id} · 只读 ${audit.terminal?.backend === "psmux" ? "psmux" : "tmux"} 窗口，不向 Agent 发送键盘输入`;
+  $("terminal-subtitle").textContent = `${audit.id} · 只读 Runner 事件窗口；原生交互 TUI 请使用下方 OpenCode session 命令`;
   setTerminalStatus(withTerminalSession({ available: false, live: false, status: "connecting", target: audit.terminal?.target, output: "正在读取终端窗口…", message: audit.terminal?.message }, audit.id));
   $("terminal-dialog").showModal();
   state.terminalGrid = null;

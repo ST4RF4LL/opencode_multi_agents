@@ -15,14 +15,58 @@ import { AuditRunner } from "../web/dynamic-validation-observatory/audit-runner.
 import { DynamicValidationRunner, validateAuthorization } from "../web/dynamic-validation-observatory/validation-runner.mjs";
 import { EnvironmentHealthService } from "../web/dynamic-validation-observatory/environment-health.mjs";
 import { OpenCodeTmuxMonitor } from "../web/dynamic-validation-observatory/tmux-monitor.mjs";
+import { openCodeEventView } from "../web/dynamic-validation-observatory/opencode-event-view.mjs";
 import { FindingWorkflowStore } from "../web/dynamic-validation-observatory/finding-workflow.mjs";
-import { buildWorkspaceSnapshot, findingsFromArtifacts, materializeFinalReportFromModel } from "../web/dynamic-validation-observatory/workspace-model.mjs";
+import { auditsFromArtifacts, buildWorkspaceSnapshot, findingsFromArtifacts, materializeFinalReportFromModel } from "../web/dynamic-validation-observatory/workspace-model.mjs";
 import { createAuditWorkbenchServer, parseArgs } from "../web/dynamic-validation-observatory/server.mjs";
 import { finalReportModelDigest, renderFinalReport } from "../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 import { buildWebXssInputEnvelope, buildWebXssRuntimeRequest } from "./fixtures/web-xss-runtime-fixture.mjs";
 
 const OPENCODE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execFileAsync = promisify(execFile);
+
+const toolEventView = openCodeEventView({
+  occurred_at: "2026-09-01T00:00:00.000Z",
+  source: "stdout",
+  message: JSON.stringify({
+    type: "tool_use",
+    sessionID: "ses_event_view",
+    part: { tool: "bash", callID: "call_1", state: { status: "completed", input: { command: "pwd" }, output: "/tmp/project" } },
+  }),
+});
+assert.equal(toolEventView.kind, "tool");
+assert.equal(toolEventView.tool, "bash");
+assert.equal(toolEventView.status, "completed");
+assert.match(toolEventView.detail, /"command": "pwd"/);
+assert.equal(toolEventView.body, "/tmp/project");
+assert.equal(toolEventView.session_id, "ses_event_view");
+
+const nestedToolOutput = openCodeEventView({
+  source: "stdout",
+  message: JSON.stringify({ type: "tool_use", part: { tool: "bash", state: { status: "completed", output: JSON.stringify({ output: "clean terminal output", metadata: { exit: 0 } }) } } }),
+});
+assert.equal(nestedToolOutput.body, "clean terminal output");
+
+const stepEventView = openCodeEventView({
+  occurred_at: "2026-09-01T00:00:01.000Z",
+  source: "stdout",
+  message: JSON.stringify({ type: "step_finish", part: { reason: "stop", tokens: { total: 12, output: 3 }, cost: 0.0001 } }),
+});
+assert.equal(stepEventView.kind, "step");
+assert.match(stepEventView.body, /总计 12/);
+assert.match(stepEventView.body, /费用 \$0\.000100/);
+
+const todoCompleteBeforeCorrelation = auditsFromArtifacts([
+  { audit_id: "audit-stage-consistency", kind: "coverage", path: "coverage/coverage-plan.audit-stage-consistency.json", modified_at: "2026-09-01T00:00:00.000Z" },
+  { audit_id: "audit-stage-consistency", kind: "vulnerability-mining", path: "vulnerability-mining/result.json", modified_at: "2026-09-01T00:00:01.000Z" },
+], [], [{
+  id: "audit-stage-consistency",
+  status: "running",
+  stage_delivery_enforcement: "TODO_ENFORCED",
+  todo: { total: 4, done: 4, pending: 0, running: 0, failed: 0, progress: 100, complete: true },
+}])[0];
+assert.equal(todoCompleteBeforeCorrelation.stage, "证据关联");
+assert.equal(todoCompleteBeforeCorrelation.stages.find(stage => stage.state === "active")?.label, "证据关联");
 
 const anonymousAuthorization = validateAuthorization({
   target_base_url: "http://127.0.0.1:8080/path",
@@ -1326,10 +1370,13 @@ if (mode === "run") {
     assert.deepEqual(events.map(event => event.sequence), events.map((_, index) => index + 1));
     const logResponse = await fetch(`${base}/api/v1/audits/${created.id}/logs?limit=20`);
     assert.equal(logResponse.status, 200);
-    const logPayload = JSON.stringify(await logResponse.json());
+    const parsedLogPayload = await logResponse.json();
+    const logPayload = JSON.stringify(parsedLogPayload);
     assert.equal(logPayload.includes("must-not-leak"), false);
     assert.equal(logPayload.includes("context-attacker-secret"), false);
     assert.match(logPayload, /PRIVATE_CONTEXT_REDACTED/);
+    assert.equal(parsedLogPayload.items.every(item => typeof item.kind === "string" && typeof item.label === "string"), true);
+    assert.equal(parsedLogPayload.items.every(item => item.message === undefined), true);
 
     const duplicateResponse = await fetch(`${base}/api/v1/audits`, {
       method: "POST",
@@ -1701,10 +1748,12 @@ if (mode === "run") {
     const appSource = await appResponse.text();
     const stylesSource = await stylesResponse.text();
     assert.match(appSource, /npm --prefix \.opencode run start:audit-workbench:runner/);
-    assert.match(appSource, /runner-log-line/);
+    assert.match(appSource, /agent-event-stream/);
+    assert.match(appSource, /renderAgentEvent/);
     assert.match(appSource, /output\.scrollTop = output\.scrollHeight/);
-    assert.match(stylesSource, /runner-log-line\.historical/);
-    assert.match(stylesSource, /runner-log-line\.recent/);
+    assert.match(stylesSource, /agent-event\.historical/);
+    assert.match(stylesSource, /agent-event\.recent/);
+    assert.match(stylesSource, /agent-event\.tool/);
     assert.match(appSource, /删除任务/);
     assert.match(appSource, /删除项目/);
     assert.match(appSource, /\/api\/v1\/repositories\//);

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { buildOpenCodeEnvironment, proxyEnvironmentFrom } from "./opencode-runtime-config.mjs";
 import { DEFAULT_MODEL_SELECTION, normalizeOpenCodeModel } from "./opencode-model-settings.mjs";
 import { OpenCodeTmuxMonitor } from "./tmux-monitor.mjs";
+import { openCodeEventView } from "./opencode-event-view.mjs";
 import { auditsFromArtifacts, materializeFinalReportFromModel, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
 import { auditTodoSummary, createEmptyAuditTodo } from "../../scripts/audit-todo-core.mjs";
@@ -1308,7 +1309,7 @@ export class AuditRunner extends EventEmitter {
         if (start > 0) lines.shift();
         return lines.filter(Boolean).flatMap(line => {
           try { return [JSON.parse(line)]; } catch { return []; }
-        }).slice(-Math.min(Math.max(Number(limit) || 100, 1), 200));
+        }).slice(-Math.min(Math.max(Number(limit) || 100, 1), 200)).map(openCodeEventView);
       } finally { await handle.close(); }
     } catch (error) {
       if (error?.code === "ENOENT") return [];

@@ -246,6 +246,18 @@ function coverageFromArtifacts(artifacts) {
   };
 }
 
+function currentStageLabel({ stages, todo, todoEnforced, completed }) {
+  if (todoEnforced && (todo?.running || todo?.pending)) {
+    return `多维漏洞审计 · ${todo.done ?? 0}/${todo.total ?? 0}`;
+  }
+  if (todoEnforced && !todo?.complete) return "多维漏洞审计 · 需处理失败项";
+  const activeStage = stages.find(stage => stage.state === "active");
+  if (activeStage) return activeStage.label;
+  const completedCount = stages.filter(stage => stage.state === "completed").length;
+  if (!completed && completedCount > 0) return "制品不连续";
+  return completed ? "报告封存" : "等待开始";
+}
+
 function severityRank(value) {
   return ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 })[String(value ?? "").toUpperCase()] ?? -1;
 }
@@ -512,8 +524,6 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
     const completed = completedCount === stages.length;
     const todoEnforced = runner?.stage_delivery_enforcement === "TODO_ENFORCED" && Number(todo?.total ?? 0) > 0;
     const progress = todoEnforced ? Number(todo.progress ?? 0) : Math.round((completedCount / stages.length) * 100);
-    const activeStage = stages.find(stage => stage.state === "active");
-    const discontinuous = !activeStage && !completed && completedCount > 0;
     return {
       id: auditId,
       name: runner?.name ?? `仓库级安全审计 · ${auditId}`,
@@ -523,9 +533,7 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       status: runner?.status ?? (completed ? "completed" : "artifact_only"),
       version: runner?.version ?? 1,
       event_sequence: runner?.event_sequence ?? 0,
-      stage: todoEnforced
-        ? (todo.running || todo.pending ? `多维漏洞审计 · ${todo.done ?? 0}/${todo.total ?? 0}` : todo.complete ? "报告封存" : "多维漏洞审计 · 需处理失败项")
-        : (activeStage?.label ?? (todo?.running || todo?.pending ? `多维漏洞审计 · ${todo.done ?? 0}/${todo.total ?? 0}` : discontinuous ? "制品不连续" : completed ? "报告封存" : "等待开始")),
+      stage: currentStageLabel({ stages, todo, todoEnforced, completed }),
       stages,
       progress,
       progress_source: todoEnforced ? "local-audit-todo" : useMaterialized ? "stage-delivery-manifest" : "legacy-artifact-heuristic",
