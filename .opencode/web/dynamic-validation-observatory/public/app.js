@@ -25,6 +25,14 @@ const state = {
   pendingDeleteAuditId: null,
   pendingDeleteRepositoryId: null,
   pendingCancelValidationId: null,
+  findings: [],
+  findingPage: 1,
+  findingTotal: 0,
+  findingTotalPages: 1,
+  findingLoaded: false,
+  findingLoading: false,
+  findingRequestSequence: 0,
+  findingSearchTimer: null,
 };
 
 const VIEW_META = {
@@ -127,7 +135,25 @@ function setView(view) {
   $("page-title").textContent = VIEW_META[view][0];
   $("breadcrumb").textContent = VIEW_META[view][1];
   renderActiveView();
+  if (view === "findings" && !state.findingLoaded && !state.findingLoading) loadFindingsPage(1).catch(showError);
   window.scrollTo(0, 0);
+}
+
+function invalidateFindings() {
+  state.findingRequestSequence += 1;
+  state.findings = [];
+  state.findingPage = 1;
+  state.findingTotal = 0;
+  state.findingTotalPages = 1;
+  state.findingLoaded = false;
+  state.findingLoading = false;
+}
+
+function applyWorkspace(workspace) {
+  const previousCount = Number(state.workspace?.summary?.finding_count ?? 0);
+  const nextCount = Number(workspace?.summary?.finding_count ?? 0);
+  state.workspace = workspace;
+  if (previousCount !== nextCount) invalidateFindings();
 }
 
 function metric(label, value, note) {
@@ -644,6 +670,7 @@ async function submitDeleteAudit(event) {
     });
     closeDeleteAuditDialog();
     state.selectedAuditId = null;
+    invalidateFindings();
     toast(`已删除 ${result.audit_id}`);
     await load();
   } catch (requestError) {
@@ -653,11 +680,15 @@ async function submitDeleteAudit(event) {
 }
 
 function renderFindings() {
-  const query = $("finding-query").value.trim().toLowerCase();
-  const findings = state.workspace.findings.filter(item => !query || `${item.id} ${item.title} ${item.description ?? ""} ${item.repository_name ?? ""} ${item.repository_id ?? ""} ${item.audit_id} ${item.location?.path ?? ""} ${(item.evidence ?? []).map(evidence => evidence.text).join(" ")}`.toLowerCase().includes(query));
+  const findings = state.findings;
   const value = element("div", "finding-card-list");
   const positioned = findings.filter(finding => finding.location_complete).length;
-  value.append(element("p", "finding-list-summary", `共 ${findings.length} 条漏洞发现；${positioned} 条已提供文件与行号定位。`));
+  if (state.findingLoading && !state.findingLoaded) {
+    value.append(element("div", "empty-state", "正在加载第 1 页漏洞发现…"));
+    $("finding-table").replaceChildren(value);
+    return;
+  }
+  value.append(element("p", "finding-list-summary", `共 ${state.findingTotal} 条漏洞发现 · 第 ${state.findingPage}/${state.findingTotalPages} 页 · 本页 ${positioned}/${findings.length} 条已提供文件与行号定位。`));
   for (const finding of findings) {
     const card = element("article", `finding-card${finding.location_complete ? "" : " location-missing"}`);
     const header = element("header", "finding-card-header");
@@ -691,7 +722,45 @@ function renderFindings() {
     value.append(card);
   }
   if (!findings.length) value.append(element("div", "empty-state", "没有符合条件的漏洞发现。"));
+  if (state.findingTotal > 0) {
+    const pagination = element("nav", "finding-pagination");
+    pagination.setAttribute("aria-label", "漏洞发现分页");
+    const previous = element("button", "button secondary", "上一页");
+    previous.type = "button";
+    previous.disabled = state.findingLoading || state.findingPage <= 1;
+    previous.addEventListener("click", () => loadFindingsPage(state.findingPage - 1).catch(showError));
+    const page = element("span", "", `第 ${state.findingPage} 页，共 ${state.findingTotalPages} 页`);
+    const next = element("button", "button secondary", "下一页");
+    next.type = "button";
+    next.disabled = state.findingLoading || state.findingPage >= state.findingTotalPages;
+    next.addEventListener("click", () => loadFindingsPage(state.findingPage + 1).catch(showError));
+    pagination.append(previous, page, next);
+    value.append(pagination);
+  }
   $("finding-table").replaceChildren(value);
+}
+
+async function loadFindingsPage(page = 1) {
+  const sequence = ++state.findingRequestSequence;
+  state.findingLoading = true;
+  renderFindings();
+  try {
+    const parameters = new URLSearchParams({ page: String(page) });
+    const query = $("finding-query").value.trim();
+    if (query) parameters.set("q", query);
+    const payload = await api(`/api/v1/findings?${parameters}`);
+    if (sequence !== state.findingRequestSequence) return;
+    state.findings = payload.items;
+    state.findingPage = payload.page;
+    state.findingTotal = payload.count;
+    state.findingTotalPages = payload.total_pages;
+    state.findingLoaded = true;
+  } finally {
+    if (sequence === state.findingRequestSequence) {
+      state.findingLoading = false;
+      renderFindings();
+    }
+  }
 }
 
 function findingSection(label, value) {
@@ -780,7 +849,7 @@ function statusText(value) {
 
 async function submitFindingWorkflow(event) {
   event.preventDefault();
-  const finding = state.workspace.findings.find(item => item.resource_id === state.selectedFindingResourceId);
+  const finding = state.findings.find(item => item.resource_id === state.selectedFindingResourceId);
   if (!finding) return;
   const form = event.currentTarget;
   const data = new FormData(form);
@@ -794,7 +863,7 @@ async function submitFindingWorkflow(event) {
     });
     toast(`漏洞 ${finding.id} 的处理状态已保存`);
     $("finding-dialog").close();
-    await load();
+    await loadFindingsPage(state.findingPage);
   } catch (error) {
     $("finding-workflow-error").textContent = error.message;
     $("finding-workflow-error").hidden = false;
@@ -1224,7 +1293,7 @@ async function refreshLiveWorkspace() {
     // repeatedly scan validation records or rebuild that page in the background.
     if (state.view === "validation") requests.push(api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/http-exchanges?limit=100"));
     const [workspace, validation, validationRequests, exchanges] = await Promise.all(requests);
-    state.workspace = workspace;
+    applyWorkspace(workspace);
     if (validation) state.validationRuns = validation.runs;
     if (validationRequests) state.validationRequests = validationRequests.items;
     if (exchanges) state.requestExchanges = exchanges.items;
@@ -1245,7 +1314,7 @@ async function load() {
   const [workspace, repositories, validation, validationRequests, runtime, environment, modelSettings, exchanges] = await Promise.all([
     api("/api/v1/workspace"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"), api("/api/v1/http-exchanges?limit=100"),
   ]);
-  state.workspace = workspace;
+  applyWorkspace(workspace);
   state.repositories = repositories.items;
   state.validationRuns = validation.runs;
   state.validationRequests = validationRequests.items;
@@ -1493,7 +1562,10 @@ $("new-audit").addEventListener("click", () => openAuditDialog());
 $("add-project").addEventListener("click", openProjectDialog);
 $("refresh").addEventListener("click", () => load().then(() => toast("制品与运行状态已刷新")).catch(showError));
 $("dispatch-queue").addEventListener("click", () => dispatchQueueNow().catch(showError));
-$("finding-query").addEventListener("input", renderFindings);
+$("finding-query").addEventListener("input", () => {
+  window.clearTimeout(state.findingSearchTimer);
+  state.findingSearchTimer = window.setTimeout(() => loadFindingsPage(1).catch(showError), 300);
+});
 $("audit-form").addEventListener("submit", submitAudit);
 $("model-settings-form").addEventListener("submit", submitModelSettings);
 $("queue-settings-form").addEventListener("submit", submitQueueSettings);

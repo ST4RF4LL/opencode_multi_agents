@@ -119,6 +119,7 @@ main { padding: 30px 34px 48px; max-width: 1600px; margin: 0 auto; }
 .finding-link:hover { color: var(--green); text-decoration: underline; }
 .finding-card-list { display: grid; gap: 12px; }
 .finding-list-summary { margin: 0; padding: 2px 2px 10px; color: var(--muted); font-size: 11px; }
+.finding-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 18px 0 2px; color: var(--muted); font-size: 11px; }
 .finding-card { padding: 18px; background: #fbfcfb; border: 1px solid var(--line); border-left: 4px solid var(--green); border-radius: 10px; }
 .finding-card:hover { border-color: #9dbbaa; border-left-color: var(--green); background: #f7faf8; }
 .finding-card.location-missing { border-left-color: var(--amber); }

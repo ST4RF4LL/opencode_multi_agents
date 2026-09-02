@@ -31,6 +31,7 @@ const DEFAULT_ROLES = join(PROJECT_ROOT, ".opencode", "agent-manifest", "roles.j
 const BIND_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
 const MAX_REQUEST_BODY = 64 * 1024;
 const MAX_REPORT_BODY = 8 * 1024 * 1024;
+const FINDINGS_PAGE_SIZE = 50;
 const markdownRenderer = new MarkdownIt({ html: false, linkify: false, typographer: false, breaks: false });
 const defaultLinkOpen = markdownRenderer.renderer.rules.link_open
   ?? ((tokens, index, options, _environment, self) => self.renderToken(tokens, index, options));
@@ -151,9 +152,25 @@ function filterFindings(findings, url) {
   return findings.filter(finding => {
     if (auditId && finding.audit_id !== auditId) return false;
     if (severity && finding.severity !== severity) return false;
-    if (query && !`${finding.id} ${finding.title} ${finding.description ?? ""} ${finding.location?.path ?? ""} ${(finding.evidence ?? []).map(item => item.text ?? "").join(" ")}`.toLowerCase().includes(query)) return false;
+    if (query && !`${finding.id} ${finding.title} ${finding.description ?? ""} ${finding.repository_name ?? ""} ${finding.repository_id ?? ""} ${finding.audit_id ?? ""} ${finding.location?.path ?? ""} ${(finding.evidence ?? []).map(item => item.text ?? "").join(" ")}`.toLowerCase().includes(query)) return false;
     return true;
   });
+}
+
+export function paginateFindings(findings, url) {
+  const filtered = filterFindings(findings, url);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / FINDINGS_PAGE_SIZE));
+  const requestedPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+  const page = Math.min(Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1, totalPages);
+  const start = (page - 1) * FINDINGS_PAGE_SIZE;
+  return {
+    items: filtered.slice(start, start + FINDINGS_PAGE_SIZE),
+    count: filtered.length,
+    returned_count: Math.min(FINDINGS_PAGE_SIZE, Math.max(0, filtered.length - start)),
+    page,
+    page_size: FINDINGS_PAGE_SIZE,
+    total_pages: totalPages,
+  };
 }
 
 function mergeSnapshots(snapshots) {
@@ -558,7 +575,8 @@ export function createAuditWorkbenchServer({
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/workspace") {
-        json(response, 200, await snapshot());
+        const { findings: _findings, ...workspace } = await snapshot();
+        json(response, 200, workspace);
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/repositories") {
@@ -688,8 +706,7 @@ export function createAuditWorkbenchServer({
       }
       if (request.method === "GET" && url.pathname === "/api/v1/findings") {
         const data = await snapshot();
-        const items = filterFindings(data.findings, url);
-        json(response, 200, { items, count: items.length });
+        json(response, 200, paginateFindings(data.findings, url));
         return;
       }
       const findingWorkflowId = matchFindingWorkflowPath(url.pathname);

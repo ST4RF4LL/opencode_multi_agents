@@ -18,7 +18,7 @@ import { OpenCodeTmuxMonitor } from "../web/dynamic-validation-observatory/tmux-
 import { openCodeEventView } from "../web/dynamic-validation-observatory/opencode-event-view.mjs";
 import { FindingWorkflowStore } from "../web/dynamic-validation-observatory/finding-workflow.mjs";
 import { auditsFromArtifacts, buildWorkspaceSnapshot, findingsFromArtifacts, materializeFinalReportFromModel } from "../web/dynamic-validation-observatory/workspace-model.mjs";
-import { createAuditWorkbenchServer, parseArgs } from "../web/dynamic-validation-observatory/server.mjs";
+import { createAuditWorkbenchServer, paginateFindings, parseArgs } from "../web/dynamic-validation-observatory/server.mjs";
 import { finalReportModelDigest, renderFinalReport } from "../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 import { buildWebXssInputEnvelope, buildWebXssRuntimeRequest } from "./fixtures/web-xss-runtime-fixture.mjs";
 
@@ -67,6 +67,14 @@ const todoCompleteBeforeCorrelation = auditsFromArtifacts([
 }])[0];
 assert.equal(todoCompleteBeforeCorrelation.stage, "证据关联");
 assert.equal(todoCompleteBeforeCorrelation.stages.find(stage => stage.state === "active")?.label, "证据关联");
+
+const findingPaginationFixture = Array.from({ length: 121 }, (_, index) => ({ id: `F-${String(index + 1).padStart(3, "0")}`, title: `Finding ${index + 1}` }));
+const findingSecondPage = paginateFindings(findingPaginationFixture, new URL("http://127.0.0.1/api/v1/findings?page=2"));
+assert.equal(findingSecondPage.items.length, 50);
+assert.equal(findingSecondPage.items[0].id, "F-051");
+assert.equal(findingSecondPage.count, 121);
+assert.equal(findingSecondPage.page_size, 50);
+assert.equal(findingSecondPage.total_pages, 3);
 
 const anonymousAuthorization = validateAuthorization({
   target_base_url: "http://127.0.0.1:8080/path",
@@ -1083,11 +1091,19 @@ if (mode === "run") {
     const workspace = await workspaceResponse.json();
     assert.equal(workspace.summary.finding_count, 1);
     assert.equal(workspace.audits[0].repository_id, "fixture");
-    assert.match(workspace.findings[0].resource_id, /^[a-f0-9]{24}$/);
-    assert.equal(workspace.findings[0].repository_id, "fixture");
-    assert.equal(workspace.findings[0].repository_name, "测试仓库");
-    assert.equal(workspace.findings[0].workflow.status, "unreviewed");
-    assert.equal(workspace.findings[0].workflow.version, 0);
+    assert.equal(workspace.findings, undefined);
+    const findingsResponse = await fetch(`${base}/api/v1/findings?page=1`);
+    assert.equal(findingsResponse.status, 200);
+    const findingsPage = await findingsResponse.json();
+    assert.equal(findingsPage.page, 1);
+    assert.equal(findingsPage.page_size, 50);
+    assert.equal(findingsPage.total_pages, 1);
+    assert.equal(findingsPage.count, 1);
+    assert.match(findingsPage.items[0].resource_id, /^[a-f0-9]{24}$/);
+    assert.equal(findingsPage.items[0].repository_id, "fixture");
+    assert.equal(findingsPage.items[0].repository_name, "测试仓库");
+    assert.equal(findingsPage.items[0].workflow.status, "unreviewed");
+    assert.equal(findingsPage.items[0].workflow.version, 0);
     const repositoryResponse = await fetch(`${base}/api/v1/repositories`);
     assert.equal(repositoryResponse.status, 200);
     const repositoryPayload = await repositoryResponse.json();
@@ -1172,7 +1188,7 @@ if (mode === "run") {
     assert.equal(saveModelSelection.status, 200);
     assert.equal((await saveModelSelection.json()).model.selected_model, "global-provider/global-audit");
 
-    findingResourceId = workspace.findings[0].resource_id;
+    findingResourceId = findingsPage.items[0].resource_id;
     const workflowResponse = await fetch(`${base}/api/v1/findings/${findingResourceId}/workflow`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "If-Match": '"0"', "Idempotency-Key": "finding-workflow-001" },
@@ -1185,8 +1201,8 @@ if (mode === "run") {
     assert.equal(workflow.version, 1);
     assert.equal(workflow.idempotency_records, undefined);
     assert.equal(workflowResponse.headers.get("etag"), '"1"');
-    const workspaceAfterWorkflow = await (await fetch(`${base}/api/v1/workspace`)).json();
-    assert.equal(workspaceAfterWorkflow.findings[0].workflow.status, "confirmed");
+    const findingsAfterWorkflow = await (await fetch(`${base}/api/v1/findings?page=1`)).json();
+    assert.equal(findingsAfterWorkflow.items[0].workflow.status, "confirmed");
     const staleWorkflowResponse = await fetch(`${base}/api/v1/findings/${findingResourceId}/workflow`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "If-Match": '"0"', "Idempotency-Key": "finding-workflow-stale" },
@@ -1606,6 +1622,8 @@ if (mode === "run") {
     assert.equal(artifactOnlyDeletion.removed_finding_workflows, 1);
     await assert.rejects(stat(findingWorkflow.directory(findingResourceId)), error => error.code === "ENOENT");
     assert.equal((await stat(join(reportsRoot, "final", "security-audit-report.audit-sealed.md"))).isFile(), true);
+    const findingsAfterAuditDeletion = await (await fetch(`${base}/api/v1/findings?page=1`)).json();
+    assert.equal(findingsAfterAuditDeletion.items.some(item => item.audit_id === "audit-history"), false);
 
     const queueDefaultsResponse = await fetch(`${base}/api/v1/settings/queue`);
     assert.equal(queueDefaultsResponse.status, 200);
@@ -1778,6 +1796,7 @@ if (mode === "run") {
     assert.match(appSource, /markdown-it-html-disabled/);
     assert.match(appSource, /关联 Repo/);
     assert.match(appSource, /finding\.repository_name/);
+    assert.match(appSource, /invalidateFindings/);
     assert.doesNotMatch(appSource, /window\.confirm/);
     const referencedIds = [...appSource.matchAll(/\$\("([A-Za-z0-9_-]+)"\)/g)].map(match => match[1]);
     assert.deepEqual([...new Set(referencedIds)].filter(id => !indexHtml.includes(`id="${id}"`)), []);
