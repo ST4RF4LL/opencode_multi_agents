@@ -727,6 +727,55 @@ if (mode === "run") {
   assert.equal(timeoutEvents.some(event => event.type === "audit.timeout.recovery.started"), true);
   await timeoutRunner.shutdown();
 
+  // Enterprise deployments may expose only a 128K model context.  When
+  // OpenCode reports that exact context-window failure, the watchdog must run
+  // the built-in compact command on the same provider session before recovery.
+  const contextFirstChild = new FakeChild();
+  const contextRecoveredChild = new FakeChild();
+  const contextMonitor = new FakeTerminalMonitor();
+  const compactCalls = [];
+  let contextSpawnCount = 0;
+  const contextRunner = new AuditRunner({
+    stateRoot: join(temp, "context-window-recovery-state"),
+    platformRoot: join(temp, "context-window-platform"),
+    repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
+    configPath: join(repositoryRoot, ".opencode", "opencode.json"),
+    enabled: true,
+    terminalMonitor: contextMonitor,
+    completionWatchdogIntervalMs: 3_600_000,
+    compactSessionRunner: async (command, args, options) => {
+      compactCalls.push({ command, args, options });
+      return { stdout: '{"type":"text","part":{"text":"compacted"}}\n', stderr: "" };
+    },
+    spawnProcess() { contextSpawnCount += 1; return contextSpawnCount === 1 ? contextFirstChild : contextRecoveredChild; },
+  });
+  await contextRunner.ready;
+  const contextAudit = await contextRunner.createAudit({ audit_id: "audit-context-window-recovery", repository_id: "fixture", ref: "HEAD", allow_dirty: true }, "context-window-recovery-request");
+  for (let attempt = 0; attempt < 100 && contextRunner.getAudit(contextAudit.id)?.status !== "running"; attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  contextFirstChild.stderr.write("Error: This model's maximum input length is 131072 tokens. However, your messages resulted in 140000 tokens.\n");
+  for (let attempt = 0; attempt < 1_000 && (contextSpawnCount !== 2 || contextRunner.getAudit(contextAudit.id)?.status !== "running" || contextRunner.getAudit(contextAudit.id)?.context_window_recovery?.state !== "restarted"); attempt += 1) await new Promise(resolve => setTimeout(resolve, 2));
+  const contextResult = contextRunner.getAudit(contextAudit.id);
+  assert.equal(contextSpawnCount, 2, "上下文 watchdog 应在压缩后只启动一次断点恢复");
+  assert.equal(compactCalls.length, 1, "上下文溢出必须只触发一次 compact");
+  assert.equal(compactCalls[0].command, "opencode");
+  assert.deepEqual(compactCalls[0].args.slice(0, 7), ["run", "--format", "json", "--session", `ses_${contextAudit.id}`, "--command", "compact"]);
+  assert.equal(compactCalls[0].args.includes("/compact"), false, "必须调用内置 command，而不是发送普通文本提示");
+  assert.equal(contextResult.status, "running");
+  assert.equal(contextResult.recovery_count, 1);
+  assert.equal(contextResult.context_window_recovery.attempts, 1);
+  assert.equal(contextResult.context_window_recovery.state, "restarted");
+  assert.deepEqual(contextFirstChild.signals, ["SIGTERM"]);
+  let contextEvents = [];
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    contextEvents = await contextRunner.eventsSince(contextAudit.id);
+    if (contextEvents.some(event => event.type === "audit.context-window.recovery.started")) break;
+    await new Promise(resolve => setTimeout(resolve, 2));
+  }
+  assert.equal(contextEvents.some(event => event.type === "audit.context-window.detected"), true);
+  assert.equal(contextEvents.some(event => event.type === "audit.context-window.compaction.completed"), true);
+  assert.equal(contextEvents.some(event => event.type === "audit.context-window.recovery.started"), true);
+  await contextRunner.shutdown();
+
   // psmux/Windows can acknowledge SIGTERM while leaving the output relay alive.
   // That stale child must not occupy the concurrency slot forever or overwrite
   // the newer recovery Runner when it eventually exits.

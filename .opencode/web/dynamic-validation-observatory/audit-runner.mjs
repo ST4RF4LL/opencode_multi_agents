@@ -32,6 +32,10 @@ const OPERATION_TIMEOUT_PATTERN = /\bthe operation timed out\b/i;
 const OPERATION_TIMEOUT_RECOVERY_REASON = "operation-timed-out";
 const MAX_OPERATION_TIMEOUT_RECOVERIES = 3;
 const OPERATION_TIMEOUT_TERMINATION_GRACE_MS = 10_000;
+const CONTEXT_WINDOW_PATTERN = /this model(?:'s|’s) maximum (?:input|context) length is\b/i;
+const CONTEXT_WINDOW_RECOVERY_REASON = "context-window-exceeded";
+const MAX_CONTEXT_WINDOW_RECOVERIES = 3;
+const CONTEXT_COMPACTION_TIMEOUT_MS = 120_000;
 const PRIVATE_CONTEXT_FILES = Object.freeze({
   additional_instructions: "additional-instructions.txt",
   test_environment: "test-environment.txt",
@@ -498,7 +502,7 @@ function providerSessionId(value) {
 }
 
 export class AuditRunner extends EventEmitter {
-  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, terminalMonitor = null, modelResolver = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS, operationTimeoutTerminationGraceMs = OPERATION_TIMEOUT_TERMINATION_GRACE_MS } = {}) {
+  constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, compactSessionRunner = null, terminalMonitor = null, modelResolver = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS, operationTimeoutTerminationGraceMs = OPERATION_TIMEOUT_TERMINATION_GRACE_MS } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
     this.configPath = configPath ? resolve(configPath) : null;
@@ -516,6 +520,7 @@ export class AuditRunner extends EventEmitter {
     this.command = command;
     this.environment = environment;
     this.spawnProcess = spawnProcess;
+    this.compactSessionRunner = compactSessionRunner ?? ((command, args, options) => execFileAsync(command, args, options));
     this.stageDeliveryVerifier = stageDeliveryVerifier;
     this.todoCompletionVerifier = todoCompletionVerifier;
     this.terminalMonitor = terminalMonitor ?? new OpenCodeTmuxMonitor({ stateRoot: this.stateRoot, command: this.command, environment: this.environment });
@@ -540,6 +545,9 @@ export class AuditRunner extends EventEmitter {
       ? Math.max(100, Number(operationTimeoutTerminationGraceMs))
       : OPERATION_TIMEOUT_TERMINATION_GRACE_MS;
     this.timeoutTerminationTimers = new Map();
+    this.contextRecoveryPending = new Set();
+    this.contextRecoveryTimers = new Map();
+    this.contextTerminationTimers = new Map();
     this.ready = this.initialize();
   }
 
@@ -1529,6 +1537,7 @@ export class AuditRunner extends EventEmitter {
         for (const line of lines) {
           this.captureProviderSession(audit, line).catch(() => {});
           this.observeOperationTimeout(audit, source, line);
+          this.observeContextWindowOverflow(audit, source, line);
           this.recordLog(audit, source, line).catch(() => {});
         }
       });
@@ -1536,6 +1545,7 @@ export class AuditRunner extends EventEmitter {
         if (!buffer) return;
         this.captureProviderSession(audit, buffer).catch(() => {});
         this.observeOperationTimeout(audit, source, buffer);
+        this.observeContextWindowOverflow(audit, source, buffer);
         this.recordLog(audit, source, buffer).catch(() => {});
       });
     };
@@ -1547,6 +1557,7 @@ export class AuditRunner extends EventEmitter {
     });
     child.once("close", (code, signal) => {
       this.clearOperationTimeoutTerminationGuard(audit.id, child);
+      this.clearContextTerminationGuard(audit.id, child);
       if (this.processes.get(audit.id) !== child) return;
       const completion = startedEvent.then(async () => {
         this.processes.delete(audit.id);
@@ -1564,11 +1575,18 @@ export class AuditRunner extends EventEmitter {
         const timeoutState = audit.timeout_recovery?.state;
         const timedOut = (audit.status === "cancelling" && audit.interruption_reason === OPERATION_TIMEOUT_RECOVERY_REASON)
           || ["observed", "interrupting", "waiting-for-runner-exit", "waiting-for-runner-close"].includes(timeoutState);
+        const contextState = audit.context_window_recovery?.state;
+        const contextExceeded = (audit.status === "cancelling" && audit.interruption_reason === CONTEXT_WINDOW_RECOVERY_REASON)
+          || ["observed", "interrupting", "waiting-for-runner-exit", "waiting-for-runner-close"].includes(contextState);
         if (timedOut && audit.status === "running") {
           audit.status = "interrupted";
           audit.interruption_reason = OPERATION_TIMEOUT_RECOVERY_REASON;
         }
-        if (audit.status === "cancelling" && (audit.interruption_reason === "workbench-shutdown" || timedOut)) audit.status = "interrupted";
+        if (contextExceeded && audit.status === "running") {
+          audit.status = "interrupted";
+          audit.interruption_reason = CONTEXT_WINDOW_RECOVERY_REASON;
+        }
+        if (audit.status === "cancelling" && (audit.interruption_reason === "workbench-shutdown" || timedOut || contextExceeded)) audit.status = "interrupted";
         else if (audit.status === "cancelling") audit.status = "cancelled";
         else if (code === 0 && audit.stage_delivery_enforcement === "ENFORCED") {
           try {
@@ -1618,12 +1636,14 @@ export class AuditRunner extends EventEmitter {
           audit.interruption_reason ||= signal ? "runner-signalled" : "runner-exited";
           audit.error ||= `Runner 异常退出（exit code ${code ?? "null"}），可从当前检查点恢复。`;
           if (timedOut) audit.timeout_recovery = { ...(audit.timeout_recovery ?? {}), state: "waiting-to-recover", interrupted_at: audit.interrupted_at };
+          if (contextExceeded) audit.context_window_recovery = { ...(audit.context_window_recovery ?? {}), state: "waiting-to-compact", interrupted_at: audit.interrupted_at };
         }
         await this.finalizeTerminal(audit).catch(error => {
           audit.terminal = { ...(audit.terminal ?? {}), live: false, status: "error", message: `终端归档失败：${redact(error.message)}` };
         });
         await this.record(audit, `audit.${audit.status}`, { exit_code: code, signal: signal ?? null });
         if (timedOut) this.scheduleOperationTimeoutRecovery(audit, audit.timeout_recovery?.attempts);
+        if (contextExceeded) this.scheduleContextWindowRecovery(audit, audit.context_window_recovery?.attempts);
       });
       this.completions.set(audit.id, completion);
       completion.finally(() => { if (this.completions.get(audit.id) === completion) this.completions.delete(audit.id); }).catch(() => {});
@@ -1652,6 +1672,85 @@ export class AuditRunner extends EventEmitter {
     await appendFile(join(this.stateRoot, audit.id, "runner.log.jsonl"), `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
     await this.record(audit, "agent.output", entry, { bumpVersion: false });
     this.observeOperationTimeout(audit, source, message, entry);
+    this.observeContextWindowOverflow(audit, source, message, entry);
+  }
+
+  markContextWindowOverflowObserved(audit, source, line) {
+    if (!audit || !CONTEXT_WINDOW_PATTERN.test(String(line ?? ""))) return null;
+    const prior = audit.context_window_recovery ?? {};
+    if (["interrupting", "waiting-for-runner-exit", "waiting-to-compact", "compacting", "recovering"].includes(prior.state)) return null;
+    let eventSessionId = null;
+    try {
+      const event = JSON.parse(String(line));
+      eventSessionId = providerSessionId(event?.sessionID ?? event?.session_id ?? event?.part?.sessionID);
+    } catch {}
+    const entry = { occurred_at: new Date().toISOString(), source, message: "This model's maximum input length is exceeded", session_id: eventSessionId };
+    audit.context_window_recovery = {
+      ...prior,
+      state: "observed",
+      last_observed_at: entry.occurred_at,
+      last_message: entry.message,
+      last_source: source,
+      session_id: eventSessionId ?? prior.session_id ?? null,
+    };
+    return entry;
+  }
+
+  observeContextWindowOverflow(audit, source, line, recordedEntry = null) {
+    const entry = this.markContextWindowOverflowObserved(audit, source, line);
+    if (!entry) return false;
+    this.handleContextWindowOverflow(audit, recordedEntry ?? entry).catch(() => {});
+    return true;
+  }
+
+  async handleContextWindowOverflow(audit, entry) {
+    if (!this.enabled || !audit || this.contextRecoveryPending.has(audit.id)) return false;
+    const prior = audit.context_window_recovery ?? {};
+    const attempts = Number(prior.attempts ?? 0);
+    if (attempts >= MAX_CONTEXT_WINDOW_RECOVERIES) {
+      audit.context_window_recovery = { ...prior, state: "exhausted", last_detected_at: entry.occurred_at };
+      await this.record(audit, "audit.context-window.recovery.exhausted", { attempts, limit: MAX_CONTEXT_WINDOW_RECOVERIES });
+      return false;
+    }
+    const sessionId = providerSessionId(prior.session_id ?? audit.provider_session_id ?? audit.terminal?.provider_session_id);
+    if (!sessionId) {
+      audit.context_window_recovery = { ...prior, state: "blocked", last_detected_at: entry.occurred_at, last_error: "provider-session-id-missing" };
+      await this.record(audit, "audit.context-window.recovery.blocked", { reason: "provider-session-id-missing" });
+      return false;
+    }
+    if (audit.status !== "running") return false;
+    const attempt = attempts + 1;
+    this.contextRecoveryPending.add(audit.id);
+    audit.context_window_recovery = {
+      ...prior,
+      attempts: attempt,
+      state: "interrupting",
+      last_detected_at: entry.occurred_at,
+      last_source: entry.source,
+      last_error: null,
+    };
+    audit.interruption_reason = CONTEXT_WINDOW_RECOVERY_REASON;
+    audit.status = "cancelling";
+    await this.record(audit, "audit.context-window.detected", { attempt, source: entry.source, provider_session_id: sessionId });
+    const child = this.processes.get(audit.id);
+    if (audit.terminal?.live) {
+      await this.terminalMonitor.abort(audit.terminal, audit.paths?.workspace_root).catch(error => this.recordLog(audit, "stderr", `上下文 watchdog 无法中止隔离 OpenCode session：${error.message}`));
+    }
+    if (child) {
+      const signalled = child.kill?.("SIGTERM") === true;
+      this.scheduleContextTerminationGuard(audit, child, attempt);
+      if (signalled) return true;
+      audit.context_window_recovery = { ...audit.context_window_recovery, state: "waiting-for-runner-exit" };
+      await this.record(audit, "audit.context-window.recovery.waiting", { attempt, message: "等待 Runner 退出后执行 /compact。" });
+      return false;
+    }
+    audit.status = "interrupted";
+    audit.finished_at = new Date().toISOString();
+    audit.interrupted_at = audit.finished_at;
+    audit.context_window_recovery = { ...audit.context_window_recovery, state: "waiting-to-compact" };
+    await this.record(audit, "audit.context-window.recovery.waiting", { attempt, message: "Runner 已退出，准备执行 /compact。" });
+    this.scheduleContextWindowRecovery(audit, attempt);
+    return true;
   }
 
   markOperationTimeoutObserved(audit, source, line) {
@@ -1855,6 +1954,124 @@ export class AuditRunner extends EventEmitter {
     }
   }
 
+  clearContextTerminationGuard(auditId, child = null) {
+    const current = this.contextTerminationTimers.get(auditId);
+    if (!current || (child && current.child !== child)) return;
+    clearTimeout(current.timer);
+    this.contextTerminationTimers.delete(auditId);
+  }
+
+  scheduleContextTerminationGuard(audit, child, attempt) {
+    if (!audit || !child || this.contextTerminationTimers.has(audit.id)) return;
+    const timer = setTimeout(() => {
+      this.contextTerminationTimers.delete(audit.id);
+      this.forceContextWindowInterruption(audit.id, child, attempt).catch(() => {});
+    }, this.timeoutTerminationGraceMs);
+    timer.unref?.();
+    this.contextTerminationTimers.set(audit.id, { timer, child });
+  }
+
+  async forceContextWindowInterruption(auditId, child, attempt) {
+    const audit = this.audits.get(auditId);
+    if (!audit || this.processes.get(auditId) !== child
+      || audit.interruption_reason !== CONTEXT_WINDOW_RECOVERY_REASON
+      || audit.context_window_recovery?.attempts !== attempt
+      || !["interrupting", "waiting-for-runner-exit", "waiting-for-runner-close"].includes(audit.context_window_recovery?.state)) {
+      return false;
+    }
+    try { child.kill?.("SIGKILL"); } catch {}
+    this.processes.delete(auditId);
+    audit.pid = null;
+    audit.status = "interrupted";
+    audit.finished_at = new Date().toISOString();
+    audit.interrupted_at = audit.finished_at;
+    audit.error = "检测到模型上下文达到上限；Runner 在宽限期内未退出，已强制收敛并准备执行 /compact。";
+    audit.context_window_recovery = { ...audit.context_window_recovery, state: "waiting-to-compact", forced_at: audit.finished_at, last_error: null };
+    if (audit.terminal?.supported && audit.terminal?.socket_name) {
+      await this.terminalMonitor.stop(audit.terminal).catch(() => {});
+      audit.terminal.live = false;
+      audit.terminal.status = "closed";
+      audit.terminal.message = "上下文溢出 Runner 未自行结束，隔离终端已由 watchdog 收敛。";
+      audit.terminal.closed_at = audit.finished_at;
+    }
+    await this.record(audit, "audit.context-window.recovery.waiting", { attempt, forced: true, message: audit.error });
+    this.scheduleContextWindowRecovery(audit, attempt);
+    return true;
+  }
+
+  scheduleContextWindowRecovery(audit, attempt) {
+    if (!this.contextRecoveryPending.has(audit.id) || this.contextRecoveryTimers.has(audit.id)) return;
+    const timer = setTimeout(() => {
+      this.contextRecoveryTimers.delete(audit.id);
+      this.runContextWindowRecovery(audit.id, attempt).catch(() => {});
+    }, 0);
+    timer.unref?.();
+    this.contextRecoveryTimers.set(audit.id, timer);
+  }
+
+  async compactOpenCodeSession(audit) {
+    const sessionId = providerSessionId(audit.context_window_recovery?.session_id ?? audit.provider_session_id ?? audit.terminal?.provider_session_id);
+    if (!sessionId) throw new Error("provider-session-id-missing");
+    const repository = this.repositories.get(audit.repository_id);
+    if (!repository) throw new Error("audit-repository-not-found");
+    const workspaceRoot = audit.paths?.workspace_root;
+    if (!isAbsolute(workspaceRoot ?? "")) throw new Error("audit-workspace-root-missing");
+    const proxyEnvironment = await this.verifiedPrivateProxyEnvironment(audit);
+    const environment = await buildOpenCodeEnvironment(repository.config_path, { ...this.environment, ...proxyEnvironment });
+    await this.compactSessionRunner(this.command, [
+      "run", "--format", "json",
+      "--session", sessionId,
+      "--command", "compact",
+      "--dir", workspaceRoot,
+    ], {
+      cwd: workspaceRoot,
+      env: environment,
+      encoding: "utf8",
+      timeout: CONTEXT_COMPACTION_TIMEOUT_MS,
+      maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true,
+    });
+    return sessionId;
+  }
+
+  async runContextWindowRecovery(auditId, attempt) {
+    let audit = this.audits.get(auditId);
+    if (!audit || audit.status !== "interrupted" || audit.context_window_recovery?.attempts !== attempt) {
+      this.contextRecoveryPending.delete(auditId);
+      return false;
+    }
+    const closing = this.completions.get(auditId);
+    if (closing) {
+      await closing.catch(() => {});
+      await new Promise(resolve => setImmediate(resolve));
+      audit = this.audits.get(auditId);
+      if (!audit || audit.status !== "interrupted" || audit.context_window_recovery?.attempts !== attempt) {
+        this.contextRecoveryPending.delete(auditId);
+        return false;
+      }
+    }
+    audit.context_window_recovery = { ...audit.context_window_recovery, state: "compacting", compaction_started_at: new Date().toISOString() };
+    await this.record(audit, "audit.context-window.compaction.started", { attempt, command: "/compact" });
+    try {
+      const sessionId = await this.compactOpenCodeSession(audit);
+      audit.context_window_recovery = { ...audit.context_window_recovery, state: "compacted", compacted_at: new Date().toISOString(), last_error: null };
+      await this.record(audit, "audit.context-window.compaction.completed", { attempt, provider_session_id: sessionId });
+      audit.context_window_recovery = { ...audit.context_window_recovery, state: "recovering", last_recovery_requested_at: new Date().toISOString() };
+      await this.action(audit.id, "recover", audit.version, `watchdog-context-window-recover:${audit.id}:${attempt}`);
+      audit.context_window_recovery = { ...audit.context_window_recovery, state: "restarted", last_recovered_at: new Date().toISOString(), last_error: null };
+      await this.record(audit, "audit.context-window.recovery.started", { attempt, recovery_count: audit.recovery_count });
+      return true;
+    } catch (error) {
+      const message = redact(error.message);
+      audit.context_window_recovery = { ...audit.context_window_recovery, state: "failed", last_error: message, last_failed_at: new Date().toISOString() };
+      audit.error = `上下文压缩或断点恢复失败：${message}`;
+      await this.record(audit, "audit.context-window.recovery.failed", { attempt, message });
+      return false;
+    } finally {
+      this.contextRecoveryPending.delete(auditId);
+    }
+  }
+
   async finalizeTerminal(audit) {
     if (!audit.terminal?.supported || !audit.terminal?.socket_name) return;
     let captured = "";
@@ -2049,6 +2266,11 @@ export class AuditRunner extends EventEmitter {
     for (const { timer } of this.timeoutTerminationTimers.values()) clearTimeout(timer);
     this.timeoutTerminationTimers.clear();
     this.timeoutRecoveryPending.clear();
+    for (const timer of this.contextRecoveryTimers.values()) clearTimeout(timer);
+    this.contextRecoveryTimers.clear();
+    for (const { timer } of this.contextTerminationTimers.values()) clearTimeout(timer);
+    this.contextTerminationTimers.clear();
+    this.contextRecoveryPending.clear();
     for (const [id, child] of this.processes) {
       const audit = this.audits.get(id);
       if (!audit || audit.status === "cancelling") continue;

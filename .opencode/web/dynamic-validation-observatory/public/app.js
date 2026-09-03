@@ -107,6 +107,17 @@ function todoStatusText(todo) {
   return `完成 ${todo.done ?? 0}/${todo.total} · 运行 ${todo.running ?? 0} · 待领 ${todo.pending ?? 0}${todo.gap ? ` · GAP ${todo.gap}` : ""}${todo.failed ? ` · FAILED ${todo.failed}` : ""}`;
 }
 
+function contextRecoveryText(recovery) {
+  if (!recovery) return "尚未触发";
+  const labels = {
+    observed: "已检测", interrupting: "正在收敛 Runner", "waiting-for-runner-exit": "等待 Runner 退出",
+    "waiting-to-compact": "等待压缩", compacting: "正在执行 /compact", compacted: "压缩完成",
+    recovering: "正在断点恢复", restarted: "已压缩并恢复", failed: "压缩或恢复失败",
+    exhausted: "已达到 3 次恢复上限", blocked: "缺少 OpenCode session",
+  };
+  return `${labels[recovery.state] ?? recovery.state ?? "状态未知"} · ${recovery.attempts ?? 0}/3 次`;
+}
+
 function bytes(value) {
   if (!Number.isFinite(value)) return "—";
   if (value < 1024) return `${value} B`;
@@ -317,7 +328,7 @@ function renderAuditDetail() {
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
-  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], [audit.status === "queued" ? "OpenCode 模型（下次启动）" : "OpenCode 模型（本次启动）", modelForDisplay ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
+  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], [audit.status === "queued" ? "OpenCode 模型（下次启动）" : "OpenCode 模型（本次启动）", modelForDisplay ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["上下文 watchdog", contextRecoveryText(audit.context_window_recovery)], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（一次 / 最多 120 秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const stages = element("ol", "stage-list");
