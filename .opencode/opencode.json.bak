@@ -24,7 +24,8 @@
     "jvm_index_*": "deny",
     "python_index_*": "deny",
     "audit_lab_*": "deny",
-    "chrome-devtools_*": "deny"
+    "chrome-devtools_*": "deny",
+    "windows-control_*": "deny"
   },
   "mcp": {
     "chrome-devtools": {
@@ -52,6 +53,16 @@
       "enabled": false
     },
     "audit_lab": {
+      "enabled": false
+    },
+    "windows-control": {
+      "type": "local",
+      "command": [
+        "node",
+        ".opencode/scripts/windows-control-mcp.mjs"
+      ],
+      "cwd": ".",
+      "timeout": 30000,
       "enabled": false
     }
   }

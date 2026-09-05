@@ -394,6 +394,13 @@ async function main() {
   assert(!chromeMcp.command.some(argument => /headless|agent-browser|browser-url|ws-endpoint|auto-?connect|user-data-dir/i.test(argument)),
     "Chrome DevTools MCP must not use headless, agent-browser, an existing browser endpoint, or a persistent profile");
   assert(config.permission["chrome-devtools_*"] === "deny", "global permissions must deny Chrome DevTools tools");
+  assert(config.mcp["windows-control"]?.enabled === false
+    && config.permission["windows-control_*"] === "deny", "standalone Windows controller must remain disabled and globally denied");
+  assert(Object.values(mcpMap.agents).every(prefixes => !prefixes.includes("windows-control_*")),
+    "Windows control probe must not gain audit-agent execution routing before the desktop P08 contract");
+  for (const file of ["windows-control-core.mjs", "windows-control-native.mjs", "windows-control-guard.ps1", "windows-control-cli.mjs", "windows-control-mcp.mjs"]) {
+    assert(await exists(join(OPENCODE, "scripts", file)), `Windows control module is missing: ${file}`);
+  }
   assert(mcpMap.servers["chrome-devtools"]?.status === "enabled-local", "mcp-map must register Chrome DevTools MCP");
   assert(sameSet(mcpMap.agents["dynamic-vulnerability-validator"], ["chrome-devtools_*"]), "dynamic validator must receive only Chrome DevTools MCP tools");
   assert(sameSet(mcpMap.agents["quick-dynamic-validator"], ["chrome-devtools_*"]), "quick dynamic validator must receive only Chrome DevTools MCP tools");

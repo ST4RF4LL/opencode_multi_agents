@@ -1,5 +1,5 @@
 {
-  "version": 18,
+  "version": 19,
   "maintenance_rule": "Define project MCP servers in the tracked .opencode/opencode.json.bak template; each user generates ignored .opencode/opencode.json with local tool paths. Mark services supplied by the user's global OpenCode config as global-config. Assign each actual exposed tool prefix here and in the matching agent permission block. Local audit scheduling is a file-backed orchestrator capability, not an MCP server.",
   "servers": {
     "cpp_index": {
@@ -26,6 +26,11 @@
       "status": "enabled-local",
       "type": "external",
       "purpose": "Visible isolated Chrome control for task-opted-in 120-second loopback quick confirmation and explicitly requested manual localhost Web-XSS full validation. Uses chrome-devtools-mcp@latest and is exposed only to the two dynamic validators."
+    },
+    "windows-control": {
+      "status": "experimental-disabled",
+      "type": "local",
+      "purpose": "Standalone winappCli 0.6.0 control probe for explicitly authorized offline Windows fixtures. Default disabled; no P08 agent or workbench execution routing yet."
     }
   },
   "agents": {

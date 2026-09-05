@@ -2,8 +2,9 @@
 
 ## 1. 定位与实施顺序
 
-本文件是待实现设计；本次仅安装并登记了 winapp UIA Skill，未增加 Web 表单、API、
-Windows Runner 或 MCP。动态验证为 `SKIPPED`，没有启动浏览器、EXE 或目标环境。
+本文件的 Web 平台接入仍为待实现设计；`dev` 已实现独立 winappCli CLI/默认关闭的
+stdio MCP 与模拟用例，见 [控制层第一阶段](winapp-control-poc.md)。尚未增加 Web 表单、
+API 或 Windows Runner。动态验证为 `SKIPPED`，没有启动浏览器、EXE 或目标环境。
 Agent 权限与证据规则以 [Agent 接入方案](windows-dynamic-validation-agent-design.md) 为准。
 
 建议首个可用版本把工作台、OpenCode、Windows 控制器和目标测试程序部署在同一台
@@ -181,7 +182,7 @@ MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广�
 | 阶段 | 交付 | 通过条件 |
 | --- | --- | --- |
 | 已完成：Skill | 中文适配、许可证、来源摘要、集合和读取权限 | 静态一致性与引用核对；执行权限仍未开放 |
-| A：原生控制 PoC | argv 适配器、版本门禁、窗口绑定、fixture 动作链 | 授权 Windows 环境中稳定完成安全 marker 的输入/读取/清理 |
+| A：原生控制 PoC（源码已实现，原生验收待运行） | argv 适配器、版本门禁、窗口绑定、fixture 动作链 | 授权 Windows 环境中稳定完成安全 marker 的输入/读取/清理 |
 | B：Agent 接入 | Windows MCP、目标/结果契约、P08 路由 | 不支持的操作拒绝；探针不能确认漏洞；完整影响证据可封存 |
 | C：平台接入 | 表单/API、会话队列、SSE、证据视图、取消 | 端到端任务可复核；并发隔离、残留清理和旧 Web 流程通过回归 |
 | D：按需增强 | 受限文件/注册表/网络观察，独立视觉 backend | 每项新增能力都有独立范围约束和证据验收；不自动回退 |
@@ -192,4 +193,4 @@ MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广�
 
 真实 E2E 仅在用户显式启用并提供授权 Windows fixture 后执行，动态测试不能成为
 默认 `npm test` 的隐式副作用。Windows/Linux 上完成相应宿主机回归；Linux 不尝试
-启动 Windows 应用。当前 Skill 集成不等于上述 A—D 阶段已交付。
+启动 Windows 应用。当前控制层源码交付不等于上述 A—D 阶段已通过验收。

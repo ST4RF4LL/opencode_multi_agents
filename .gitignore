@@ -11,3 +11,6 @@ update_plan.md
 # Generated locally from .opencode/opencode.json.bak.
 .opencode/opencode.json
 .atlas/
+# Native Windows control fixture build output.
+.opencode/tests/fixtures/winapp-control/bin/
+.opencode/tests/fixtures/winapp-control/obj/

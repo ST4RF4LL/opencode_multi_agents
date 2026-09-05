@@ -4,9 +4,11 @@
 
 本次已完成 `.opencode/skills/dynamic-vulnerability-validator-subagent/winapp-ui-automation/`
 的项目适配，更新 `collection.json` 和 `dynamic-vulnerability-validator` 的 Skill 读取
-权限。执行工具、P08 契约、漏洞路由、Web Runner 和根目录安全边界均未扩展。
-下文除上述 Skill 集成外，均为待实现方案。实际 Windows 动态验证：
-`SKIPPED`，原因是本次没有提供或启用授权 Windows 测试环境，且桌面控制器尚未实现。
+权限。P08 执行工具权限、契约、漏洞路由、Web Runner 和根目录安全边界均未扩展。
+`dev` 第一阶段已补充独立 winappCli 控制层、CLI、默认关闭的 stdio MCP 和模拟用例，
+具体范围与未完成的原生验收见 [控制层第一阶段](winapp-control-poc.md)。
+下文 P08/Agent/平台接入仍是待实现方案。实际 Windows 动态验证：
+`SKIPPED`，原因是本次没有提供或启用授权 Windows 测试环境，且尚未完成 Windows 原生验收和桌面 P08 接入。
 
 目标是让文本模型通过 UIA 完成“观察 → 应用输入 → 状态验证 → 清理”，形成可复核
 的漏洞补充证据。优先跑通一个标准 Windows 测试程序；视觉模型留作后续可选后端。

@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "action": "inspect", "control_id": "input" },
+    { "action": "set_value", "control_id": "input" },
+    { "action": "invoke", "control_id": "submit" },
+    { "action": "wait_for", "control_id": "status" },
+    { "action": "get_state", "control_id": "status" }
+  ]
+}
