@@ -80,10 +80,11 @@
     "static_analysis": {
       "format": "sarif",
       "standard": "SARIF 2.1.0",
-      "cardinality": "one file per agent session when static-analysis tools are used",
-      "path_template": "reports/sarif/{agent_name}.{agent_session_id}.sarif",
+      "cardinality": "one immutable artifact bundle per scan run plus one deterministic compatibility aggregate per agent session",
+      "path_templates": ["reports/static-analysis/{audit_id}/{scan_run_id}/manifest.json", "reports/static-analysis/{audit_id}/{scan_run_id}/summary.json", "reports/static-analysis/{audit_id}/{scan_run_id}/result.sarif", "reports/sarif/{agent_name}.{agent_session_id}.sarif"],
       "required_for": ["semgrep", "opengrep", "joern", "other static-analysis tools"],
-      "notes": "Normalize static-analysis output to SARIF even when the underlying tool produces another format."
+      "required_fields": ["schema_version", "scan_run_id", "audit_id", "status", "capability", "engine", "inputs", "accounting", "artifacts", "manifest_digest"],
+      "notes": "Normalize every tool result to SARIF 2.1.0. Per-run bundles are digest-bound and immutable; compatibility aggregates are rebuilt in scan_run_id order. A rule hit is candidate evidence and never closes vulnerability or function coverage by itself."
     },
     "vulnerability_mining": {
       "format": "json",

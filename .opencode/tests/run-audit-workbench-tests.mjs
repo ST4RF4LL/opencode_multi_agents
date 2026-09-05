@@ -968,6 +968,25 @@ if (mode === "run") {
   assert.equal(windowsHealth.components.find(item => item.id === "tmux").status, "ready");
   assert.match(windowsHealth.components.find(item => item.id === "tmux").detail, /psmux/);
 
+  const noJoernHealthService = new EnvironmentHealthService({
+    projectRoot: resolve(OPENCODE, ".."),
+    configPaths: [healthConfig],
+    environment: { PATH: fakeBin, OPENCODE_BIN: join(fakeBin, "opencode"), OPENGREP_BIN: join(fakeBin, "opengrep") },
+    platform: "win32",
+    architecture: "x64",
+    nodeVersion: "22.12.0",
+    async resolveCommand(command) {
+      const value = String(command).toLowerCase();
+      if (value.includes("joern") || value.endsWith("java") || value.endsWith("java.exe") || value.includes("gitleaks") || value.includes("osv-scanner")) return null;
+      return command;
+    },
+    async execute(command) { return { stdout: `${basename(command)} 1.0.0\n`, stderr: "" }; },
+  });
+  const noJoernHealth = await noJoernHealthService.snapshot();
+  assert.equal(noJoernHealth.capabilities.find(item => item.id === "static").status, "ready");
+  assert.equal(noJoernHealth.capabilities.find(item => item.id === "deep_dataflow").status, "skipped");
+  assert.equal(noJoernHealth.capabilities.find(item => item.id === "secret_scan").status, "skipped");
+
   const windowsMonitorCalls = [];
   const windowsMonitor = new OpenCodeTmuxMonitor({
     stateRoot: join(temp, "windows-psmux-state"),

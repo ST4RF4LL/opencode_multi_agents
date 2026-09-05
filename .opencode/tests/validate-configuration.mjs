@@ -66,6 +66,7 @@ async function main() {
   const parserCapabilitiesText = await readFile(join(OPENCODE, "skills/common-subagent/audit-coverage-accounting/scripts/build-parser-capabilities.mjs"), "utf8");
   const semgrepCliText = await readFile(join(OPENCODE, "scripts/semgrep-scan.mjs"), "utf8");
   const semgrepCoreText = await readFile(join(OPENCODE, "scripts/semgrep-core.mjs"), "utf8");
+  const staticScanCliText = await readFile(join(OPENCODE, "scripts/static-scan.mjs"), "utf8");
   const auditTodoCoreText = await readFile(join(OPENCODE, "scripts/audit-todo-core.mjs"), "utf8");
   const packageConfig = await json(join(OPENCODE, "package.json"));
   const stageContractRegistry = await json(join(OPENCODE, "skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json"));
@@ -369,12 +370,18 @@ async function main() {
   assert(await exists(join(OPENCODE, "scripts/semgrep-core.mjs"))
     && await exists(join(OPENCODE, "scripts/semgrep-scan.mjs"))
     && await exists(join(OPENCODE, "tests/run-semgrep-tests.mjs")), "direct Semgrep/OpenGrep CLI implementation or tests are missing");
+  assert(await exists(join(OPENCODE, "scripts/static-artifacts.mjs"))
+    && await exists(join(OPENCODE, "scripts/static-scan.mjs"))
+    && await exists(join(OPENCODE, "tests/run-static-scan-tests.mjs"))
+    && await exists(join(OPENCODE, "shared/security-audit/static-rules/registry.json"))
+    && await exists(join(OPENCODE, "shared/security-audit/static-rules/static-rule-manifest-v1.schema.json")), "unified static scanning contracts are missing");
+  assert(["doctor", "plan", "run", "verify", "aggregate"].every(command => staticScanCliText.includes(`command === "${command}"`)), "unified static scanner must expose doctor/plan/run/verify/aggregate");
   assert(semgrepCliText.includes("MAX_OUTPUT_BYTES = 16 * 1024")
     && semgrepCoreText.includes("MAX_STDOUT_BYTES = 64 * 1024 * 1024")
     && semgrepCoreText.includes("stderrPath"), "direct Semgrep/OpenGrep CLI must bound context output and retain scanner stderr");
   for (const agent of SEMGREP_AGENTS) {
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
-    assert(text.includes("node .opencode/scripts/semgrep-scan.mjs health"), `${agent} must use the direct Semgrep/OpenGrep CLI`);
+    assert(text.includes("node .opencode/scripts/static-scan.mjs doctor"), `${agent} must use the unified static scanner CLI`);
   }
   assert(!("coverage_ledger" in config.mcp), "project config must not enable the removed Coverage Ledger MCP");
   assert(!("coverage_ledger" in mcpMap.servers), "mcp-map must not retain Coverage Ledger");

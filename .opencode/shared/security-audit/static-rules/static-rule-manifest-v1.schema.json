@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "static-rule-manifest.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "version", "status", "engine", "languages", "taxonomy", "native", "validation", "requirements", "limitations"],
+  "properties": {
+    "schema_version": { "const": "static-rule-manifest.v1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "status": { "enum": ["draft", "candidate", "validated", "released", "deprecated"] },
+    "engine": {
+      "type": "object",
+      "required": ["family", "tested_versions"],
+      "properties": { "family": { "type": "string" }, "tested_versions": { "type": "array", "items": { "type": "string" } } }
+    },
+    "languages": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "taxonomy": {
+      "type": "object",
+      "required": ["cwe", "dimensions", "severity", "confidence"],
+      "properties": {
+        "cwe": { "type": "array", "items": { "type": "string", "pattern": "^CWE-[0-9]+$" } },
+        "dimensions": { "type": "array", "items": { "type": "string", "pattern": "^D([1-9]|10)$" } },
+        "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+        "confidence": { "enum": ["high", "medium", "low"] }
+      }
+    },
+    "native": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": { "path": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "sources": { "type": "array", "items": { "type": "string" } },
+        "sinks": { "type": "array", "items": { "type": "string" } },
+        "sanitizers": { "type": "array", "items": { "type": "string" } },
+        "guards": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "required": ["positive", "fixed", "negative", "regression", "expected_findings"],
+      "properties": {
+        "positive": { "type": "integer", "minimum": 0 }, "fixed": { "type": "integer", "minimum": 0 },
+        "negative": { "type": "integer", "minimum": 0 }, "regression": { "type": "integer", "minimum": 0 },
+        "expected_findings": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "required": ["network", "build", "timeout_seconds", "operating_systems"],
+      "properties": {
+        "network": { "type": "boolean" }, "build": { "type": "boolean" },
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "operating_systems": { "type": "array", "items": { "enum": ["windows", "linux", "darwin"] } }
+      }
+    },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}

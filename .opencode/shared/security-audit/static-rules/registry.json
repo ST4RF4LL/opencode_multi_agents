@@ -1,0 +1,46 @@
+{
+  "schema_version": "static-rule-registry.v1",
+  "production_status": "released",
+  "packs": [
+    {
+      "id": "java-deep-joern-legacy",
+      "version": "1.0.0",
+      "status": "candidate",
+      "engine_family": "joern",
+      "capability": "deep_dataflow",
+      "languages": ["java"],
+      "path": "../joern-rules/index.json",
+      "notes": "现有 Joern 规则的兼容索引；完成逐规则测试和摘要固定前不得自动进入生产计划。"
+    },
+    {
+      "id": "java-semgrep-skill-packs",
+      "version": "1.0.0",
+      "status": "candidate",
+      "engine_family": "semgrep-compatible",
+      "capability": "source_pattern_scan",
+      "languages": ["java"],
+      "path": "../../../skills/java-subagent",
+      "notes": "现有 Java skill 内 Semgrep/OpenGrep 规则的迁移入口。"
+    },
+    {
+      "id": "builtin-gitleaks",
+      "version": "1.0.0",
+      "status": "released",
+      "engine_family": "gitleaks",
+      "capability": "secret_scan",
+      "languages": ["generic"],
+      "path": null,
+      "notes": "使用 Gitleaks 内置规则，执行时强制 redact。"
+    },
+    {
+      "id": "builtin-osv-scanner",
+      "version": "1.0.0",
+      "status": "released",
+      "engine_family": "osv-scanner",
+      "capability": "dependency_scan",
+      "languages": ["generic"],
+      "path": null,
+      "notes": "仅在发现受支持的依赖清单或锁文件时适用。"
+    }
+  ]
+}

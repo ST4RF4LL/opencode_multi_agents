@@ -71,7 +71,7 @@ Use the pre-initialized all-`GAP` report or run `initialize-audit-report.mjs`. U
 
 The orchestrator supplies one bounded local work packet containing one or more Focus Area × `ai` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
 
-Run `node .opencode/scripts/semgrep-scan.mjs health` before local AI integration/configuration scanning. When a workspace-local Semgrep-compatible rule applies, use the script's `scan` command; auto mode prefers OpenGrep and falls back to Semgrep. Record its bounded summary and raw-output/SARIF paths in the audit report. Never use remote registry configs or upload repository content.
+Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local AI integration/configuration scanning. When a workspace-local compatible rule applies, use `run --engine auto` and execute optional capabilities marked `PLANNED`. Verify immutable run manifests and record their paths. Rule hits remain candidate evidence. Never use remote registry configs or upload repository content.
 
 ## Execution
 

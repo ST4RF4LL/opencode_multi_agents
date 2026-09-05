@@ -16,7 +16,7 @@
 
 - 终端复用器（推荐）。macOS/Linux/WSL 使用 tmux；Windows 原生环境使用 psmux（支持 tmux CLI 协议）。它用于工作台中的只读 OpenCode 实时窗口；缺失时静态审计仍会回退到普通 Runner。macOS 可执行 `brew install tmux`，Debian/Ubuntu/WSL 可执行 `sudo apt install tmux`；Windows 安装 psmux，并确保 `psmux.exe`（或它提供的 `tmux.exe` 别名）位于 PATH。
 
-- JDK 与 Joern。Joern 官方文档以 JDK 19 为前提；如使用更新 JDK，请在本机验证兼容性。按[Joern 安装说明](https://docs.joern.io/installation/)安装最新预编译版本：
+- JDK 21 与 Joern（可选，仅用于 `deep_dataflow` 和尚未迁移的函数清单）。按[Joern 安装说明](https://docs.joern.io/installation/)安装最新预编译版本；Windows 优先使用官方发布的 x64/arm64 ZIP：
 
   ```sh
   curl -L "https://github.com/joernio/joern/releases/latest/download/joern-install.sh" -o joern-install.sh
@@ -44,6 +44,8 @@
   pipx install semgrep
   ```
 
+- Gitleaks 与 OSV-Scanner（可选）。缺失时分别把 `secret_scan`、`dependency_scan` 记为 `SKIPPED`，不阻断源码模式扫描。Windows 应安装官方原生二进制并加入 `PATH`，也可分别设置 `GITLEAKS_BIN` 与 `OSV_SCANNER_BIN`。
+
 安装项目内的 Node.js 依赖：
 
 ```sh
@@ -66,6 +68,8 @@ command -v joern-parse
 command -v java
 command -v opengrep
 command -v semgrep
+command -v gitleaks
+command -v osv-scanner
 ```
 
 Semgrep/OpenGrep 不再通过项目 MCP 配置。若命令已在 `PATH` 中无需额外设置；否则在运行 `initial.sh`、受控扫描 CLI 和 OpenCode 的同一个 Shell 中导出：
@@ -74,9 +78,21 @@ Semgrep/OpenGrep 不再通过项目 MCP 配置。若命令已在 `PATH` 中无�
 export OPENGREP_BIN="/absolute/path/to/opengrep"
 export SEMGREP_BIN="/absolute/path/to/semgrep"
 export SEMGREP_ENGINE="auto"
+export GITLEAKS_BIN="/absolute/path/to/gitleaks"
+export OSV_SCANNER_BIN="/absolute/path/to/osv-scanner"
 ```
 
 没有安装 Semgrep 时可不设置 `SEMGREP_BIN`；自动模式仍会使用 OpenGrep。反之亦然。
+
+Windows PowerShell 使用同一组变量，无需 Bash/WSL：
+
+```powershell
+$env:OPENGREP_BIN = "C:\Tools\opengrep.exe"
+$env:SEMGREP_ENGINE = "opengrep"
+$env:GITLEAKS_BIN = "C:\Tools\gitleaks.exe"
+$env:OSV_SCANNER_BIN = "C:\Tools\osv-scanner.exe"
+node .opencode/scripts/static-scan.mjs doctor
+```
 
 Joern 不再通过项目 MCP 配置。只要 `joern`、`joern-parse` 和 `java` 已在 `PATH` 中，就不需要额外配置；否则在启动 `initial.sh` 和 OpenCode 的同一个 Shell 中导出：
 
@@ -137,7 +153,7 @@ npm --prefix .opencode run start:audit-workbench:runner -- \
 
 完整动态验证始终不自动运行。需要通过 Web 手动触发时，使用 `npm --prefix .opencode run start:audit-workbench:full`，或在基础命令的 `--` 后同时加入 `--enable-runner --enable-dynamic-validation`。操作员需在“完整动态验证”页面选择一条密封且待处理的 Web request，并逐次填写 loopback URL、确认授权测试环境；账号、登录步骤和清理步骤可选。匿名或共享账号模式不能形成跨用户证据，缺少当前证明所必需的信息时相应步骤只能返回 `INCONCLUSIVE`/`NOT_RUN`。结果作为 sidecar，不自动改写主链 routing 或终稿。
 
-`initial.sh` 会直接解析并检查 OpenGrep/Semgrep、`joern`、`joern-parse`、Java 及可选 GNU coreutils，同时检查核心 CLI、项目依赖、本地和全局 OpenCode 配置，以及 Coverage Ledger MCP 的实际健康状态。OpenGrep 与 Semgrep 合并为一个扫描器检查项：自动模式下二选一即可，优先使用 OpenGrep。它默认不运行完整回归，也不执行语言 CPG 构建。
+`initial.sh` 会直接解析并检查 OpenGrep/Semgrep，同时探测可选的 Gitleaks、OSV-Scanner、`joern`、`joern-parse`、Java 及 GNU coreutils，并检查核心 CLI、项目依赖、本地和全局 OpenCode 配置，以及 Coverage Ledger MCP 的实际健康状态。OpenGrep 与 Semgrep 自动模式下二选一即可，优先使用 OpenGrep；Joern 缺失只会使 `deep_dataflow` 不可用，不再阻断基础静态扫描。它默认不运行完整回归，也不执行语言 CPG 构建。
 
 工作台启动后还可以在“运行环境”页面查看同一组组件的在线能力快照。该页面分别计算工作台、静态漏洞挖掘、OpenCode 窗口监控和 Web 动态验证就绪度；点击“重新探测”会绕过 30 秒缓存，但不会启动 Chrome、执行扫描或发起动态验证。
 
@@ -148,16 +164,21 @@ npm --prefix .opencode run start:audit-workbench:runner -- \
 
 输出中的 `【通过】` 表示当前工作流可用，`【警告】` 表示可选能力缺失，`【失败】` 表示所选工作流被阻断。处理完 `【失败】` 后重新运行 `./initial.sh`；只有 Python 前端冒烟检查或完整回归需要时，才分别增加对应参数。
 
-Joern 和 OpenGrep/Semgrep 的可用性都由 `initial.sh` 直接检查。也可运行：
+所有扫描器的能力状态可由统一入口检查和规划：
 
 ```sh
-node .opencode/scripts/semgrep-scan.mjs health
-node .opencode/scripts/semgrep-scan.mjs scan \
+node .opencode/scripts/static-scan.mjs doctor
+node .opencode/scripts/static-scan.mjs plan --target src
+node .opencode/scripts/static-scan.mjs run \
+  --engine auto \
   --audit-id audit-001 \
   --session-id web-r1 \
   --agent-name java-source-auditor \
   --target src \
   --rule .opencode/skills/java-subagent/java-sql-injection/rules/semgrep/java-sqli-sinks.yaml
+node .opencode/scripts/static-scan.mjs aggregate \
+  --audit-id audit-001 \
+  --output reports/sarif/java-source-auditor.web-r1.sarif
 ```
 
-`scan` 只接受工作区内的本地规则和目标，完整 JSON、stderr 与 SARIF 落盘，终端只返回有硬上限的 JSON 摘要。工具缺失时应修正当前 Shell 的 `PATH` 或上述环境变量，不要在审计过程中临时跳过。
+`run` 的 OpenGrep/Semgrep 模式只接受工作区内本地规则和目标；`--engine gitleaks` 强制脱敏，`--engine osv-scanner` 只分析本地依赖清单。每次运行生成摘要绑定的不可变制品，`verify` 校验摘要，`aggregate` 按 `scan_run_id` 排序重建 SARIF。必要引擎缺失记录 `GAP`，可选引擎缺失记录 `SKIPPED`，无适用目标记录 `NOT_APPLICABLE`。

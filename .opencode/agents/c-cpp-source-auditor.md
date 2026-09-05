@@ -65,7 +65,7 @@ Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.m
 
 The orchestrator supplies one bounded local work packet containing one or more Focus Area × `c-cpp` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
 
-Run `node .opencode/scripts/semgrep-scan.mjs health` before local pattern scanning. When Semgrep-compatible C/C++ rules apply, use the script's `scan` command with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Record its bounded summary and raw-output/SARIF paths in the audit report. A missing engine is an explicit tool gap and never substitutes for manual/Joern review.
+Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local scanning. When compatible C/C++ rules apply, use `run --engine auto` with workspace-local YAML rules and execute optional capabilities marked `PLANNED`. Verify immutable run manifests and record their paths. Joern is optional `deep_dataflow`; missing function inventory remains `GAP`, and rule hits never substitute for manual review.
 
 ## Tri-Lens Execution Contract
 

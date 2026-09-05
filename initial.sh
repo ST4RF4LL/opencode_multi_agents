@@ -21,7 +21,7 @@ usage() {
 选项:
   --python          运行临时 Joern Python 前端冒烟检查。
   --test            环境检查后运行完整项目回归测试。
-  --no-mcp          跳过 Coverage Ledger MCP 健康检查；仍直接检查扫描器和 Joern CLI。
+  --no-mcp          跳过 Coverage Ledger MCP 健康检查；仍直接检查本机静态扫描器。
   -h, --help        显示本帮助。
 
 项目配置默认为 .opencode/opencode.json。若需检查其他配置，运行前设置
@@ -275,7 +275,7 @@ else
 fi
 
 if [ "$config_ok" = true ]; then
-  printf '\n静态扫描器与 Joern 工具\n'
+  printf '\n静态扫描器与可选深度分析工具\n'
   opengrep_bin="${OPENGREP_BIN:-opengrep}"
   semgrep_bin="${SEMGREP_BIN:-semgrep}"
   semgrep_engine="${SEMGREP_ENGINE:-auto}"
@@ -330,19 +330,19 @@ if [ "$config_ok" = true ]; then
   joern_gnubin="${JOERN_GNUBIN:-}"
   joern_parse_path=""
 
-  if probe_available "Joern" "$joern_bin"; then :; else fail "Joern 不可用"; fi
+  if probe_available "Joern" "$joern_bin"; then :; elif [ "$check_python" = true ]; then fail "--python 要求 Joern 可用"; else warn "Joern 不可用；仅跳过可选 deep_dataflow，不阻断基础静态扫描"; fi
   if joern_parse_path="$(resolve_executable "$joern_parse_bin")"; then
     if probe_available "joern-parse" "$joern_parse_bin"; then :; fi
   else
-    fail "joern-parse 不可用"
+    if [ "$check_python" = true ]; then fail "--python 要求 joern-parse 可用"; else warn "joern-parse 不可用；仅跳过可选 deep_dataflow 和基于 Joern 的函数清单"; fi
   fi
 
   if [ -n "$joern_java_bin" ]; then
-    if probe_executable "Joern 所用 Java" "$joern_java_bin/java"; then :; else fail "JOERN_JAVA_BIN 未提供 java"; fi
+    if probe_executable "Joern 所用 Java" "$joern_java_bin/java"; then :; elif [ "$check_python" = true ]; then fail "JOERN_JAVA_BIN 未提供 java"; else warn "JOERN_JAVA_BIN 未提供 java；可选 Joern 能力不可用"; fi
   elif probe_executable "Joern 所用 Java" "java"; then
     :
   else
-    fail "Java 不可用"
+    if [ "$check_python" = true ]; then fail "--python 要求 Java 可用"; else warn "Java 不可用；可选 Joern 能力不可用"; fi
   fi
 
   if [ -n "$joern_gnubin" ]; then
@@ -352,6 +352,9 @@ if [ "$config_ok" = true ]; then
       fail "JOERN_GNUBIN 未提供 greadlink"
     fi
   fi
+
+  if probe_executable "Gitleaks（可选 secret_scan）" "${GITLEAKS_BIN:-gitleaks}"; then :; else warn "Gitleaks 不可用；secret_scan 记为 SKIPPED"; fi
+  if probe_executable "OSV-Scanner（可选 dependency_scan）" "${OSV_SCANNER_BIN:-osv-scanner}"; then :; else warn "OSV-Scanner 不可用；dependency_scan 记为 SKIPPED"; fi
 
   if [ -n "$joern_parse_path" ] && "$joern_parse_path" --list-languages 2>/dev/null | grep -qi '^[- ]*python'; then
     pass "Joern 声明支持 Python 前端"

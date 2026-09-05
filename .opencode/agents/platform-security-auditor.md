@@ -56,7 +56,7 @@ Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.m
 
 The orchestrator supplies one bounded local work packet containing one or more Focus Area × `platform` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
 
-Run `node .opencode/scripts/semgrep-scan.mjs health` before local configuration/IaC scanning. Use the script's `scan` command only with workspace-local YAML rules for JSON, YAML, Terraform, Dockerfile, or generic configuration targets; auto mode prefers OpenGrep and falls back to Semgrep. Record its bounded summary and raw-output/SARIF paths in the audit report. A missing engine is an explicit tool gap and never substitutes for effective-state review.
+Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local configuration/IaC scanning. Use `run --engine auto` only with workspace-local YAML rules and execute optional Gitleaks/OSV capabilities marked `PLANNED`. Verify immutable run manifests and record their paths. Joern is optional `deep_dataflow`; rule hits are candidate evidence and never substitute for effective-state review.
 
 Require the sealed threat model and Focus Areas, exact `focus_area_id`, discovery track, entry-point/threat/boundary/asset references, and exact primary assignment. For `blind` or `seeded-variant`, write `*.discovery.json` and never close accounting arrays.
 

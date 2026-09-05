@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { digestPath, writeStaticRun } from "./static-artifacts.mjs";
 
 const ENGINE_NAMES = new Set(["auto", "semgrep", "opengrep"]);
 const MAX_STDOUT_BYTES = 64 * 1024 * 1024;
@@ -45,7 +46,7 @@ export async function resolveWorkspacePath(workspaceRoot, inputPath, { mustExist
   }
 }
 
-async function resolveAllowedPath(baseRoot, inputPath, allowedRoots, { mustExist = true, label = "Path" } = {}) {
+export async function resolveAllowedPath(baseRoot, inputPath, allowedRoots, { mustExist = true, label = "Path" } = {}) {
   const roots = await Promise.all(allowedRoots.map(root => realpath(resolve(root))));
   const candidate = isAbsolute(inputPath) ? resolve(inputPath) : resolve(baseRoot, inputPath);
   let actual;
@@ -82,7 +83,7 @@ function truncateText(value, maxBytes) {
   return `${buffer.subarray(0, Math.max(0, maxBytes - 32)).toString("utf8")}\n...[truncated ${buffer.length - maxBytes} bytes]`;
 }
 
-function runProcess(command, args, {
+export function runProcess(command, args, {
   cwd,
   timeoutMs,
   env = {},
@@ -399,6 +400,11 @@ export async function runSemgrepScan({
     if (!info.isFile() && !info.isDirectory()) throw new Error(`Unsupported rule path: ${rule}`);
   }
   const selected = await selectEngine({ workspaceRoot: root, engine, environment });
+  const targetDigest = await digestPath(target, {
+    excludedPaths: splitWorkspace ? [reportsRoot, tmpRoot] : [join(root, "reports"), join(root, "tmp")],
+  });
+  const ruleDigests = await Promise.all(rules.map(path => digestPath(path)));
+  const rulePackDigest = sha256(ruleDigests.sort().join("\n"));
   const rawDirectory = splitWorkspace
     ? await resolveAllowedPath(tmpRoot, join(auditId, "semgrep", sessionId), [tmpRoot], { mustExist: false, label: "Raw output" })
     : await resolveWorkspacePath(root, join("tmp", auditId, "semgrep", sessionId), { mustExist: false });
@@ -494,6 +500,34 @@ export async function runSemgrepScan({
     commandLine,
     workspaceRoot: sourceRoot,
   });
+  const immutable = await writeStaticRun({
+    reportsRoot: splitWorkspace ? reportsRoot : join(root, "reports"),
+    auditId,
+    identity: {
+      schema_version: "static-scan-identity.v1",
+      capability: "source_pattern_scan",
+      engine: selected.engine,
+      engine_version: selected.version,
+      target_path: relative(sourceRoot, target).replaceAll("\\", "/") || ".",
+      target_digest: targetDigest,
+      rule_pack_digest: rulePackDigest,
+      options: { jobs, rule_timeout_seconds: ruleTimeoutSeconds, max_memory_mb: maxMemoryMb, excludes: [...excludes].sort() },
+    },
+    sarif: sarifRun,
+    summary: {
+      status: (payload.errors?.length ?? 0) > 0 ? "PARTIAL" : "SUCCESS",
+      engine: selected.engine,
+      engine_version: selected.version,
+      findings: payload.results?.length ?? 0,
+      errors: payload.errors?.length ?? 0,
+      requested_rules: rules.map(path => relative(engineRoot, path).replaceAll("\\", "/")).sort(),
+      executed_rules: rules.map(path => relative(engineRoot, path).replaceAll("\\", "/")).sort(),
+      skipped_rules: [],
+      target_files: payload.paths?.scanned?.length ?? null,
+      parsed_files: payload.paths?.scanned?.length ?? null,
+      skipped_files: payload.paths?.skipped?.length ?? null,
+    },
+  });
   const combinedSarif = await mergeSarif(outputPath, sarifRun);
   const sarifBytes = `${JSON.stringify(combinedSarif, null, 2)}\n`;
   return {
@@ -517,5 +551,8 @@ export async function runSemgrepScan({
     sarif_path: splitWorkspace ? relativeArtifactPath("reports", reportsRoot, outputPath) : relative(root, outputPath),
     sarif_sha256: sha256(sarifBytes),
     sarif_runs: combinedSarif.runs.length,
+    scan_run_id: immutable.scan_run_id,
+    run_manifest_path: splitWorkspace ? relativeArtifactPath("reports", reportsRoot, immutable.manifest_path) : relative(root, immutable.manifest_path),
+    immutable_sarif_path: splitWorkspace ? relativeArtifactPath("reports", reportsRoot, immutable.sarif_path) : relative(root, immutable.sarif_path),
   };
 }

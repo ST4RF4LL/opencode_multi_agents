@@ -113,16 +113,16 @@ function configuredComponent(id, label, category, configured, requiredFor, detai
   };
 }
 
-function capability(id, label, componentIds, components, { anyOf = [] } = {}) {
+function capability(id, label, componentIds, components, { anyOf = [], optional = false } = {}) {
   const byId = new Map(components.map(component => [component.id, component]));
   const missing = componentIds.filter(componentId => byId.get(componentId)?.status !== "ready");
   if (anyOf.length && !anyOf.some(componentId => byId.get(componentId)?.status === "ready")) missing.push(anyOf.join(" / "));
   return {
     id,
     label,
-    status: missing.length ? "blocked" : "ready",
+    status: missing.length ? (optional ? "skipped" : "blocked") : "ready",
     blockers: [...new Set(missing)],
-    summary: missing.length ? `缺少 ${[...new Set(missing)].length} 项必要能力。` : "必要组件均已就绪。",
+    summary: missing.length ? (optional ? `缺少 ${[...new Set(missing)].length} 项可选组件，当前能力已跳过。` : `缺少 ${[...new Set(missing)].length} 项必要能力。`) : "必要组件均已就绪。",
   };
 }
 
@@ -159,25 +159,31 @@ export class EnvironmentHealthService {
       id: "node", label: "Node.js", category: "基础运行时", status: nodeMajor >= 20 ? "ready" : "unavailable", version: this.nodeVersion,
       command: "node", required_for: ["workbench", "static", "dynamic"], detail: nodeMajor >= 20 ? "满足 Node.js 20+ 要求。" : "需要 Node.js 20 或更高版本。",
     };
-    const [npm, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, chrome, dependencies, mcp] = await Promise.all([
+    const [npm, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, gitleaks, osvScanner, chrome, dependencies, mcp] = await Promise.all([
       probeExecutable({ id: "npm", label: "npm", category: "基础运行时", command: platform === "win32" ? "npm.cmd" : "npm", requiredFor: ["workbench", "dynamic"], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "git", label: "Git", category: "基础运行时", command: "git", requiredFor: ["static", "dynamic"], environment, platform, execute, resolveCommand }),
       openCodeComponent({ environment, platform, architecture: this.architecture, execute, resolveCommand }),
       terminalMultiplexerComponent({ environment, platform, execute, resolveCommand }),
-      probeExecutable({ id: "java", label: "Java", category: "静态分析", command: javaCommand, requiredFor: ["static"], environment, platform, execute, resolveCommand }),
-      probeExecutable({ id: "joern", label: "Joern", category: "静态分析", command: environment.JOERN_BIN ?? "joern", args: null, requiredFor: ["static"], environment, platform, execute, resolveCommand }),
-      probeExecutable({ id: "joern_parse", label: "joern-parse", category: "静态分析", command: environment.JOERN_PARSE_BIN ?? "joern-parse", args: ["--list-languages"], requiredFor: ["static"], environment, platform, execute, resolveCommand }),
+      probeExecutable({ id: "java", label: "Java", category: "深度静态分析（可选）", command: javaCommand, requiredFor: ["deep_dataflow"], environment, platform, execute, resolveCommand }),
+      probeExecutable({ id: "joern", label: "Joern", category: "深度静态分析（可选）", command: environment.JOERN_BIN ?? "joern", args: null, requiredFor: ["deep_dataflow"], environment, platform, execute, resolveCommand }),
+      probeExecutable({ id: "joern_parse", label: "joern-parse", category: "深度静态分析（可选）", command: environment.JOERN_PARSE_BIN ?? "joern-parse", args: ["--list-languages"], requiredFor: ["deep_dataflow"], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "opengrep", label: "OpenGrep", category: "静态分析", command: environment.OPENGREP_BIN ?? "opengrep", requiredFor: [], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "semgrep", label: "Semgrep", category: "静态分析", command: environment.SEMGREP_BIN ?? "semgrep", requiredFor: [], environment, platform, execute, resolveCommand }),
+      probeExecutable({ id: "gitleaks", label: "Gitleaks", category: "静态分析（可选）", command: environment.GITLEAKS_BIN ?? "gitleaks", requiredFor: ["secret_scan"], environment, platform, execute, resolveCommand }),
+      probeExecutable({ id: "osv_scanner", label: "OSV-Scanner", category: "静态分析（可选）", command: environment.OSV_SCANNER_BIN ?? "osv-scanner", requiredFor: ["dependency_scan"], environment, platform, execute, resolveCommand }),
       chromeComponent({ environment, platform, execute, resolveCommand }),
       readPackageComponent(this.projectRoot),
       inspectMcpConfiguration(this.configPaths),
     ]);
     const chromeMcp = configuredComponent("chrome_devtools_mcp", "Chrome DevTools MCP", "动态验证", mcp.chrome_devtools, ["dynamic"], "隔离 Chrome DevTools MCP 已启用。" );
-    const components = [node, npm, dependencies, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, chrome, chromeMcp];
+    const components = [node, npm, dependencies, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, gitleaks, osvScanner, chrome, chromeMcp];
     const capabilities = [
       capability("workbench", "工作台", ["node", "project_dependencies"], components),
-      capability("static", "静态漏洞挖掘", ["node", "git", "opencode", "project_dependencies", "java", "joern", "joern_parse"], components, { anyOf: ["opengrep", "semgrep"] }),
+      capability("static", "静态漏洞挖掘", ["node", "git", "opencode", "project_dependencies"], components, { anyOf: ["opengrep", "semgrep"] }),
+      capability("source_pattern_scan", "源码模式扫描", [], components, { anyOf: ["opengrep", "semgrep"] }),
+      capability("secret_scan", "密钥泄漏扫描（可选）", ["gitleaks"], components, { optional: true }),
+      capability("dependency_scan", "依赖漏洞扫描（可选）", ["osv_scanner"], components, { optional: true }),
+      capability("deep_dataflow", "深度数据流分析（可选）", ["java", "joern", "joern_parse"], components, { optional: true }),
       capability("terminal_monitor", "OpenCode 窗口监控", ["node", "opencode", "tmux"], components),
       capability("dynamic", "Web 动态验证", ["node", "npm", "git", "opencode", "project_dependencies", "chrome", "chrome_devtools_mcp"], components),
     ];

@@ -72,7 +72,7 @@ If an expected manifest is missing or incomplete, return `GAP`; do not substitut
 
 The orchestrator supplies one bounded local work packet containing one or more Focus Area × `web` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
 
-Run `node .opencode/scripts/semgrep-scan.mjs health` before local pattern scanning. When Web rules apply, use the script's `scan` command with workspace-local YAML rules; auto mode prefers OpenGrep and falls back to Semgrep. Record its bounded summary and raw-output/SARIF paths in the audit report. A missing engine is an explicit tool gap and never substitutes for source/AST review.
+Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local scanning. When Web rules apply, use `run --engine auto` with workspace-local YAML rules and execute optional capabilities marked `PLANNED`. Verify immutable run manifests and record their paths. Joern is optional `deep_dataflow`; a rule hit is only candidate evidence and never substitutes for source/AST review or closes function coverage.
 
 Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.mjs` yourself. Update entity records in place with digest-bound evidence; never regenerate shorter arrays, hand-write D1-D10 cells, or submit target counts. After entity review, run `reconcile-audit-report.mjs`.
 

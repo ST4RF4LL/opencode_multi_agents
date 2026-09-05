@@ -221,9 +221,9 @@ Windows/Linux 发布前的真实 Chrome 所有权、清理与 Bruno 4 Desktop �
 
 ## Local analysis and MCP defaults
 
-Semgrep/OpenGrep 不再注册为 MCP。Agent 通过 `node .opencode/scripts/semgrep-scan.mjs` 直接调用受控扫描入口：`health` 检查本地引擎，`scan` 自动优先使用 `opengrep` 并回退 `semgrep`，只接受工作区内本地 YAML 规则。完整 JSON 与 stderr 保存到 `tmp/<audit_id>/semgrep/`，结果归一化并合并到 `reports/sarif/`，终端只输出不超过 16 KiB 的摘要。扫描器的异常 JSON 也有 64 MiB 硬上限。
+统一静态扫描入口为 `node .opencode/scripts/static-scan.mjs`，提供 `doctor`、`plan`、`run`、`verify`、`aggregate`。基础模式由 OpenGrep/Semgrep 提供源码模式扫描；Gitleaks 与 OSV-Scanner 分别提供可选的密钥和依赖扫描；Joern 只提供可选 `deep_dataflow`，缺失时不再阻断基础静态漏洞挖掘。旧 `semgrep-scan.mjs` 继续兼容。完整 JSON 与 stderr 保存到 `tmp/<audit_id>/`，所有引擎统一输出 SARIF，并生成 `reports/static-analysis/<audit_id>/<scan_run_id>/` 下摘要、结果和摘要绑定的不可变 manifest；`reports/sarif/` 是按 `scan_run_id` 确定性重建的兼容聚合。终端摘要不超过 16 KiB。
 
-Joern 不再注册为 MCP。函数清单构建器和审计命令直接调用 `joern-parse` 与 `joern`；默认从 `PATH` 解析，也可在启动 OpenCode 前通过 `JOERN_BIN`、`JOERN_PARSE_BIN`、`JOERN_JAVA_BIN` 和 `JOERN_GNUBIN` 指定本机工具链。Joern 查询应把完整 stdout/stderr 写入 `tmp/`，只把有界摘要带回 agent 上下文。
+Joern 不再注册为 MCP。函数清单构建器和深度审计命令可直接调用 `joern-parse` 与 `joern`；默认从 `PATH` 解析，也可在启动 OpenCode 前通过 `JOERN_BIN`、`JOERN_PARSE_BIN`、`JOERN_JAVA_BIN` 和 `JOERN_GNUBIN` 指定本机工具链。Joern 缺失时相关函数清单必须保留 `GAP`，不得把文件扫描伪装为函数级覆盖；其余静态引擎仍可执行。
 
 配置模板默认启用 `coverage_ledger` 和固定版本的 `chrome-devtools-mcp@1.8.0`。动态 Runner 按风险在现有 Chrome 独立标签页、isolated context 和临时隔离 Chrome 之间选择；共享标签页要求 Chrome 144+、已开启远程调试并由用户确认所选 profile 对控制器可见，Broker 仍只管理本任务登记的页面。Web XSS 等高影响任务强制隔离，无桌面的 Linux 服务器可以使用隔离 headless Chrome。禁止远程、容器域名和 `agent-browser` 回退。`coverage_ledger` 暴露 Assignment Unit、attestation 和兼容的 check 级工具，串行生成认证哈希链。正常 unit 工作流仅交换计数、事件元数据和服务端派生的冻结 source-set 摘要，单次响应硬限制为 16 KiB；完整 source/接口元数据仅允许按小页做定向诊断。
 

@@ -64,7 +64,7 @@ Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.m
 
 The orchestrator supplies one bounded local work packet containing one or more Focus Area × `java` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
 
-Run `node .opencode/scripts/semgrep-scan.mjs health` before local pattern scanning. Use the script's `scan` command with the deep pack's workspace-local `rules/semgrep/*.yaml`; auto mode prefers OpenGrep and falls back to Semgrep. Record its bounded summary and raw-output/SARIF paths in the audit report. A missing engine is an explicit tool gap and never substitutes for source/Joern review.
+Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local scanning. Use `run --engine auto` with the deep pack's workspace-local `rules/semgrep/*.yaml`; run optional Gitleaks/OSV capabilities when the plan marks them `PLANNED`. Verify immutable run manifests and record their paths. Joern is optional `deep_dataflow`: its absence is `SKIPPED`, while any unavailable required capability is `GAP`. Rule hits are candidates and never substitute for source review or close function coverage.
 
 ## Tri-Lens Execution Contract
 

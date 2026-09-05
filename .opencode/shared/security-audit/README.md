@@ -18,6 +18,7 @@ default target profile.
 - `joern-rules/`: Joern rules, rule metadata, and rule inventory.
   - Layout: `joern-rules/<language>/<rule-id>.sc` + `<rule-id>.md`, inventory in `index.json`.
   - Java seed: 105 rules promoted from `java-subagent` deep packs (`java-*-locate-sinks`, `source-to-sink`, derived SQLi patterns, …). Build a CPG with `joern-parse`, then run a rule with `joern <cpg.bin> --script <rule.sc>`.
+- `static-rules/`: 统一静态规则注册表与 `static-rule-manifest.v1` schema。规则生命周期为 `draft → candidate → validated → released → deprecated`；只有 `released` 可自动进入生产扫描计划。
 - `vulnerability-cases/`: confirmed or likely reusable vulnerability cases.
   - Java seed: 21 cases under `vulnerability-cases/java/<skill>-case-*/` with `case-summary.json` plus defensive samples.
 - `false-positive-cases/`: rejected findings and false-positive patterns.
