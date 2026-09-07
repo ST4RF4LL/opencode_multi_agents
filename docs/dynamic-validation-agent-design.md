@@ -21,7 +21,7 @@
 - Web 目录类型已开放；不属于 Web 范围的类型仍拒绝调度。需要破坏性、拒绝服务、进程崩溃、文件覆盖或外部目标访问才能确认的步骤不得执行，应返回 `INCONCLUSIVE` 或 `NOT_RUN`。
 
 `vulnerability-validator` 现在负责终稿前的真实性路由：任务 opt-in 时先委派
-`quick-dynamic-validator` 做全任务最多 120 秒的 loopback 快速确认，再把未确认项
+`quick-dynamic-validator` 做共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒的 loopback 快速确认，再把未确认项
 交给本地正方、反方、Moderator 静态挑战。本文件描述的
 `dynamic-vulnerability-validator` 是另一个只由用户手动触发的完整验证 Agent；其结果
 是 sidecar，不替代或自动改写上述 routing。

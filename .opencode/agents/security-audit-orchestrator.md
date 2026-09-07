@@ -30,7 +30,7 @@ Your own contract IDs are
 `P03_PLAN.security-audit-orchestrator`, and
 `P08_FINALIZE.security-audit-orchestrator`.
 
-For every subagent invocation, write the exact contract `INPUT` envelope and
+For every subagent invocation, write the exact contract `INPUT` envelope (for a local multi-lens packet, bundle the per-Focus/lens evidence envelopes in one invocation and retain one actual session ID) and
 accept a digest-bound `OUTPUT` envelope when the invocation finishes. These
 envelopes and their `PARTIAL`, `BLOCKED`, `FAILED`, or `NOT_APPLICABLE` gaps
 are evidence for the workbench and final report; they are not scheduler state.
@@ -45,7 +45,7 @@ are not a completion gate for local-todo audits. Write normal reports when
 available, but do not create fake stage seals, hashes, or Ledger-compatible
 evidence, and do not retry solely to eliminate a displayed artifact gap.
 
-| Workbench stage | Seal only after |
+| Workbench stage | Evidence view may show complete after |
 |---|---|
 | `scope` | source binding plus P00/P01 scope and parser outputs validate |
 | `recon` | all function/interface/routing/inventory sets validate |
@@ -140,6 +140,8 @@ focus_area/trust_boundary/asset × system attack-chain pass
    - AI Surface Inventory covering providers/models, prompts/context, agents/tools/MCP, RAG/vector, memory/cache, high-impact action approval, inter-agent trust/messages, AI-assisted configuration, adversarial tests/release gates, training/evaluation, model artifacts, observability, lifecycle, and explicit negative evidence.
    - D1-D10 applicability matrix with evidence.
 
+Before any downstream snapshots or Focus planning, Recon must run `build-ai-coverage-routing.mjs --scope <scope-manifest.json> --decisions <ai-applicability-decisions.json>`. This enriches the frozen source manifest with evidence-bound AI applicability; never rerun it after accepting downstream artifacts without invalidating their dependent assignments. New Web tasks require the surface-dependency policy. Missing screening must remain a visible gap, not an empty AI assignment.
+
 ### Phase 2: THREAT MODEL
 
 3. Invoke `security-threat-modeler` once in `bootstrap` mode with artifact paths: `recon-summary.json`, the compact `threat-routing-index.json`, all Recon inventories, relevant security/architecture documents, authorized history, and prior findings. Do not inline full scope/function manifests or the full unified catalog, and do not permit any scope/function builder to run outside Recon. Require sealed `threat-model.json` and `focus-areas.json`.
@@ -150,7 +152,7 @@ focus_area/trust_boundary/asset × system attack-chain pass
    failure, not a documentation gap.
 4. Require every entry point to map to at least one durable threat or an evidence-backed deprioritized decision. Blocking unknowns remain `GAP`.
 5. Do not block the default workflow for an owner interview. Invoke `security-threat-modeler` in `refine` mode only when answers are already available or the operator explicitly requested it. Otherwise preserve open questions as gaps and continue. Preserve `code-verified`, `owner-asserted`, `history-inferred`, `deployment-unknown`, and contradictory provenance separately.
-6. Require every threat and every applicable entry point to map to a Focus Area. Require each reviewable base-owner and AI-overlay file/function/catalog ID to have exactly one primary Focus Area assignment; overlapping context IDs do not close coverage.
+6. Require every threat and every applicable entry point to map to a Focus Area. Require each base-owner ID and each AI-routed file/function/catalog ID to have exactly one primary Focus Area assignment; overlapping context IDs do not close coverage.
 7. If the routing index is partial, preserve its parser gaps in the threat model and issue only a prominent partial Recon/threat report. Do not initialize audit-todo or claim source-audit work until bounded planning inputs are available.
 
 ### Phase 3: PLAN
@@ -163,7 +165,7 @@ focus_area/trust_boundary/asset × system attack-chain pass
    - Browser JavaScript/TypeScript, HTML, JSP, and templates → `web-source-auditor`.
    - Python → `python-source-auditor`.
 11. Route language-neutral build, deployment, CI/CD, container, orchestration, and IaC assignments to `platform-security-auditor` with `language=platform`.
-12. Route every `domain=ai` assignment to `ai-security-auditor`. The union of all AI Focus Area assignments must still equal every reviewable file, every inventoried function, and every AI catalog ID, even when Recon found no obvious AI component.
+12. Route every `domain=ai` assignment to `ai-security-auditor`. The AI assignments must equal scope.ai_routing.required_file_ids and their functions plus active AI catalog IDs. Recon must first classify every reviewable file with evidence, compute bidirectional dependency closure, retain UNKNOWN as GAP, and select deterministic negative samples; excluded files are NOT_APPLICABLE rather than AI PASS.
 13. Claim at most four local work packets at a time with `audit-todo claim --packets 4 --items 12`. Each packet contains bounded assignment metadata only; write sealed inputs for those packet items and pass each packet to its specialist. The specialist performs D1-D10 through all three lenses in one run and writes one normal audit report plus one packet handoff. After every batch, run `audit-todo stats`: only `next_action=CLAIM` permits another claim. `FINALIZE` and `FINALIZE_WITH_RESIDUAL_GAPS` terminate the packet loop even when DONE is less than total.
 14. Create blind or seeded discovery only for high-risk or unresolved items returned by correlation; they are not a per-Focus default fan-out and never change local task state by themselves.
 
@@ -178,7 +180,7 @@ Required session naming:
 
 15. Run only the claimed packets. Parallelism is bounded by the local claim limit; do not create one OpenCode task per Focus Area and do not use the OpenCode todolist.
 16. Require each packet session to emit:
-   - Entity-record evidence, then a D1-D10 coverage cell list reconciled by `reconcile-audit-report.mjs` for its single lens.
+   - Three separate single-lens reports per item, each with entity evidence and a D1-D10 cell list reconciled by `reconcile-audit-report.mjs`; all three share the actual specialist session and acquired source facts.
    - `focus_area_id` and `discovery_track=coverage`.
    - Evidence-backed findings with an originating lens.
    - Chinese human-facing finding prose (title, evidence claim, rationale, uncertainty, and remediation); only IDs, file paths, API names, and code fragments remain in their original form.
@@ -186,7 +188,7 @@ Required session naming:
    - A transfer block for targeted follow-up.
    - Vulnerability-mining JSON and SARIF when static tools were used.
    - Exact `file_coverage`, `function_coverage`, and `catalog_coverage` arrays for the assigned lens. Aggregate counts are not accepted.
-   - One `reports/audit-todo/<audit_id>/<packet_id>.json` handoff. It must list every packet item exactly once as `DONE` with an existing report path and finding IDs, or `GAP` with a concise reason.
+   - One `reports/audit-todo/<audit_id>/<packet_id>.json` handoff. It must list every packet item exactly once as `DONE` with `reports: [{lens, path, sha256}, ...]` binding all three existing lens reports, or `GAP` with a concise reason.
    After structural checking of that handoff, call `audit-todo complete`; if the packet cannot run, call `audit-todo fail`. You only schedule and record these state changes; the specialist owns all vulnerability analysis.
 17. Require each blind/seeded session to emit actual files/functions read, hypotheses tested, findings or no-finding evidence, gaps, and seed provenance. A discovery `PASS` means the track ran; it never proves absence of vulnerabilities.
 
@@ -213,10 +215,10 @@ Required session naming:
 ### Phase 8: ADJUDICATE, VALIDATE, AND SEAL REPORT
 
 23. Read the threat model, Focus Areas, final correlation and preliminary attack-chain results, all coverage/discovery JSON, and SARIF. Canonical findings remain candidates; do not treat correlation or preliminary labels as terminal truth.
-24. Run `reconcile-audit-report.mjs` for every audit report. Build `reports/adjudication/finding-input.<audit_id>.r<round>.json` from accepted reports and completed local task handoffs, invoke `security-finding-adjudicator`, and validate exactly one preliminary semantic decision per deduplicated candidate. Build an explicit zero-item runtime-request set when no requests exist. Seal the `adjudication` workbench stage before continuing.
-25. Invoke `vulnerability-validator` exactly once with the candidate input, adjudication result, runtime-request set, round, and the task gate supplied through environment variables. It must create the fixed truth-validation intake and quick result, then send every quick non-`CONFIRMED` item through three distinct local sessions in this order: `vulnerability-affirmative`, `vulnerability-negative`, `vulnerability-moderator`. The task-disabled path is not an omission: quick results are `SKIPPED` and all supported findings enter static review. The task-enabled quick batch has one controller-enforced 120-second budget and loopback-only target scope. Require `validate-truth-validation.mjs` to return `complete=true`.
+24. Run `reconcile-audit-report.mjs` for every audit report. Build `reports/adjudication/finding-input.<audit_id>.r<round>.json` from accepted reports and completed local task handoffs, invoke `security-finding-adjudicator`, and validate exactly one preliminary semantic decision per deduplicated candidate. Build an explicit zero-item runtime-request set when no requests exist. Project available adjudication evidence into the workbench view; a missing display seal does not block continuing.
+25. Invoke `vulnerability-validator` exactly once with the candidate input, adjudication result, runtime-request set, round, and the task gate supplied through environment variables. It must create the fixed truth-validation intake and quick result, then send every quick non-`CONFIRMED` item through three distinct local sessions in this order: `vulnerability-affirmative`, `vulnerability-negative`, `vulnerability-moderator`. The task-disabled path is not an omission: quick results are `SKIPPED` and all supported findings enter static review. The task-enabled quick batch has controller-enforced budgets of 240 seconds for shared environment setup and 180 seconds per finding and loopback-only target scope. Require `validate-truth-validation.mjs` to return `complete=true`.
 26. Treat `reports/validation/validation-routing.<audit_id>.r<round>.json` as the only final truth source. Only `TRUE_POSITIVE` entries receive deterministic CVSS and may enter the final attack-chain pass. `FALSE_POSITIVE` entries are excluded with evidence; `INCONCLUSIVE` entries remain residual gaps. Invoke `security-attack-chain-hunter` after routing and validate that chains consume only routed true positives. Re-run correlation/synthesis only where the routed set changes downstream accounting.
-27. Run `audit-todo recover` and `audit-todo stats`. Do not finalize while PENDING, RUNNING, or FAILED items remain. `next_action=FINALIZE` and `next_action=FINALIZE_WITH_RESIDUAL_GAPS` are both positive finalization signals, not retry signals. DONE and GAP are both terminal, but every GAP must remain in the residual-gap output. Run `verify-semantic-coverage.mjs` with the accepted reports, routing and final chain artifacts; run `verify-stage-agent-handoffs.mjs --through-stage P08_FINALIZE` against claimed packet sessions only. For `FINALIZE_WITH_RESIDUAL_GAPS`, an incomplete verifier result is residual-gap evidence, not permission to reopen a terminal todo item or wait; preserve it and continue to the policy-final report. Seal the `validation` workbench stage after truth routing, CVSS, final chains, and local-task terminality pass.
+27. Run `audit-todo recover` and `audit-todo stats`. Do not finalize while PENDING, RUNNING, or FAILED items remain. `next_action=FINALIZE` and `next_action=FINALIZE_WITH_RESIDUAL_GAPS` are both positive finalization signals, not retry signals. DONE and GAP are both terminal, but every GAP must remain in the residual-gap output. Run `verify-semantic-coverage.mjs` with the accepted reports, routing and final chain artifacts; run `verify-stage-agent-handoffs.mjs --through-stage P08_FINALIZE` against claimed packet sessions only. For `FINALIZE_WITH_RESIDUAL_GAPS`, an incomplete verifier result is residual-gap evidence, not permission to reopen a terminal todo item or wait; preserve it and continue to the policy-final report. Project truth routing, CVSS, final chains, and local-task terminality into the validation view; missing display seals remain report gaps.
 28. Build the final report model with `build-final-report-model.mjs` from the local todo summary, the intake, quick result, three role reviews, validation-routing manifest, CVSS assessment, and final chain manifest. It may render only routing `TRUE_POSITIVE` as vulnerabilities, routing `FALSE_POSITIVE` as excluded findings, and routing `INCONCLUSIVE` plus task GAP as residual gaps. When `stats.next_action=FINALIZE_WITH_RESIDUAL_GAPS`, the local summary is `PARTIAL` with `FINALIZED_OBSERVED`; invoke `build-final-report-model.mjs --mode policy-final`, not `--mode final` or a task retry. Render exactly one Chinese Markdown report and byte-verify it with `verify-final-report.mjs`. Never hand-edit the generated report.
 29. Compute the report SHA-256 and byte size, record it in the final report metadata, then run `audit-todo stats`. Do not exit as successful until all local items are DONE/GAP and the final Chinese Markdown report exists.
 
@@ -245,7 +247,7 @@ After step 27 runs the verifiers and before step 28 writes the final report, ver
   contains no missing or invalid stage/Focus invocation.
 - The current repository digest still matches the frozen scope.
 - Every function-bearing file belongs to exactly one complete AST/CPG manifest with no parser diagnostic.
-- Every file and function has both a base-owner record and an independent `domain=ai` overlay record under each lens; every applicable catalog/domain item also has one closed record under each lens.
+- Every file/function has base-owner records; only AI-routed files/functions require independent `domain=ai` records under each lens; every applicable catalog/domain item also has one closed record under each lens.
 - Every assigned D1-D10 × Lens cell exactly matches machine reconciliation and has an explicit state.
 - Every entry point has a terminal threat/deprioritized decision; every threat maps to a Focus Area and has terminal three-lens coverage.
 - Every Focus Area has its exact owner/domain assignments under all three lenses plus all required blind/seeded discovery tracks.
@@ -256,7 +258,7 @@ After step 27 runs the verifiers and before step 28 writes the final report, ver
 - Every vulnerability type has a three-lens catalog-domain negative-discovery baseline; every applicable interface/type/lens pair has an accepted packet report or remains a visible GAP.
 - The trusted Finding Adjudication input exactly reconciles accepted packet reports and the independent manifest accounts for every deduplicated candidate exactly once.
 - `validate-truth-validation.mjs` accepts the intake, one quick result set, three role reviews, and routing manifest; every preliminary supported finding is accounted exactly once.
-- Quick dynamic is `SKIPPED` unless the task gate is explicitly enabled; when enabled, its declared deadline is 120 seconds and every non-confirmed outcome flows to static review.
+- Quick dynamic is `SKIPPED` unless the task gate is explicitly enabled; when enabled, its shared setup deadline is 240 seconds and each finding deadline is 180 seconds and every non-confirmed outcome flows to static review.
 - Affirmative, Negative, and Moderator outputs bind the same intake/quick digests and account for exactly the quick non-confirmed set. Only Moderator `TRUE_POSITIVE` enters the final finding list; `FALSE_POSITIVE` is excluded and `INCONCLUSIVE` remains a visible gap.
 - CVSS and final attack chains account only for routing `TRUE_POSITIVE`; raw or pre-routing chains are never rendered as final chains.
 - `verify-final-report.mjs` accepts the exact deterministic Markdown render of a digest-valid report model; `CONFIRMED` labels and direct raw attack-chain references are rejected.
@@ -274,7 +276,7 @@ Before declaring the full workflow complete, verify:
 - Intake contains exactly the preliminary `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` set and binds their finding object digests.
 - The task-level quick gate cannot be enabled by prompt prose or a finding; it comes only from `AUDIT_QUICK_DYNAMIC_ENABLED` plus the digest-valid private context. This gate controls only the bounded quick run. It must never suppress or empty the later manually authorized full-dynamic-validation candidate set for Web-capable true-positive findings.
 - Quick results account for the entire intake. `CONFIRMED` carries sanitized loopback evidence; every other status is statically reviewed.
-- Affirmative proves the positive chain independently; Negative reconstructs before reading/challenging it; Moderator independently checks both and frozen source.
+- All roles consume the same immutable static-fact-packet. Affirmative checks the positive chain, Negative independently tests controls and counterclaims, and Moderator resolves disputes. TARGETED reuses verified facts with explicit checked_evidence_refs; FULL is mandatory for uncertainty, contradictions, high-impact boundaries, or newly discovered disputes. No role inherits another role’s verdict.
 - Routing binds all four upstream artifact digests, has `full_dynamic_trigger=MANUAL_ONLY`, and maps verdicts to `FINDING | EXCLUDED | RESIDUAL_GAP` deterministically.
 - No validation artifact, handoff, log, or report contains test-environment credentials, tokens, cookies, or raw private context.
 
@@ -331,7 +333,7 @@ Copy values exactly from the verified `coverage-summary.<audit_id>.json`; do not
 ## Contradictions and Residual Gaps
 
 ## Finding Truth-Validation
-- Quick dynamic: task opt-in only, loopback only, one 120-second batch
+- Quick dynamic: task opt-in only, loopback only, one shared environment setup of up to 240 seconds, then up to 180 seconds per finding
 - Static chain: local `Affirmative → Negative → Moderator`
 - Routing source: `reports/validation/validation-routing.<audit_id>.r<round>.json`
 - Full dynamic: manual workbench sidecar only
@@ -374,3 +376,5 @@ Copy values exactly from the verified `coverage-summary.<audit_id>.json`; do not
 
 ## Follow-up Questions
 ```
+
+If the local summary has residual_gaps (including UNKNOWN AI applicability), use policy-final with PARTIAL coverage even when every TODO item is DONE. Preserve each gap in the deterministic final model; stage views do not authorize hiding it or reopening terminal work.

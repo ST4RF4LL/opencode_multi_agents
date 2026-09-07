@@ -43,7 +43,7 @@ registry. It defines every internal stage and agent invocation contract, the exa
 required/optional payload fields for each input and output.
 See `references/stage-agent-io.md` for the exact common envelope shapes.
 
-Every invocation has two durable envelopes:
+A non-packet invocation has two durable envelopes. A local tri-lens packet bundles per-Focus/lens INPUT/OUTPUT evidence pairs within one actual invocation; filenames include Focus/lens and all records retain the same actual session ID:
 
 1. The orchestrator writes an `INPUT` envelope, seals it with
    `scripts/seal-stage-agent-envelope.mjs`, and dispatches that exact digest.
@@ -57,9 +57,7 @@ phase completion.
 
 Before final synthesis, run `scripts/verify-stage-agent-handoffs.mjs`. It
 derives coverage expectations for every sealed Focus Area assignment × lens and
-every required blind/seeded discovery track. A missing output envelope is a
-missing execution, even if an agent response says it finished. This handoff
-gate supplements rather than replaces structural and semantic coverage gates.
+every required blind/seeded discovery track. A missing output envelope is an explicit evidence gap. For local packets, preserve the accepted three-report handoff and do not launch another session merely to repair a display envelope. Incomplete accounting must remain visible in a policy-final report.
 
 ## Fixed Workbench Stage Deliveries
 
@@ -99,9 +97,7 @@ required or activated-conditional validator to pass, all forward predecessor
 manifests to be `COMPLETE`, every feedback predecessor to use its edge-approved
 status, a frozen scope binding, and zero gaps. Correlation
 may create a new-round feedback edge to audit when
-`correlation_gap_round` is active. The registry is `ACTIVE` + `ENFORCED` for new
-workbench tasks: a zero exit code is converted to a recoverable interruption if
-any of the eight materialized stages is incomplete. Historical artifact-only
+`correlation_gap_round` is active. The registry is `ACTIVE` + `SHADOW` for new workbench tasks. Eight stages are evidence views, not scheduling gates. New-task completion uses local TODO terminality and the final Chinese report; missing stage artifacts are visible report gaps, never a reason to repeat terminal work. Historical artifact-only
 tasks remain visible through a labeled legacy heuristic and are not silently
 upgraded to compliant.
 
@@ -121,7 +117,7 @@ Use SARIF 2.1.0. At minimum include:
 
 ## Vulnerability-Mining Reports
 
-One vulnerability-mining agent session produces one JSON file. At minimum include:
+One local packet session produces one JSON report per Focus item/lens and a single packet handoff binding the three reports per item. Reports keep one audit_strategy and the same actual session ID. At minimum include:
 
 - `schema_version`
 - `audit_id`
@@ -165,15 +161,14 @@ After the last correlation/gap round, the orchestrator snapshots the validated s
 After preliminary adjudication and before CVSS, final attack chains, or report
 generation, require the six-artifact finding truth-validation bundle. A task
 that explicitly enabled test-environment context may run one loopback-only
-quick batch for at most 120 seconds. A disabled task writes explicit SKIPPED
+shared session with setup capped at 240 seconds and each finding capped at 180 seconds. A disabled task writes explicit SKIPPED
 results. Every non-CONFIRMED item then passes through distinct local
 Affirmative, Negative, and Moderator sessions.
 
 `validation-routing` is the terminal finding source: `TRUE_POSITIVE` enters the
 vulnerability list, `FALSE_POSITIVE` enters exclusions, and `INCONCLUSIVE`
 enters residual gaps. CVSS and final attack chains consume only true positives.
-Require a complete stage-handoff verification, truth-validation bundle, and
-both coverage gates before building the deterministic final report model. Keep
+Require a valid truth-validation bundle before building the deterministic final report model. For local TODO audits, incomplete stage/coverage views are explicit residual gaps and select policy-final rather than reopening terminal work. Only verified complete coverage may be described as complete. Keep
 the final report immutable after byte verification.
 
 ## External Runtime-Validation Handoff

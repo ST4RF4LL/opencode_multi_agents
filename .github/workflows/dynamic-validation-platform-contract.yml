@@ -26,6 +26,9 @@ jobs:
       - run: npm --prefix .opencode run test:dynamic-validation-contract
       - run: npm --prefix .opencode run test:dynamic-validation-core
       - run: npm --prefix .opencode run test:dynamic-validation-web
+      - run: npm --prefix .opencode run test:audit-todo
+      - run: npm --prefix .opencode run test:stage-delivery-contract
+      - run: npm --prefix .opencode run test:truth-validation-contract
       - run: npm --prefix .opencode run test:windows-control
       - name: Validate Windows control guard syntax
         if: runner.os == 'Windows'

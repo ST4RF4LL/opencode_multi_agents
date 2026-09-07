@@ -17,10 +17,7 @@
 reports/stage-deliveries/<audit_id>/<stage_id>.r<round>.json
 ```
 
-当前注册表状态是 `ACTIVE`，执行模式是 `ENFORCED`。新建工作台任务只有在八个环节
-的物化清单、文件 SHA-256、前驱绑定和验证证据全部通过后才能进入 `completed`。
-OpenCode 正常退出但交付不完整时，任务会标记为可恢复的 `interrupted`；历史无清单
-任务继续以“历史制品推断”只读展示，不被伪装成清单完成。
+当前注册表状态是 `ACTIVE`，执行模式是 `SHADOW`。新建任务通过本地 TODO 全部 DONE/GAP 与最终中文报告判定完成；八环节清单仅展示证据和缺口，缺少展示制品不触发重跑或阻塞收尾。历史 `ENFORCED` 任务仍通过独立兼容分支读取。
 
 ## 2. 八环节映射
 
@@ -32,7 +29,7 @@ OpenCode 正常退出但交付不完整时，任务会标记为可恢复的 `int
 | 多维漏洞审计 | P04 + P07 | Focus audit result 集合、Finding 集合、可选 SARIF 集合 | 所有 assignment × lens/discovery 完成，报告 reconcile，Finding v2 有效 |
 | 证据关联 | P05 + P06 + P07 | 初步攻击链、关联报告、follow-up 集合、结构覆盖 | 关联信封和结构 intake 通过；有阻断 gap 时不得完成 |
 | 发现裁决 | P08 | 裁决输入/输出、完整动态验证请求集合（可为零项） | 候选守恒、初步语义裁决完整、请求集合显式交付 |
-| 验证复核 | P08 | truth intake、quick result、正方/反方/Moderator、routing、CVSS、终态攻击链、三类覆盖门禁 | 快速动态全任务最多 120 秒；未确认项三方静态复核；只有 routing `TRUE_POSITIVE` 可进入 CVSS/攻击链 |
+| 验证复核 | P08 | truth intake、quick result、正方/反方/Moderator、routing、CVSS、终态攻击链、三类覆盖门禁 | 快速动态共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒；未确认项三方静态复核；只有 routing `TRUE_POSITIVE` 可进入 CVSS/攻击链 |
 | 报告封存 | P08 + 可选 P10 | 报告模型、中文 Markdown、可选优化摘要 | 模型绑定 routing/CVSS/攻击链，确定性报告逐字节验证，八环节物化验证通过 |
 
 工作台未单列 Coverage Plan，因此“威胁建模”聚合 P02 与 P03。初步攻击链属于证据
@@ -141,7 +138,7 @@ correlation --correlation_gap_round--> audit (round + 1)
 1. 创建任务时未 ENABLE 测试环境：quick result 对每项写 `SKIPPED`，所有初步支持项
    进入本地正方、反方、Moderator 静态复核。
 2. 创建任务时已 ENABLE 且私有上下文摘要有效：所有初步支持项进入同一个 loopback
-   快速批次，全任务硬上限 120 秒；runtime request 是可选结构化提示而非准入条件，
+   快速批次，共享环境准备最多 240 秒、每个疑似漏洞报告硬上限 180 秒；runtime request 是可选结构化提示而非准入条件，
    只有 `CONFIRMED` 可跳过三方静态复核。CONFIRMED 引用的脱敏证据文件由
    controller 逐文件计算 SHA-256 并写入 quick result，物化校验会再次核对。
 3. 完整动态验证始终为 `MANUAL_ONLY`。它只在用户到验证页逐次点击、再次提供授权

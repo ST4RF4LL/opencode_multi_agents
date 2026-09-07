@@ -10,8 +10,11 @@
 下文 P08/Agent/平台接入仍是待实现方案。实际 Windows 动态验证：
 `SKIPPED`，原因是本次没有提供或启用授权 Windows 测试环境，且尚未完成 Windows 原生验收和桌面 P08 接入。
 
-目标是让文本模型通过 UIA 完成“观察 → 应用输入 → 状态验证 → 清理”，形成可复核
-的漏洞补充证据。优先跑通一个标准 Windows 测试程序；视觉模型留作后续可选后端。
+产品级验证采用 [客户端与服务端联合动态验证策略](client-server-dynamic-validation-strategy.md)：
+按客户端→服务端、服务端/其他客户端→受害者客户端、客户端本地缺陷三个场景编排。
+适用时 API 优先确认问题或准备数据，再用 winappCli 确认客户端效果、尝试用户触发路径；
+本地输入问题可直接走客户端。问题成立、数据消费和用户入口分别记录。
+本文描述 Windows 控制接入细节；视觉与原生诊断均为后续独立能力。
 
 设计依据来自用户的[分享讨论](https://chatgpt.com/share/6a9b8bec-aad0-83e9-bada-eb745c4e3843)。
 实现参数以微软 [v0.6.0 Skill](https://github.com/microsoft/winappCli/blob/b7494ed3b324d6e378cb17b477f2b1a9729765d0/plugins/winapp/skills/winapp-ui-automation/SKILL.md)
@@ -25,21 +28,26 @@
 `validation-runner.mjs` 强制 loopback HTTP(S) URL、Web 漏洞 capability 和 Browser
 Session Broker。因此“安装 skill”不会让现有完整验证流程自动操作 EXE。
 
-建议保留 `dynamic-vulnerability-validator` 作为完整验证入口，通过目标类型选择
-后端，避免新增一套重复的 Finding/审计流程。现阶段不增加子 Agent：
+建议保留 `dynamic-vulnerability-validator` 作为完整验证入口，对同一 finding 生成
+有依赖的验证步骤，每步按已绑定目标选择后端。联合任务可以同时使用 API 和 Windows，
+不强制整次验证只选一个目标类型。现阶段不增加子 Agent：
 
 ```mermaid
 flowchart TD
-  R[密封 request + 当前用户授权] --> G[目标类型与环境门禁]
+  R[密封 request + 当前用户授权] --> G[影响方向 / 证明缺口 / 分步授权]
+  G --> H[API 验证或数据准备]
+  H --> HTTP[受限 loopback HTTP 执行器：待实现]
+  HTTP --> D[windows_local_app]
+  HTTP --> E[分步影响证据与触发路径]
   G --> W[web_localhost]
-  G --> D[windows_local_app]
+  G --> D
   W --> C[Chrome DevTools MCP]
   D --> B[本机 Windows 会话管理与权限校验]
   B --> M[Windows Control MCP]
   M --> U[固定版本 winapp CLI / UIA]
   U --> A[授权测试应用]
-  A --> E[动作轨迹 + 影响证据 + 清理结果]
-  E --> V[桌面结果确定性校验]
+  A --> E
+  E --> V[联合结果 / 各后端证据确定性校验]
   V --> S[Finding 补充制品]
 ```
 
@@ -48,8 +56,9 @@ flowchart TD
 最终 Agent 调 MCP；保留固定 Node 结果校验命令，不开放 `winapp *` 或任意 PowerShell。
 
 浏览器任务继续走 Chrome DevTools MCP。Electron/WebView2 首期只验证已绑定桌面
-窗口中的 UI 流程；需要 HTTP/XSS 证据时必须另走已授权 loopback Web 路由，不能把
-UIA 点击、显示字符串或截图当成浏览器执行证据。
+窗口中的 UI 流程。后续直接 API 请求由独立受限 HTTP 后端执行；涉及浏览器 XSS
+执行的证据仍走 Chrome DevTools MCP。不能把 UIA 点击、字符串显示、API 返回成功
+或投递完成当成客户端影响或浏览器执行证据。
 
 ## 3. 授权与目标契约
 
@@ -57,6 +66,9 @@ UIA 点击、显示字符串或截图当成浏览器执行证据。
 边界，增加本机 Windows 测试进程这一目标类型。通过正式配置和确定性校验落地，
 不能只修改 Agent prompt 绕过当前规则。网络目标仍仅允许 `localhost`、`127.0.0.1`、
 `[::1]`，不增加远程 Windows worker、UNC 路径、远程 staging 或真实账号。
+
+联合计划应同时引用独立 API target 与一个或多个 Windows target，每步明确目标、
+身份、作用和证据依赖；API 授权不隐含桌面控制授权。以下是 Windows 子目标要求。
 
 新增版本化、带类型判别的 `WINDOWS_LOCAL_APP_TARGET`；不要把 EXE 填进 `base_url`，
 也不要构造假的 localhost URL 去通过 Web 校验器。建议绑定以下字段：
@@ -108,6 +120,10 @@ MVP 不开放坐标点击、触摸、笔、录像、任意键盘输入、文件/
 
 ## 5. Agent 工作流与漏洞证据
 
+先按联合策略决定 API 是否能证明 claim、是否仅用于投递数据，以及客户端效果是否
+为完整结论的必需证据。以下步骤用于计划中的 Windows 阶段；API 已确认的服务端
+问题不会因为用户入口未找到而被撤销，客户端影响则不能由 API 投递成功替代。
+
 1. 校验 P08 INPUT 与 request/source/target 摘要，按目标类型加载操作 Skill 及未来
    `windows-runtime-validation` 证据 Skill。目录中的语言标签不能代替桌面能力声明。
 2. 控制器分配专用测试桌面租约，核实进程归属和版本；获取最小 baseline。
@@ -136,6 +152,8 @@ MVP 不开放坐标点击、触摸、笔、录像、任意键盘输入、文件/
 复用公共 result 的 request/finding/scope digest、四种 outcome、observations、
 counterevidence、residual_gaps 和 safety attestation，新增桌面扩展：
 
+- 联合计划的 `impact_directions`、`validation_strategy`、`targets`、`steps`，以及
+  分开的 `claim_verification`、`delivery_verification`、`user_trigger_verification`。
 - `windows_runtime_extension_schema_version`、`environment_binding_digest`。
 - `desktop_backend`：winapp/UIA、实际版本、程序摘要、适配器版本、租约/session ID。
 - `action_trace`：递增序号、动作 ID、目标绑定、selector、前后状态证据引用、时间、
@@ -160,7 +178,7 @@ counterevidence、residual_gaps 和 safety attestation，新增桌面扩展：
 | P08 `stage-agent-contracts.json` 及校验代码 | 版本化目标联合类型；旧 Web INPUT/OUTPUT 保持兼容 |
 | 漏洞 capability registry（新增） | 按 `target_kind + vulnerability_type_id + proof_method` 白名单路由 |
 
-`quick-dynamic-validator` 的 120 秒 Web 快验本期不扩展桌面，避免审计 opt-in 意外
+`quick-dynamic-validator` 的 共享环境准备 240 秒、每报告 180 秒的 Web 快验本期不扩展桌面，避免审计 opt-in 意外
 获得整机桌面控制能力。完整桌面验证仍是用户显式发起的旁路流程。
 
 ## 7. 验收顺序

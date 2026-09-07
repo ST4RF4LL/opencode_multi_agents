@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { aiRequired, validateAiRouting } from "./ai-coverage-routing.mjs";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { DOMAIN_AGENTS, activeDomains, entryAppliesToDomain } from "./coverage-v2-common.mjs";
@@ -158,16 +159,18 @@ async function main() {
   const scope = JSON.parse(await readFile(resolve(snapshot.scope.path), "utf8"));
   const functionManifests = await Promise.all((snapshot.functions ?? []).map(async item => JSON.parse(await readFile(resolve(item.path), "utf8"))));
   const catalog = JSON.parse(await readFile(resolve(snapshot.catalog.path), "utf8"));
+  for (const message of validateAiRouting(scope)) issues.push({ code: "AI_ROUTING_INVALID", message });
+  for (const file_id of scope.ai_routing?.unknown_file_ids ?? []) issues.push({ code: "AI_APPLICABILITY_UNKNOWN", file_id });
   const expectedPrimary = new Set();
   const activeCatalogDomains = new Set(activeDomains(scope));
   for (const file of scope.files ?? []) {
     if (!file.review_required) continue;
     expectedPrimary.add(`${file.owner_agent}|base|file|${file.file_id}`);
-    expectedPrimary.add(`ai-security-auditor|ai|file|${file.file_id}`);
+    if (aiRequired(scope, file)) expectedPrimary.add(`ai-security-auditor|ai|file|${file.file_id}`);
   }
   for (const fn of functionManifests.flatMap(manifest => manifest.functions ?? [])) {
     expectedPrimary.add(`${fn.owner_agent}|base|function|${fn.function_id}`);
-    expectedPrimary.add(`ai-security-auditor|ai|function|${fn.function_id}`);
+    if (aiRequired(scope, fn)) expectedPrimary.add(`ai-security-auditor|ai|function|${fn.function_id}`);
   }
   for (const entry of catalog.entries ?? []) {
     for (const domain of [...activeCatalogDomains].filter(value => entryAppliesToDomain(entry, value, catalog))) {

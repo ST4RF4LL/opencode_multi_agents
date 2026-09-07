@@ -25,7 +25,7 @@
     "chrome-devtools": {
       "status": "enabled-local",
       "type": "external",
-      "purpose": "Visible isolated Chrome control for task-opted-in 120-second loopback quick confirmation and explicitly requested manual localhost Web-XSS full validation. Uses chrome-devtools-mcp@latest and is exposed only to the two dynamic validators."
+      "purpose": "Visible isolated Chrome control for task-opted-in 240-second shared-setup / 180-second per-finding loopback quick confirmation and explicitly requested manual localhost Web-XSS full validation. Uses chrome-devtools-mcp@latest and is exposed only to the two dynamic validators."
     },
     "windows-control": {
       "status": "experimental-disabled",

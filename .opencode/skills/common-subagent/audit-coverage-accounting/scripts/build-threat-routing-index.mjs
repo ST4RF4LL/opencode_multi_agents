@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { aiRequired } from "./ai-coverage-routing.mjs";
 
 import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
@@ -140,6 +141,7 @@ async function main() {
     file_id: file.file_id,
     path: file.path,
     owner_agent: file.owner_agent,
+    ai_review_required: aiRequired(scope, file),
     content_kind: file.content_kind,
     function_inventory: gapByPath.has(file.path)
       ? { state: "unavailable", ...gapByPath.get(file.path) }
@@ -153,7 +155,8 @@ async function main() {
     audit_id: args["audit-id"],
     scope_digest: scope.scope_digest,
     required_lenses: scope.policy?.lenses ?? [],
-    coverage_domains: ["base", "ai"],
+    coverage_domains: ["base", ...(routes.some(route => route.ai_review_required) ? ["ai"] : [])],
+    ai_routing: scope.ai_routing ? { policy: scope.ai_routing.policy, routing_digest: scope.ai_routing.routing_digest, required_file_ids: scope.ai_routing.required_file_ids, excluded_file_ids: scope.ai_routing.excluded_file_ids, unknown_file_ids: scope.ai_routing.unknown_file_ids, sample_file_ids: scope.ai_routing.sample_file_ids } : null,
     complete: partialFunctionGaps.length === 0,
     partial: partialFunctionGaps.length > 0,
     gaps: partialFunctionGaps,

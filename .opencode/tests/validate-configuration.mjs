@@ -308,7 +308,9 @@ async function main() {
   assert(!Object.hasOwn(artifactPolicy.reports, "third_party_review"), "legacy external whole-report review policy must be removed");
   assert(truthValidationPolicy?.path_templates?.length === 6
     && truthValidationPolicy.path_templates.every(path => path.startsWith("reports/validation/"))
-    && truthValidationPolicy.required_policy?.quick_dynamic_deadline_seconds === 120
+    && truthValidationPolicy.required_policy?.quick_dynamic_deadline_seconds === 180
+    && truthValidationPolicy.required_policy?.quick_dynamic_setup_seconds === 240
+    && truthValidationPolicy.required_policy?.quick_dynamic_environment_reuse === "AUDIT_ROUND"
     && truthValidationPolicy.required_policy?.quick_dynamic_target_scope === "LOOPBACK_ONLY"
     && truthValidationPolicy.required_policy?.static_review === "AFFIRMATIVE_NEGATIVE_MODERATOR"
     && truthValidationPolicy.required_policy?.full_dynamic_trigger === "MANUAL_ONLY",
@@ -335,14 +337,15 @@ async function main() {
     assert(await exists(join(OPENCODE, "skills/common-subagent/audit-artifact-management", file)), `workbench stage delivery asset is missing: ${file}`);
   }
   assert(stageDeliveryRegistry.lifecycle?.state === "ACTIVE"
-    && stageDeliveryRegistry.lifecycle?.enforcement === "ENFORCED"
+    && stageDeliveryRegistry.lifecycle?.enforcement === "SHADOW"
     && stageDeliveryRegistry.stages?.length === 8
     && validateStageDeliveryRegistry(stageDeliveryRegistry, stageContractRegistry).length === 0,
-  "eight-stage delivery registry must be active, enforced, and valid");
+  "eight-stage evidence view registry must be active, shadow, and valid");
   for (const script of [
     "truth-validation-contract.mjs",
     "build-truth-validation-intake.mjs",
     "run-quick-dynamic-validation.mjs",
+    "quick-dynamic-session.mjs",
     "build-validation-routing.mjs",
     "seal-truth-validation-artifact.mjs",
     "validate-truth-validation.mjs",
@@ -406,8 +409,8 @@ async function main() {
   assert(sameSet(mcpMap.agents["quick-dynamic-validator"], ["chrome-devtools_*"]), "quick dynamic validator must receive only Chrome DevTools MCP tools");
   assert(/^\s*"chrome-devtools_\*": allow\s*$/m.test(dynamicValidatorText), "dynamic validator must allow Chrome DevTools MCP tools");
   assert(/^\s*"chrome-devtools_\*": allow\s*$/m.test(quickValidatorText)
-    && quickValidatorText.includes("120 秒") && /loopback/i.test(quickValidatorText),
-  "quick dynamic validator must enforce Chrome-only loopback execution within 120 seconds");
+    && quickValidatorText.includes("180 秒") && quickValidatorText.includes("240 秒") && /loopback/i.test(quickValidatorText),
+  "quick dynamic validator must enforce Chrome-only loopback execution with 240-second shared setup and 180 seconds per finding");
   assert(dynamicValidatorText.includes("DOM_PROBE_ONLY") && dynamicValidatorText.includes("STORED_CROSS_USER"), "dynamic validator must enforce XSS evidence levels");
   assert(rootAgentsText.includes("Never reset browser state by killing Chrome")
     && rootAgentsText.includes("stored XSS")
@@ -478,7 +481,7 @@ async function main() {
   assert(artifactPolicy.reports.vulnerability_mining.required_for_agents.includes("ai-security-auditor"), "AI auditor report is not mandatory");
   assert(artifactPolicy.work.required_recon_files.includes("ai-surfaces.json"), "Recon policy does not require ai-surfaces.json");
 
-  process.stdout.write(`${JSON.stringify({ complete: true, agents: roleAgents.length, collections: actualCollections.length, skills: skillCount, semantic_agents: ["security-threat-modeler", "security-attack-chain-hunter"], semantic_verifier: true, truth_validation: { quick_dynamic_deadline_seconds: 120, quick_dynamic_scope: "LOOPBACK_ONLY", static_roles: ["AFFIRMATIVE", "NEGATIVE", "MODERATOR"], full_dynamic_trigger: "MANUAL_ONLY" }, stage_delivery: { stages: 8, state: "ACTIVE", enforcement: "ENFORCED" }, catalog_entries: catalog.entries.length, ai_catalog_entries: aiEntries.length, owasp_ai_agent_controls: requiredAiAgentControls, catalog_dimensions: [...catalogDimensions].sort(), ai_catalog_dimensions: [...aiDimensions].sort() })}\n`);
+  process.stdout.write(`${JSON.stringify({ complete: true, agents: roleAgents.length, collections: actualCollections.length, skills: skillCount, semantic_agents: ["security-threat-modeler", "security-attack-chain-hunter"], semantic_verifier: true, truth_validation: { quick_dynamic_deadline_seconds: 180, quick_dynamic_setup_seconds: 240, quick_dynamic_scope: "LOOPBACK_ONLY", static_roles: ["AFFIRMATIVE", "NEGATIVE", "MODERATOR"], full_dynamic_trigger: "MANUAL_ONLY" }, stage_delivery: { stages: 8, state: "ACTIVE", enforcement: "SHADOW" }, catalog_entries: catalog.entries.length, ai_catalog_entries: aiEntries.length, owasp_ai_agent_controls: requiredAiAgentControls, catalog_dimensions: [...catalogDimensions].sort(), ai_catalog_dimensions: [...aiDimensions].sort() })}\n`);
 }
 
 main().catch(error => {

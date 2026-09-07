@@ -472,13 +472,13 @@
         "required_artifact_types": ["truth-validation-intake", "external-runtime-validation-request-set"],
         "optional_artifact_types": ["private-test-environment-context"],
         "required_payload_fields": ["explicit_task_opt_in", "deadline_seconds", "target_scope", "eligible_finding_ids"],
-        "optional_payload_fields": ["setup_deadline_seconds", "environment_reuse"]
+        "optional_payload_fields": []
       },
       "output": {
         "required_artifact_types": ["quick-dynamic-result-set"],
         "optional_artifact_types": [],
         "required_payload_fields": ["deadline_seconds", "elapsed_ms", "confirmed_ids", "not_confirmed_ids", "blocked_ids", "timed_out_ids", "gaps"],
-        "optional_payload_fields": ["environment_setup", "skipped_ids"]
+        "optional_payload_fields": []
       }
     },
     {

@@ -1361,14 +1361,15 @@ if (mode === "run") {
     assert.match(monitoredPrompt, /唯一的持久交付根目录/);
     assert.equal(monitoredPrompt.includes(reportsRoot), true);
     assert.equal(monitoredPrompt.includes(join(reportsRoot, "final", `security-audit-report.${created.id}.md`)), true);
-    assert.match(monitoredPrompt, /120 秒快速动态确认/);
+    assert.match(monitoredPrompt, /每报告 180 秒快速动态确认/);
     assert.match(monitoredPrompt, /完整动态验证仍只允许用户在工作台手动点击/);
     assert.match(monitoredPrompt, /不得调用 question 工具/);
     assert.match(monitoredPrompt, /additional-instructions\.txt/);
     assert.match(monitoredPrompt, /test-environment\.txt/);
     assert.equal(monitoredPrompt.includes("context-attacker-secret"), false);
     assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_ENABLED, "true");
-    assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS, "120");
+    assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS, "180");
+    assert.equal(spawnCall.options.env.AUDIT_QUICK_DYNAMIC_SETUP_SECONDS, "240");
     assert.equal(spawnCall.options.env.AUDIT_FULL_DYNAMIC_TRIGGER, "MANUAL_ONLY");
     assert.equal(spawnCall.options.env.http_proxy, "http://proxy-fixture.test:8080");
     assert.equal(spawnCall.options.env.HTTPS_PROXY, "http://secure-proxy-fixture.test:8443");
@@ -1818,7 +1819,7 @@ if (mode === "run") {
     assert.match(indexHtml, /name="test_environment_context"/);
     assert.match(indexHtml, /未启用或未填写时，主审计不会启动浏览器/);
     assert.match(indexHtml, /完整动态验证资格不受此开关限制/);
-    assert.match(indexHtml, /全任务最多 120 秒/);
+    assert.match(indexHtml, /共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒/);
     assert.match(indexHtml, /可在验证页补录环境并逐次授权/);
     assert.match(indexHtml, /id="export-selected-bruno"/);
     assert.match(indexHtml, /导出所选 OpenCollection/);

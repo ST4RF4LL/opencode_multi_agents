@@ -112,7 +112,7 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/initiali
 
 Repeat `--functions` for every manifest. The initializer validates the sealed threat/Focus artifacts, selects the exact primary assignment for the agent and Focus Area, sets `discovery_track=coverage`, and creates every required row as `GAP`. Auditors update only entity rows with evidence; do not rebuild or shorten arrays, hand-write coverage cells, or supply coverage counts.
 
-For `ai-security-auditor`, also pass `--ai-surfaces tmp/<audit-id>/recon/ai-surfaces.json`. Each initializer call selects one `domain=ai` Focus Area assignment; their union must equal every reviewable file, every inventoried function, and every AI catalog item.
+For `ai-security-auditor`, also pass `--ai-surfaces tmp/<audit-id>/recon/ai-surfaces.json`. Each initializer call selects one `domain=ai` Focus Area assignment; their union must equal scope.ai_routing.required_file_ids, their functions, and active AI catalog items.
 
 For a later gap round, either repeat `--file-id`, `--function-id`, and `--catalog-id`, or pass `--assignment <json>`. The subset must remain inside the original Focus Area assignment. Without a follow-up assignment, the initializer uses the Focus Area's complete primary assignment. The structural verifier retains earlier-round records for entity/lens keys not present in a later subset report.
 
@@ -358,3 +358,9 @@ recoverable and retain the intermediate reports for the next orchestrator run.
 ## Claim boundary
 
 The structural gate proves base-owner plus AI-overlay accounting over frozen files, source-defined functions, executable template units recognized by configured AST/CPG extractors, catalog domains, and deterministic source/spec/config external-interface anchors. The local task list additionally proves that every scheduled `Focus Area × domain` packet has a completed report or an explicit GAP; it does not claim that every atomic check was independently verified. These are coverage-completion claims, not proof that no vulnerability exists. The semantic gate proves terminal entry-point threat decisions, Focus Area/lens/track execution, and a system pass over declared boundaries/assets. Unsupported potential source, generated code absent from the repository, hosted model/tool behavior, and runtime-only controls remain gaps.
+
+## AI 适用性与工作包执行
+
+Recon 在 scope 枚举后、下游快照前，读取全仓代码/依赖/AI 表面，写 `ai-applicability-decisions.json`（audit_id、scope_digest、decisions）。每文件一项：file_id、state（RELEVANT/DEPENDENCY/NOT_APPLICABLE/UNKNOWN）、reason、evidence_refs（源码相对路径，可带行号）、depends_on_file_ids。然后运行 `scripts/build-ai-coverage-routing.mjs --scope <scope.json> --decisions <decisions.json>`。实际组件及依赖双向闭包、未知项、负面样本进入 AI 深审；未知项保留 GAP，不能用未发现关键词当作不适用证据。
+
+同一工作包会话完成全部三视角，逐视角生成独立报告并使用相同真实 session ID。handoff 的每个 DONE 项通过 reports 数组绑定三个 lens/path/sha256；不再只给单个 report_path。

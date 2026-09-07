@@ -6,6 +6,8 @@
 stdio MCP 与模拟用例，见 [控制层第一阶段](winapp-control-poc.md)。尚未增加 Web 表单、
 API 或 Windows Runner。动态验证为 `SKIPPED`，没有启动浏览器、EXE 或目标环境。
 Agent 权限与证据规则以 [Agent 接入方案](windows-dynamic-validation-agent-design.md) 为准。
+产品级场景、API 优先顺序与分步结果采用
+[客户端与服务端联合动态验证策略](client-server-dynamic-validation-strategy.md)，以下为接入细节。
 
 建议首个可用版本把工作台、OpenCode、Windows 控制器和目标测试程序部署在同一台
 Windows 原生宿主机。Web 页面负责提交任务、展示状态和证据，真正的 UIA 操作由
@@ -20,7 +22,10 @@ Linux 原生平台继续运行已有 Web 能力，显示“当前主机不支持
 ```mermaid
 flowchart TD
   UI[工作台：目标类型 / 授权 / 证据] --> API[现有 validations API]
-  API --> P[版本化目标策略与能力路由]
+  API --> P[联合目标 / 影响方向 / 有依赖的步骤计划]
+  P --> AR[受限 API Runner：待实现]
+  AR --> DR
+  AR --> LOG
   P --> WR[现有 Web Runner / Browser Broker]
   P --> DR[Windows Runner / Desktop Broker]
   DR --> OC[同机 OpenCode 动态验证 Agent]
@@ -41,8 +46,9 @@ validateResult / releaseSession`，不要在每个函数中不断增加 Windows 
 
 ## 3. 工作台使用流程
 
-1. 在“完整动态验证”选择已密封请求，展示可用目标类型：`Web（localhost）` 或
-   `Windows 本机程序`。不支持当前漏洞证明方式时显示原因，禁用启动。
+1. 在“完整动态验证”选择已密封请求，按影响方向生成 API 优先或客户端优先的计划。
+   一个联合任务可同时配置 localhost API 服务和 Windows 客户端；浏览器 Web 验证
+   保留独立后端。不支持的步骤显示缺口，不阻止其他独立且已授权的步骤。
 2. Windows 表单从本机管理员预登记的测试应用中选择，展示程序名称、版本/hash、
    专用测试实例和桌面就绪状态。前端不能提交任意可执行路径、启动参数或 shell。
 3. 用户选择已授权测试身份模式并填写必要的操作/清理说明，明确启用本次桌面验证。
@@ -52,8 +58,9 @@ validateResult / releaseSession`，不要在每个函数中不断增加 Windows 
 5. 详情页展示控件动作时间线、脱敏前后状态、必要截图、证据等级、缺口和清理残留。
    保留“取消”按钮；取消新动作后仍须走有界清理，不等同于立即强杀目标进程。
 
-表单中的 Windows 信息替代 Web URL/浏览器模式字段；loopback 依赖只在应用确实
-需要本机服务时填写。先只支持预先登录的专用测试会话或无需登录的 fixture。
+联合表单将 API 服务和 Windows 实例并列配置，而不是用 EXE 替换 URL。每种后端
+独立授权，客户端可区分发送方与受害者身份；API-only 任务无需 Windows 桌面。
+浏览器模式仅用于实际浏览器步骤。Windows 先只支持预登录的专用测试会话或匿名 fixture。
 未来有秘密输入 broker 后再支持平台代登录，禁止将密码写进 winapp argv。
 
 页面不提供任意桌面遥控、终端、鼠标坐标或键盘自由输入框。模型的行动由受管 MCP
@@ -63,7 +70,9 @@ validateResult / releaseSession`，不要在每个函数中不断增加 Windows 
 
 复用现有 `POST /api/v1/validations`、`POST /api/v1/validations/:id/actions`
 和 `GET /api/v1/validations/:id/events`，新增带类型判别的请求版本。
-以下是未来表单草案，尚不能发送给当前服务器：
+以下是单 Windows 子目标的早期表单草案，尚不能发送给当前服务器。产品联合任务
+需按联合策略另行定义包含 `targets`、`steps` 与分后端授权的版本化 schema；不能把
+这份单目标草案直接用于跨客户端/服务端任务：
 
 ```json
 {
@@ -89,7 +98,8 @@ app/version 指纹与执行时的文件摘要不符则拒绝，不自动接受�
 
 旧请求缺少 `target_kind` 时仅按既有 `web_localhost` 解释，继续使用原 URL 校验。
 不识别的 target kind、字段混用、未经授权的实例或不支持的 schema version 均拒绝。
-不能出现 Windows 请求失败后自动尝试 Web，或反过来的回退。
+不能在失败后擅自切换到未授权目标。API→Windows 的后续步骤应由最初已授权的联合
+计划和依赖关系明确安排；可选的用户入口探索失败不撤销已有 API 结论。
 
 建议新增只读能力接口 `GET /api/v1/desktop-capabilities`，返回平台支持、已注册应用
 的脱敏信息、可用 proof methods 和可读的不可用原因。普通健康检查只检查安装/配置；
@@ -145,7 +155,8 @@ target/result schema。详情模型按 `target_kind` 分派，旧 Web 数据保�
 - 环境卡：测试应用、版本/hash、实际 winapp 版本、会话模式、绑定摘要与运行状态。
 - 动作时间线：序号、操作含义、selector、前后状态、耗时、错误/警告和证据引用。
 - 证据面板：最小化 UIA 子树、控件/窗口截图、受限影响采集器产物。
-- 结论面板：自动化探针与漏洞确认分级、反证、残留缺口、清理结果和人工处置。
+- 结论面板：问题成立、数据投递/消费、用户触发路径分别展示；保留探针等级、反证、
+  残留缺口、分阶段清理结果和人工处置。API 投递成功不能显示为客户端漏洞确认。
 
 MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广播之前脱敏。
 当前日志中的通用字符串替换不能直接作为 Windows 截图/控件树脱敏实现。密码控件
@@ -155,8 +166,9 @@ MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广�
 
 新增的图片读取接口必须沿用仓库/任务作用域检查、限定 MIME 与大小、拒绝越界路径，
 只返回已验证的证据清单条目。UIA 字符串使用 textContent，下载文件使用受控文件名。
-不把桌面动作硬塞进 `HTTP_EXCHANGE_V2`，也不生成虚假的 HAR。真实 Web/network
-证据仍使用已有 Chrome 采集路径与 HTTP 契约；桌面导出为含摘要的脱敏证据包。
+不把桌面动作硬塞进 `HTTP_EXCHANGE_V2`，也不生成虚假的 HAR。Chrome 采集的 Web
+证据保留现有契约；直接 API 后端需独立且真实的来源标识和 HTTP 证据契约。联合导出
+以 proof ID、请求/动作 ID 和测试资源关联两路证据，不能伪造浏览器来源。
 
 ## 7. 具体接入位置
 
@@ -164,7 +176,8 @@ MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广�
 
 | 当前文件 | 后续接入 |
 | --- | --- |
-| `validation-runner.mjs` | 提取 backend adapter，按目标选择授权、prompt、会话与结果校验 |
+| `validation-runner.mjs` | 提取 backend adapter，并增加有依赖的联合步骤编排与结果汇总 |
+| API backend 与联合计划契约（新增） | 受限 HTTP 执行、独立来源证据、API/桌面目标引用、分步授权和清理 |
 | `dynamic-validation-core.mjs` | 保留 Web URL 和浏览器策略；桌面规则放新模块，避免放宽 loopback 函数 |
 | `web-validation-policy.mjs` | 保持 Web 职责；新增上层类型路由和 `windows-validation-policy.mjs` |
 | `windows-desktop-session-broker.mjs`（新增） | 桌面独占租约、任务窗口登记、取消/恢复 |
@@ -179,6 +192,9 @@ MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广�
 
 ## 8. 分阶段验收
 
+按补充场景，B/C 阶段先补 API 后端和联合目标/结果契约，再接 Agent 与平台调度。
+原生内存诊断独立设计，当前不执行故意崩溃或内存破坏测试。
+
 | 阶段 | 交付 | 通过条件 |
 | --- | --- | --- |
 | 已完成：Skill | 中文适配、许可证、来源摘要、集合和读取权限 | 静态一致性与引用核对；执行权限仍未开放 |
@@ -190,6 +206,10 @@ MCP 输出、stdout/stderr、OpenCode 工具事件与 SSE 必须在落盘和广�
 默认模拟回归覆盖：Windows/Linux 能力差异、未授权零进程启动、缺登录信息跳过、
 篡改 app/instance、未知目标类型、版本/schema 不兼容、窗口归属变化、双任务争抢
 桌面、重复提交、取消中清理、重启后的租约恢复、跨仓库读取与截图脱敏。
+
+联合模拟验收还需覆盖：API 确认但无客户端入口、API 投递成功但客户端无效果、
+缺少受害者身份、客户端本地输入无需 API、依赖数据在最后消费前不被清理，以及
+客户端阶段失败/取消后服务端数据仍需清理。以上均不能靠统一的“成功”标志代替。
 
 真实 E2E 仅在用户显式启用并提供授权 Windows fixture 后执行，动态测试不能成为
 默认 `npm test` 的隐式副作用。Windows/Linux 上完成相应宿主机回归；Linux 不尝试

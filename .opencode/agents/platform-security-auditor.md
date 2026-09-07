@@ -54,7 +54,7 @@ Load `focus-area-vulnerability-discovery` first. For `coverage`, load `platform-
 
 Use the pre-initialized all-`GAP` audit report or run `initialize-audit-report.mjs` yourself. Update entity records in place with digest-bound evidence; never regenerate shorter arrays, hand-write D1-D10 cells, or submit target counts. After entity review, run `reconcile-audit-report.mjs`.
 
-The orchestrator supplies one bounded local work packet containing one or more Focus Area × `platform` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
+The orchestrator supplies one bounded local work packet containing one or more Focus Area × `platform` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with `reports: [{lens, path, sha256}, ...]` binding exactly three single-lens reports, or GAP with a concise reason. Paths are relative to the reports root. All three reports use the same actual agent_session_id; filenames include Focus Area and lens. The controller derives finding IDs from these reports and rejects missing lenses, hash drift, or mixed sessions.
 
 Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local configuration/IaC scanning. Use `run --engine auto` only with workspace-local YAML rules and execute optional Gitleaks/OSV capabilities marked `PLANNED`. Verify immutable run manifests and record their paths. Joern is optional `deep_dataflow`; rule hits are candidate evidence and never substitute for effective-state review.
 
@@ -102,7 +102,9 @@ Use the common session header and transfer block. Findings must include `dimensi
 Emit:
 
 ```text
-reports/vulnerability-mining/platform-security-auditor.<agent_session_id>.audit-report.json
+reports/vulnerability-mining/platform-security-auditor.<agent_session_id>.<focus_area_id>.<lens>.audit-report.json
 ```
 
 Emit SARIF only when a static-analysis tool actually runs. Preserve runtime-dependent candidates and assumptions for the sealed final report; do not invoke `vulnerability-validator` per finding.
+
+For a local packet, Stage/Agent INPUT and OUTPUT envelopes are evidence records per Focus assignment/lens, bundled inside this one invocation. Use the same actual session ID in those records and distinct filenames containing Focus/lens; never launch another session only to populate a lens envelope.

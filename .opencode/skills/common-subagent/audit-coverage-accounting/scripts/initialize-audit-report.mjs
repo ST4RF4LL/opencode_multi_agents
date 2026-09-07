@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { aiRequired } from "./ai-coverage-routing.mjs";
 import { createHash } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -122,8 +123,8 @@ async function main() {
 
   const isAiOverlay = args.agent === AI_AGENT;
   const coverageDomain = isAiOverlay ? "ai" : "base";
-  const ownedFiles = scope.files.filter(file => file.review_required && (isAiOverlay || file.owner_agent === args.agent));
-  const ownedFunctions = functions.filter(fn => isAiOverlay || fn.owner_agent === args.agent);
+  const ownedFiles = scope.files.filter(file => file.review_required && (isAiOverlay ? aiRequired(scope, file) : file.owner_agent === args.agent));
+  const ownedFunctions = functions.filter(fn => isAiOverlay ? aiRequired(scope, fn) : fn.owner_agent === args.agent);
   const domain = [...DOMAIN_AGENT].find(([, agent]) => agent === args.agent)?.[0] ?? null;
   const domainCatalog = domain ? catalog.entries.filter(entry => entryAppliesToDomain(entry, domain, catalog)) : [];
   const focusAssignments = focusArea.assignments?.filter(item => item.agent_name === args.agent) ?? [];

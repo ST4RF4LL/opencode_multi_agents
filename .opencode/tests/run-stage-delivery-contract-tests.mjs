@@ -117,7 +117,7 @@ function completeManifest(stage, { activatedConditions = [], round = 1 } = {}) {
 assert.deepEqual(validateStageDeliveryRegistry(registry, stageAgentRegistry), []);
 assert.equal(registry.registry_digest, stageDeliveryRegistryDigest(registry));
 assert.equal(registry.lifecycle.state, "ACTIVE");
-assert.equal(registry.lifecycle.enforcement, "ENFORCED");
+assert.equal(registry.lifecycle.enforcement, "SHADOW");
 assert.deepEqual(registry.stages.map(stage => stage.stage_id), [
   "scope", "recon", "threat", "audit", "correlation", "adjudication", "validation", "report",
 ]);

@@ -54,6 +54,8 @@ export function validateFinalReportModel(model) {
     || !isObject(model.truth_validation.summary) || !sourceValid(model.truth_validation.source)) {
     errors.push("final-report-model-truth-validation-invalid");
   }
+  if (model.residual_gaps !== undefined && (!Array.isArray(model.residual_gaps) || model.residual_gaps.some(gap => !nonEmptyString(gap)))) errors.push("final-report-residual-gaps-invalid");
+  if (model.residual_gaps?.length && model.coverage?.coverage_status === "COMPLETE") errors.push("final-report-gaps-hidden-by-complete");
   if (model.report_kind === "FINAL" && model.coverage?.coverage_status !== "COMPLETE") errors.push("final-report-model-final-not-complete");
   if (model.report_kind === "POLICY_FINAL" && (model.coverage?.policy_satisfied !== true
     || !new Set(["FINALIZED_OBSERVED", "FINALIZED_RELEASE", "FINALIZED_COMPLETE"]).has(model.coverage?.seal_state))) {
@@ -302,6 +304,7 @@ export function renderFinalReport(model) {
           ? ["", "本报告满足配置的流程策略，但未验证检查仍是显式覆盖缺口，不能表述为完整覆盖。"]
       : []),
     "",
+    ...(model.residual_gaps?.length ? ["## 残余覆盖缺口", "", ...model.residual_gaps.map(gap => `- ${gap.replace(/[\r\n]+/g, " ")}`), ""] : []),
     "## 管理摘要",
     "",
     `本次审计确认 ${model.findings.length} 个 Finding；以下内容按 CVSS 基础分从高到低排列。每项首先给出源码文件和行号，再给出证据链、影响、利用前提与修复建议。`,

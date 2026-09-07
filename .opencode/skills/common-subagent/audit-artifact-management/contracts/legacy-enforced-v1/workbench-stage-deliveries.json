@@ -4,8 +4,8 @@
   "purpose": "固定工作台八个审计环节之间的输入、输出、内容契约、校验门禁和断点恢复锚点。",
   "lifecycle": {
     "state": "ACTIVE",
-    "enforcement": "SHADOW",
-    "compatibility": "新建任务以本地 TODO 全部 DONE/GAP 及最终中文报告为完成条件；八阶段仅投影证据与缺口，不触发重跑或阻塞收尾。历史 ENFORCED 任务保留版本化兼容读取。"
+    "enforcement": "ENFORCED",
+    "compatibility": "作为 P00-P10 Stage/Agent 契约之上的强制聚合交付层；历史无清单任务只读兼容展示，新建工作台任务必须通过八环节物化校验。"
   },
   "manifest": {
     "schema_version": 1,
@@ -950,7 +950,7 @@
       "template_id": "WB07_VALIDATION_GATES",
       "order": 7,
       "label": "验证复核",
-      "objective": "先执行任务级共享环境准备 240 秒、逐报告 180 秒快速动态分流，再由本地 Affirmative、Negative、Moderator 挑战所有未确认 finding；基于终局 routing 生成 CVSS 与攻击链，并通过 Stage handoff、结构覆盖和语义覆盖门禁。",
+      "objective": "先执行任务级 120 秒快速动态分流，再由本地 Affirmative、Negative、Moderator 挑战所有未确认 finding；基于终局 routing 生成 CVSS 与攻击链，并通过 Stage handoff、结构覆盖和语义覆盖门禁。",
       "internal_stage_ids": ["P08_FINALIZE"],
       "stage_agent_contract_ids": [
         "P08_FINALIZE.vulnerability-validator",
@@ -1257,7 +1257,7 @@
         "resume_rule": "从 intake 起按 quick、Affirmative、Negative、Moderator、routing 顺序复用摘要有效的制品，从最早缺失项恢复；routing 变化时重建 CVSS、攻击链与覆盖门禁。"
       },
       "integration_notes": [
-        "任务未启用测试环境时 quick result 必须显式 SKIPPED，所有初步支持项进入静态三方；启用时共享环境准备硬上限为 240 秒，之后每个疑似漏洞报告独立硬上限为 180 秒。",
+        "任务未启用测试环境时 quick result 必须显式 SKIPPED，所有初步支持项进入静态三方；启用时整个 quick 批次硬上限为 120 秒。",
         "完整动态验证是工作台人工 sidecar，不属于八环节完成门禁，也不得自动改写 routing。"
       ]
     },
@@ -1482,5 +1482,5 @@
       "description": "关联阶段存在 blocking gap、矛盾或定向 follow-up packet 时，回到多维审计执行增量补审。"
     }
   ],
-  "registry_digest": "82b45e42246e3034fee294afa9c46e8e3eab53118027e937a9a316fbad01e733"
+  "registry_digest": "e6d3b5217b18fd67692c1ddd0d840d4651a2a019a28d3c5e1ea08a9da412209a"
 }

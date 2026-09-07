@@ -110,7 +110,7 @@
     "vulnerability-validator": {
       "mode": "subagent",
       "stage_contract_ids": ["P08_FINALIZE.vulnerability-validator"],
-      "responsibility": "Before final-report synthesis, run the task-gated 120-second loopback quick-dynamic router once, send every unconfirmed supported finding through local Affirmative/Negative/Moderator static challenge, and persist a complete digest-bound routing manifest.",
+      "responsibility": "Before final-report synthesis, run the task-gated 240-second shared-setup / 180-second per-finding loopback quick-dynamic router once, send every unconfirmed supported finding through local Affirmative/Negative/Moderator static challenge, and persist a complete digest-bound routing manifest.",
       "inputs": ["audit_id", "finding adjudication input and result", "runtime-validation request set", "task-level quick-dynamic gate"],
       "outputs": ["truth-validation intake", "quick-dynamic result set", "Affirmative review", "Negative review", "Moderator verdicts", "validation routing manifest"],
       "artifacts": ["reports/validation/truth-validation-intake.<audit-id>.r<round>.json", "reports/validation/quick/<audit-id>.r<round>.json", "reports/validation/static/<audit-id>/{affirmative,negative,moderator}.r<round>.json", "reports/validation/validation-routing.<audit-id>.r<round>.json"],
@@ -119,7 +119,7 @@
     "quick-dynamic-validator": {
       "mode": "subagent",
       "stage_contract_ids": ["P08_FINALIZE.quick-dynamic-validator"],
-      "responsibility": "Within one controller-enforced 120-second budget, attempt non-destructive confirmation of eligible findings only against an explicitly authorized loopback test environment through Chrome DevTools MCP.",
+      "responsibility": "Within controller-enforced budgets of 240 seconds for shared environment setup and 180 seconds per finding, attempt non-destructive confirmation of eligible findings only against an explicitly authorized loopback test environment through Chrome DevTools MCP.",
       "inputs": ["truth-validation intake", "digest-verified private test-environment context", "runtime-validation request set", "hard deadline"],
       "outputs": ["sanitized quick-dynamic result set with complete finding accounting"],
       "artifacts": ["reports/validation/quick/<audit-id>.r<round>.json"],

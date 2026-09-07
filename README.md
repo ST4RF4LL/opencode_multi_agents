@@ -18,7 +18,7 @@
 - `security-evidence-correlator`: 归一化覆盖、合并跨视角证据、去重、暴露矛盾/GAP 并生成补充任务。
 - `security-attack-chain-hunter`: 在分区审计后执行独立系统级发现，覆盖全部 Focus Area、信任边界和资产。
 - `vulnerability-validator`: 在终稿前编排 finding 真实性路由；按任务开关生成快速动态结果，并把所有未确认项依次交给本地正方、反方和 Moderator。
-- `quick-dynamic-validator`: 仅在创建任务时显式 ENABLE 测试环境后，使用 Chrome DevTools MCP 对授权 loopback 环境执行一次、全任务最多 120 秒的非破坏性快速确认。
+- `quick-dynamic-validator`: 仅在创建任务时显式 ENABLE 测试环境后，使用 Chrome DevTools MCP 对授权 loopback 环境执行一次、共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒的非破坏性快速确认。
 - `vulnerability-affirmative` / `vulnerability-negative` / `vulnerability-moderator`: 使用三个独立 OpenCode session 对未确认 finding 做正方举证、反方挑战和终局静态裁定。
 - `dynamic-vulnerability-validator`: 仅在用户从工作台手动触发时，使用 Chrome DevTools MCP 对 localhost 上目录中标记为 `applies_to: web` 的漏洞做完整动态验证；XSS 使用专用强校验，其他 Web 类型使用通用非破坏性契约，结果不自动改写主链。
 - `security-skill-optimizer`: 根据摘要绑定的 routing 与 Moderator 证据优化审计 skill、Joern 规则、漏洞案例和误报案例。
@@ -117,7 +117,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - 与 JSON 精确同源的覆盖摘要：`reports/coverage/coverage-summary.<audit-id>.md`
 - 语义覆盖验收结果：`reports/coverage/semantic-coverage-verification.<audit-id>.json`
 - 真实性复核 intake：`reports/validation/truth-validation-intake.<audit-id>.r<round>.json`
-- 120 秒快速动态结果：`reports/validation/quick/<audit-id>.r<round>.json`
+- 共享环境准备 240 秒、每报告 180 秒快速动态结果：`reports/validation/quick/<audit-id>.r<round>.json`
 - 本地三方静态复核：`reports/validation/static/<audit-id>/{affirmative,negative,moderator}.r<round>.json`
 - 终局 finding 路由：`reports/validation/validation-routing.<audit-id>.r<round>.json`
 - 人工完整 localhost 动态验证绑定/结果：`reports/validation-handoff/runtime/<audit-id>/<finding-id>.{target,result}.json`
@@ -129,7 +129,7 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 
 一个 agent session 对应一个 SARIF；一个漏洞挖掘 session 对应一个 JSON。多个静态分析工具在同一 session 内运行时，应合并到同一个 SARIF 的多个 `runs`。
 
-Orchestrator 先完成初步语义裁决，再调用 `vulnerability-validator`。任务未 ENABLE 测试环境时，quick result 显式写 `SKIPPED`，所有初步支持项进入本地三方；已 ENABLE 时只执行一次、全任务最多 120 秒的 loopback 快速确认，只有 `CONFIRMED` 可跳过静态三方。Moderator routing 是最终真实性来源，只有 `TRUE_POSITIVE` 才进入 CVSS、终态攻击链和最终中文报告。完整动态验证始终由用户在工作台手动触发，并作为 sidecar 保存。八个阶段清单全部物化验证后任务才算完成。流程**不会自动删除 `tmp/`**；`tmp/<audit-id>/` 的清理由人工处理。
+Orchestrator 先完成初步语义裁决，再调用 `vulnerability-validator`。任务未 ENABLE 测试环境时，quick result 显式写 `SKIPPED`，所有初步支持项进入本地三方；已 ENABLE 时只执行一次、共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒的 loopback 快速确认，只有 `CONFIRMED` 可跳过静态三方。Moderator routing 是最终真实性来源，只有 `TRUE_POSITIVE` 才进入 CVSS、终态攻击链和最终中文报告。完整动态验证始终由用户在工作台手动触发，并作为 sidecar 保存。新建任务以本地 TODO 全部 DONE/GAP 且最终中文报告存在作为完成条件；八阶段仅作证据展示，缺失项进入报告缺口。流程**不会自动删除 `tmp/`**；`tmp/<audit-id>/` 的清理由人工处理。
 
 ## Usage
 
@@ -138,7 +138,7 @@ Orchestrator 先完成初步语义裁决，再调用 `vulnerability-validator`�
 推荐入口：
 
 ```text
-@security-audit-orchestrator 对当前项目做一次 Tri-Lens 安全审计，完成八环节固定交付；初步 finding 先按任务开关执行 120 秒快速动态分流，再由本地正方、反方、Moderator 复核未确认项，只把终局 TRUE_POSITIVE 写入最终中文报告。
+@security-audit-orchestrator 对当前项目做一次 Tri-Lens 安全审计，完成八环节固定交付；初步 finding 先按任务开关执行 共享环境准备 240 秒、每报告 180 秒快速动态分流，再由本地正方、反方、Moderator 复核未确认项，只把终局 TRUE_POSITIVE 写入最终中文报告。
 ```
 
 也可以分阶段调用：
@@ -187,7 +187,7 @@ npm --prefix .opencode run start:audit-workbench:runner -- \
 
 如果使用基础脚本手工追加参数，npm 的参数分隔符 `--` 不能省略：`npm ... run start:audit-workbench -- --enable-runner`；写成 `npm ... run start:audit-workbench --enable-runner` 会被 npm 当成自身配置并吞掉。
 
-项目登记接口接收操作员明确填写的绝对目录并在服务端规范化、校验和持久化；后续创建审计时，浏览器只提交登记后的项目 ID、audit ID 和 Git ref，不能临时替换目录或拼接 shell 命令。创建界面还提供两个独立 ENABLE：“测试目标补充说明”会把自由文本追加为本任务要求与侧重点；“测试环境信息”保存 URL、专用测试账号等上下文，并授权主链执行一次、全任务最多 120 秒的 loopback 快速动态确认。未启用后者时主审计不会启动浏览器，所有初步支持项直接进入本地三方静态复核；这不影响之后在“完整动态验证”页面补录环境、账号和操作说明并逐次授权。两份原文只保存为任务状态目录下的 `0600` 私密文件，API 仅返回开关与长度；prompt 和断点恢复按文件路径、SHA-256 绑定，不在任务 JSON、事件或日志中复制原文。服务端不会自动 checkout，默认拒绝脏工作树和未位于目标 ref 的项目。被测仓库只作为只读源码根使用，Runner 不再把它作为 OpenCode 当前目录，也不得在其中创建 `reports/`、`tmp/` 或运行缓存。每个任务在本项目 `workspace/audit-runs/<audit-id>/` 下获得执行目录，制品和临时目录分别落到本项目 `reports/repositories/<repository-id>/` 与 `tmp/repositories/<repository-id>/`；这些目录均已被 Git 忽略。运行日志、状态和有序事件写入服务端管理的 `reports/platform/audit-runs/`，SSE 用于实时刷新。tmux/psmux 模式为每个审计使用独立 `-L` namespace，并把实际的 `opencode run --format json` 固定到 `audit:tui`；工作台通过只读输出中继消费同一进程的 JSONL 和退出状态，不再启动 `opencode serve` 或调用本机 HTTP API。暂停、恢复和取消只作用于工作台持有的输出中继和该审计的精确 multiplexer/OpenCode run，不扫描或终止其他会话。终端复用器不可用时静态审计仍直接运行同一组 `opencode run` 参数，只是没有实时窗口。
+项目登记接口接收操作员明确填写的绝对目录并在服务端规范化、校验和持久化；后续创建审计时，浏览器只提交登记后的项目 ID、audit ID 和 Git ref，不能临时替换目录或拼接 shell 命令。创建界面还提供两个独立 ENABLE：“测试目标补充说明”会把自由文本追加为本任务要求与侧重点；“测试环境信息”保存 URL、专用测试账号等上下文，并授权主链执行一次、共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒的 loopback 快速动态确认。未启用后者时主审计不会启动浏览器，所有初步支持项直接进入本地三方静态复核；这不影响之后在“完整动态验证”页面补录环境、账号和操作说明并逐次授权。两份原文只保存为任务状态目录下的 `0600` 私密文件，API 仅返回开关与长度；prompt 和断点恢复按文件路径、SHA-256 绑定，不在任务 JSON、事件或日志中复制原文。服务端不会自动 checkout，默认拒绝脏工作树和未位于目标 ref 的项目。被测仓库只作为只读源码根使用，Runner 不再把它作为 OpenCode 当前目录，也不得在其中创建 `reports/`、`tmp/` 或运行缓存。每个任务在本项目 `workspace/audit-runs/<audit-id>/` 下获得执行目录，制品和临时目录分别落到本项目 `reports/repositories/<repository-id>/` 与 `tmp/repositories/<repository-id>/`；这些目录均已被 Git 忽略。运行日志、状态和有序事件写入服务端管理的 `reports/platform/audit-runs/`，SSE 用于实时刷新。tmux/psmux 模式为每个审计使用独立 `-L` namespace，并把实际的 `opencode run --format json` 固定到 `audit:tui`；工作台通过只读输出中继消费同一进程的 JSONL 和退出状态，不再启动 `opencode serve` 或调用本机 HTTP API。暂停、恢复和取消只作用于工作台持有的输出中继和该审计的精确 multiplexer/OpenCode run，不扫描或终止其他会话。终端复用器不可用时静态审计仍直接运行同一组 `opencode run` 参数，只是没有实时窗口。
 
 Runner 异常退出、工作台重启或任务被取消后，任务会保留原 `audit_id`、执行工作区、落盘制品、事件历史和 OpenCode provider session id。任务详情中的“断点恢复”会先确认源码仍位于原提交，并对创建时要求干净的工作树继续执行脏状态门禁；随后只关闭该任务自己的旧 tmux socket，优先用 `--session` 续接原 OpenCode 会话，再要求 Agent 校验已有制品并从最早未完成阶段继续。旧版本没有记录 session id 的任务仍可基于同一工作区和制品恢复。每次恢复都会记录恢复次数、时间、模式和有序事件；“新建重试”则仍会创建全新的 audit id，两者语义不同。
 
@@ -242,4 +242,4 @@ Joern 不再注册为 MCP。函数清单构建器和深度审计命令可直接�
 - `external_directory: allow`, `webfetch: allow`, `websearch: allow` — 允许外部目录访问和网络操作。
 - `skill: "*": allow` — 所有 agent 可使用任意发现的 skill，skill 通过目录约定自动映射。
 - `pwd`、`ls`、`find`、`rg`、`git status/log/grep/ls-files`、`mkdir` 等既有细粒度规则继续保留，便于描述各角色的常规命令集；未命中的 Bash 命令也自动允许。
-- `vulnerability-validator` 负责终稿前的 quick/static 真实性路由；`quick-dynamic-validator` 只接受任务级 ENABLE 且最多运行 120 秒；独立的 `dynamic-vulnerability-validator` 只接受工作台逐次人工授权。两个动态 Agent 都只验证 loopback，并禁止生产/第三方目标、全局 Chrome 进程终止、凭证持久化、外连利用或数据窃取。
+- `vulnerability-validator` 负责终稿前的 quick/static 真实性路由；`quick-dynamic-validator` 只接受任务级 ENABLE 且共享环境准备最多 240 秒、每报告最多运行 180 秒；独立的 `dynamic-vulnerability-validator` 只接受工作台逐次人工授权。两个动态 Agent 都只验证 loopback，并禁止生产/第三方目标、全局 Chrome 进程终止、凭证持久化、外连利用或数据窃取。

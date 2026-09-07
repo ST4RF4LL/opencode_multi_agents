@@ -6,6 +6,7 @@ import { objectDigest } from "../../audit-coverage-accounting/scripts/coverage-v
 import { verifyLedger } from "../../audit-coverage-accounting/scripts/coverage-ledger-core.mjs";
 import { parseFindingArtifact } from "../../finding-evidence-contract/scripts/finding-contract.mjs";
 import { ADJUDICATION_SCHEMA_VERSION, candidateManifestDigest, validateCandidateManifest } from "./finding-adjudication-contract.mjs";
+import { itemReportPaths, PACKET_REPORT_CONTRACT, validatePacketReports } from "../../../../scripts/packet-reports.mjs";
 import { readAuditTodo } from "../../../../scripts/audit-todo-core.mjs";
 
 function parseArgs(argv) {
@@ -49,9 +50,11 @@ async function main() {
     const reportsRoot = resolve(args["reports-root"]);
     const todo = await readAuditTodo(resolve(args.todo));
     if (todo.audit_id !== args["audit-id"]) throw new Error("Local audit todo belongs to another audit_id");
-    const doneReports = new Set(todo.items
-      .filter(item => item.status === "DONE" && typeof item.artifact_path === "string")
-      .map(item => resolve(reportsRoot, item.artifact_path)));
+    const doneItems = todo.items.filter(item => item.status === "DONE");
+    for (const item of doneItems) if (item.report_contract === PACKET_REPORT_CONTRACT) {
+      await validatePacketReports({ reportsRoot, auditId: todo.audit_id, item, reports: item.report_bindings });
+    }
+    const doneReports = new Set(doneItems.flatMap(itemReportPaths).map(path => resolve(reportsRoot, path)));
     for (const acceptedFinding of accepted.values()) {
       const check = plan.checks.find(item => item.check_id === acceptedFinding.primary_check_id);
       if (!check) throw new Error(`Structural finding references an unknown check: ${acceptedFinding.primary_check_id}`);

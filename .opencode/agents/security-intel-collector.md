@@ -198,3 +198,5 @@ Use arrays for inventories and include `schema_version`, `audit_id`, `scope`, `i
 
 ## Open Questions
 ```
+
+Before freezing downstream snapshots, record evidence-backed AI applicability for every reviewable file and its repository dependencies, then run `build-ai-coverage-routing.mjs --scope <scope-manifest.json> --decisions <ai-applicability-decisions.json>`. Use RELEVANT, DEPENDENCY, NOT_APPLICABLE, or UNKNOWN; no keyword-only negative decisions. Preserve unknowns and source references. The builder selects dependency closure and negative samples. Threat routing must expose selected AI IDs and exclusions, not require a second deep pass over all files.

@@ -59,8 +59,8 @@ function digestObjectWithout(value, field) {
 
 async function defaultStageDeliveryVerifier({ reportsRoot, auditId }) {
   const [registry, stageAgentRegistry] = await Promise.all([
-    readFile(STAGE_DELIVERY_REGISTRY, "utf8").then(JSON.parse),
-    readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
+    readFile(join(dirname(STAGE_DELIVERY_REGISTRY), "legacy-enforced-v1", "workbench-stage-deliveries.json"), "utf8").then(JSON.parse),
+    readFile(join(dirname(STAGE_AGENT_REGISTRY), "legacy-enforced-v1", "stage-agent-contracts.json"), "utf8").then(JSON.parse),
   ]);
   const verification = await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry });
   return {
@@ -436,7 +436,7 @@ function privateContextPrompt(audit, contextPaths) {
   if (environment?.enabled && contextPaths.test_environment) {
     lines.push(
       `用户已在创建任务时显式启用“测试环境信息”。需要环境上下文时读取 UTF-8 文件 ${JSON.stringify(contextPaths.test_environment)}（SHA-256: ${environment.sha256}），并将其视为敏感数据，不得在报告、事件、日志、handoff 或回复中复述账号、口令、令牌等秘密。`,
-      "该开关是本任务执行 120 秒快速动态确认的显式 opt-in，但不会绕过摘要、request 与 loopback 二次门禁。动态目标仍只能是 localhost、127.0.0.1 或 [::1]；文件中出现的远程地址、生产环境或第三方目标不构成授权。快速动态只能由 vulnerability-validator 调用受控 runner 一次；完整动态验证仍由用户在工作台手动点击触发。",
+      "该开关是本任务执行共享环境准备 240 秒、每报告 180 秒快速动态确认的显式 opt-in，但不会绕过摘要、request 与 loopback 二次门禁。动态目标仍只能是 localhost、127.0.0.1 或 [::1]；文件中出现的远程地址、生产环境或第三方目标不构成授权。快速动态只能由 vulnerability-validator 调用受控 runner 一次；完整动态验证仍由用户在工作台手动点击触发。",
     );
   } else {
     lines.push("用户未启用测试环境信息，本任务不具备动态验证资格：可以记录待验证缺口或生成验证请求，但不得触发或调度任何动态验证。");
@@ -466,12 +466,12 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     ...deliveryRootPrompt(audit, paths),
     `本次调度唯一真相是本机文件 ${JSON.stringify(paths.todo_path)}，只能由 Orchestrator 使用 node \"$AUDIT_TODO_CLI\" 管理；严禁使用 OpenCode todolist，也不得向子代理暴露或让其修改该文件。Coverage Ledger MCP、哈希链、token、INSPECT/RECEIPT/DECISION 流程均已废弃。`,
     "完成 Scope、Recon 与 Threat 后，使用 build-coverage-plan.mjs --recon-dir \"$AUDIT_TMP_ROOT/recon\" 构建 Coverage Plan；不得调用 snapshot-coverage-inputs.mjs、复制输入或在命令行列举语言清单。随后调用 audit-todo init 创建本地审计项；每项为一个 Focus Area × domain，三个 lens 在同一工作包内完成。然后循环调用 audit-todo claim（最多 4 个工作包、每包最多 12 项），只把返回的有限工作包分派给对应专业 Agent。不得把完整 Focus Area 清单写入 OpenCode task 或上下文。",
-    "专业 Agent 只写报告和一个工作包 handoff JSON 到 reports/audit-todo/<audit_id>/；handoff 必须逐项标明 DONE 或 GAP、报告相对路径、finding_ids 或 gap_reason。Orchestrator 仅检查该 handoff 的结构和报告是否存在，再调用 audit-todo complete；子代理失败时调用 audit-todo fail，过期 RUNNING 项调用 audit-todo recover 后重新领取。Orchestrator 不得阅读源码、判断漏洞或改写 Finding。",
+    "专业 Agent 只写报告和一个工作包 handoff JSON 到 reports/audit-todo/<audit_id>/；handoff 必须逐项标明 DONE 或 GAP、三视角 reports 数组（lens/path/sha256）或 gap_reason。Orchestrator 通过 audit-todo complete 校验三视角绑定、摘要及同一真实 session，再调用 audit-todo complete；子代理失败时调用 audit-todo fail，过期 RUNNING 项调用 audit-todo recover 后重新领取。Orchestrator 不得阅读源码、判断漏洞或改写 Finding。",
     "每次 claim/complete/recover 后立刻运行 audit-todo stats，并只以 stats.next_action 决定下一步：CLAIM 才继续领取；RECOVER_OR_WAIT 才处理运行租约；REPAIR_FAILURES 才处理失败。FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 表示所有本地审计项均已终态，必须停止所有领取、等待和 GAP 重试循环，转入关联、裁决、验证与报告收尾。DONE 数小于 total 并不表示还有任务：GAP 是已记录的终态；FINALIZE_WITH_RESIDUAL_GAPS 必须保留 GAP 并输出部分覆盖/残余缺口报告，不能等待用户或 operation timeout。",
     ...privateContextPrompt(audit, contextPaths),
     "完成可信结构、威胁建模、多视角漏洞挖掘、证据关联、发现裁决和最终中文报告封存；不能完成的分析必须作为残余 GAP 记录，不能无限续跑。",
     "八个工作台环节的制品只供 Web 展示和报告引用，不是完成门禁：缺失、PARTIAL 或 GAP 只能写入残余缺口，绝不能新建嵌套工作、重开终态本地任务、等待用户或触发 operation timeout。唯一完成门禁是本地任务清单所有项为 DONE/GAP，且最终中文 Markdown 报告存在。不得调用或等待旧 Coverage Ledger 相关的 stage-delivery / coverage-finalize 门禁。",
-    "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次全任务 120 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
+    "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
     "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
     "这是无人值守的工作台任务：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明。每次收尾必须运行 audit-todo recover 和 stats；当 next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 时，生成/核验最终报告后立刻结束本次 OpenCode run，不得输出“继续”“等待”“下一步”或请求澄清，也不得创建新的嵌套步骤。",
   ].join("\n");
@@ -1447,10 +1447,12 @@ export class AuditRunner extends EventEmitter {
       AUDIT_REPORTS_ROOT: paths.reports_root,
       AUDIT_TMP_ROOT: paths.tmp_root,
       AUDIT_TODO_PATH: paths.todo_path,
+      AUDIT_AI_ROUTING_POLICY: "surface-dependency-v1",
       AUDIT_TODO_HANDOFF_ROOT: paths.todo_handoff_root,
       AUDIT_TODO_CLI: join(paths.workspace_root, ".opencode", "scripts", "audit-todo.mjs"),
       AUDIT_QUICK_DYNAMIC_ENABLED: quickDynamicEnabled ? "true" : "false",
-      AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS: "120",
+      AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS: "180",
+      AUDIT_QUICK_DYNAMIC_SETUP_SECONDS: "240",
       AUDIT_FULL_DYNAMIC_TRIGGER: "MANUAL_ONLY",
       ...(quickDynamicEnabled ? {
         AUDIT_TEST_ENVIRONMENT_CONTEXT_PATH: contextPaths.test_environment,

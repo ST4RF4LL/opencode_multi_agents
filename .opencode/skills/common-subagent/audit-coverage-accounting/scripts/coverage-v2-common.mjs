@@ -1,3 +1,4 @@
+import { aiRequired } from "./ai-coverage-routing.mjs";
 import { createHash } from "node:crypto";
 
 export const LENSES = ["sink-driven", "control-driven", "config-driven"];
@@ -86,7 +87,7 @@ export function interfaceApplicability(entry, domain, item, catalog) {
 export function activeDomains(scope) {
   const owners = new Set((scope.files ?? []).filter(file => file.review_required).map(file => file.owner_agent));
   const domains = Object.entries(DOMAIN_AGENTS)
-    .filter(([domain, agent]) => domain === "ai" || owners.has(agent))
+    .filter(([domain, agent]) => domain === "ai" ? (scope.files ?? []).some(file => file.review_required && aiRequired(scope, file)) : owners.has(agent))
     .map(([domain]) => domain);
   return domains.sort();
 }
@@ -108,11 +109,11 @@ export function validateFocusAreaPartition({ scope, functionManifests, catalog, 
   for (const file of scope.files ?? []) {
     if (!file.review_required) continue;
     addExpected(file.owner_agent, "base", "file", file.file_id);
-    addExpected(DOMAIN_AGENTS.ai, "ai", "file", file.file_id);
+    if (aiRequired(scope, file)) addExpected(DOMAIN_AGENTS.ai, "ai", "file", file.file_id);
   }
   for (const fn of (functionManifests ?? []).flatMap(manifest => manifest.functions ?? [])) {
     addExpected(fn.owner_agent, "base", "function", fn.function_id);
-    addExpected(DOMAIN_AGENTS.ai, "ai", "function", fn.function_id);
+    if (aiRequired(scope, fn)) addExpected(DOMAIN_AGENTS.ai, "ai", "function", fn.function_id);
   }
   for (const domain of domains) {
     for (const entry of catalog.entries ?? []) {
@@ -162,9 +163,9 @@ export function validateFocusAreaPartition({ scope, functionManifests, catalog, 
   return [...new Set(errors)].sort();
 }
 
-export function interfaceDomains(item) {
+export function interfaceDomains(item, scope) {
   const base = Object.entries(DOMAIN_AGENTS).find(([domain, agent]) => domain !== "ai" && agent === item.owner_agent)?.[0];
-  return [...new Set([base, "ai"].filter(Boolean))].sort();
+  return [...new Set([base, aiRequired(scope, item) ? "ai" : null].filter(Boolean))].sort();
 }
 
 export function coverageCheckId(subjectKind, subjectId, vulnerabilityTypeId, domain, lens) {

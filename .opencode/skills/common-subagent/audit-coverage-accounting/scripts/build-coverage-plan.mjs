@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { aiRequired } from "./ai-coverage-routing.mjs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -196,6 +197,7 @@ async function main() {
     throw new Error(summarizedErrors("Coverage Plan requires complete function inventory", issues));
   }
 
+  if (process.env.AUDIT_AI_ROUTING_POLICY === "surface-dependency-v1" && !scope.ai_routing) throw new Error("新任务缺少 Recon AI 适用性路由，必须先完成筛查并记录缺口。");
   const focusErrors = validateFocusAreaPartition({ scope, functionManifests, catalog, focusAreas });
   if (focusErrors.length > 0) throw new Error(summarizedErrors("Focus Area primary assignments are invalid", focusErrors));
 
@@ -203,7 +205,7 @@ async function main() {
   const domainSourceIds = new Map(domains.map(domain => [
     domain,
     (scope.files ?? []).filter(file => file.review_required
-      && (domain === "ai" || file.owner_agent === DOMAIN_AGENTS[domain])).map(file => file.file_id).sort(),
+      && (domain === "ai" ? aiRequired(scope, file) : file.owner_agent === DOMAIN_AGENTS[domain])).map(file => file.file_id).sort(),
   ]));
   const applicableEntriesByDomain = new Map(domains.map(domain => [
     domain,
@@ -282,7 +284,7 @@ async function main() {
   const interfaceGroups = new Map();
   for (const item of confirmedInterfaces) {
     const itemDimensions = new Set(item.dimensions ?? []);
-    for (const domain of interfaceDomains(item).filter(candidate => domains.includes(candidate))) {
+    for (const domain of interfaceDomains(item, scope).filter(candidate => domains.includes(candidate))) {
       const focusAreaId = fileFocus.get(`${domain}|${item.file_id}`);
       if (!focusAreaId) throw new Error(`Interface source lacks a unique primary Focus Area assignment: ${domain}|${item.file_id}`);
       for (const entry of applicableEntriesByDomain.get(domain)) {
@@ -383,6 +385,9 @@ async function main() {
     schema_version: PLAN_SCHEMA_VERSION,
     coverage_model_version: COVERAGE_MODEL_VERSION,
     execution_model: COVERAGE_EXECUTION_MODEL,
+    packet_report_contract: "tri-lens-v2",
+    ai_routing_digest: scope.ai_routing?.routing_digest ?? null,
+    ai_routing_unknown_file_ids: scope.ai_routing?.unknown_file_ids ?? [],
     coverage_policy: {
       mode: args["coverage-mode"],
       release_required_unit_ids: releaseRequiredUnitIds,

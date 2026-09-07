@@ -58,10 +58,10 @@ Load `tri-lens-evidence-correlation`, `secure-code-review-common`, `audit-covera
 - Preliminary `security-attack-chain-hunter` candidates for the round when available; they remain untrusted until the post-adjudication chain pass.
 - The independent Finding Adjudication manifest for final synthesis.
 - SARIF references emitted by those sessions.
-- Previous correlation report and gap packets when present. Independent review does not run until the final comprehensive report has been sealed.
+- Previous correlation report and gap packets when present. Truth review runs before final report synthesis.
 - Frozen Coverage Plan, read-only local audit-todo summary, completed packet handoffs, and paginated `GAP` items. Retrieve only the needed handoffs; task-state closure comes only from the local scheduler, never from prose reports.
 
-Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_id`, `focus_area_id`, `discovery_track=coverage`, one-lens `audit_strategy`, scope digest, D1-D10 cells, or exact file/function/catalog coverage arrays are missing. Reject discovery reports with invalid track/evidence/seed boundaries, and reject attack-chain reports whose semantic digests or reviewed-ID sets mismatch. Record schema problems as `GAP` instead of silently inferring values.
+Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_id`, `focus_area_id`, `discovery_track=coverage`, per-report single-lens `audit_strategy`, scope digest, D1-D10 cells, or exact file/function/catalog coverage arrays are missing. Reject discovery reports with invalid track/evidence/seed boundaries, and reject attack-chain reports whose semantic digests or reviewed-ID sets mismatch. Record schema problems as `GAP` instead of silently inferring values.
 
 ## Responsibilities
 
@@ -99,4 +99,6 @@ Include:
 - discovery metrics (`duplicate_rate`, `novelty_yield`, `new_surface_rate`) used only to redirect later rounds
 - consumed and rejected artifact lists
 
-Return a concise markdown summary to the orchestrator. Keep canonical findings as candidates until the independent Finding Adjudication manifest accounts for them. Only its `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` decisions may enter attack-chain construction or final synthesis; the later `vulnerability-validator` still reviews the complete sealed report, not individual findings.
+Return a concise markdown summary to the orchestrator. Keep canonical findings as candidates until the independent Finding Adjudication manifest accounts for them. Only its `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` decisions may enter attack-chain construction or final synthesis; the later `vulnerability-validator` reviews the routed finding set using immutable fact packets before report synthesis.
+
+One packet session may supply three reports per Focus item with the same actual agent_session_id. Treat `(session, focus_area_id, audit_strategy)` as the record identity; do not request three new sessions. AI accounting follows the frozen scope.ai_routing selection, preserving excluded/unknown decisions.

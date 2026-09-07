@@ -3,7 +3,7 @@
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -341,85 +341,16 @@ try {
     "--output", "reports/validation/invalid-intake.json",
   ], { cwd: cliWorkspace, environment: cliEnvironment, expected: 1 });
 
-  const enabledIntakePath = join(cliWorkspace, "reports/validation/truth-validation-intake.enabled.r1.json");
-  const enabledOutputPath = join(cliWorkspace, "reports/validation/quick/enabled.r1.json");
-  const rejectedOutputPath = join(cliWorkspace, "reports/validation/quick/rejected.r1.json");
-  const missingEvidenceOutputPath = join(cliWorkspace, "reports/validation/quick/missing-evidence.r1.json");
-  const contextPath = join(cliWorkspace, "test-environment.txt");
-  const contextBytes = Buffer.from("URL: http://127.0.0.1:4173\n", "utf8");
-  const fakeOpenCodePath = join(cliWorkspace, "fake-opencode.mjs");
-  await Promise.all([
-    writeFile(enabledIntakePath, `${JSON.stringify(validIntake, null, 2)}\n`),
-    writeFile(contextPath, contextBytes, { mode: 0o600 }),
-    writeFile(fakeOpenCodePath, `#!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-const intake = JSON.parse(readFileSync(process.env.AUDIT_QUICK_DYNAMIC_INTAKE_PATH, "utf8"));
-const remote = process.env.FAKE_QUICK_MODE === "remote";
-const missing = process.env.FAKE_QUICK_MODE === "missing";
-const evidencePath = \`reports/validation/quick/evidence/\${intake.audit_id}/\${missing ? "missing" : "fixture"}.json\`;
-const value = {
-  schema_version: 1,
-  artifact_type: "quick-dynamic-result-set",
-  audit_id: intake.audit_id,
-  round: intake.round,
-  intake_digest: intake.artifact_digest,
-  deadline_seconds: 120,
-  elapsed_ms: 0,
-  deadline_exceeded: false,
-  evidence_bindings: [],
-  results: intake.findings.map(finding => ({
-    finding_id: finding.finding_id,
-    status: finding.quick_dynamic_eligible ? "CONFIRMED" : "SKIPPED",
-    duration_ms: 0,
-    target_origin: finding.quick_dynamic_eligible ? (remote ? "https://example.com" : "http://127.0.0.1:4173") : null,
-    evidence_refs: finding.quick_dynamic_eligible ? [evidencePath] : [],
-    summary: finding.quick_dynamic_eligible ? "授权的本机应用路径产生了可复查证据。" : "该发现不满足快速动态条件，已转入静态复核。",
-    gaps: [],
-  })),
-  artifact_digest: "0".repeat(64),
-};
-if (!missing) {
-  mkdirSync(join(process.env.AUDIT_WORKSPACE_ROOT, \`reports/validation/quick/evidence/\${intake.audit_id}\`), { recursive: true });
-  writeFileSync(join(process.env.AUDIT_WORKSPACE_ROOT, evidencePath), "{}\\n");
-}
-mkdirSync(dirname(process.env.AUDIT_QUICK_DYNAMIC_RESULT_PATH), { recursive: true });
-writeFileSync(process.env.AUDIT_QUICK_DYNAMIC_RESULT_PATH, JSON.stringify(value));
-`),
-  ]);
-  await chmod(fakeOpenCodePath, 0o700);
-  const enabledEnvironment = {
-    AUDIT_WORKSPACE_ROOT: cliWorkspace,
-    AUDIT_QUICK_DYNAMIC_ENABLED: "true",
-    AUDIT_TEST_ENVIRONMENT_CONTEXT_PATH: contextPath,
-    AUDIT_TEST_ENVIRONMENT_CONTEXT_SHA256: createHash("sha256").update(contextBytes).digest("hex"),
-    AUDIT_OPENCODE_COMMAND: fakeOpenCodePath,
-  };
+  // Historical v1 artifacts remain readable, but cannot launch the new session.
+  const legacyPath = join(cliWorkspace, "reports/validation/legacy-intake.json");
+  await writeFile(legacyPath, JSON.stringify(validIntake));
   runScript("run-quick-dynamic-validation.mjs", [
-    "--intake", "reports/validation/truth-validation-intake.enabled.r1.json",
-    "--output", "reports/validation/quick/enabled.r1.json",
-  ], { cwd: cliWorkspace, environment: enabledEnvironment });
-  const enabledResult = JSON.parse(await readFile(enabledOutputPath, "utf8"));
-  assert.deepEqual(validateQuickDynamicResultSet(enabledResult, validIntake), []);
-  assert.equal(enabledResult.results[0].status, "CONFIRMED");
-  assert.notEqual(enabledResult.artifact_digest, "0".repeat(64));
-  assert.equal(enabledResult.evidence_bindings[0].sha256, createHash("sha256").update("{}\n").digest("hex"));
+    "--intake", "reports/validation/legacy-intake.json", "--output", "reports/validation/quick/legacy.json",
+  ], { cwd: cliWorkspace, environment: { AUDIT_WORKSPACE_ROOT: cliWorkspace } });
+  const legacyResult = JSON.parse(await readFile(join(cliWorkspace, "reports/validation/quick/legacy.json"), "utf8"));
+  assert.deepEqual(validateQuickDynamicResultSet(legacyResult, validIntake), []);
+  assert.ok(legacyResult.results.every(row => row.status === "SKIPPED"));
 
-  runScript("run-quick-dynamic-validation.mjs", [
-    "--intake", "reports/validation/truth-validation-intake.enabled.r1.json",
-    "--output", "reports/validation/quick/rejected.r1.json",
-  ], { cwd: cliWorkspace, environment: { ...enabledEnvironment, FAKE_QUICK_MODE: "remote" } });
-  const rejectedResult = JSON.parse(await readFile(rejectedOutputPath, "utf8"));
-  assert.deepEqual(validateQuickDynamicResultSet(rejectedResult, validIntake), []);
-  assert.equal(rejectedResult.results[0].status, "BLOCKED");
-
-  runScript("run-quick-dynamic-validation.mjs", [
-    "--intake", "reports/validation/truth-validation-intake.enabled.r1.json",
-    "--output", "reports/validation/quick/missing-evidence.r1.json",
-  ], { cwd: cliWorkspace, environment: { ...enabledEnvironment, FAKE_QUICK_MODE: "missing" } });
-  const missingEvidenceResult = JSON.parse(await readFile(missingEvidenceOutputPath, "utf8"));
-  assert.deepEqual(validateQuickDynamicResultSet(missingEvidenceResult, validIntake), []);
-  assert.equal(missingEvidenceResult.results[0].status, "BLOCKED");
 } finally {
   await rm(cliWorkspace, { recursive: true, force: true });
 }

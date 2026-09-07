@@ -70,7 +70,7 @@ Refuse to close coverage without:
 
 If an expected manifest is missing or incomplete, return `GAP`; do not substitute grep counts for an AST/CPG inventory.
 
-The orchestrator supplies one bounded local work packet containing one or more Focus Area × `web` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with its report path or GAP with a concise reason.
+The orchestrator supplies one bounded local work packet containing one or more Focus Area × `web` items. Review every listed item through sink, control, and config lenses in the same session. Do not call a coverage MCP, do not manage task state, and do not create per-finding receipts or decisions. Write the substantive reports plus the packet handoff requested by the orchestrator; each item must be marked DONE with `reports: [{lens, path, sha256}, ...]` binding exactly three single-lens reports, or GAP with a concise reason. Paths are relative to the reports root. All three reports use the same actual agent_session_id; filenames include Focus Area and lens. The controller derives finding IDs from these reports and rejects missing lenses, hash drift, or mixed sessions.
 
 Run `node .opencode/scripts/static-scan.mjs doctor` and `plan --target <path>` before local scanning. When Web rules apply, use `run --engine auto` with workspace-local YAML rules and execute optional capabilities marked `PLANNED`. Verify immutable run manifests and record their paths. Joern is optional `deep_dataflow`; a rule hit is only candidate evidence and never substitutes for source/AST review or closes function coverage.
 
@@ -107,6 +107,8 @@ Each entity record uses only `REVIEWED`, `FINDING`, or `GAP`, includes the exact
 
 ## Output
 
-Write `reports/vulnerability-mining/web-source-auditor.<agent_session_id>.audit-report.json`. The report must satisfy `artifact-policy.json` and `verify-coverage.mjs`: one lens, D1-D10, scope digest, exact file/function/catalog coverage arrays, findings, artifacts, and learning candidates. Emit SARIF when a static-analysis tool runs.
+Write `reports/vulnerability-mining/web-source-auditor.<agent_session_id>.<focus_area_id>.<lens>.audit-report.json`. The report must satisfy `artifact-policy.json` and `verify-coverage.mjs`: one lens, D1-D10, scope digest, exact file/function/catalog coverage arrays, findings, artifacts, and learning candidates. Emit SARIF when a static-analysis tool runs.
 
 Report only evidence-backed candidates. Route runtime-dependent or server-enforcement questions to correlation as explicit gaps or validation requests.
+
+For a local packet, Stage/Agent INPUT and OUTPUT envelopes are evidence records per Focus assignment/lens, bundled inside this one invocation. Use the same actual session ID in those records and distinct filenames containing Focus/lens; never launch another session only to populate a lens envelope.

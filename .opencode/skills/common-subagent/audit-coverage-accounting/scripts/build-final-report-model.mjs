@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { validateBoundFactPackets } from "../../../vulnerability-validator-subagent/vulnerability-validation/scripts/static-fact-packet.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { objectDigest } from "./coverage-v2-common.mjs";
@@ -45,6 +46,7 @@ async function main() {
     readFile(resolve(args.cvss), "utf8").then(JSON.parse),
     readFile(resolve(args.chains), "utf8").then(JSON.parse),
   ]);
+  await validateBoundFactPackets(resolve(process.env.AUDIT_WORKSPACE_ROOT ?? process.cwd()), validationIntake);
   if (summary.audit_id !== args["audit-id"] || summary.manifest_digest !== objectDigest(summary)) {
     throw new Error("Coverage summary is invalid or bound to another audit");
   }
@@ -203,6 +205,7 @@ async function main() {
       cvss_assessment: resolve(args.cvss),
       attack_chains: resolve(args.chains),
     },
+    residual_gaps: summary.residual_gaps ?? [],
     findings: findings.sort((left, right) => right.cvss.base_score - left.cvss.base_score || left.finding_id.localeCompare(right.finding_id)),
     excluded_findings: excludedFindings.sort((left, right) => left.finding_id.localeCompare(right.finding_id)),
     chains: acceptedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),

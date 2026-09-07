@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { isDeepStrictEqual } from "node:util";
 import { catalogQuestionDigest, deriveCoverageCells } from "./coverage-cell-accounting.mjs";
+import { aiRequired, validateAiRouting } from "./ai-coverage-routing.mjs";
 import { DOMAIN_AGENTS, entryAppliesToDomain } from "./coverage-v2-common.mjs";
 import { FINDING_SCHEMA_VERSION, findingObjectDigest, validateFinding } from "../../finding-evidence-contract/scripts/finding-contract.mjs";
 
@@ -283,6 +284,8 @@ async function main() {
   const scope = JSON.parse(await readFile(resolve(args.scope), "utf8"));
   const catalog = JSON.parse(await readFile(resolve(args.catalog), "utf8"));
   const issues = [];
+  for (const message of validateAiRouting(scope)) pushIssue(issues, "AI_ROUTING_INVALID", message);
+  for (const file_id of scope.ai_routing?.unknown_file_ids ?? []) pushIssue(issues, "AI_APPLICABILITY_UNKNOWN", "AI 适用性尚未确认，保留覆盖缺口。", { file_id });
 
   const snapshotIndexPath = args["snapshot-index"] ? resolve(args["snapshot-index"]) : null;
   if (snapshotIndexPath) {
@@ -340,6 +343,7 @@ async function main() {
       return changedFields.length > 0 ? [{ path: current.path, changed_fields: changedFields }] : [];
     });
     const comparableCurrentPolicy = { ...currentScope.policy };
+    if (scope.ai_routing && validateAiRouting(scope).length === 0) comparableCurrentPolicy.ai_coverage = scope.policy.ai_coverage;
     if (!("requested_mode" in (scope.policy ?? {}))) delete comparableCurrentPolicy.requested_mode;
     if (!("ignored_content" in (scope.policy ?? {}))) delete comparableCurrentPolicy.ignored_content;
     const policyChanged = JSON.stringify(scope.policy) !== JSON.stringify(comparableCurrentPolicy);
@@ -484,7 +488,7 @@ async function main() {
     if (catalogErrors.length > 0) pushIssue(issues, "INVALID_CATALOG_ENTRY", "Catalog entry is incomplete", { catalog_id: entry.id, errors: catalogErrors });
   }
 
-  const activeDomains = new Set(["ai"]);
+  const activeDomains = new Set((scope.files ?? []).some(file => file.review_required && aiRequired(scope, file)) ? ["ai"] : []);
   for (const file of scopeFiles.values()) {
     for (const [domain, agent] of DOMAIN_AGENT) if (file.owner_agent === agent) activeDomains.add(domain);
   }
@@ -603,7 +607,7 @@ async function main() {
       const localKey = `${id}|${domain}`;
       if (seenFileIds.has(localKey)) pushIssue(issues, "DUPLICATE_REPORT_FILE", "Report repeats a file/domain coverage record", { report: reportPath, file_id: id, domain });
       seenFileIds.add(localKey);
-      const expectedAgent = domain === "ai" ? AI_AGENT : domain === "base" ? file.owner_agent : null;
+      const expectedAgent = domain === "ai" ? (aiRequired(scope, file) ? AI_AGENT : null) : domain === "base" ? file.owner_agent : null;
       if (!COVERAGE_DOMAINS.includes(domain) || report.agent_name !== expectedAgent) {
         pushIssue(issues, "FILE_OWNER_MISMATCH", "File coverage domain is invalid or not closed by its assigned base/AI owner", { report: reportPath, file_id: id, domain, expected_agent: expectedAgent });
         continue;
@@ -638,7 +642,7 @@ async function main() {
       const localKey = `${id}|${domain}`;
       if (seenFunctionIds.has(localKey)) pushIssue(issues, "DUPLICATE_REPORT_FUNCTION", "Report repeats a function/domain coverage record", { report: reportPath, function_id: id, domain });
       seenFunctionIds.add(localKey);
-      const expectedAgent = domain === "ai" ? AI_AGENT : domain === "base" ? fn.owner_agent : null;
+      const expectedAgent = domain === "ai" ? (aiRequired(scope, fn) ? AI_AGENT : null) : domain === "base" ? fn.owner_agent : null;
       if (!COVERAGE_DOMAINS.includes(domain) || report.agent_name !== expectedAgent) {
         pushIssue(issues, "FUNCTION_OWNER_MISMATCH", "Function coverage domain is invalid or not closed by its assigned base/AI owner", { report: reportPath, function_id: id, domain, expected_agent: expectedAgent });
         continue;
@@ -729,7 +733,7 @@ async function main() {
   const invalid = { files: [], functions: [], catalog: [] };
   for (const file of scopeFiles.values()) {
     if (!file.review_required) continue;
-    for (const domain of COVERAGE_DOMAINS) {
+    for (const domain of COVERAGE_DOMAINS.filter(domain => domain !== "ai" || aiRequired(scope, file))) {
       for (const lens of LENSES) {
         const key = `${file.file_id}|${domain}|${lens}`;
         const latest = selectLatest(fileRecords.get(key) ?? [], key, issues);
@@ -740,7 +744,7 @@ async function main() {
     }
   }
   for (const fn of functions.values()) {
-    for (const domain of COVERAGE_DOMAINS) {
+    for (const domain of COVERAGE_DOMAINS.filter(domain => domain !== "ai" || aiRequired(scope, fn))) {
       for (const lens of LENSES) {
         const key = `${fn.function_id}|${domain}|${lens}`;
         const latest = selectLatest(functionRecords.get(key) ?? [], key, issues);
@@ -803,8 +807,8 @@ async function main() {
       files: [...scopeFiles.values()].filter(file => file.review_required).length,
       functions: functions.size,
       file_function_coverage_domains: COVERAGE_DOMAINS,
-      file_domain_pairs: [...scopeFiles.values()].filter(file => file.review_required).length * COVERAGE_DOMAINS.length,
-      function_domain_pairs: functions.size * COVERAGE_DOMAINS.length,
+      file_domain_pairs: [...scopeFiles.values()].filter(file => file.review_required).reduce((count, file) => count + 1 + Number(aiRequired(scope, file)), 0),
+      function_domain_pairs: [...functions.values()].reduce((count, fn) => count + 1 + Number(aiRequired(scope, fn)), 0),
       catalog_domain_pairs: [...catalogEntries.values()].reduce((sum, entry) => sum
         + [...activeDomains].filter(domain => entryAppliesToDomain(entry, domain, catalog)).length, 0),
       external_interfaces: interfaceManifest?.interfaces?.length ?? 0,

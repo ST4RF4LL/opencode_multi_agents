@@ -81,7 +81,7 @@
             <div id="runtime-grid" class="metric-grid"></div>
             <div id="capability-grid" class="capability-grid"></div>
             <article class="panel environment-panel"><div class="section-title"><div><p class="eyebrow">COMPONENT HEALTH</p><h2>组件健康</h2></div><button class="text-button" id="refresh-environment">重新探测</button></div><div id="environment-table" class="data-table"></div></article>
-            <article class="panel boundary-panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>审计项目由操作员指定工作台所在机器上的绝对目录，并在服务端规范化、校验和持久登记。</li><li>目标源码目录与工作台 OpenCode Agent/MCP 配置相互隔离。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>测试环境 ENABLE 是 120 秒快速动态的任务级显式授权；完整动态仍需逐次人工授权，两者都只允许 loopback。</li></ul></article>
+            <article class="panel boundary-panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>审计项目由操作员指定工作台所在机器上的绝对目录，并在服务端规范化、校验和持久登记。</li><li>目标源码目录与工作台 OpenCode Agent/MCP 配置相互隔离。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>测试环境 ENABLE 是 共享环境准备 240 秒、每报告 180 秒快速动态的任务级显式授权；完整动态仍需逐次人工授权，两者都只允许 loopback。</li></ul></article>
           </section>
 
           <section id="view-settings" class="view">
@@ -135,7 +135,7 @@
               <label class="enable-switch"><input name="test_environment_enabled" type="checkbox" aria-controls="test-environment-context"><span>ENABLE</span></label>
             </div>
             <label class="context-textarea" for="test-environment-context">环境上下文<textarea id="test-environment-context" name="test_environment_context" maxlength="24000" autocomplete="off" spellcheck="false" placeholder="URL: http://127.0.0.1:8080&#10;测试账号: ...&#10;测试密码: ...&#10;登录/数据清理说明: ..." disabled></textarea></label>
-            <p class="context-note">未启用或未填写时，主审计不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用即明确授权审计主链执行一次、全任务最多 120 秒的 loopback 快速动态确认；信息按敏感上下文保存且不在任务 API 中回显。完整动态验证资格不受此开关限制，可在验证页补录环境并逐次授权。</p>
+            <p class="context-note">未启用或未填写时，主审计不会启动浏览器，所有初步支持项直接进入本地三方静态复核。启用即明确授权审计主链执行一次、共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒的 loopback 快速动态确认；信息按敏感上下文保存且不在任务 API 中回显。完整动态验证资格不受此开关限制，可在验证页补录环境并逐次授权。</p>
           </section>
         </div>
         <div id="audit-form-error" class="notice error" hidden></div>
