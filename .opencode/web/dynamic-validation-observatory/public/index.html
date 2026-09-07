@@ -85,12 +85,12 @@
           </section>
 
           <section id="view-settings" class="view">
-            <div class="page-heading"><div><p class="eyebrow">WORKBENCH SETTINGS</p><h2>设置</h2><p>为工作台任务固定 OpenCode 模型，并配置定时排队策略。</p></div></div>
+            <div class="page-heading"><div><p class="eyebrow">WORKBENCH SETTINGS</p><h2>设置</h2><p>设置新建任务的默认 OpenCode 模型，并配置定时排队策略。</p></div></div>
             <article class="panel settings-panel">
               <div class="section-title"><div><p class="eyebrow">OPENCODE MODEL</p><h2>使用模型</h2></div><span id="model-settings-status" class="status">读取中</span></div>
               <form id="model-settings-form" class="settings-form">
                 <label>使用模型<select name="model" id="opencode-model-select" required></select></label>
-                <p class="settings-note">模型清单读取自 <code>.opencode/opencode.json(c)</code>、<code>~/.config/opencode.json(c)</code>（兼容路径）及 OpenCode 标准全局配置 <code>~/.config/opencode/opencode.json(c)</code>；支持 UTF-8 BOM、注释和尾逗号。未开始、重试和断点恢复任务会在启动时读取当前选择，并以 <code>opencode run --model provider/model</code> 启动；已运行任务不受影响。“默认”不传递 <code>--model</code>。</p>
+                <p class="settings-note">模型清单读取自 <code>.opencode/opencode.json(c)</code>、<code>~/.config/opencode.json(c)</code>（兼容路径）及 OpenCode 标准全局配置 <code>~/.config/opencode/opencode.json(c)</code>；支持 UTF-8 BOM、注释和尾逗号。此设置仅作为新建任务弹窗的初始选择；任务提交后保存自己的模型，排队和断点恢复沿用该选择。重试时可在创建弹窗中修改。指定模型以 <code>opencode run --model provider/model</code> 启动；已运行任务不受影响。“默认”不传递 <code>--model</code>。</p>
                 <div id="model-settings-error" class="notice error" hidden></div>
                 <div class="dialog-actions"><button id="save-model-settings" class="button secondary" type="submit">保存模型设置</button></div>
               </form>
@@ -118,6 +118,8 @@
       <form id="audit-form" method="dialog">
         <div class="dialog-heading"><div><p class="eyebrow">NEW AUDIT</p><h2>创建仓库级安全审计</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
         <label>任务名称<input name="name" maxlength="160" placeholder="例如：支付服务发布前安全审计" required></label>
+        <label>使用模型<select name="model" id="audit-model-select" required></select></label>
+        <p class="context-note">模型随任务保存，排队和断点恢复沿用此选择；重试可重新选择。“默认”由 OpenCode 配置决定。</p>
         <label>审计项目<select name="repository_id" id="repository-select" required></select></label>
         <div class="form-row"><label>audit_id<input name="audit_id" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,127}" placeholder="audit-2026-001" required></label><label>目标 ref<input name="ref" value="HEAD" maxlength="200" required></label></div>
         <label class="check"><input name="allow_dirty" type="checkbox">允许审计包含未提交修改的工作树（会降低可复现性）</label>

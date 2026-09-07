@@ -321,10 +321,7 @@ function renderAuditDetail() {
   const audit = state.workspace.audits.find(item => item.id === state.selectedAuditId);
   const panel = $("audit-detail");
   if (!audit) { panel.replaceChildren(element("div", "empty-state", "选择一个审计任务查看阶段详情。")); return; }
-  const queuedModel = state.modelSettings?.selected_model;
-  const modelForDisplay = audit.status === "queued" && queuedModel !== undefined
-    ? (queuedModel === "default" ? null : queuedModel)
-    : audit.model;
+  const modelForDisplay = audit.model;
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
@@ -1424,6 +1421,15 @@ function openAuditDialog(repositoryId = null, templateAudit = null) {
   form.elements.name.value = templateAudit?.name ? `${templateAudit.name.replace(/（重试）$/u, "")}（重试）` : "";
   form.elements.audit_id.value = `audit-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 7)}`;
   form.elements.ref.value = "HEAD";
+  const selectedModel = templateAudit ? (templateAudit.model ?? "default") : (state.modelSettings?.selected_model ?? "default");
+  const modelOptions = [...(state.modelSettings?.options ?? [{ value: "default", label: "默认" }])];
+  if (!modelOptions.some(option => option.value === selectedModel)) {
+    modelOptions.push({ value: selectedModel, label: `${selectedModel}（当前配置不可用，请重新选择）` });
+  }
+  form.elements.model.replaceChildren(...modelOptions.map(item => {
+    const option = element("option", "", item.label); option.value = item.value; return option;
+  }));
+  form.elements.model.value = selectedModel;
   syncAuditContextControls(form);
   $("audit-form-error").hidden = true;
   $("audit-dialog").showModal();
@@ -1467,6 +1473,7 @@ async function submitAudit(event) {
   const testEnvironmentEnabled = form.elements.test_environment_enabled.checked;
   const input = {
     name: data.get("name"), repository_id: data.get("repository_id"), audit_id: data.get("audit_id"), ref: data.get("ref"), allow_dirty: data.get("allow_dirty") === "on",
+    model: data.get("model"),
     additional_instructions_enabled: additionalInstructionsEnabled,
     additional_instructions: additionalInstructionsEnabled ? form.elements.additional_instructions.value : "",
     test_environment_enabled: testEnvironmentEnabled,
@@ -1531,7 +1538,7 @@ async function submitModelSettings(event) {
     });
     state.modelSettings = response.model;
     renderSettings();
-    toast("OpenCode 模型设置已保存；未开始、重试和断点恢复任务会在启动时使用该选择");
+    toast("OpenCode 模型设置已保存；新建任务弹窗将默认选择此模型，已创建任务保留原选择");
   } catch (error) {
     $("model-settings-error").textContent = error.message;
     $("model-settings-error").hidden = false;

@@ -12,7 +12,7 @@ import { AuditRunner } from "./audit-runner.mjs";
 import { EnvironmentHealthService } from "./environment-health.mjs";
 import { FindingWorkflowStore } from "./finding-workflow.mjs";
 import { listValidationRequests, listValidationRunDetails, listValidationRuns } from "./model.mjs";
-import { DEFAULT_MODEL_SELECTION, OpenCodeModelCatalog, OpenCodeModelSettingsStore } from "./opencode-model-settings.mjs";
+import { DEFAULT_MODEL_SELECTION, normalizeOpenCodeModel, OpenCodeModelCatalog, OpenCodeModelSettingsStore } from "./opencode-model-settings.mjs";
 import { buildWorkspaceSnapshot } from "./workspace-model.mjs";
 import { DynamicValidationRunner } from "./validation-runner.mjs";
 import { RequestHistoryStore } from "./request-history-store.mjs";
@@ -288,24 +288,6 @@ export function createAuditWorkbenchServer({
   const modelSettingsStore = suppliedModelSettingsStore ?? new OpenCodeModelSettingsStore({
     path: modelSettingsPath ?? join(dirname(resolve(stateRoot)), "opencode-model-settings.json"),
   });
-  // Resolve immediately before every `opencode run`.  This deliberately keeps
-  // a task that has not started (including a retry/recovery) aligned with the
-  // current workbench setting, while a process already running is untouched.
-  runner.setModelResolver(async () => (await modelSettingsStore.get()).model);
-  // Tasks that were already queued when the workbench restarted still contain
-  // their last persisted display value. Serialize refreshes so an initial
-  // refresh cannot overwrite a newer settings-save refresh.
-  let queuedModelSync = Promise.resolve();
-  function syncQueuedAuditModels() {
-    const operation = queuedModelSync.catch(() => {}).then(async () => {
-      await Promise.all([runner.ready, modelSettingsStore.ready]);
-      const settings = await modelSettingsStore.get();
-      return runner.syncQueuedAuditModels(settings.model);
-    });
-    queuedModelSync = operation;
-    return operation;
-  }
-  const initialQueuedModelSync = syncQueuedAuditModels();
   const dynamicRunner = suppliedDynamicRunner ?? new DynamicValidationRunner({
     stateRoot: dynamicStateRoot ?? join(dirname(stateRoot), "dynamic-validation-runs"),
     enabled: dynamicRunnerEnabled,
@@ -440,7 +422,7 @@ export function createAuditWorkbenchServer({
   async function snapshot() {
     if (snapshotInFlight) return snapshotInFlight;
     const operation = (async () => {
-      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready, initialQueuedModelSync]);
+      await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready]);
       await runner.reconcileTerminalCompletions("workspace-watchdog");
       const runnerAudits = await runner.listAuditsWithTodo();
       const validationByRepository = new Map();
@@ -551,7 +533,6 @@ export function createAuditWorkbenchServer({
         const body = await requestJson(request);
         const catalog = await modelCatalog.snapshot();
         await modelSettingsStore.update(body.model, catalog.models);
-        await syncQueuedAuditModels();
         json(response, 200, { model: await modelSettingsSnapshot() });
         return;
       }
@@ -610,10 +591,12 @@ export function createAuditWorkbenchServer({
       if (request.method === "POST" && url.pathname === "/api/v1/audits") {
         assertSafeMutation(request);
         const [input, settings] = await Promise.all([requestJson(request), modelSettingsStore.get()]);
-        // The selected value is server-owned: a browser cannot inject arbitrary
-        // flags into the OpenCode command by posting its own `model` field.
-        // The runner resolves it again when the queued task actually launches.
-        const audit = await runner.createAudit({ ...input, model: settings.model }, request.headers["idempotency-key"]);
+        const model = normalizeOpenCodeModel(Object.hasOwn(input, "model") ? input.model : settings.model);
+        const catalog = await modelCatalog.snapshot();
+        if (model && !catalog.models.includes(model)) {
+          throw Object.assign(new Error("所选模型不在当前 OpenCode 配置清单中，请重新选择使用模型。"), { statusCode: 422, code: "opencode-model-not-configured" });
+        }
+        const audit = await runner.createAudit({ ...input, model }, request.headers["idempotency-key"]);
         json(response, 202, audit, { Location: `/api/v1/audits/${encodeURIComponent(audit.id)}`, ETag: `"${audit.version}"` });
         return;
       }

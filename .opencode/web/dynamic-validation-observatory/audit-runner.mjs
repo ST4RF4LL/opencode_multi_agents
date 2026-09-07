@@ -992,21 +992,8 @@ export class AuditRunner extends EventEmitter {
   }
 
   async modelForLaunch(audit) {
-    const configured = this.modelResolver ? await this.modelResolver(audit) : audit.model;
+    const configured = Object.hasOwn(audit, "model") ? audit.model : this.modelResolver ? await this.modelResolver(audit) : null;
     return normalizeOpenCodeModel(configured);
-  }
-
-  async syncQueuedAuditModels(model) {
-    const selectedModel = normalizeOpenCodeModel(model);
-    const queued = [...this.audits.values()].filter(audit => audit.status === "queued" && audit.model !== selectedModel);
-    for (const audit of queued) {
-      audit.model = selectedModel;
-      await this.record(audit, "audit.model.updated", {
-        model: selectedModel ?? DEFAULT_MODEL_SELECTION,
-        reason: "settings-updated-while-queued",
-      });
-    }
-    return queued.length;
   }
 
   queueSnapshot() {
@@ -1388,9 +1375,8 @@ export class AuditRunner extends EventEmitter {
       exit_code: null,
       error: null,
       allow_dirty: input.allow_dirty === true,
-      // This is the model currently selected when the audit is created.  The
-      // command itself resolves the latest system selection immediately before
-      // each launch, so queued and recovery work follows current settings.
+      // Persist the task selection, including null for OpenCode defaults.
+      // Queue dispatch and recovery must preserve this binding.
       model: normalizeOpenCodeModel(input.model),
       provider_session_id: null,
       recovery_count: 0,

@@ -574,9 +574,7 @@ if (mode === "run") {
   assert.match(sourceBinding.binding_digest, /^[a-f0-9]{64}$/);
   await fallbackRunner.shutdown();
 
-  // A queued audit must not retain the setting from its creation time.  The
-  // selected model is refreshed while it waits, then read again when its
-  // `opencode run` command is actually constructed.
+  // Queued tasks retain their model even when the global default changes.
   let queuedModelSelection = "global-provider/global-audit";
   const queuedChild = new FakeChild();
   const queuedTerminalMonitor = new FakeTerminalMonitor();
@@ -602,11 +600,11 @@ if (mode === "run") {
   assert.equal(queuedRunner.getAudit(queuedAudit.id).status, "queued");
   assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "global-provider/global-audit");
   queuedModelSelection = "project-provider/project-default";
-  assert.equal(await queuedRunner.syncQueuedAuditModels(queuedModelSelection), 1);
-  assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "project-provider/project-default");
+  assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "global-provider/global-audit");
+  assert.equal(await queuedRunner.modelForLaunch({ model: null }), null, "显式默认不得被全局模型覆盖");
   queuedModelSelection = "project-provider/project-review";
   await queuedRunner.dispatchQueuedAudit(queuedAudit.id);
-  assert.equal(queuedTerminalMonitor.starts[0].args[queuedTerminalMonitor.starts[0].args.indexOf("--model") + 1], "project-provider/project-review");
+  assert.equal(queuedTerminalMonitor.starts[0].args[queuedTerminalMonitor.starts[0].args.indexOf("--model") + 1], "global-provider/global-audit");
   await queuedRunner.shutdown();
 
   const gatedChild = new FakeChild();
@@ -1307,6 +1305,36 @@ if (mode === "run") {
     assert.equal(await reportDownload.text(), report.body);
     assert.equal((await fetch(`${base}/api/v1/reports/not-found`)).status, 404);
 
+    const originalCreateAudit = runner.createAudit;
+    try {
+      runner.createAudit = async input => ({ id: "model-selection-probe", version: 1, model: input.model });
+      for (const [input, expected] of [
+        [{}, "global-provider/global-audit"],
+        [{ model: "default" }, null],
+        [{ model: null }, null],
+        [{ model: "project-provider/project-review" }, "project-provider/project-review"],
+      ]) {
+        const selected = await fetch(`${base}/api/v1/audits`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": "model-selection-probe" },
+          body: JSON.stringify(input),
+        });
+        assert.equal(selected.status, 202);
+        assert.equal((await selected.json()).model, expected);
+      }
+    } finally {
+      runner.createAudit = originalCreateAudit;
+    }
+
+    for (const model of ["unconfigured/provider", "--model injected"]) {
+      const rejected = await fetch(`${base}/api/v1/audits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": `invalid-model-${model}` },
+        body: JSON.stringify({ repository_id: "fixture", model }),
+      });
+      assert.equal(rejected.status, 422);
+    }
+
     const createResponse = await fetch(`${base}/api/v1/audits`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": "request-001" },
@@ -1316,7 +1344,7 @@ if (mode === "run") {
         repository_id: "fixture",
         ref: "HEAD",
         allow_dirty: true,
-        model: "browser-controlled/ignored",
+        model: "project-provider/project-review",
         additional_instructions_enabled: true,
         additional_instructions: "只验证 XSS 漏洞；其他类型只记录静态证据。",
         test_environment_enabled: true,
@@ -1326,7 +1354,7 @@ if (mode === "run") {
     assert.equal(createResponse.status, 202);
     const created = await createResponse.json();
     assert.equal(created.id, "audit-live-001");
-    assert.equal(created.model, "global-provider/global-audit");
+    assert.equal(created.model, "project-provider/project-review");
     assert.equal(created.idempotency_digest, undefined);
     assert.equal(created.private_context, undefined);
     assert.equal(created.task_context.additional_instructions_enabled, true);
@@ -1351,7 +1379,7 @@ if (mode === "run") {
     assert.match(spawnCall.args[0], /terminal-output-relay\.mjs$/);
     const monitoredRunArgs = terminalMonitor.starts[0].args;
     assert.deepEqual(monitoredRunArgs.slice(0, 3), ["run", "--format", "json"]);
-    assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--model") + 1], "global-provider/global-audit");
+    assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--model") + 1], "project-provider/project-review");
     assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--agent") + 1], "security-audit-orchestrator");
     assert.equal(monitoredRunArgs[monitoredRunArgs.indexOf("--dir") + 1], executionWorkspace);
     const monitoredPrompt = monitoredRunArgs.at(-1);
@@ -1550,7 +1578,7 @@ if (mode === "run") {
     assert.equal(dynamicSpawnCall.options.shell, false);
     assert.equal(dynamicSpawnCall.args[1], "请读取所附授权说明并严格按 dynamic-vulnerability-validator 契约执行。");
     assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--agent") + 1], "dynamic-vulnerability-validator");
-    assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--model") + 1], "global-provider/global-audit");
+    assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--model") + 1], "project-provider/project-review");
     const dynamicExecutionWorkspace = join(platformRoot, "workspace", "audit-runs", created.id);
     assert.equal(dynamicSpawnCall.options.cwd, dynamicExecutionWorkspace);
     assert.equal(dynamicSpawnCall.args[dynamicSpawnCall.args.indexOf("--dir") + 1], dynamicExecutionWorkspace);
@@ -1804,6 +1832,7 @@ if (mode === "run") {
     assert.match(indexHtml, /data-view="settings"/);
     assert.match(indexHtml, /id="queue-settings-form"/);
     assert.match(indexHtml, /id="model-settings-form"/);
+    assert.match(indexHtml, /使用模型<select name="model" id="audit-model-select" required>/);
     assert.match(indexHtml, /使用模型/);
     assert.match(indexHtml, /队列间隔/);
     assert.match(indexHtml, /激活排队机制/);
@@ -1970,7 +1999,7 @@ if (mode === "run") {
   const resumedAudit = await resumableRunner.action(resumableAuditId, "recover", interruptedAudit.version, "resume-action-001");
   assert.equal(resumedAudit.status, "running");
   assert.equal(resumedAudit.recovery_count, 1);
-  assert.equal(resumedAudit.model, "project-provider/project-review");
+  assert.equal(resumedAudit.model, "global-provider/global-audit");
   assert.equal(resumedAudit.provider_session_id, "ses_resume_fixture");
   assert.equal(resumeTerminalMonitor.abortCalls.length, 1);
   assert.equal(resumeTerminalMonitor.starts[0].providerSessionId, "ses_resume_fixture");
@@ -1983,7 +2012,7 @@ if (mode === "run") {
   assert.equal(JSON.stringify(resumedAudit).includes("resume-proxy-fixture.test"), false);
   const resumeRunArgs = resumeTerminalMonitor.starts[0].args;
   assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--session") + 1], "ses_resume_fixture");
-  assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--model") + 1], "project-provider/project-review");
+  assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--model") + 1], "global-provider/global-audit");
   assert.match(resumeRunArgs.at(-1), /第 1 次断点恢复/);
   assert.match(resumeRunArgs.at(-1), /不得删除有效制品/);
   assert.match(resumeRunArgs.at(-1), /不得调用 question 工具/);
