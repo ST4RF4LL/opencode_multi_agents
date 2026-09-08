@@ -196,7 +196,7 @@ function mergeSnapshots(snapshots) {
   return merged;
 }
 
-async function streamAuditEvents(request, response, runner, auditId) {
+export async function streamAuditEvents(request, response, runner, auditId) {
   if (!runner.getAudit(auditId)) {
     json(response, 404, { error: "audit-not-found" });
     return;
@@ -207,14 +207,25 @@ async function streamAuditEvents(request, response, runner, auditId) {
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  const prior = await runner.eventsSince(auditId, 0);
   const streamUrl = new URL(request.url ?? "/", "http://127.0.0.1");
-  const afterSequence = Number(streamUrl.searchParams.get("after") ?? 0);
-  const lastEventId = request.headers["last-event-id"];
-  const lastIndex = lastEventId ? prior.findIndex(event => event.event_id === lastEventId) : -1;
-  const replay = lastIndex >= 0 ? prior.slice(lastIndex + 1) : prior.filter(event => event.sequence > afterSequence);
-  for (const event of replay) response.write(`id: ${event.event_id}\ndata: ${JSON.stringify(event)}\n\n`);
-  const unsubscribe = runner.subscribe(auditId, event => response.write(`id: ${event.event_id}\ndata: ${JSON.stringify(event)}\n\n`));
+  const requestedSequence = Number(streamUrl.searchParams.get("after") ?? 0);
+  const afterSequence = Number.isSafeInteger(requestedSequence) && requestedSequence >= 0 ? requestedSequence : 0;
+  const pending = [];
+  let replaying = true, sentSequence = 0;
+  const send = event => {
+    if (event.sequence <= sentSequence || response.destroyed) return;
+    response.write(`id: ${event.event_id}\ndata: ${JSON.stringify(event)}\n\n`);
+    sentSequence = event.sequence;
+  };
+  const unsubscribe = runner.subscribe(auditId, event => replaying ? pending.push(event) : send(event));
+  request.once("close", unsubscribe);
+  try {
+    const replay = await runner.eventsSince(auditId, afterSequence, request.headers["last-event-id"]);
+    for (const event of replay) send(event);
+    for (const event of pending) send(event);
+    replaying = false;
+  } catch (error) { unsubscribe(); throw error; }
+  if (response.destroyed) { unsubscribe(); return; }
   const heartbeat = setInterval(() => response.write(": heartbeat\n\n"), 15_000);
   heartbeat.unref();
   request.once("close", () => {

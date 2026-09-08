@@ -1,3 +1,4 @@
+import { EventLogReader } from "./event-log-reader.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
@@ -531,6 +532,7 @@ export class AuditRunner extends EventEmitter {
     this.writeQueues = new Map();
     this.contextRedactions = new Map();
     this.queueScheduler = null;
+    this.eventLogReader = new EventLogReader();
     this.modelResolver = null;
     this.setModelResolver(modelResolver);
     this.dispatching = new Set();
@@ -1281,14 +1283,8 @@ export class AuditRunner extends EventEmitter {
     });
   }
 
-  async eventsSince(id, sequence = 0) {
-    try {
-      const content = await readFile(join(this.stateRoot, id, "events.jsonl"), "utf8");
-      return content.split("\n").filter(Boolean).map(line => JSON.parse(line)).filter(event => event.sequence > sequence);
-    } catch (error) {
-      if (error?.code === "ENOENT") return [];
-      throw error;
-    }
+  async eventsSince(id, sequence = 0, lastEventId = null) {
+    return this.eventLogReader.eventsSince(join(this.stateRoot, id, "events.jsonl"), sequence, lastEventId);
   }
 
   async recentLogs(id, limit = 100) {

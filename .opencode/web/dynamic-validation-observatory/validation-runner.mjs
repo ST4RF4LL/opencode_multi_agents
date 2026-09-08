@@ -1,3 +1,4 @@
+import { EventLogReader } from "./event-log-reader.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { execFile, spawn } from "node:child_process";
@@ -193,6 +194,7 @@ export class DynamicValidationRunner extends EventEmitter {
     this.runs = new Map();
     this.processes = new Map();
     this.subscribers = new Map();
+    this.eventLogReader = new EventLogReader();
     this.queues = new Map();
     this.ready = this.initialize();
   }
@@ -276,6 +278,7 @@ export class DynamicValidationRunner extends EventEmitter {
       const queuedWrite = this.queues.get(run.id);
       if (queuedWrite) await queuedWrite;
       await rm(this.directory(run.id), { recursive: true, force: true });
+      this.eventLogReader.files.delete(join(this.directory(run.id), "events.jsonl"));
       this.runs.delete(run.id);
       this.subscribers.delete(run.id);
       this.queues.delete(run.id);
@@ -284,13 +287,7 @@ export class DynamicValidationRunner extends EventEmitter {
   }
 
   async eventsSince(id, sequence = 0) {
-    try {
-      const content = await readFile(join(this.directory(id), "events.jsonl"), "utf8");
-      return content.split("\n").filter(Boolean).map(line => JSON.parse(line)).filter(event => event.sequence > sequence);
-    } catch (error) {
-      if (error?.code === "ENOENT") return [];
-      throw error;
-    }
+    return this.eventLogReader.eventsSince(join(this.directory(id), "events.jsonl"), sequence);
   }
 
   subscribe(id, listener) {

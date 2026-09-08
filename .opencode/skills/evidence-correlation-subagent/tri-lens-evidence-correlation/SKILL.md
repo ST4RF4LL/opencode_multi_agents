@@ -11,6 +11,26 @@ metadata:
 
 Correlate existing evidence without performing new vulnerability discovery, inventing attack-chain transitions, or performing exploitability classification.
 
+## Machine Coverage Projection
+
+Use the accounting script for mechanical fields; do not ask the model to reproduce entity arrays or calculate cell totals. Create a compact manifest from all current-round accepted packet report bindings (all three lenses), preserving their existing hashes:
+
+```json
+{"audit_id":"<id>","scope_digest":"<digest>","round":1,"reports":[{"path":"vulnerability-mining/<report>.json","sha256":"<existing handoff hash>"}]}
+```
+
+Paths are relative to the reports root. Reconcile before hashing/sealing. Never manufacture new hashes to hide a changed DONE report. Keep missing/GAP work items in the semantic residual gaps; an omitted packet cannot be treated as covered. Blind/seeded/system evidence remains separate from coverage accounting.
+
+```sh
+node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/build-correlation-coverage.mjs \
+  --manifest <accepted-report-bindings.json> --scope <scope-manifest.json> \
+  --catalog <catalog.json> --reports-root reports --output <machine-coverage.json>
+```
+
+Read the generated dimension/cell summaries and rejection/gap list. Read original entity rows only when needed to investigate a discrepancy. Write semantic correlation fields (canonical findings, duplicate mapping, contradictions, semantic coverage, follow-up packets and residual gaps). Re-run the same command with `--correlation <correlation-report.json>` to attach lossless machine-generated arrays and the projection digest before sealing. This recomputes from actual source bytes and rejects changed hashes; it never edits source reports. Do not manually edit the attached mechanical fields.
+
+The projection cannot prove that the supplied report list covers the full frozen plan. Existing TODO binding checks and structural/semantic verifiers remain mandatory and authoritative; retain their gaps. Earlier-round evidence stays explicitly identified and is never silently superseded.
+
 ## Normalize Coverage
 
 Use this unique cell key:
@@ -104,7 +124,7 @@ Keep the original `audit_strategy`; do not ask one session to resolve multiple l
 
 ## Output Schema
 
-The correlation JSON must include:
+The final correlation JSON must include the following fields. The builder owns `coverage_cells`, `dimension_summary`, and the three `*_coverage_records` arrays; the model writes semantic fields only:
 
 ```yaml
 schema_version: 1

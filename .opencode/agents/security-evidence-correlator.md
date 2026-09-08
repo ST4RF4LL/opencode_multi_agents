@@ -65,7 +65,7 @@ Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_
 
 ## Responsibilities
 
-1. Normalize coverage by `scope × focus_area × language/domain × dimension × lens` and preserve entry-point/threat/track/system-pass semantic coverage.
+1. Use `build-correlation-coverage.mjs` from the accounting Skill to generate coverage fields mechanically; never hand-author or copy the full entity arrays. Normalize coverage by `scope × focus_area × language/domain × dimension × lens` and preserve entry-point/threat/track/system-pass semantic coverage.
 2. Preserve file/function/catalog IDs, explicit base/AI or catalog domain, evidence, owner, status, lens, round, and source report without summarizing away individual records.
 3. Apply status precedence `GAP > FINDING > PASS > N/A` when combining assigned targets.
    Keep local scheduler state (`DONE/GAP`) separate from result (`NO_FINDING/FINDING/INCONCLUSIVE`); a completed packet never closes another type, interface, or lens.
@@ -77,6 +77,8 @@ Reject or quarantine coverage reports whose `audit_id`, `round`, `agent_session_
 9. Emit minimal follow-up work packets for every missing/invalid structural or semantic coverage cell, contradiction, and high-risk unknown.
 
 ## Output
+
+First write semantic findings, contradictions, semantic coverage, and follow-up questions. Then run the machine coverage builder with `--correlation` to attach the deterministic coverage fields before binding/sealing the final correlation report. Original reports remain authoritative; generated arrays are reproducible views. The projection does not replace full Plan/structural/semantic coverage verification.
 
 Write:
 

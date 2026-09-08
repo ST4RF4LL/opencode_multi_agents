@@ -47,4 +47,4 @@
 
 先统一 TODO 完成条件与三视角制品协议，避免错误重跑；再去掉重复 doctor、合并确定性覆盖视图；随后复用语义事实包和初步攻击链；最后评估 AI 覆盖适用性政策的调整。每项在 Windows/Linux 原生环境记录 Agent 调用数、重复读取文件数、模型 Token、准备/单报告耗时及误报/漏报回归，才能判断收益。
 
-第1—4项已按[实施说明](audit-workflow-optimizations-1-4.md)调整；本表保留优化前的问题证据，第5—8项尚未实施。快速动态预算与共享环境改动详见[实施说明](quick-dynamic-shared-environment.md)。
+第1—4项已按[实施说明](audit-workflow-optimizations-1-4.md)调整；本表保留优化前的问题证据，第5—8项中的工具探测和覆盖机械汇总已在[第二轮优化](audit-redundancy-mechanical-optimizations.md)处理；终态攻击链差异复核和政策统一仍未实施。快速动态预算与共享环境改动详见[实施说明](quick-dynamic-shared-environment.md)。

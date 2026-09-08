@@ -30,7 +30,7 @@
     "test:adjudication-regressions": "node tests/run-adjudication-regression-tests.mjs",
     "test:attack-chain-contract": "node tests/run-attack-chain-contract-tests.mjs",
     "test:semantic-reseed": "node tests/run-semantic-reseed-tests.mjs",
-    "test:coverage": "node tests/run-coverage-tests.mjs && node tests/run-coverage-response-tests.mjs && node tests/run-coverage-concurrency-tests.mjs",
+    "test:coverage": "node tests/run-coverage-tests.mjs && node tests/run-coverage-response-tests.mjs && node tests/run-coverage-concurrency-tests.mjs && node tests/run-redundancy-io-tests.mjs",
     "test:semantic": "node tests/run-semantic-coverage-tests.mjs",
     "winapp:control": "node scripts/windows-control-cli.mjs",
     "winapp:mcp": "node scripts/windows-control-mcp.mjs",

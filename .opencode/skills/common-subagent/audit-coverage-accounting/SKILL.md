@@ -139,6 +139,10 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/reconcil
 
 The reconciler computes the complete target universe from the report's frozen assignment and catalog dimensions. It sets `PASS`, `FINDING`, or `GAP`; it emits `N/A` only when that dimension has zero machine-assigned targets. Never add `targets_discovered` or `targets_reviewed`: the verifier rejects self-reported totals.
 
+After the report is hash-bound by a handoff, use the same command with `--mode verify`: it checks derived cells without writing. Default reconciliation also leaves already matching cells and report bytes untouched. A failed verification is a GAP requiring corrected artifacts and renewed bindings, never permission to rewrite a sealed report silently.
+
+For correlation, `build-correlation-coverage.mjs` generates cell summaries and lossless entity views from digest-bound reports; follow the compact manifest and `--correlation` merge procedure in `tri-lens-evidence-correlation`. These generated views never replace full structural or semantic coverage verification.
+
 ## Build and execute Coverage Plan v3
 
 After the sealed Focus Areas partition every file/function/catalog primary

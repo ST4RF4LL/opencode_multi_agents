@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
+import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { deriveCoverageCells } from "./coverage-cell-accounting.mjs";
 
@@ -16,8 +18,8 @@ function parseArgs(argv) {
   return args;
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+export async function reconcileReport(args) {
+  if (!["reconcile", "verify"].includes(args.mode ?? "reconcile")) throw new Error("mode must be reconcile or verify");
   const reportPath = resolve(args.report);
   const outputPath = resolve(args.output ?? args.report);
   const [report, scope, catalog] = await Promise.all([
@@ -29,12 +31,21 @@ async function main() {
     throw new Error("Report audit/scope binding does not match the frozen scope manifest");
   }
   const catalogEntries = new Map((catalog.entries ?? []).map(entry => [entry.id, entry]));
-  report.coverage_cells = deriveCoverageCells(report, catalogEntries);
-  await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ output: outputPath, audit_id: report.audit_id, lens: report.audit_strategy, cells: report.coverage_cells.map(cell => ({ dimension: cell.dimension, status: cell.status, targets: cell.evidence[0].machine_target_count, closed: cell.evidence[0].closed_target_count })) })}\n`);
+  const cells = deriveCoverageCells(report, catalogEntries);
+  const unchanged = isDeepStrictEqual(report.coverage_cells, cells);
+  if (args.mode === "verify" && !unchanged) throw new Error("密封报告的覆盖统计与实体记录不一致；请重新归一化并更新下游绑定。");
+  if (args.mode === "verify" && outputPath !== reportPath) throw new Error("verify 模式不允许另存报告。");
+  report.coverage_cells = cells;
+  if (args.mode !== "verify" && (!unchanged || outputPath !== reportPath)) {
+    await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  }
+  return { output: outputPath, unchanged, audit_id: report.audit_id, lens: report.audit_strategy,
+    cells: cells.map(cell => ({ dimension: cell.dimension, status: cell.status, targets: cell.evidence[0].machine_target_count, closed: cell.evidence[0].closed_target_count })) };
 }
 
-main().catch(error => {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) reconcileReport(parseArgs(process.argv.slice(2))).then(result => {
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}).catch(error => {
   process.stderr.write(`${error.stack ?? error.message}\n`);
   process.exitCode = 1;
 });
