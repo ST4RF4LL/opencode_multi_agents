@@ -45,7 +45,28 @@
 
           <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">AUDIT TARGETS</p><h2>审计项目</h2><p>登记你要审计的源码目录；路径属于工作台所在机器，而不是浏览器所在机器。</p></div><button id="add-project" class="button primary">＋ 指定目录</button></div><article class="panel"><div id="project-table" class="data-table"></div></article></section>
 
-          <section id="view-audits" class="view"><div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div><button id="dispatch-queue" class="button secondary">立即调度队列</button></div><div class="split"><article class="panel"><div id="audit-table" class="data-table"></div></article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div></section>
+          <section id="view-audits" class="view">
+            <div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div><button id="dispatch-queue" class="button secondary">立即调度队列</button></div>
+            <div class="audit-list-controls">
+              <div class="audit-tabs" role="group" aria-label="审计任务分类">
+                <button type="button" class="button secondary primary" data-audit-tab="running" aria-pressed="true">运行中</button>
+                <button type="button" class="button secondary" data-audit-tab="completed" aria-pressed="false">已完成</button>
+                <button type="button" class="button secondary" data-audit-tab="all" aria-pressed="false">全部</button>
+              </div>
+              <label>搜索任务 <input id="audit-query" type="search" placeholder="任务名称、ID、仓库或提交" /></label>
+              <span id="audit-list-status" role="status"></span>
+            </div>
+            <p class="audit-list-hint">“已完成”包含所有非运行任务，包括中断、取消、失败、排队中和已暂停的任务。</p>
+            <div class="split"><article class="panel">
+              <div id="audit-table" class="data-table"></div>
+              <nav id="audit-pagination" class="finding-pagination" aria-label="审计任务分页" hidden>
+                <label>每页 <select id="audit-page-size"><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option></select> 条</label>
+                <button id="audit-previous" type="button" class="button secondary">上一页</button>
+                <span id="audit-page-info"></span>
+                <button id="audit-next" type="button" class="button secondary">下一页</button>
+              </nav>
+            </article><aside id="audit-detail" class="panel detail-panel"><div class="empty-state">选择一个审计任务查看阶段详情。</div></aside></div>
+          </section>
 
           <section id="view-findings" class="view"><div class="page-heading"><div><p class="eyebrow">FINDING LEDGER</p><h2>漏洞发现</h2><p>按结论、源码定位、关键证据、影响与修复展示；缺失定位会明确标记，而不会显示空白。</p></div><label class="search"><span>⌕</span><input id="finding-query" placeholder="搜索漏洞、文件、证据或 ID"></label></div><article class="panel"><div id="finding-table" class="finding-list"></div></article></section>
 

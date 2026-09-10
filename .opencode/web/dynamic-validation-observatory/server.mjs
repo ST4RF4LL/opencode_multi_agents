@@ -14,6 +14,7 @@ import { FindingWorkflowStore } from "./finding-workflow.mjs";
 import { listValidationRequests, listValidationRunDetails, listValidationRuns } from "./model.mjs";
 import { DEFAULT_MODEL_SELECTION, normalizeOpenCodeModel, OpenCodeModelCatalog, OpenCodeModelSettingsStore } from "./opencode-model-settings.mjs";
 import { buildWorkspaceSnapshot } from "./workspace-model.mjs";
+import { paginateAudits, compactWorkspaceAudits } from "./audit-list.mjs";
 import { DynamicValidationRunner } from "./validation-runner.mjs";
 import { RequestHistoryStore } from "./request-history-store.mjs";
 import { buildOpenCollectionArchive } from "./bruno-exporter.mjs";
@@ -568,6 +569,7 @@ export function createAuditWorkbenchServer({
       }
       if (request.method === "GET" && url.pathname === "/api/v1/workspace") {
         const { findings: _findings, ...workspace } = await snapshot();
+        if (url.searchParams.get("audits") === "compact") workspace.audits = compactWorkspaceAudits(workspace.audits);
         json(response, 200, workspace);
         return;
       }
@@ -596,7 +598,7 @@ export function createAuditWorkbenchServer({
       }
       if (request.method === "GET" && url.pathname === "/api/v1/audits") {
         const data = await snapshot();
-        json(response, 200, { items: data.audits, count: data.audits.length });
+        json(response, 200, paginateAudits(data.audits, url.searchParams));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/v1/audits") {

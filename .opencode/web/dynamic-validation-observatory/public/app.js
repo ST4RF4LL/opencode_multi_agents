@@ -9,6 +9,17 @@ const state = {
   environment: { capabilities: [], components: [], platform: {}, configuration: {} },
   modelSettings: { selected_model: "default", options: [{ value: "default", label: "默认" }], sources: [], selection_available: true },
   selectedAuditId: null,
+  selectedAudit: null,
+  audits: [],
+  auditTab: "running",
+  auditPage: 1,
+  auditPageSize: 20,
+  auditTotal: 0,
+  auditTotalPages: 1,
+  auditLoading: false,
+  auditController: null,
+  auditDetailController: null,
+  auditSearchTimer: null,
   selectedValidationId: null,
   selectedFindingResourceId: null,
   view: "dashboard",
@@ -146,6 +157,16 @@ function setView(view) {
   $("page-title").textContent = VIEW_META[view][0];
   $("breadcrumb").textContent = VIEW_META[view][1];
   renderActiveView();
+  if (view === "audits") loadAuditsPage(1).catch(showError);
+  else {
+    state.auditController?.abort();
+    state.auditDetailController?.abort();
+    state.audits = [];
+    state.selectedAudit = null;
+    state.selectedAuditId = null;
+    $("audit-table").replaceChildren();
+    $("audit-detail").replaceChildren();
+  }
   if (view === "findings" && !state.findingLoaded && !state.findingLoading) loadFindingsPage(1).catch(showError);
   window.scrollTo(0, 0);
 }
@@ -200,7 +221,7 @@ function auditListItem(audit) {
   const todo = audit.todo?.total ? ` · 本地任务 ${audit.todo.done}/${audit.todo.total}${audit.todo.gap ? `，${audit.todo.gap} GAP` : ""}` : "";
   progress.append(element("small", "", audit.status === "queued" ? "等待定时调度" : `${audit.stage} · ${audit.progress ?? 0}%${todo}`), bar);
   button.append(identity, progress, status(audit.status));
-  button.addEventListener("click", () => { state.selectedAuditId = audit.id; setView("audits"); renderAuditDetail(); });
+  button.addEventListener("click", () => { state.selectedAuditId = audit.id; setView("audits"); selectAudit(audit.id).catch(showError); });
   return button;
 }
 
@@ -270,6 +291,17 @@ function renderProjects() {
 }
 
 function renderAudits() {
+  document.querySelectorAll("[data-audit-tab]").forEach(button => {
+    const selected = button.dataset.auditTab === state.auditTab;
+    button.classList.toggle("primary", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  $("audit-pagination").hidden = state.auditTab === "running";
+  $("audit-page-size").value = String(state.auditPageSize);
+  $("audit-page-info").textContent = `第 ${state.auditPage} / ${state.auditTotalPages} 页 · 共 ${state.auditTotal} 个任务`;
+  $("audit-previous").disabled = state.auditLoading || state.auditPage <= 1;
+  $("audit-next").disabled = state.auditLoading || state.auditPage >= state.auditTotalPages;
+  $("audit-list-status").textContent = state.auditLoading ? "加载中…" : `共 ${state.auditTotal} 个任务`;
   const dispatchQueue = $("dispatch-queue");
   const queue = state.workspace.queue ?? {};
   const queued = queue.queued_count ?? state.workspace.audits.filter(audit => audit.status === "queued").length;
@@ -283,7 +315,7 @@ function renderAudits() {
         ? "当前并发名额已满"
         : "跳过队列间隔，按创建时间启动当前可用名额内的任务";
   const [value, body] = table(["审计任务", "仓库 / 提交", "当前阶段", "进度", "漏洞", "状态", "操作"]);
-  for (const audit of state.workspace.audits) {
+  for (const audit of state.audits) {
     const row = element("tr", "clickable");
     const identity = element("td");
     identity.append(element("strong", "", audit.name), element("small", "mono", audit.id));
@@ -309,16 +341,64 @@ function renderAudits() {
       actionCell.textContent = "—";
     }
     row.append(actionCell);
-    row.addEventListener("click", () => { state.selectedAuditId = audit.id; renderAuditDetail(); });
+    row.addEventListener("click", () => selectAudit(audit.id).catch(showError));
     body.append(row);
   }
   $("audit-table").replaceChildren(value);
-  if (!state.selectedAuditId && state.workspace.audits[0]) state.selectedAuditId = state.workspace.audits[0].id;
+  if (!state.audits.length) $("audit-table").append(element("div", "empty-state", state.auditLoading ? "正在加载任务…" : "没有符合条件的审计任务。"));
   renderAuditDetail();
 }
 
+async function loadAuditsPage(page = 1) {
+  state.auditController?.abort();
+  const controller = new AbortController();
+  state.auditController = controller;
+  state.auditLoading = true;
+  state.audits = [];
+  renderAudits();
+  try {
+    const parameters = new URLSearchParams({ tab: state.auditTab, page: String(page), page_size: String(state.auditPageSize), q: $("audit-query").value.trim() });
+    const payload = await api(`/api/v1/audits?${parameters}`, { signal: controller.signal });
+    if (controller.signal.aborted || state.view !== "audits") return;
+    state.audits = payload.items;
+    state.auditPage = payload.page;
+    state.auditTotal = payload.count;
+    state.auditTotalPages = payload.total_pages;
+  } catch (error) {
+    if (error.name !== "AbortError") throw error;
+  } finally {
+    if (state.auditController === controller) {
+      state.auditLoading = false;
+      if (state.view === "audits") renderAudits();
+    }
+  }
+}
+
+async function selectAudit(auditId) {
+  state.auditDetailController?.abort();
+  const controller = new AbortController();
+  state.auditDetailController = controller;
+  state.selectedAuditId = auditId;
+  state.selectedAudit = null;
+  renderAuditDetail();
+  try {
+    const audit = await api(`/api/v1/audits/${encodeURIComponent(auditId)}`, { signal: controller.signal });
+    if (controller.signal.aborted || state.selectedAuditId !== auditId || state.view !== "audits") return;
+    state.selectedAudit = audit;
+    renderAuditDetail();
+  } catch (error) {
+    if (error.name !== "AbortError") throw error;
+  }
+}
+
+function findAudit(auditId) {
+  return (state.selectedAudit?.id === auditId ? state.selectedAudit : null)
+    ?? state.audits.find(item => item.id === auditId)
+    ?? state.workspace.audits.find(item => item.id === auditId);
+}
+
 function renderAuditDetail() {
-  const audit = state.workspace.audits.find(item => item.id === state.selectedAuditId);
+  const audit = state.selectedAudit;
   const panel = $("audit-detail");
   if (!audit) { panel.replaceChildren(element("div", "empty-state", "选择一个审计任务查看阶段详情。")); return; }
   const modelForDisplay = audit.model;
@@ -444,7 +524,7 @@ function setTerminalStatus(payload) {
 }
 
 function withTerminalSession(payload, auditId) {
-  const audit = state.workspace.audits.find(item => item.id === auditId);
+  const audit = findAudit(auditId);
   const sessionId = payload.provider_session_id ?? audit?.provider_session_id ?? audit?.terminal?.provider_session_id ?? null;
   return {
     ...payload,
@@ -661,7 +741,7 @@ function closeDeleteAuditDialog() {
 
 async function submitDeleteAudit(event) {
   event.preventDefault();
-  const audit = state.workspace.audits.find(item => item.id === state.pendingDeleteAuditId);
+  const audit = findAudit(state.pendingDeleteAuditId);
   const error = $("delete-audit-form-error");
   if (!audit) {
     error.textContent = "待删除的审计任务已不存在，请关闭后刷新。";
@@ -678,6 +758,7 @@ async function submitDeleteAudit(event) {
     });
     closeDeleteAuditDialog();
     state.selectedAuditId = null;
+    state.selectedAudit = null;
     invalidateFindings();
     toast(`已删除 ${result.audit_id}`);
     await load();
@@ -1295,7 +1376,7 @@ async function refreshLiveWorkspace() {
   if (state.liveLoad) return state.liveLoad;
   const request = (async () => {
     $("global-error").hidden = true;
-    const requests = [api("/api/v1/workspace")];
+    const requests = [api("/api/v1/workspace?audits=compact")];
     // Validation has two supplementary collections.  Keep them current only
     // while that page is visible; status output from a static audit should not
     // repeatedly scan validation records or rebuild that page in the background.
@@ -1306,6 +1387,9 @@ async function refreshLiveWorkspace() {
     if (validationRequests) state.validationRequests = validationRequests.items;
     if (exchanges) state.requestExchanges = exchanges.items;
     renderActiveView();
+    if (state.view === "audits") {
+      await Promise.all([loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : null]);
+    }
     connectEventStream();
     connectValidationEventStream();
   })();
@@ -1320,7 +1404,7 @@ async function refreshLiveWorkspace() {
 async function load() {
   $("global-error").hidden = true;
   const [workspace, repositories, validation, validationRequests, runtime, environment, modelSettings, exchanges] = await Promise.all([
-    api("/api/v1/workspace"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"), api("/api/v1/http-exchanges?limit=100"),
+    api("/api/v1/workspace?audits=compact"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"), api("/api/v1/http-exchanges?limit=100"),
   ]);
   applyWorkspace(workspace);
   state.repositories = repositories.items;
@@ -1333,6 +1417,9 @@ async function load() {
   // Keep the initial paint small as well: hidden pages can contain long audit,
   // finding and report tables.  They are rendered when the operator opens them.
   renderActiveView();
+  if (state.view === "audits") {
+    await Promise.all([loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : null]);
+  }
   connectEventStream();
   connectValidationEventStream();
 }
@@ -1493,7 +1580,9 @@ async function submitAudit(event) {
     state.selectedAuditId = audit.id;
     toast(`审计 ${audit.id} 已进入队列`);
     await load();
+    state.auditTab = "completed";
     setView("audits");
+    await selectAudit(audit.id);
   } catch (error) {
     $("audit-form-error").textContent = error.message;
     $("audit-form-error").hidden = false;
@@ -1580,6 +1669,26 @@ $("new-audit").addEventListener("click", () => openAuditDialog());
 $("add-project").addEventListener("click", openProjectDialog);
 $("refresh").addEventListener("click", () => load().then(() => toast("制品与运行状态已刷新")).catch(showError));
 $("dispatch-queue").addEventListener("click", () => dispatchQueueNow().catch(showError));
+document.querySelectorAll("[data-audit-tab]").forEach(button => button.addEventListener("click", () => {
+  state.auditTab = button.dataset.auditTab;
+  state.auditDetailController?.abort();
+  state.selectedAuditId = null;
+  state.selectedAudit = null;
+  loadAuditsPage(1).catch(showError);
+}));
+$("audit-page-size").addEventListener("change", event => {
+  state.auditPageSize = Number(event.target.value);
+  loadAuditsPage(1).catch(showError);
+});
+$("audit-previous").addEventListener("click", () => loadAuditsPage(state.auditPage - 1).catch(showError));
+$("audit-next").addEventListener("click", () => loadAuditsPage(state.auditPage + 1).catch(showError));
+$("audit-query").addEventListener("input", () => {
+  window.clearTimeout(state.auditSearchTimer);
+  state.auditController?.abort();
+  state.auditSearchTimer = window.setTimeout(() => {
+    if (state.view === "audits") loadAuditsPage(1).catch(showError);
+  }, 300);
+});
 $("finding-query").addEventListener("input", () => {
   window.clearTimeout(state.findingSearchTimer);
   state.findingSearchTimer = window.setTimeout(() => loadFindingsPage(1).catch(showError), 300);
