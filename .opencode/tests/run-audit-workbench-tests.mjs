@@ -1166,6 +1166,10 @@ if (mode === "run") {
     assert.equal(compactWorkspace.summary.audit_count, workspace.summary.audit_count);
     assert.ok(compactWorkspace.audits.length <= 6);
     assert.equal(compactWorkspace.audits[0].stages, undefined);
+    const liveWorkspace = await (await fetch(`${base}/api/v1/workspace?audits=compact&live=1`)).json();
+    assert.equal(liveWorkspace.summary.audit_count, compactWorkspace.summary.audit_count);
+    const liveList = await (await fetch(`${base}/api/v1/audits?tab=all&live=1`)).json();
+    assert.equal(liveList.count, auditPage.count);
     const auditDetail = await (await fetch(`${base}/api/v1/audits/${encodeURIComponent(auditPage.items[0].id)}`)).json();
     assert.ok(Array.isArray(auditDetail.stages));
     const matchingAudits = await (await fetch(`${base}/api/v1/audits?tab=all&q=${encodeURIComponent(auditDetail.id)}`)).json();
@@ -1677,6 +1681,9 @@ if (mode === "run") {
     assert.equal(terminalMonitor.abortCalls.length, 1);
     for (let attempt = 0; attempt < 50 && runner.getAudit(created.id)?.status !== "cancelled"; attempt += 1) await new Promise(resolve => setImmediate(resolve));
     assert.equal(runner.getAudit(created.id).status, "cancelled");
+    const liveCancelled = await (await fetch(`${base}/api/v1/audits/${created.id}?live=1`)).json();
+    assert.equal(liveCancelled.status, "cancelled");
+    assert.equal(liveCancelled.version, runner.getAudit(created.id).version);
     assert.equal(runner.getAudit(created.id).terminal.status, "archived");
     assert.equal(terminalMonitor.stopCalls, 1);
     const archivedTerminal = await (await fetch(`${base}/api/v1/audits/${created.id}/terminal`)).json();

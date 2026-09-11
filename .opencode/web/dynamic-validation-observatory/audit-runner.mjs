@@ -512,6 +512,7 @@ export class AuditRunner extends EventEmitter {
     this.temporaryRoot = join(this.platformRoot, "tmp", "repositories");
     this.executionRoot = join(this.platformRoot, "workspace", "audit-runs");
     this.repositoryRegistryPath = join(this.stateRoot, "repositories.json");
+    this.repositoryFactsCache = new Map();
     this.startupRepositoryIds = new Set(repositories.map(repository => repository.id));
     this.repositories = new Map(repositories.map(repository => {
       const normalized = normalizeRepository(repository, this.configPath);
@@ -847,6 +848,7 @@ export class AuditRunner extends EventEmitter {
       throw Object.assign(new Error("该项目仍有关联审计；请先删除这些审计任务。"), { statusCode: 409, code: "repository-has-audits" });
     }
     this.repositories.delete(repositoryId);
+    this.repositoryFactsCache.delete(repositoryId);
     await this.persistRepositories();
     return {
       repository_id: repositoryId,
@@ -870,12 +872,17 @@ export class AuditRunner extends EventEmitter {
     }
   }
 
-  async listRepositories() {
+  async listRepositories({ cached = false } = {}) {
     await this.ready;
     const values = [];
     for (const repository of this.repositories.values()) {
       const audits = [...this.audits.values()].filter(audit => audit.repository_id === repository.id).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
-      values.push(publicRepository(repository, await this.repositoryFacts(repository), {
+      let entry = this.repositoryFactsCache.get(repository.id);
+      if (!cached || !entry || Date.now() - entry.at >= 10000) {
+        entry = { facts: await this.repositoryFacts(repository), at: Date.now() };
+        this.repositoryFactsCache.set(repository.id, entry);
+      }
+      values.push(publicRepository(repository, entry.facts, {
         audit_count: audits.length,
         active_audit_count: audits.filter(audit => ACTIVE.has(audit.status)).length,
         last_audit_at: audits[0]?.updated_at ?? null,

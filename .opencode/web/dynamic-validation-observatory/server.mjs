@@ -15,6 +15,7 @@ import { listValidationRequests, listValidationRunDetails, listValidationRuns } 
 import { DEFAULT_MODEL_SELECTION, normalizeOpenCodeModel, OpenCodeModelCatalog, OpenCodeModelSettingsStore } from "./opencode-model-settings.mjs";
 import { buildWorkspaceSnapshot } from "./workspace-model.mjs";
 import { paginateAudits, compactWorkspaceAudits } from "./audit-list.mjs";
+import { createSnapshotCache } from "./snapshot-cache.mjs";
 import { DynamicValidationRunner } from "./validation-runner.mjs";
 import { RequestHistoryStore } from "./request-history-store.mjs";
 import { buildOpenCollectionArchive } from "./bruno-exporter.mjs";
@@ -426,13 +427,9 @@ export function createAuditWorkbenchServer({
     };
   }
 
-  // The UI used to request /workspace and /repositories together.  Both build a
-  // complete artifact snapshot, so a single browser refresh could recursively
-  // scan the same reports twice.  Share only concurrent work (rather than a
-  // time-based cache) to keep mutations immediately observable.
-  let snapshotInFlight = null;
-  async function snapshot() {
-    if (snapshotInFlight) return snapshotInFlight;
+  // Display reads share a bounded snapshot. Mutations and evidence reads still
+  // await fresh verification; live Runner state is overlaid only for display.
+  async function buildSnapshot() {
     const operation = (async () => {
       await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready]);
       await runner.reconcileTerminalCompletions("workspace-watchdog");
@@ -472,12 +469,33 @@ export function createAuditWorkbenchServer({
       merged.queue = await queueScheduler.snapshot();
       return merged;
     })();
-    snapshotInFlight = operation;
-    try {
-      return await operation;
-    } finally {
-      if (snapshotInFlight === operation) snapshotInFlight = null;
+    return operation;
+  }
+  const snapshotCache = createSnapshotCache(buildSnapshot);
+  const snapshot = () => snapshotCache.get();
+
+  async function displaySnapshot(url) {
+    if (url.searchParams.get("live") !== "1") return snapshot();
+    const data = await snapshotCache.get({ allowStale: true });
+    const audits = new Map(data.audits.map(audit => [audit.id, audit]));
+    for (const current of runner.listAudits()) {
+      const previous = audits.get(current.id);
+      const audit = { ...previous };
+      const fields = ["id", "name", "repository_id", "repository_name", "commit", "status", "version", "event_sequence", "created_at", "updated_at", "terminal", "queue", "paths", "provider_session_id", "task_context", "todo", "model", "error", "exit_code", "recovery_count", "last_recovered_at", "interrupted_at", "interruption_reason", "todo_completion", "stage_delivery", "context_window_recovery", "completion_source"];
+      for (const field of fields) audit[field] = current[field] ?? null;
+      if (!previous) Object.assign(audit, { stages: [], progress: 0, stage: "等待调度", finding_count: 0, artifact_count: 0, runtime_validation_count: 0 });
+      if (current.stage_delivery_enforcement === "TODO_ENFORCED" && current.todo?.total > 0) {
+        audit.progress = current.todo.progress ?? 0;
+        audit.progress_source = "local-audit-todo";
+      }
+      audits.set(current.id, audit);
     }
+    const items = [...audits.values()].sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+    return { ...data, audits: items, queue: await queueScheduler.snapshot(), summary: {
+      ...data.summary, audit_count: items.length,
+      active_audits: items.filter(audit => ["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"].includes(audit.status)).length,
+      completed_audits: items.filter(audit => audit.status === "completed").length,
+    } };
   }
 
   async function reportContent(reportId) {
@@ -499,8 +517,8 @@ export function createAuditWorkbenchServer({
     return { report, bytes, digest };
   }
 
-  async function repositoriesSnapshot() {
-    const [items, data] = await Promise.all([runner.listRepositories(), snapshot()]);
+  async function repositoriesSnapshot(url = null) {
+    const [items, data] = await Promise.all([runner.listRepositories({ cached: url?.searchParams.get("live") === "1" }), url ? displaySnapshot(url) : snapshot()]);
     return items.map(repository => {
       const audits = data.audits
         .filter(audit => audit.repository_id === repository.id)
@@ -517,6 +535,10 @@ export function createAuditWorkbenchServer({
 
   const server = createHttpServer(async (request, response) => {
     securityHeaders(response);
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      snapshotCache.invalidate();
+      response.once("finish", () => snapshotCache.invalidate());
+    }
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (request.method === "GET" && (url.pathname === "/api/health" || url.pathname === "/api/v1/runtime/health")) {
@@ -568,13 +590,13 @@ export function createAuditWorkbenchServer({
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/workspace") {
-        const { findings: _findings, ...workspace } = await snapshot();
+        const { findings: _findings, ...workspace } = await displaySnapshot(url);
         if (url.searchParams.get("audits") === "compact") workspace.audits = compactWorkspaceAudits(workspace.audits);
         json(response, 200, workspace);
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/repositories") {
-        const items = await repositoriesSnapshot();
+        const items = await repositoriesSnapshot(url);
         json(response, 200, { items, count: items.length });
         return;
       }
@@ -597,7 +619,7 @@ export function createAuditWorkbenchServer({
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/v1/audits") {
-        const data = await snapshot();
+        const data = await displaySnapshot(url);
         json(response, 200, paginateAudits(data.audits, url.searchParams));
         return;
       }
@@ -645,7 +667,7 @@ export function createAuditWorkbenchServer({
         return;
       }
       if (request.method === "GET" && auditId) {
-        const data = await snapshot();
+        const data = await displaySnapshot(url);
         const audit = data.audits.find(item => item.id === auditId);
         if (!audit) json(response, 404, { error: "audit-not-found" });
         else json(response, 200, audit, { ETag: `"${audit.version}"` });

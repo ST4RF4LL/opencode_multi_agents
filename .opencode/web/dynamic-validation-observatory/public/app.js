@@ -20,6 +20,7 @@ const state = {
   auditController: null,
   auditDetailController: null,
   auditSearchTimer: null,
+  auditQueryKey: null,
   selectedValidationId: null,
   selectedFindingResourceId: null,
   view: "dashboard",
@@ -157,6 +158,7 @@ function setView(view) {
   $("page-title").textContent = VIEW_META[view][0];
   $("breadcrumb").textContent = VIEW_META[view][1];
   renderActiveView();
+  loadViewResources(view).catch(showError);
   if (view === "audits") loadAuditsPage(1).catch(showError);
   else {
     state.auditController?.abort();
@@ -354,16 +356,19 @@ async function loadAuditsPage(page = 1) {
   const controller = new AbortController();
   state.auditController = controller;
   state.auditLoading = true;
-  state.audits = [];
+  const parameters = new URLSearchParams({ tab: state.auditTab, page: String(page), page_size: String(state.auditPageSize), q: $("audit-query").value.trim(), live: "1" });
+  const queryKey = parameters.toString();
+  if (state.auditQueryKey !== queryKey) state.audits = [];
   renderAudits();
   try {
-    const parameters = new URLSearchParams({ tab: state.auditTab, page: String(page), page_size: String(state.auditPageSize), q: $("audit-query").value.trim() });
     const payload = await api(`/api/v1/audits?${parameters}`, { signal: controller.signal });
     if (controller.signal.aborted || state.view !== "audits") return;
     state.audits = payload.items;
     state.auditPage = payload.page;
     state.auditTotal = payload.count;
     state.auditTotalPages = payload.total_pages;
+    parameters.set("page", String(payload.page));
+    state.auditQueryKey = parameters.toString();
   } catch (error) {
     if (error.name !== "AbortError") throw error;
   } finally {
@@ -379,10 +384,10 @@ async function selectAudit(auditId) {
   const controller = new AbortController();
   state.auditDetailController = controller;
   state.selectedAuditId = auditId;
-  state.selectedAudit = null;
+  if (state.selectedAudit?.id !== auditId) state.selectedAudit = null;
   renderAuditDetail();
   try {
-    const audit = await api(`/api/v1/audits/${encodeURIComponent(auditId)}`, { signal: controller.signal });
+    const audit = await api(`/api/v1/audits/${encodeURIComponent(auditId)}?live=1`, { signal: controller.signal });
     if (controller.signal.aborted || state.selectedAuditId !== auditId || state.view !== "audits") return;
     state.selectedAudit = audit;
     renderAuditDetail();
@@ -1376,20 +1381,21 @@ async function refreshLiveWorkspace() {
   if (state.liveLoad) return state.liveLoad;
   const request = (async () => {
     $("global-error").hidden = true;
-    const requests = [api("/api/v1/workspace?audits=compact")];
+    const auditRefresh = state.view === "audits"
+      ? Promise.all([loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : null])
+      : Promise.resolve();
+    const requests = [api("/api/v1/workspace?audits=compact&live=1")];
     // Validation has two supplementary collections.  Keep them current only
     // while that page is visible; status output from a static audit should not
     // repeatedly scan validation records or rebuild that page in the background.
     if (state.view === "validation") requests.push(api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/http-exchanges?limit=100"));
-    const [workspace, validation, validationRequests, exchanges] = await Promise.all(requests);
+    const [resources] = await Promise.all([Promise.all(requests), auditRefresh]);
+    const [workspace, validation, validationRequests, exchanges] = resources;
     applyWorkspace(workspace);
     if (validation) state.validationRuns = validation.runs;
     if (validationRequests) state.validationRequests = validationRequests.items;
     if (exchanges) state.requestExchanges = exchanges.items;
     renderActiveView();
-    if (state.view === "audits") {
-      await Promise.all([loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : null]);
-    }
     connectEventStream();
     connectValidationEventStream();
   })();
@@ -1403,25 +1409,33 @@ async function refreshLiveWorkspace() {
 
 async function load() {
   $("global-error").hidden = true;
-  const [workspace, repositories, validation, validationRequests, runtime, environment, modelSettings, exchanges] = await Promise.all([
-    api("/api/v1/workspace?audits=compact"), api("/api/v1/repositories"), api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/runtime/health"), api("/api/v1/environment"), api("/api/v1/settings/model"), api("/api/v1/http-exchanges?limit=100"),
-  ]);
-  applyWorkspace(workspace);
-  state.repositories = repositories.items;
-  state.validationRuns = validation.runs;
-  state.validationRequests = validationRequests.items;
-  state.runtime = runtime;
-  state.environment = environment;
-  state.modelSettings = modelSettings.model;
-  state.requestExchanges = exchanges.items;
-  // Keep the initial paint small as well: hidden pages can contain long audit,
-  // finding and report tables.  They are rendered when the operator opens them.
-  renderActiveView();
-  if (state.view === "audits") {
-    await Promise.all([loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : null]);
-  }
+  // Render each resource on arrival; environment and validation are page-local.
+  const resources = [
+    api("/api/v1/workspace?audits=compact&live=1").then(workspace => { applyWorkspace(workspace); renderActiveView(); connectEventStream(); }),
+    api("/api/v1/repositories?live=1").then(payload => { state.repositories = payload.items; renderActiveView(); }),
+    api("/api/v1/runtime/health").then(runtime => { state.runtime = runtime; renderActiveView(); connectEventStream(); }),
+    api("/api/v1/settings/model").then(payload => { state.modelSettings = payload.model; if (state.view === "settings") renderActiveView(); }),
+    loadViewResources(state.view),
+  ];
+  if (state.view === "audits") resources.push(loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : Promise.resolve());
+  await Promise.all(resources);
   connectEventStream();
   connectValidationEventStream();
+}
+
+async function loadViewResources(view) {
+  if (view === "runtime") {
+    state.environment = await api("/api/v1/environment");
+  } else if (view === "validation") {
+    const [validation, requests, exchanges] = await Promise.all([
+      api("/api/runs"), api("/api/v1/validation-requests"), api("/api/v1/http-exchanges?limit=100"),
+    ]);
+    state.validationRuns = validation.runs;
+    state.validationRequests = requests.items;
+    state.requestExchanges = exchanges.items;
+    connectValidationEventStream();
+  } else return;
+  if (state.view === view) renderActiveView();
 }
 
 async function refreshEnvironment() {
