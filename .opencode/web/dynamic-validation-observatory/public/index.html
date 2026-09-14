@@ -43,7 +43,7 @@
             </div>
           </section>
 
-          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">PRODUCT SPACES / AUDIT TARGETS</p><h2>产品与测试对象</h2><p>产品提供独立空间；一个测试对象可指向单个非 Git 目录，后续也可保存多个源码范围。</p></div><div class="topbar-actions"><button id="add-product" class="button secondary">＋ 新建产品</button><button id="add-project" class="button primary">＋ 新建对象</button></div></div><article class="panel"><div class="section-title"><div><p class="eyebrow">ACTIVE PRODUCT</p><h2>当前产品空间</h2></div><div class="topbar-actions"><label>产品 <select id="product-selector"></select></label><button id="product-archive" class="button secondary">归档产品</button></div></div><div id="project-table" class="data-table"></div></article></section>
+          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">PRODUCT SPACES / AUDIT TARGETS</p><h2>产品与测试对象</h2><p>产品提供独立空间；一个测试对象可指向单个非 Git 目录，后续也可保存多个源码范围。</p></div><div class="topbar-actions"><button id="add-product" class="button secondary">＋ 新建产品</button><button id="add-project" class="button primary">＋ 新建对象</button></div></div><article class="panel"><div class="section-title"><div><p class="eyebrow">ACTIVE PRODUCT</p><h2>当前产品空间</h2></div><div class="topbar-actions"><label>产品 <select id="product-selector"></select></label><button id="transfer-selected-targets" class="button secondary" disabled>批量修改归属</button><button id="product-archive" class="button secondary">归档产品</button></div></div><div id="project-table" class="data-table"></div></article></section>
 
           <section id="view-audits" class="view">
             <div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div><button id="dispatch-queue" class="button secondary">立即调度队列</button></div>
@@ -193,10 +193,10 @@
     </dialog>
     <dialog id="target-transfer-dialog">
       <form id="target-transfer-form">
-        <div class="dialog-heading"><h2>归属到产品</h2><button type="button" class="icon-button" data-close-target-transfer>×</button></div>
+        <div class="dialog-heading"><h2>修改归属产品</h2><button type="button" class="icon-button" data-close-target-transfer>×</button></div>
         <p id="target-transfer-name"></p>
         <label>目标产品<select name="destination_product_id" id="target-transfer-product" required></select></label>
-        <div class="notice">对象及其历史任务将整体归属目标产品。存在排队、暂停、运行或取消中的审计及活动验证时，请先结束任务。当前仅支持从“未定义”归入正式产品，暂不支持转回或跨产品转移。</div>
+        <div class="notice">对象及其历史任务将整体归属目标产品。存在排队、暂停、运行或取消中的审计及活动验证时，请先结束任务。支持跨产品修改，也可转回“未定义”。批量操作全部成功后才提交；完成后保留当前选中的产品。</div>
         <div id="target-transfer-error" class="notice error" hidden></div>
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-target-transfer>取消</button><button id="submit-target-transfer" class="button primary" type="submit">确认归属</button></div>
       </form>

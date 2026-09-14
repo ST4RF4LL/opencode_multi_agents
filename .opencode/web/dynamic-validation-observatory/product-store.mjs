@@ -460,18 +460,35 @@ export class ProductStore {
     });
   }
   async transferTarget(fromProductId, targetId, toProductId, expectedVersion) {
+    const [target] = await this.transferTargets(fromProductId, [{ id: targetId, version: Number(expectedVersion) }], toProductId);
+    return target;
+  }
+  validateTransferSelection(items) {
+    if (!Array.isArray(items) || items.length < 1 || items.length > 100
+      || items.some(item => !item || typeof item.id !== "string" || !item.id || !Number.isSafeInteger(item.version) || item.version < 1)
+      || new Set(items.map(item => item.id)).size !== items.length) {
+      throw error("请选择 1–100 个不同的测试对象，并提供有效版本。", 422, "target-transfer-selection-invalid");
+    }
+  }
+  async transferTargets(fromProductId, items, toProductId) {
+    this.validateTransferSelection(items);
+    if (typeof toProductId !== "string" || !toProductId) throw error("请选择目标产品。", 422, "target-transfer-destination-invalid");
     return this.transaction(async () => {
-      if (fromProductId !== UNDEFINED_PRODUCT_ID) throw error("当前版本只允许从“未定义”转移到正式产品。", 409, "target-transfer-source-not-supported");
-      const target = this.getTarget(fromProductId, targetId, { writable: true });
       const destination = this.assertProduct(toProductId, { writable: true });
-      if (destination.system || destination.id === fromProductId) throw error("请选择一个正式且不同的目标产品。", 422, "target-transfer-destination-invalid");
-      if (Number(expectedVersion) !== target.version) throw error("审计对象版本已变化，请刷新后重试。", 412, "version-mismatch");
+      if (destination.id === fromProductId) throw error("请选择不同的目标产品。", 422, "target-transfer-destination-invalid");
+      const targets = items.map(item => {
+        const target = this.getTarget(fromProductId, item.id, { writable: true });
+        if (item.version !== target.version) throw error(`测试对象“${target.name}”版本已变化，请刷新后重试；本批次未修改。`, 412, "version-mismatch");
+        return target;
+      });
       const changed = now();
-      this.db.prepare("UPDATE audit_targets SET product_id=?,version=version+1,operation_epoch=operation_epoch+1,ownership_generation=ownership_generation+1,updated_at=? WHERE id=?")
-        .run(destination.id, changed, targetId);
-      this.event(fromProductId, "target.transferred_out", "target", targetId, { to_product_id: destination.id });
-      this.event(destination.id, "target.transferred_in", "target", targetId, { from_product_id: fromProductId });
-      return this.getTarget(destination.id, targetId);
+      for (const target of targets) {
+        this.db.prepare("UPDATE audit_targets SET product_id=?,version=version+1,operation_epoch=operation_epoch+1,ownership_generation=ownership_generation+1,updated_at=? WHERE id=?")
+          .run(destination.id, changed, target.id);
+        this.event(fromProductId, "target.transferred_out", "target", target.id, { to_product_id: destination.id });
+        this.event(destination.id, "target.transferred_in", "target", target.id, { from_product_id: fromProductId });
+      }
+      return targets.map(target => this.getTarget(destination.id, target.id));
     });
   }
   async targetExecutionSnapshot(productId, targetId) {

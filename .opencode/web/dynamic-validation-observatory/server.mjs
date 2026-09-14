@@ -725,6 +725,23 @@ export function createAuditWorkbenchServer({
             return;
           }
         }
+        const transferCollection = url.pathname.match(/^\/api\/v2\/products\/([^/]+)\/targets\/transfer$/);
+        if (request.method === "POST" && transferCollection) {
+          assertSafeMutation(request);
+          const body = await requestJson(request);
+          productStore.validateTransferSelection(body.targets);
+          const ids = body.targets.map(target => target.id).sort();
+          const lockAll = (index, operation) => index === ids.length
+            ? operation() : withTargetOperationLock(ids[index], () => lockAll(index + 1, operation));
+          const items = await lockAll(0, async () => {
+            for (const id of ids) {
+              if (targetHasRunningWork(id)) throw Object.assign(new Error("所选对象仍有排队、暂停或运行中的审计/验证；本批次未修改，请先结束任务。"), { statusCode: 409, code: "target-has-active-work" });
+            }
+            return productStore.transferTargets(decodeURIComponent(transferCollection[1]), body.targets, body.destination_product_id);
+          });
+          json(response, 200, { items, count: items.length });
+          return;
+        }
         const targetAction = matchTargetPath(url.pathname, "actions");
         if (request.method === "POST" && targetAction) {
           assertSafeMutation(request);

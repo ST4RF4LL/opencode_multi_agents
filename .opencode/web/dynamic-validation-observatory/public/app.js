@@ -4,7 +4,8 @@ const state = {
   products: [],
   targets: [],
   editingTarget: null,
-  transferringTarget: null,
+  transferringTargets: [],
+  selectedTargetIds: new Set(),
   selectedProductId: "product-undefined",
   validationRuns: [],
   validationRequests: [],
@@ -266,9 +267,38 @@ function renderProjects() {
   productArchive.disabled = !currentProduct || currentProduct.system;
   productArchive.textContent = currentProduct?.status === "archived" ? "恢复产品" : "归档产品";
   productArchive.title = currentProduct?.system ? "系统内置“未定义”产品不能归档。" : currentProduct?.status === "archived" ? "恢复产品及其对象的可写状态" : "归档前必须没有排队、运行或取消中的任务";
-  const [value, body] = table(["测试对象 / 源码范围", "可用性", "版本与重点", "归属与状态", "操作"]);
+  const selectableTargets = state.targets.filter(target => target.status === "active" && currentProduct?.status === "active");
+  const selectableIds = new Set(selectableTargets.map(target => target.id));
+  state.selectedTargetIds = new Set([...state.selectedTargetIds].filter(id => selectableIds.has(id)));
+  $("transfer-selected-targets").disabled = !state.selectedTargetIds.size;
+  $("transfer-selected-targets").textContent = state.selectedTargetIds.size ? `修改归属（${state.selectedTargetIds.size}）` : "批量修改归属";
+  const [value, body] = table(["选择", "测试对象 / 源码范围", "可用性", "版本与重点", "归属与状态", "操作"]);
+  const selectAll = element("input");
+  selectAll.type = "checkbox";
+  selectAll.setAttribute("aria-label", "全选当前列表中可修改归属的测试对象");
+  selectAll.disabled = !selectableTargets.length;
+  selectAll.checked = selectableTargets.length > 0 && state.selectedTargetIds.size === selectableTargets.length;
+  selectAll.indeterminate = state.selectedTargetIds.size > 0 && !selectAll.checked;
+  selectAll.addEventListener("change", () => {
+    state.selectedTargetIds = new Set(selectAll.checked ? selectableTargets.map(target => target.id) : []);
+    renderProjects();
+  });
+  value.querySelector("thead th").replaceChildren(selectAll);
   for (const target of state.targets) {
     const row = element("tr");
+    const selection = element("td");
+    const checkbox = element("input");
+    checkbox.type = "checkbox";
+    checkbox.setAttribute("aria-label", `选择 ${target.name}`);
+    checkbox.disabled = !selectableIds.has(target.id);
+    checkbox.checked = state.selectedTargetIds.has(target.id);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) state.selectedTargetIds.add(target.id);
+      else state.selectedTargetIds.delete(target.id);
+      renderProjects();
+    });
+    selection.append(checkbox);
+    row.append(selection);
     const identity = element("td");
     const scopes = target.source_scopes ?? [];
     identity.append(element("strong", "", target.name), ...scopes.slice(0, 2).map(scope => element("small", "mono", scope.path)), element("small", "mono", target.id));
@@ -295,8 +325,8 @@ function renderProjects() {
     edit.disabled = target.status !== "active" || currentProduct?.status !== "active";
     edit.addEventListener("click", () => openTargetEditDialog(target));
     action.append(create, edit);
-    if (target.product_id === "product-undefined") {
-      const transfer = element("button", "text-button", "归属到产品");
+    {
+      const transfer = element("button", "text-button", target.product_id === "product-undefined" ? "归属到产品" : "修改归属");
       transfer.disabled = edit.disabled;
       transfer.addEventListener("click", () => openTargetTransferDialog(target).catch(showError));
       action.append(transfer);
@@ -308,7 +338,7 @@ function renderProjects() {
   if (!state.targets.length) {
     const row = element("tr");
     const empty = element("td", "empty-state", currentProduct?.status === "archived" ? "该产品已归档。恢复后才可新建对象或审计。" : "尚无测试对象。点击“新建对象”，填写工作台服务所在主机的源码目录。");
-    empty.colSpan = 5;
+    empty.colSpan = 6;
     row.append(empty);
     body.append(row);
   }
@@ -1674,36 +1704,39 @@ async function submitTargetEdit(event) {
   } finally { $("submit-target-edit").disabled = false; }
 }
 
-async function openTargetTransferDialog(target) {
+async function openTargetTransferDialog(selection) {
+  const targets = structuredClone(Array.isArray(selection) ? selection : [selection]);
+  if (!targets.length) return;
+  const fromProductId = targets[0].product_id;
   const products = [];
   for (let page = 1; ; page++) {
     const payload = await api(`/api/v2/products?status=active&page=${page}&page_size=100`);
-    products.push(...payload.items.filter(product => !product.system));
+    products.push(...payload.items.filter(product => product.id !== fromProductId));
     if (payload.items.length < 100) break;
   }
-  state.transferringTarget = structuredClone(target);
-  $("target-transfer-name").textContent = `测试对象：${target.name}`;
+  state.transferringTargets = targets;
+  $("target-transfer-name").textContent = `已选择 ${targets.length} 个测试对象：${targets.map(target => target.name).join("、")}`;
   $("target-transfer-product").replaceChildren(...products.map(product => {
     const option = element("option", "", product.name);
     option.value = product.id;
     return option;
   }));
   $("submit-target-transfer").disabled = !products.length;
-  $("target-transfer-error").textContent = products.length ? "" : "尚无可用的正式产品，请先新建产品。";
+  $("target-transfer-error").textContent = products.length ? "" : "尚无其他可用产品，请先新建或恢复产品。";
   $("target-transfer-error").hidden = products.length > 0;
   $("target-transfer-dialog").showModal();
 }
 
 async function submitTargetTransfer(event) {
   event.preventDefault();
-  const target = state.transferringTarget;
-  if (!target) return;
+  const targets = state.transferringTargets;
+  if (!targets.length) return;
   const destination = new FormData(event.currentTarget).get("destination_product_id");
   $("submit-target-transfer").disabled = true;
   try {
-    await api(`${targetUrl(target)}/actions`, {
-      method: "POST", headers: { "Content-Type": "application/json", "If-Match": `"${target.version}"` },
-      body: JSON.stringify({ action: "transfer", destination_product_id: destination }),
+    await api(`/api/v2/products/${encodeURIComponent(targets[0].product_id)}/targets/transfer`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targets: targets.map(target => ({ id: target.id, version: target.version })), destination_product_id: destination }),
     });
     $("target-transfer-dialog").close();
     state.auditController?.abort();
@@ -1711,9 +1744,10 @@ async function submitTargetTransfer(event) {
     state.selectedAuditId = null;
     state.selectedAudit = null;
     state.audits = [];
-    state.selectedProductId = destination;
-    toast("测试对象及历史任务已归属目标产品");
-    await loadProducts();
+    targets.forEach(target => state.selectedTargetIds.delete(target.id));
+    state.transferringTargets = [];
+    toast(`已修改 ${targets.length} 个测试对象的归属，当前产品保持不变`);
+    await loadProducts().catch(error => toast(`归属已修改，但列表刷新失败：${error.message}`));
     setView("projects");
   } catch (error) {
     $("target-transfer-error").textContent = error.message;
@@ -1759,7 +1793,6 @@ async function submitProject(event) {
     $("project-dialog").close();
     form.reset();
     toast(`测试对象 ${target.name} 已创建`);
-    if (state.selectedProductId !== data.get("product_id")) state.selectedProductId = data.get("product_id");
     await loadProducts();
     setView("projects");
   } catch (error) {
@@ -1886,7 +1919,9 @@ $("new-audit").addEventListener("click", () => openAuditDialog());
 $("add-project").addEventListener("click", openProjectDialog);
 $("add-product").addEventListener("click", openProductDialog);
 $("product-archive").addEventListener("click", () => productAction().catch(showError));
+$("transfer-selected-targets").addEventListener("click", () => openTargetTransferDialog(state.targets.filter(target => state.selectedTargetIds.has(target.id))).catch(showError));
 $("product-selector").addEventListener("change", event => {
+  state.selectedTargetIds.clear();
   state.selectedProductId = event.currentTarget.value;
   state.selectedAuditId = null;
   state.selectedAudit = null;

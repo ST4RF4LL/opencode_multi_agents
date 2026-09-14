@@ -65,6 +65,44 @@ try {
 
   const events = await store.listProductEvents(product.id);
   assert.ok(events.some(event => event.type === "target.transferred_in"));
+
+  const destination = await store.createProduct({ name: "归属修正产品" });
+  const moved = await store.transferTarget(product.id, transferred.id, destination.id, transferred.version);
+  assert.equal(moved.product_id, destination.id);
+  assert.equal(moved.storage_namespace, transferred.storage_namespace);
+  assert.equal(moved.ownership_generation, transferred.ownership_generation + 1);
+  assert.ok((await store.auditLinksForProduct(destination.id)).has("audit-transfer-test"));
+  assert.equal((await store.auditLinksForProduct(product.id)).has("audit-transfer-test"), false);
+  const returned = await store.transferTarget(destination.id, moved.id, UNDEFINED_PRODUCT_ID, moved.version);
+  assert.equal(returned.product_id, UNDEFINED_PRODUCT_ID);
+  assert.deepEqual(store.auditLink("audit-transfer-test"), historicalLink);
+
+  const batchPeer = await store.createTarget(UNDEFINED_PRODUCT_ID, {
+    name: "批量归属对象", source_scopes: [{ name: "source", path: source }],
+  });
+  const selection = [{ id: returned.id, version: returned.version }, { id: batchPeer.id, version: batchPeer.version }];
+  const beforeEvents = await store.listProductEvents(UNDEFINED_PRODUCT_ID);
+  await assert.rejects(() => store.transferTargets(UNDEFINED_PRODUCT_ID,
+    [selection[0], { ...selection[1], version: batchPeer.version + 1 }], destination.id), error => error.code === "version-mismatch");
+  assert.deepEqual(store.getTarget(UNDEFINED_PRODUCT_ID, returned.id), returned);
+  assert.deepEqual(store.getTarget(UNDEFINED_PRODUCT_ID, batchPeer.id), batchPeer);
+  assert.deepEqual(await store.listProductEvents(UNDEFINED_PRODUCT_ID), beforeEvents);
+  await assert.rejects(() => store.transferTargets(UNDEFINED_PRODUCT_ID, [selection[0], selection[0]], destination.id), error => error.code === "target-transfer-selection-invalid");
+  await assert.rejects(() => store.transferTargets(UNDEFINED_PRODUCT_ID, [], destination.id), error => error.code === "target-transfer-selection-invalid");
+  await assert.rejects(() => store.transferTargets(UNDEFINED_PRODUCT_ID, selection, UNDEFINED_PRODUCT_ID), error => error.code === "target-transfer-destination-invalid");
+  await assert.rejects(() => store.transferTargets(product.id, selection, destination.id), error => error.code === "target-not-found");
+  const archivedProduct = await store.createProduct({ name: "已归档目标产品" });
+  await store.productAction(archivedProduct.id, "archive", archivedProduct.version);
+  await assert.rejects(() => store.transferTargets(UNDEFINED_PRODUCT_ID, selection, archivedProduct.id), error => error.code === "product-archived");
+
+  const batchMoved = await store.transferTargets(UNDEFINED_PRODUCT_ID, selection, destination.id);
+  assert.equal(batchMoved.length, 2);
+  for (const item of batchMoved) {
+    assert.equal(item.product_id, destination.id);
+    assert.equal(item.version, selection.find(target => target.id === item.id).version + 1);
+  }
+  assert.ok((await store.auditLinksForProduct(destination.id)).has("audit-transfer-test"));
+  assert.deepEqual(store.auditLink("audit-transfer-test"), historicalLink);
   console.log("产品目录库测试通过");
 } finally {
   store?.close();
