@@ -207,7 +207,7 @@ function renderMetrics() {
   grid.replaceChildren(
     metric("审计任务", summary.audit_count ?? 0, `${summary.active_audits ?? 0} 个活跃或排队中`),
     metric("canonical 漏洞", summary.finding_count ?? 0, `${summary.severity?.critical ?? 0} 个严重`),
-    metric("最终报告", summary.report_count ?? 0, "模型验证或摘要记录"),
+    metric("最终报告", summary.report_count ?? 0, "已生成的审计报告"),
     metric("动态验证", summary.validation_run_count ?? 0, "显式授权的 localhost 运行"),
     metric("测试对象", state.targets.length, `${state.products.find(product => product.id === state.selectedProductId)?.name ?? "未选择产品"} 空间`),
   );
@@ -1027,13 +1027,8 @@ async function submitFindingWorkflow(event) {
 function renderReports() {
   const cards = state.workspace.reports.map(report => {
     const card = element("article", "report-card");
-    const integrity = report.integrity_state === "verified_model"
-      ? ["MODEL VERIFIED", "模型与 Markdown 已完成确定性字节校验", "verified_model"]
-      : report.integrity_state === "model_mismatch"
-        ? ["MODEL MISMATCH", "报告模型或 Markdown 校验失败", "model_mismatch"]
-        : ["DIGEST RECORD", "历史报告仅记录当前 SHA-256，未发现报告模型", "digest_only"];
-    card.append(element("p", "eyebrow", integrity[0]), element("h3", "", report.name), element("p", "mono", report.path), element("span", `status ${integrity[2]}`, integrity[1]));
-    const footer = element("footer", "", `${report.repository_name ?? "—"} · SHA-256 ${short(report.sha256, 16)} · ${bytes(report.size)} · ${formatDate(report.sealed_at)}`);
+    card.append(element("p", "eyebrow", "AUDIT REPORT"), element("h3", "", report.name), element("p", "mono", report.path));
+    const footer = element("footer", "", `${report.repository_name ?? "—"} · ${bytes(report.size)} · ${formatDate(report.sealed_at)}`);
     const actions = element("div", "report-actions");
     const preview = element("button", "button primary", "查看报告");
     preview.type = "button";
@@ -1052,15 +1047,7 @@ async function openReport(report) {
   const dialog = $("report-dialog");
   $("report-title").textContent = report.name;
   $("report-subtitle").textContent = `${report.repository_name ?? "—"} · ${report.path}`;
-  $("report-digest").textContent = report.sha256 ?? "—";
-  const integrityLabels = { verified_model: "模型绑定并通过确定性字节校验", model_mismatch: "模型或 Markdown 校验失败", digest_only: "仅记录当前 SHA-256，未发现报告模型" };
-  $("report-integrity").textContent = integrityLabels[report.integrity_state] ?? report.integrity_state ?? "未知";
-  const note = $("report-integrity-note");
-  note.hidden = report.integrity_state === "verified_model";
-  note.textContent = report.integrity_state === "model_mismatch"
-    ? `该报告不能作为模型绑定封存件使用。校验问题：${(report.integrity_issues ?? []).join("、") || "未知"}`
-    : "该历史报告可以预览和下载，但当前只能证明本次读取内容与展示摘要一致，不能证明它来自确定性报告模型。";
-  $("report-preview").textContent = "正在校验封存摘要并读取报告…";
+  $("report-preview").textContent = "正在读取报告…";
   $("report-download").href = `/api/v1/reports/${encodeURIComponent(report.id)}/download`;
   dialog.showModal();
   try {

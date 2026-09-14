@@ -560,8 +560,7 @@ export function createAuditWorkbenchServer({
     }
   }
 
-  // Display reads share a bounded snapshot. Mutations and evidence reads still
-  // await fresh verification; live Runner state is overlaid only for display.
+  // Display reads share a bounded snapshot with live Runner state overlaid.
   async function buildSnapshot() {
     const operation = (async () => {
       await Promise.all([runner.ready, findingWorkflow.ready, queueScheduler.ready, modelSettingsStore.ready]);
@@ -645,9 +644,7 @@ export function createAuditWorkbenchServer({
     const info = await stat(candidate);
     if (!info.isFile() || info.size > MAX_REPORT_BODY) throw Object.assign(new Error("报告文件不可读取或超过大小限制。"), { statusCode: 413, code: "report-body-too-large" });
     const bytes = await readFile(candidate);
-    const digest = createHash("sha256").update(bytes).digest("hex");
-    if (!report.sha256 || digest !== report.sha256) throw Object.assign(new Error("报告内容与记录摘要不一致，请刷新制品后重试。"), { statusCode: 409, code: "report-digest-mismatch" });
-    return { report, bytes, digest };
+    return { report, bytes };
   }
 
   async function repositoriesSnapshot(url = null) {
@@ -1075,14 +1072,13 @@ export function createAuditWorkbenchServer({
       }
       const reportDownloadId = matchReportPath(url.pathname, "download");
       if (request.method === "GET" && reportDownloadId) {
-        const { report, bytes, digest } = await reportContent(reportDownloadId);
+        const { report, bytes } = await reportContent(reportDownloadId);
         const fileName = `security-audit-report.${String(report.audit_id).replaceAll(/[^A-Za-z0-9._-]/g, "-")}.md`;
         response.writeHead(200, {
           "Content-Type": "text/markdown; charset=utf-8",
           "Content-Length": bytes.length,
           "Content-Disposition": `attachment; filename="${fileName}"`,
           "Cache-Control": "no-store",
-          ETag: `"sha256-${digest}"`,
         });
         response.end(bytes);
         return;

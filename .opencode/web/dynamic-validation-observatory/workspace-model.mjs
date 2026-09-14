@@ -2,13 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { renderFinalReport, validateFinalReportModel } from "../../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
-import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const STAGE_DELIVERY_REGISTRY = resolve(HERE, "../../skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json");
-const STAGE_AGENT_REGISTRY = resolve(HERE, "../../skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json");
 
 const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
 const MAX_ARTIFACTS = 5000;
@@ -179,9 +173,6 @@ export async function scanReportArtifacts(reportsRoot) {
     const auditId = typeof data?.audit_id === "string" ? data.audit_id : auditIdFromFileName(path.split(sep).at(-1));
     if (!auditId) continue;
     const kind = artifactKind(rel);
-    const markdownBytes = kind === "final" && extension === ".md" && info.size <= MAX_ARTIFACT_BYTES ? await readFile(path) : null;
-    const markdown = markdownBytes === null ? null : markdownBytes.toString("utf8");
-    const sha256 = markdownBytes === null ? null : createHash("sha256").update(markdownBytes).digest("hex");
     artifacts.push({
       id: createHash("sha256").update(rel).digest("hex").slice(0, 24),
       audit_id: auditId,
@@ -190,9 +181,7 @@ export async function scanReportArtifacts(reportsRoot) {
       media_type: extension === ".md" ? "text/markdown" : extension === ".sarif" ? "application/sarif+json" : "application/json",
       size: info.size,
       modified_at: info.mtime.toISOString(),
-      sha256,
       data,
-      markdown,
     });
   }
   return artifacts.sort((left, right) => right.modified_at.localeCompare(left.modified_at));
@@ -469,22 +458,7 @@ export function findingsFromArtifacts(artifacts) {
   }).sort((left, right) => severityRank(right.severity) - severityRank(left.severity));
 }
 
-function reportFromArtifact(artifact, artifacts) {
-  const model = finalReportModelForAudit(artifacts, artifact.audit_id)?.model ?? null;
-  let integrityState = "digest_only";
-  let integrityIssues = [];
-  if (model) {
-    try {
-      integrityIssues = validateFinalReportModel(model);
-      if (model.audit_id !== artifact.audit_id) integrityIssues.push("final-report-model-audit-mismatch");
-      if (integrityIssues.length === 0 && artifact.markdown !== renderFinalReport(model)) integrityIssues.push("final-report-not-deterministic-render");
-      integrityIssues = [...new Set(integrityIssues)];
-      integrityState = integrityIssues.length === 0 ? "verified_model" : "model_mismatch";
-    } catch {
-      integrityState = "model_mismatch";
-      integrityIssues = ["final-report-model-verification-error"];
-    }
-  }
+function reportFromArtifact(artifact) {
   return {
     id: artifact.id,
     audit_id: artifact.audit_id,
@@ -493,10 +467,6 @@ function reportFromArtifact(artifact, artifacts) {
     size: artifact.size,
     sealed_at: artifact.modified_at,
     media_type: artifact.media_type,
-    sha256: artifact.sha256,
-    integrity_state: integrityState,
-    integrity_issues: integrityIssues,
-    model_digest: typeof model?.manifest_digest === "string" ? model.manifest_digest : null,
   };
 }
 
@@ -572,54 +542,14 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
 export async function buildWorkspaceSnapshot({ reportsRoot, validationRuns = [], runnerAudits = [] }) {
   const artifacts = await scanReportArtifacts(reportsRoot);
   const findings = findingsFromArtifacts(artifacts);
-  const auditIds = new Set([
-    ...artifacts.map(artifact => artifact.audit_id),
-    ...validationRuns.map(run => run.audit_id),
-    ...runnerAudits.map(run => run.id),
-  ]);
-  const [registry, stageAgentRegistry] = await Promise.all([
-    readFile(STAGE_DELIVERY_REGISTRY, "utf8").then(JSON.parse),
-    readFile(STAGE_AGENT_REGISTRY, "utf8").then(JSON.parse),
-  ]);
-  const registryStages = Array.isArray(registry.stages) ? registry.stages : [];
-  const runnerById = new Map(runnerAudits.map(audit => [audit.id, audit]));
-  // A verification walks the delivery tree for an audit.  Most current audits are
-  // driven by the local todo, where stage manifests are deliberately optional;
-  // historical audits without stage-delivery artifacts also have nothing to
-  // verify.  Restrict the expensive check to its two meaningful cases.
-  const stageDeliveryAuditIds = [...auditIds].filter(auditId => (
-    runnerById.get(auditId)?.stage_delivery_enforcement === "ENFORCED"
-    || artifacts.some(artifact => artifact.audit_id === auditId && artifact.kind === "stage-deliveries")
-  ));
-  const stageDeliveriesByAudit = new Map(await Promise.all(stageDeliveryAuditIds.map(async auditId => {
-    try {
-      return [auditId, await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry })];
-    } catch (error) {
-      const message = String(error?.message ?? error).slice(0, 1000);
-      return [auditId, {
-        enforcement: registry.lifecycle?.enforcement ?? null,
-        audit_id: auditId,
-        complete: false,
-        completed_count: 0,
-        stages: registryStages.map((stage, index) => ({
-          id: stage.stage_id,
-          label: stage.label,
-          order: stage.order,
-          state: index === 0 ? "active" : "pending",
-          round: null,
-          manifest_path: null,
-          manifest_digest: null,
-          errors: index === 0 ? [`stage-delivery-verification-error:${message}`] : [],
-        })),
-        errors: [`stage-delivery-verification-error:${message}`],
-      }];
-    }
-  })));
+  const stageDeliveriesByAudit = new Map(runnerAudits
+    .filter(audit => Array.isArray(audit.stage_delivery?.stages))
+    .map(audit => [audit.id, audit.stage_delivery]));
   const audits = auditsFromArtifacts(artifacts, validationRuns, runnerAudits, stageDeliveriesByAudit);
   const reports = artifacts
     .filter(artifact => artifact.kind === "final" && artifact.media_type === "text/markdown")
     .filter(artifact => finalReportArtifactForAudit(artifacts, artifact.audit_id)?.id === artifact.id)
-    .map(artifact => reportFromArtifact(artifact, artifacts));
+    .map(reportFromArtifact);
   const severity = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
   for (const finding of findings) {
     const key = finding.severity.toLowerCase();

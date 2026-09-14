@@ -381,14 +381,13 @@ if (mode === "run") {
   assert.equal(snapshot.summary.audit_count, 4);
   assert.equal(snapshot.summary.finding_count, 1);
   assert.equal(snapshot.summary.report_count, 3);
-  assert(snapshot.reports.every(report => /^[a-f0-9]{64}$/.test(report.sha256)));
+  assert(snapshot.reports.every(report => !Object.hasOwn(report, "sha256") && !Object.hasOwn(report, "integrity_state")));
   assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").progress, 63);
   assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").stage, "制品不连续");
   assert.equal(snapshot.audits.find(audit => audit.id === "audit-history").progress_source, "legacy-artifact-heuristic");
-  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-history").integrity_state, "digest_only");
-  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").integrity_state, "verified_model");
-  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-sealed").model_digest, verifiedModel.manifest_digest);
-  assert.equal(snapshot.reports.find(report => report.audit_id === "audit-mismatch").integrity_state, "model_mismatch");
+  assert.ok(snapshot.reports.find(report => report.audit_id === "audit-history"));
+  assert.ok(snapshot.reports.find(report => report.audit_id === "audit-sealed"));
+  assert.ok(snapshot.reports.find(report => report.audit_id === "audit-mismatch"));
   const localTodoSnapshot = await buildWorkspaceSnapshot({
     reportsRoot,
     runnerAudits: [{
@@ -424,7 +423,7 @@ if (mode === "run") {
   assert.equal(reportRepair.materialized, true);
   assert.equal(reportRepair.artifact.path, "final/security-audit-report.audit-report-repair.md");
   const repairedSnapshot = await buildWorkspaceSnapshot({ reportsRoot });
-  assert.equal(repairedSnapshot.reports.find(report => report.audit_id === "audit-report-repair").integrity_state, "verified_model");
+  assert.ok(repairedSnapshot.reports.find(report => report.audit_id === "audit-report-repair"));
 
   const v2Findings = findingsFromArtifacts([{
     kind: "correlation",
@@ -1314,12 +1313,25 @@ if (mode === "run") {
     assert.match(report.rendered_html, /<table>/);
     assert.doesNotMatch(report.rendered_html, /<script>/i);
     assert.doesNotMatch(report.rendered_html, /href=["']javascript:/i);
-    assert.equal(report.sha256, historyReport.sha256);
-    assert.equal(report.integrity_state, "digest_only");
+    assert.equal(Object.hasOwn(report, "sha256"), false);
+    assert.equal(Object.hasOwn(report, "integrity_state"), false);
     const reportDownload = await fetch(`${base}/api/v1/reports/${historyReport.id}/download`);
     assert.equal(reportDownload.status, 200);
     assert.match(reportDownload.headers.get("content-disposition"), /security-audit-report\.audit-history\.md/);
     assert.equal(await reportDownload.text(), report.body);
+    const updatedReportBody = `${report.body}\n报告读取回归标记\n`;
+    const historyReportPath = join(reportsRoot, historyReport.path);
+    await writeFile(historyReportPath, updatedReportBody, "utf8");
+    try {
+      const updatedPreview = await fetch(`${base}/api/v1/reports/${historyReport.id}`);
+      assert.equal(updatedPreview.status, 200);
+      assert.equal((await updatedPreview.json()).body, updatedReportBody);
+      const updatedDownload = await fetch(`${base}/api/v1/reports/${historyReport.id}/download`);
+      assert.equal(updatedDownload.status, 200);
+      assert.equal(await updatedDownload.text(), updatedReportBody);
+    } finally {
+      await writeFile(historyReportPath, report.body, "utf8");
+    }
     assert.equal((await fetch(`${base}/api/v1/reports/not-found`)).status, 404);
 
     const originalCreateAudit = runner.createAudit;
