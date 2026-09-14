@@ -21,6 +21,7 @@ import { RequestHistoryStore } from "./request-history-store.mjs";
 import { buildOpenCollectionArchive } from "./bruno-exporter.mjs";
 import { buildHar } from "./har-exporter.mjs";
 import { materializeManualValidationRequests } from "./manual-validation-request-materializer.mjs";
+import { ProductStore, UNDEFINED_PRODUCT_ID } from "./product-store.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(HERE, "../../..");
@@ -34,6 +35,9 @@ const BIND_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]
 const MAX_REQUEST_BODY = 64 * 1024;
 const MAX_REPORT_BODY = 8 * 1024 * 1024;
 const FINDINGS_PAGE_SIZE = 50;
+const AUDIT_ACTIVE_WORK_STATES = new Set(["queued", "preparing", "recovering", "running", "pausing", "paused", "cancelling"]);
+const AUDIT_RUNNING_TAB_STATES = new Set(["preparing", "recovering", "running", "pausing", "cancelling"]);
+const VALIDATION_RUNNING_STATES = new Set(["preparing", "running", "cancelling"]);
 const markdownRenderer = new MarkdownIt({ html: false, linkify: false, typographer: false, breaks: false });
 const defaultLinkOpen = markdownRenderer.renderer.rules.link_open
   ?? ((tokens, index, options, _environment, self) => self.renderToken(tokens, index, options));
@@ -136,6 +140,55 @@ function matchReportPath(pathname, suffix = "") {
 function matchFindingWorkflowPath(pathname) {
   const match = pathname.match(/^\/api\/v1\/findings\/([^/]+)\/workflow$/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function matchProductPath(pathname, suffix = "") {
+  const pattern = suffix
+    ? new RegExp(`^/api/v2/products/([^/]+)/${suffix}$`)
+    : /^\/api\/v2\/products\/([^/]+)$/;
+  const match = pathname.match(pattern);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function matchTargetPath(pathname, suffix = "") {
+  const pattern = suffix
+    ? new RegExp(`^/api/v2/products/([^/]+)/targets/([^/]+)/${suffix}$`)
+    : /^\/api\/v2\/products\/([^/]+)\/targets\/([^/]+)$/;
+  const match = pathname.match(pattern);
+  return match ? { productId: decodeURIComponent(match[1]), targetId: decodeURIComponent(match[2]) } : null;
+}
+
+function matchProductAuditPath(pathname, suffix = "") {
+  const pattern = suffix
+    ? new RegExp(`^/api/v2/products/([^/]+)/audits/([^/]+)/${suffix}$`)
+    : /^\/api\/v2\/products\/([^/]+)\/audits\/([^/]+)$/;
+  const match = pathname.match(pattern);
+  return match ? { productId: decodeURIComponent(match[1]), auditId: decodeURIComponent(match[2]) } : null;
+}
+
+function expectedVersion(request) {
+  return String(request.headers["if-match"] ?? "").replaceAll('"', "");
+}
+
+function targetAuditPage(audits, searchParams) {
+  const tab = searchParams.get("tab") ?? "all";
+  if (!['running', 'completed', 'all'].includes(tab)) throw Object.assign(new Error("任务页签无效。"), { statusCode: 422, code: "audit-tab-invalid" });
+  const query = searchParams.get("q")?.trim().toLowerCase() ?? "";
+  const items = audits.filter(audit => {
+    if (tab === "running" && !AUDIT_RUNNING_TAB_STATES.has(audit.status)) return false;
+    if (tab === "completed" && AUDIT_RUNNING_TAB_STATES.has(audit.status)) return false;
+    if (query && !`${audit.id} ${audit.name} ${audit.status} ${audit.repository_name ?? ""}`.toLowerCase().includes(query)) return false;
+    return true;
+  }).sort((left, right) => String(right.updated_at ?? right.created_at ?? "").localeCompare(String(left.updated_at ?? left.created_at ?? "")));
+  if (tab === "running") return { items, count: items.length, returned_count: items.length, page: 1, page_size: items.length, total_pages: 1, pagination: false, tab };
+  const requestedPage = Number(searchParams.get("page") ?? 1);
+  const requestedSize = Number(searchParams.get("page_size") ?? 20);
+  if (!Number.isInteger(requestedPage) || requestedPage < 1 || ![20, 30, 50, 100].includes(requestedSize)) {
+    throw Object.assign(new Error("任务分页参数无效。"), { statusCode: 422, code: "audit-pagination-invalid" });
+  }
+  const totalPages = Math.max(1, Math.ceil(items.length / requestedSize));
+  const page = Math.min(requestedPage, totalPages);
+  return { items: items.slice((page - 1) * requestedSize, page * requestedSize), count: items.length, returned_count: Math.min(requestedSize, Math.max(items.length - (page - 1) * requestedSize, 0)), page, page_size: requestedSize, total_pages: totalPages, pagination: true, tab };
 }
 
 function scopedResourceId(repositoryId, localId) {
@@ -279,6 +332,8 @@ export function createAuditWorkbenchServer({
   modelConfigPaths = null,
   requestStateRoot = null,
   requestHistoryStore: suppliedRequestHistoryStore = null,
+  productCatalogPath = null,
+  productStore: suppliedProductStore = null,
 } = {}) {
   const resolvedRuntimeRoot = resolve(runtimeRoot);
   const runner = suppliedRunner ?? new AuditRunner({ stateRoot, platformRoot: PROJECT_ROOT, repositories, configPath: platformConfigPath, enabled: runnerEnabled });
@@ -317,6 +372,35 @@ export function createAuditWorkbenchServer({
   const requestHistory = suppliedRequestHistoryStore ?? new RequestHistoryStore({
     stateRoot: requestStateRoot ?? join(dirname(resolve(stateRoot)), "dynamic-request-workbench"),
   });
+  const productStore = suppliedProductStore ?? new ProductStore({
+    path: productCatalogPath ?? join(dirname(resolve(stateRoot)), "product-catalog.sqlite"),
+    platformRoot: PROJECT_ROOT,
+  });
+  const targetOperationLocks = new Map();
+
+  async function withTargetOperationLock(targetId, operation) {
+    const prior = targetOperationLocks.get(targetId) ?? Promise.resolve();
+    let release;
+    const current = new Promise(resolve => { release = resolve; });
+    targetOperationLocks.set(targetId, current);
+    await prior.catch(() => {});
+    try { return await productStore.withTargetOperation(targetId, "web-operation", operation); }
+    finally {
+      release();
+      if (targetOperationLocks.get(targetId) === current) targetOperationLocks.delete(targetId);
+    }
+  }
+
+  const productCatalogReady = Promise.all([runner.ready, productStore.ready]).then(async () => {
+    for (const repository of runner.runtimeRepositories()) await productStore.importLegacyRepository(repository);
+    for (const audit of runner.listAudits()) {
+      if (productStore.auditLink(audit.id)) continue;
+      const target = productStore.getTarget(UNDEFINED_PRODUCT_ID, audit.repository_id);
+      const snapshot = await productStore.targetExecutionSnapshot(UNDEFINED_PRODUCT_ID, target.id);
+      await productStore.linkAudit({ auditId: audit.id, productId: UNDEFINED_PRODUCT_ID, targetId: target.id, snapshot: snapshot.snapshot, snapshotDigest: snapshot.digest });
+    }
+  });
+  runner.setTargetOperationGuard?.((audit, operation) => withTargetOperationLock(audit.execution_spec?.target_id ?? audit.repository_id, operation));
 
   function runtimeSources() {
     const artifacts = new Map(runner.artifactSources().map(source => [source.repository_id, source.reports_root]));
@@ -425,6 +509,55 @@ export function createAuditWorkbenchServer({
       selection_available: selected === DEFAULT_MODEL_SELECTION || catalog.models.includes(selected),
       updated_at: settings.updated_at,
     };
+  }
+
+  async function auditsForProduct(productId) {
+    await productCatalogReady;
+    productStore.assertProduct(productId);
+    const links = await productStore.auditLinksForProduct(productId);
+    return runner.listAudits().flatMap(audit => {
+      const link = links.get(audit.id);
+      if (!link) return [];
+      return [{ ...audit, product_id_at_creation: link.product_id_at_creation, product_name_at_creation: link.product_name_at_creation, target_id: link.target_id, target_snapshot_digest: link.snapshot_digest }];
+    });
+  }
+
+  async function auditForProduct(productId, auditId) {
+    await productCatalogReady;
+    productStore.assertProduct(productId);
+    const link = productStore.auditLink(auditId);
+    const audit = runner.getAudit(auditId);
+    if (!link || productStore.targetById(link.target_id)?.product_id !== productId || !audit) throw Object.assign(new Error("产品空间内没有该审计任务。"), { statusCode: 404, code: "product-audit-not-found" });
+    return { ...audit, product_id_at_creation: link.product_id_at_creation, product_name_at_creation: link.product_name_at_creation, target_id: link.target_id, target_snapshot_digest: link.snapshot_digest };
+  }
+
+  function targetHasRunningWork(targetId) {
+    const auditBusy = runner.listAudits().some(audit => audit.repository_id === targetId && AUDIT_ACTIVE_WORK_STATES.has(audit.status));
+    const validationBusy = dynamicRunner.listRuns().some(run => run.repository_id === targetId && VALIDATION_RUNNING_STATES.has(run.status));
+    return auditBusy || validationBusy;
+  }
+
+  async function assertProductCanArchive(productId) {
+    const targetIds = await productStore.targetIds(productId);
+    if (targetIds.some(targetHasRunningWork)) {
+      throw Object.assign(new Error("产品仍有排队、运行或取消中的审计/验证；请先让这些任务结束后再归档。"), { statusCode: 409, code: "product-has-active-work" });
+    }
+  }
+
+  async function assertLegacyUndefinedTarget(targetId) {
+    await productCatalogReady;
+    const target = productStore.targetById(targetId);
+    if (target && target.product_id !== UNDEFINED_PRODUCT_ID) {
+      throw Object.assign(new Error("该审计对象已归属正式产品；请使用产品空间 API 或界面创建和管理任务。"), { statusCode: 409, code: "legacy-write-product-scoped" });
+    }
+  }
+
+  async function assertLegacyUndefinedAudit(auditId) {
+    await productCatalogReady;
+    const link = productStore.auditLink(auditId);
+    if (link && productStore.targetById(link.target_id)?.product_id !== UNDEFINED_PRODUCT_ID) {
+      throw Object.assign(new Error("该审计任务属于正式产品；请使用产品空间 API 或界面管理。"), { statusCode: 409, code: "legacy-write-product-scoped" });
+    }
   }
 
   // Display reads share a bounded snapshot. Mutations and evidence reads still
@@ -541,6 +674,183 @@ export function createAuditWorkbenchServer({
     }
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      // v2 product-space APIs deliberately use the catalog as the authority.
+      // v1 continues to expose the historical repository adapter unchanged.
+      if (url.pathname.startsWith("/api/v2/products")) {
+        await productCatalogReady;
+        if (request.method === "GET" && url.pathname === "/api/v2/products") {
+          json(response, 200, await productStore.listProducts(Object.fromEntries(url.searchParams)));
+          return;
+        }
+        if (request.method === "POST" && url.pathname === "/api/v2/products") {
+          assertSafeMutation(request);
+          const product = await productStore.createProduct(await requestJson(request));
+          json(response, 201, product, { Location: `/api/v2/products/${encodeURIComponent(product.id)}`, ETag: `"${product.version}"` });
+          return;
+        }
+        const productEventsId = matchProductPath(url.pathname, "events");
+        if (request.method === "GET" && productEventsId) {
+          const items = await productStore.listProductEvents(productEventsId, url.searchParams.get("after"), url.searchParams.get("limit"));
+          json(response, 200, { items, count: items.length });
+          return;
+        }
+        const productActionsId = matchProductPath(url.pathname, "actions");
+        if (request.method === "POST" && productActionsId) {
+          assertSafeMutation(request);
+          const body = await requestJson(request);
+          if (body.action === "archive") await assertProductCanArchive(productActionsId);
+          const product = await productStore.productAction(productActionsId, body.action, expectedVersion(request));
+          json(response, 200, product, { ETag: `"${product.version}"` });
+          return;
+        }
+        const productId = matchProductPath(url.pathname);
+        if (request.method === "GET" && productId) {
+          json(response, 200, productStore.assertProduct(productId), { ETag: `"${productStore.assertProduct(productId).version}"` });
+          return;
+        }
+        if (request.method === "PUT" && productId) {
+          assertSafeMutation(request);
+          const product = await productStore.updateProduct(productId, await requestJson(request), expectedVersion(request));
+          json(response, 200, product, { ETag: `"${product.version}"` });
+          return;
+        }
+        const targetsCollection = url.pathname.match(/^\/api\/v2\/products\/([^/]+)\/targets$/);
+        if (targetsCollection) {
+          const scopedProductId = decodeURIComponent(targetsCollection[1]);
+          if (request.method === "GET") {
+            json(response, 200, await productStore.listTargets(scopedProductId, Object.fromEntries(url.searchParams)));
+            return;
+          }
+          if (request.method === "POST") {
+            assertSafeMutation(request);
+            const target = await productStore.createTarget(scopedProductId, await requestJson(request));
+            json(response, 201, target, { Location: `/api/v2/products/${encodeURIComponent(scopedProductId)}/targets/${encodeURIComponent(target.id)}`, ETag: `"${target.version}"` });
+            return;
+          }
+        }
+        const targetAction = matchTargetPath(url.pathname, "actions");
+        if (request.method === "POST" && targetAction) {
+          assertSafeMutation(request);
+          const body = await requestJson(request);
+          const target = await withTargetOperationLock(targetAction.targetId, async () => {
+            if (body.action === "inspect") return productStore.inspectTarget(targetAction.productId, targetAction.targetId);
+            if (body.action === "copy") return productStore.copyTarget(targetAction.productId, targetAction.targetId, body);
+            if (body.action === "transfer") {
+              if (targetHasRunningWork(targetAction.targetId)) throw Object.assign(new Error("对象仍有排队、运行或取消中的审计/验证，不能转移。"), { statusCode: 409, code: "target-has-active-work" });
+              return productStore.transferTarget(targetAction.productId, targetAction.targetId, body.destination_product_id, expectedVersion(request));
+            }
+            if (body.action === "archive" && targetHasRunningWork(targetAction.targetId)) {
+              throw Object.assign(new Error("对象仍有排队、运行或取消中的审计/验证，不能归档。"), { statusCode: 409, code: "target-has-active-work" });
+            }
+            return productStore.targetAction(targetAction.productId, targetAction.targetId, body.action, expectedVersion(request));
+          });
+          json(response, 200, target, { ETag: target.version ? `"${target.version}"` : undefined });
+          return;
+        }
+        const targetPath = matchTargetPath(url.pathname);
+        if (targetPath) {
+          if (request.method === "GET") {
+            const target = productStore.getTarget(targetPath.productId, targetPath.targetId);
+            json(response, 200, target, { ETag: `"${target.version}"` });
+            return;
+          }
+          if (request.method === "PUT") {
+            assertSafeMutation(request);
+            const input = await requestJson(request);
+            const target = await withTargetOperationLock(targetPath.targetId, () => productStore.updateTarget(targetPath.productId, targetPath.targetId, input, expectedVersion(request)));
+            json(response, 200, target, { ETag: `"${target.version}"` });
+            return;
+          }
+          if (request.method === "DELETE") {
+            assertSafeMutation(request);
+            const body = await requestJson(request);
+            if (body.confirmation !== targetPath.targetId) throw Object.assign(new Error("删除确认必须与对象 ID 完全一致。"), { statusCode: 422, code: "target-delete-confirmation-invalid" });
+            const result = await withTargetOperationLock(targetPath.targetId, async () => {
+              if (targetHasRunningWork(targetPath.targetId)) throw Object.assign(new Error("对象仍有活动审计或验证，不能删除。"), { statusCode: 409, code: "target-has-active-work" });
+              return productStore.deleteTarget(targetPath.productId, targetPath.targetId, expectedVersion(request));
+            });
+            json(response, 200, result);
+            return;
+          }
+        }
+        const auditsCollection = url.pathname.match(/^\/api\/v2\/products\/([^/]+)\/audits$/);
+        if (auditsCollection) {
+          const scopedProductId = decodeURIComponent(auditsCollection[1]);
+          if (request.method === "GET") {
+            json(response, 200, targetAuditPage(await auditsForProduct(scopedProductId), url.searchParams));
+            return;
+          }
+          if (request.method === "POST") {
+            assertSafeMutation(request);
+            const [body, settings] = await Promise.all([requestJson(request), modelSettingsStore.get()]);
+            const model = normalizeOpenCodeModel(Object.hasOwn(body, "model") ? body.model : settings.model);
+            const catalog = await modelCatalog.snapshot();
+            if (model && !catalog.models.includes(model)) throw Object.assign(new Error("所选模型不在当前 OpenCode 配置清单中，请重新选择使用模型。"), { statusCode: 422, code: "opencode-model-not-configured" });
+            const audit = await withTargetOperationLock(body.target_id, async () => {
+              const frozen = await productStore.targetExecutionSnapshot(scopedProductId, body.target_id);
+              const created = await runner.createAuditFromTarget({ ...body, model, target_id: frozen.target.id, execution_spec: frozen.snapshot, execution_spec_digest: frozen.digest }, request.headers["idempotency-key"]);
+              const existingLink = productStore.auditLink(created.id);
+              if (!existingLink) await productStore.linkAudit({ auditId: created.id, productId: scopedProductId, targetId: frozen.target.id, snapshot: frozen.snapshot, snapshotDigest: frozen.digest });
+              return created;
+            });
+            json(response, 202, audit, { Location: `/api/v2/products/${encodeURIComponent(scopedProductId)}/audits/${encodeURIComponent(audit.id)}`, ETag: `"${audit.version}"` });
+            return;
+          }
+        }
+        const productAuditAction = matchProductAuditPath(url.pathname, "actions");
+        if (request.method === "POST" && productAuditAction) {
+          assertSafeMutation(request);
+          const body = await requestJson(request);
+          const current = await auditForProduct(productAuditAction.productId, productAuditAction.auditId);
+          if (Number(expectedVersion(request)) !== current.version) throw Object.assign(new Error("审计版本已变化，请刷新后重试。"), { statusCode: 412, code: "version-mismatch" });
+          const audit = body.action === "dispatch"
+            ? await queueScheduler.dispatchAuditNow(productAuditAction.auditId)
+            : await runner.action(productAuditAction.auditId, body.action, expectedVersion(request), request.headers["idempotency-key"]);
+          json(response, 202, audit, { ETag: `"${audit.version}"` });
+          return;
+        }
+        const productAuditEvents = matchProductAuditPath(url.pathname, "events");
+        if (request.method === "GET" && productAuditEvents) {
+          await auditForProduct(productAuditEvents.productId, productAuditEvents.auditId);
+          await streamAuditEvents(request, response, runner, productAuditEvents.auditId);
+          return;
+        }
+        const productAuditLogs = matchProductAuditPath(url.pathname, "logs");
+        if (request.method === "GET" && productAuditLogs) {
+          await auditForProduct(productAuditLogs.productId, productAuditLogs.auditId);
+          const items = await runner.recentLogs(productAuditLogs.auditId, url.searchParams.get("limit"));
+          json(response, 200, { items, count: items.length });
+          return;
+        }
+        const productAuditTerminalResize = matchProductAuditPath(url.pathname, "terminal/resize");
+        if (request.method === "POST" && productAuditTerminalResize) {
+          assertSafeMutation(request);
+          await auditForProduct(productAuditTerminalResize.productId, productAuditTerminalResize.auditId);
+          const body = await requestJson(request);
+          json(response, 200, await runner.resizeTerminal(productAuditTerminalResize.auditId, body.columns, body.rows));
+          return;
+        }
+        const productAuditTerminal = matchProductAuditPath(url.pathname, "terminal");
+        if (request.method === "GET" && productAuditTerminal) {
+          await auditForProduct(productAuditTerminal.productId, productAuditTerminal.auditId);
+          json(response, 200, await runner.terminalSnapshot(productAuditTerminal.auditId));
+          return;
+        }
+        const productAuditArtifacts = matchProductAuditPath(url.pathname, "artifacts");
+        if (request.method === "GET" && productAuditArtifacts) {
+          await auditForProduct(productAuditArtifacts.productId, productAuditArtifacts.auditId);
+          const data = await snapshot();
+          const items = data.artifacts.filter(artifact => artifact.audit_id === productAuditArtifacts.auditId);
+          json(response, 200, { items, count: items.length });
+          return;
+        }
+        const productAudit = matchProductAuditPath(url.pathname);
+        if (request.method === "GET" && productAudit) {
+          const audit = await auditForProduct(productAudit.productId, productAudit.auditId);
+          json(response, 200, audit, { ETag: `"${audit.version}"` });
+          return;
+        }
+      }
       if (request.method === "GET" && (url.pathname === "/api/health" || url.pathname === "/api/v1/runtime/health")) {
         json(response, 200, { ok: true, service: "opencode-audit-workbench", runner: runner.health(), dynamic_runner: dynamicRunner.health(), request_history: { mode: "read_only" } });
         return;
@@ -603,6 +913,7 @@ export function createAuditWorkbenchServer({
       if (request.method === "POST" && url.pathname === "/api/v1/repositories") {
         assertSafeMutation(request);
         const repository = await runner.addRepository(await requestJson(request), request.headers["idempotency-key"]);
+        await productStore.importLegacyRepository(runner.runtimeRepositories().find(item => item.id === repository.id));
         json(response, 201, repository, { Location: `/api/v1/repositories/${encodeURIComponent(repository.id)}` });
         return;
       }
@@ -612,6 +923,7 @@ export function createAuditWorkbenchServer({
         const repositoryId = decodeURIComponent(repositoryDelete[1]);
         const body = await requestJson(request);
         if (body.confirmation !== repositoryId) throw Object.assign(new Error("删除确认必须与项目 ID 完全一致。"), { statusCode: 422, code: "repository-delete-confirmation-invalid" });
+        await assertLegacyUndefinedTarget(repositoryId);
         const repository = (await repositoriesSnapshot()).find(item => item.id === repositoryId);
         if (!repository) throw Object.assign(new Error("审计项目不存在。"), { statusCode: 404, code: "repository-not-found" });
         if ((repository.audit_count ?? 0) > 0) throw Object.assign(new Error("该项目仍有关联审计；请先删除这些审计任务。"), { statusCode: 409, code: "repository-has-audits" });
@@ -626,12 +938,20 @@ export function createAuditWorkbenchServer({
       if (request.method === "POST" && url.pathname === "/api/v1/audits") {
         assertSafeMutation(request);
         const [input, settings] = await Promise.all([requestJson(request), modelSettingsStore.get()]);
+        await assertLegacyUndefinedTarget(input.repository_id);
         const model = normalizeOpenCodeModel(Object.hasOwn(input, "model") ? input.model : settings.model);
         const catalog = await modelCatalog.snapshot();
         if (model && !catalog.models.includes(model)) {
           throw Object.assign(new Error("所选模型不在当前 OpenCode 配置清单中，请重新选择使用模型。"), { statusCode: 422, code: "opencode-model-not-configured" });
         }
         const audit = await runner.createAudit({ ...input, model }, request.headers["idempotency-key"]);
+        if (!productStore.auditLink(audit.id)) {
+          const target = productStore.targetById(audit.repository_id);
+          if (target) {
+            const frozen = await productStore.targetExecutionSnapshot(UNDEFINED_PRODUCT_ID, target.id);
+            await productStore.linkAudit({ auditId: audit.id, productId: UNDEFINED_PRODUCT_ID, targetId: target.id, snapshot: frozen.snapshot, snapshotDigest: frozen.digest });
+          }
+        }
         json(response, 202, audit, { Location: `/api/v1/audits/${encodeURIComponent(audit.id)}`, ETag: `"${audit.version}"` });
         return;
       }
@@ -640,6 +960,7 @@ export function createAuditWorkbenchServer({
         assertSafeMutation(request);
         const body = await requestJson(request);
         if (body.confirmation !== auditId) throw Object.assign(new Error("删除确认必须与 audit_id 完全一致。"), { statusCode: 422, code: "audit-delete-confirmation-invalid" });
+        await assertLegacyUndefinedAudit(auditId);
         const data = await snapshot();
         const audit = data.audits.find(item => item.id === auditId);
         if (!audit) throw Object.assign(new Error("审计不存在。"), { statusCode: 404, code: "audit-not-found" });
@@ -677,6 +998,7 @@ export function createAuditWorkbenchServer({
       if (request.method === "POST" && actionAuditId) {
         assertSafeMutation(request);
         const body = await requestJson(request);
+        await assertLegacyUndefinedAudit(actionAuditId);
         const expected = String(request.headers["if-match"] ?? "").replaceAll('"', "");
         let audit;
         if (body.action === "dispatch") {
@@ -733,6 +1055,7 @@ export function createAuditWorkbenchServer({
         const data = await snapshot();
         const finding = data.findings.find(item => item.resource_id === findingWorkflowId);
         if (!finding) throw Object.assign(new Error("没有找到对应漏洞。"), { statusCode: 404, code: "finding-not-found" });
+        await assertLegacyUndefinedAudit(finding.audit_id);
         const body = await requestJson(request);
         const expected = String(request.headers["if-match"] ?? "0").replaceAll('"', "");
         const workflow = await findingWorkflow.update({
@@ -828,6 +1151,7 @@ export function createAuditWorkbenchServer({
       if (request.method === "POST" && url.pathname === "/api/v1/validations") {
         assertSafeMutation(request);
         const input = await requestJson(request);
+        await assertLegacyUndefinedTarget(input.repository_id);
         const repository = runner.runtimeRepositories().find(item => item.id === input.repository_id);
         if (!repository) throw Object.assign(new Error("仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
         const requests = await validationRequests();
@@ -885,7 +1209,10 @@ export function createAuditWorkbenchServer({
   server.shutdownRunners = async () => {
     await queueScheduler.shutdown();
     await Promise.all([runner.shutdown(), dynamicRunner.shutdown()]);
+    productStore.close();
   };
+  server.productStore = productStore;
+  server.productCatalogReady = productCatalogReady;
   return server;
 }
 

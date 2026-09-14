@@ -1,6 +1,11 @@
 const state = {
   workspace: { summary: {}, audits: [], findings: [], reports: [], artifacts: [], queue: { enabled: false, interval_hours: 1, concurrency: 1 } },
   repositories: [],
+  products: [],
+  targets: [],
+  editingTarget: null,
+  transferringTarget: null,
+  selectedProductId: "product-undefined",
   validationRuns: [],
   validationRequests: [],
   requestExchanges: [],
@@ -49,8 +54,8 @@ const state = {
 
 const VIEW_META = {
   dashboard: ["源码审计工作台", "安全态势 / 概览"],
-  projects: ["审计项目", "资产管理 / 操作员指定目录"],
-  audits: ["审计任务", "任务中心 / 端到端运行"],
+  projects: ["产品与测试对象", "资产管理 / 产品空间"],
+  audits: ["审计任务", "任务中心 / 当前产品空间"],
   findings: ["漏洞发现", "风险中心 / canonical findings"],
   reports: ["审计报告", "交付中心 / 完整性记录"],
   validation: ["完整动态验证", "验证中心 / 人工 localhost 证据"],
@@ -87,7 +92,7 @@ function status(value) {
     queued: "排队中", preparing: "准备中", recovering: "恢复中", running: "运行中", pausing: "正在暂停", paused: "已暂停", cancelling: "正在取消",
     interrupted: "已中断", cancelled: "已取消", completed: "已完成", failed: "失败", artifact_only: "历史制品", unvalidated: "未验证",
     supported_runtime: "运行时已证实", not_confirmed: "未证实", stored_cross_user: "跨用户存储型 XSS", stored_same_user: "同用户存储型 XSS",
-    ready: "已就绪", warning: "需注意", blocked: "受阻", unavailable: "不可用",
+    ready: "已就绪", warning: "需注意", blocked: "受阻", unavailable: "不可用", available: "可用", unknown: "未检查", active: "启用", archived: "已归档",
     queue_active: "已激活", queue_inactive: "未激活",
     unreviewed: "未处理", confirmed: "已确认", rejected: "已排除", insufficient_evidence: "证据不足",
     awaiting_validation: "待动态验证", validated: "验证通过", validation_failed: "验证失败", validation_blocked: "验证受阻", reported: "已入报告",
@@ -204,7 +209,7 @@ function renderMetrics() {
     metric("canonical 漏洞", summary.finding_count ?? 0, `${summary.severity?.critical ?? 0} 个严重`),
     metric("最终报告", summary.report_count ?? 0, "模型验证或摘要记录"),
     metric("动态验证", summary.validation_run_count ?? 0, "显式授权的 localhost 运行"),
-    metric("审计项目", state.repositories.length, `${state.repositories.filter(repo => repo.ready).length} 个可启动审计`),
+    metric("测试对象", state.targets.length, `${state.products.find(product => product.id === state.selectedProductId)?.name ?? "未选择产品"} 空间`),
   );
   $("active-audit-badge").textContent = summary.active_audits ?? 0;
   $("finding-badge").textContent = summary.finding_count ?? 0;
@@ -248,48 +253,92 @@ function renderDashboard() {
 }
 
 function renderProjects() {
-  const [value, body] = table(["项目 / 指定目录", "就绪度", "Git / 目标版本", "审计活动", "审计引擎配置", "操作"]);
-  for (const repository of state.repositories) {
+  const selector = $("product-selector");
+  const activeProducts = state.products.filter(product => product.status === "active" || product.id === state.selectedProductId);
+  selector.replaceChildren(...activeProducts.map(product => {
+    const option = element("option", "", `${product.name}${product.system ? "（系统）" : ""}`);
+    option.value = product.id;
+    return option;
+  }));
+  if (state.selectedProductId && [...selector.options].some(option => option.value === state.selectedProductId)) selector.value = state.selectedProductId;
+  const currentProduct = state.products.find(product => product.id === state.selectedProductId);
+  const productArchive = $("product-archive");
+  productArchive.disabled = !currentProduct || currentProduct.system;
+  productArchive.textContent = currentProduct?.status === "archived" ? "恢复产品" : "归档产品";
+  productArchive.title = currentProduct?.system ? "系统内置“未定义”产品不能归档。" : currentProduct?.status === "archived" ? "恢复产品及其对象的可写状态" : "归档前必须没有排队、运行或取消中的任务";
+  const [value, body] = table(["测试对象 / 源码范围", "可用性", "版本与重点", "归属与状态", "操作"]);
+  for (const target of state.targets) {
     const row = element("tr");
     const identity = element("td");
-    identity.append(element("strong", "", repository.name), element("small", "mono", repository.directory), element("small", "mono", repository.id));
+    const scopes = target.source_scopes ?? [];
+    identity.append(element("strong", "", target.name), ...scopes.slice(0, 2).map(scope => element("small", "mono", scope.path)), element("small", "mono", target.id));
     row.append(identity);
-    const readiness = element("td");
-    readiness.append(status(repository.readiness));
-    if (repository.issues?.length) readiness.append(element("small", "repository-issues", repository.issues.join("；")));
-    else if (repository.dirty) readiness.append(element("small", "repository-issues warning", "存在本地修改，默认阻止创建可复现审计。"));
-    else readiness.append(element("small", "repository-issues", "指定目录与审计引擎检查通过。"));
-    row.append(readiness);
-    const gitCell = element("td");
-    gitCell.append(element("strong", "", repository.git_repository ? (repository.dirty ? "工作树有修改" : "工作树干净") : "Git 不可用"), element("small", "mono", `${repository.branch ?? "—"} · ${short(repository.commit)}`));
-    row.append(gitCell);
-    const activity = element("td");
-    activity.append(element("strong", "", `${repository.audit_count ?? 0} 次审计`), element("small", "", repository.active_audit_count ? `${repository.active_audit_count} 个正在运行` : repository.last_audit_at ? `最近 ${formatDate(repository.last_audit_at)}` : "尚无运行记录"));
-    row.append(activity);
-    cell(row, !repository.configured ? "缺少配置" : repository.config_valid ? "JSON 有效" : "JSON 无效");
+    const availability = element("td");
+    availability.append(status(target.availability), element("small", "repository-issues", target.availability_error ?? (target.availability_checked_at ? `检查于 ${formatDate(target.availability_checked_at)}` : "列表不触发目录扫描")));
+    row.append(availability);
+    const version = element("td");
+    version.append(element("strong", "", target.version_label || "未标注版本"), element("small", "", target.test_focus || "未设置测试重点"));
+    row.append(version);
+    const ownership = element("td");
+    ownership.append(status(target.status), element("small", "", currentProduct?.name ?? "产品未知"));
+    row.append(ownership);
     const action = element("td");
     const create = element("button", "text-button", "创建审计 →");
-    create.disabled = !repository.ready || !state.runtime?.runner?.enabled;
-    create.addEventListener("click", () => openAuditDialog(repository.id));
-    const remove = element("button", "text-button danger-text", "删除项目");
-    remove.disabled = repository.removable === false || (repository.audit_count ?? 0) > 0;
-    remove.title = repository.removable === false
-      ? "该项目由工作台启动参数管理，不能从网页删除。"
-      : (repository.audit_count ?? 0) > 0 ? "请先删除该项目的全部审计任务。" : "只移除工作台登记，不删除源码目录。";
-    remove.addEventListener("click", () => openDeleteProjectDialog(repository));
+    create.disabled = currentProduct?.status !== "active" || target.status !== "active" || target.availability === "unavailable" || !state.runtime?.runner?.enabled;
+    create.addEventListener("click", () => openAuditDialog(target.id));
+    const inspect = element("button", "text-button", "检查目录");
+    inspect.addEventListener("click", () => targetAction(target, "inspect").catch(showError));
+    const archive = element("button", "text-button danger-text", target.status === "archived" ? "恢复对象" : "归档对象");
+    archive.addEventListener("click", () => targetAction(target, target.status === "archived" ? "restore" : "archive").catch(showError));
     action.className = "project-actions";
-    action.append(create, remove);
+    const edit = element("button", "text-button", "编辑对象");
+    edit.disabled = target.status !== "active" || currentProduct?.status !== "active";
+    edit.addEventListener("click", () => openTargetEditDialog(target));
+    action.append(create, edit);
+    if (target.product_id === "product-undefined") {
+      const transfer = element("button", "text-button", "归属到产品");
+      transfer.disabled = edit.disabled;
+      transfer.addEventListener("click", () => openTargetTransferDialog(target).catch(showError));
+      action.append(transfer);
+    }
+    action.append(inspect, archive);
     row.append(action);
     body.append(row);
   }
-  if (!state.repositories.length) {
+  if (!state.targets.length) {
     const row = element("tr");
-    const empty = element("td", "empty-state", "尚未登记审计项目。点击“指定目录”，填写工作台所在机器上的源码目录。");
-    empty.colSpan = 6;
+    const empty = element("td", "empty-state", currentProduct?.status === "archived" ? "该产品已归档。恢复后才可新建对象或审计。" : "尚无测试对象。点击“新建对象”，填写工作台服务所在主机的源码目录。");
+    empty.colSpan = 5;
     row.append(empty);
     body.append(row);
   }
   $("project-table").replaceChildren(value);
+}
+
+async function targetAction(target, action) {
+  const updated = await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/targets/${encodeURIComponent(target.id)}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "If-Match": `"${target.version}"` },
+    body: JSON.stringify({ action }),
+  });
+  if (action === "inspect") toast(updated.availability === "available" ? "目录检查通过" : "目录当前不可用，请查看原因");
+  else toast(action === "archive" ? "测试对象已归档" : "测试对象已恢复");
+  await loadProductTargets();
+  renderActiveView();
+}
+
+async function productAction() {
+  const product = state.products.find(item => item.id === state.selectedProductId);
+  if (!product || product.system) return;
+  const action = product.status === "archived" ? "restore" : "archive";
+  await api(`/api/v2/products/${encodeURIComponent(product.id)}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "If-Match": `"${product.version}"` },
+    body: JSON.stringify({ action }),
+  });
+  await loadProducts();
+  renderActiveView();
+  toast(action === "archive" ? "产品已归档；历史记录仍可查询" : "产品已恢复");
 }
 
 function renderAudits() {
@@ -352,16 +401,23 @@ function renderAudits() {
 }
 
 async function loadAuditsPage(page = 1) {
+  if (!state.selectedProductId) {
+    state.audits = [];
+    state.auditTotal = 0;
+    state.auditTotalPages = 1;
+    renderAudits();
+    return;
+  }
   state.auditController?.abort();
   const controller = new AbortController();
   state.auditController = controller;
   state.auditLoading = true;
-  const parameters = new URLSearchParams({ tab: state.auditTab, page: String(page), page_size: String(state.auditPageSize), q: $("audit-query").value.trim(), live: "1" });
+  const parameters = new URLSearchParams({ tab: state.auditTab, page: String(page), page_size: String(state.auditPageSize), q: $("audit-query").value.trim() });
   const queryKey = parameters.toString();
   if (state.auditQueryKey !== queryKey) state.audits = [];
   renderAudits();
   try {
-    const payload = await api(`/api/v1/audits?${parameters}`, { signal: controller.signal });
+    const payload = await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits?${parameters}`, { signal: controller.signal });
     if (controller.signal.aborted || state.view !== "audits") return;
     state.audits = payload.items;
     state.auditPage = payload.page;
@@ -387,7 +443,7 @@ async function selectAudit(auditId) {
   if (state.selectedAudit?.id !== auditId) state.selectedAudit = null;
   renderAuditDetail();
   try {
-    const audit = await api(`/api/v1/audits/${encodeURIComponent(auditId)}?live=1`, { signal: controller.signal });
+    const audit = await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits/${encodeURIComponent(auditId)}`, { signal: controller.signal });
     if (controller.signal.aborted || state.selectedAuditId !== auditId || state.view !== "audits") return;
     state.selectedAudit = audit;
     renderAuditDetail();
@@ -410,7 +466,7 @@ function renderAuditDetail() {
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
-  [["仓库", audit.repository_name], ["提交", short(audit.commit, 18)], [audit.status === "queued" ? "OpenCode 模型（下次启动）" : "OpenCode 模型（本次启动）", modelForDisplay ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["上下文 watchdog", contextRecoveryText(audit.context_window_recovery)], ["人工完整验证", `${audit.runtime_validation_count} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（环境准备240秒 / 每报告180秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "历史任务未记录"]].forEach(([label, value]) => {
+  [["测试对象", audit.repository_name], [audit.source_kind === "directory" ? "目录范围快照" : "提交", audit.source_kind === "directory" ? short(audit.execution_spec_digest, 18) : short(audit.commit, 18)], [audit.status === "queued" ? "OpenCode 模型（下次启动）" : "OpenCode 模型（本次启动）", modelForDisplay ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count ?? 0} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["上下文 watchdog", contextRecoveryText(audit.context_window_recovery)], ["人工完整验证", `${audit.runtime_validation_count ?? 0} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（环境准备240秒 / 每报告180秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "启动后生成"]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const stages = element("ol", "stage-list");
@@ -463,9 +519,11 @@ function renderAuditDetail() {
     const retry = element("button", "button secondary", audit.status === "completed" ? "再次审计" : "新建重试");
     retry.addEventListener("click", () => openAuditDialog(audit.repository_id, audit));
     actions.append(retry);
-    const remove = element("button", "button danger", "删除任务");
-    remove.addEventListener("click", () => openDeleteAuditDialog(audit));
-    actions.append(remove);
+    if (state.selectedProductId === "product-undefined") {
+      const remove = element("button", "button danger", "删除任务");
+      remove.addEventListener("click", () => openDeleteAuditDialog(audit));
+      actions.append(remove);
+    }
   }
   const logs = element("div", "runner-log");
   logs.append(element("p", "eyebrow", "RECENT OPENCODE EVENTS"), element("div", "agent-event-stream", "正在读取最近事件…"));
@@ -497,7 +555,7 @@ function renderAgentEvent(item, recent) {
 }
 
 async function loadAuditLogs(auditId, container) {
-  const items = (await api(`/api/v1/audits/${encodeURIComponent(auditId)}/logs?limit=80`)).items;
+  const items = (await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits/${encodeURIComponent(auditId)}/logs?limit=80`)).items;
   if (state.selectedAuditId !== auditId) return;
   const output = container.querySelector(".agent-event-stream");
   if (!items.length) {
@@ -562,7 +620,7 @@ async function syncTerminalSize(auditId, { force = false } = {}) {
   if (!size) return null;
   const signature = `${auditId}:${size.columns}x${size.rows}`;
   if (!force && state.terminalGrid === signature) return null;
-  const payload = await api(`/api/v1/audits/${encodeURIComponent(auditId)}/terminal/resize`, {
+  const payload = await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits/${encodeURIComponent(auditId)}/terminal/resize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(size),
@@ -598,7 +656,7 @@ function observeTerminalSize() {
 async function refreshTerminal(auditId) {
   window.clearTimeout(state.terminalRefresh);
   state.terminalRefresh = null;
-  const payload = withTerminalSession(await api(`/api/v1/audits/${encodeURIComponent(auditId)}/terminal`), auditId);
+  const payload = withTerminalSession(await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits/${encodeURIComponent(auditId)}/terminal`), auditId);
   if (state.terminalAuditId !== auditId || !$("terminal-dialog").open) return;
   setTerminalStatus(payload);
   const output = $("terminal-output");
@@ -631,7 +689,7 @@ function closeTerminal() {
 
 async function requestAuditAction(audit, action) {
   try {
-    await api(`/api/v1/audits/${encodeURIComponent(audit.id)}/actions`, {
+    await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits/${encodeURIComponent(audit.id)}/actions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "If-Match": `"${audit.version}"`, "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ action }),
@@ -1316,7 +1374,7 @@ function renderShell() {
   const enabled = Boolean(state.runtime?.runner?.enabled);
   $("runner-state").textContent = enabled ? "运行驱动已启用" : "只读观测模式";
   $("runner-pulse").classList.toggle("online", enabled);
-  $("engine-caption").textContent = `${state.repositories.length} 个审计项目 · ${state.workspace.artifacts.length} 个制品`;
+  $("engine-caption").textContent = `${state.products.length} 个产品 · ${state.targets.length} 个当前测试对象 · ${state.workspace.artifacts.length} 个制品`;
   $("new-audit").disabled = !enabled;
   $("new-audit").title = enabled ? "创建审计" : "请运行 npm --prefix .opencode run start:audit-workbench:runner";
   $("active-audit-badge").textContent = summary.active_audits ?? 0;
@@ -1415,12 +1473,35 @@ async function load() {
     api("/api/v1/repositories?live=1").then(payload => { state.repositories = payload.items; renderActiveView(); }),
     api("/api/v1/runtime/health").then(runtime => { state.runtime = runtime; renderActiveView(); connectEventStream(); }),
     api("/api/v1/settings/model").then(payload => { state.modelSettings = payload.model; if (state.view === "settings") renderActiveView(); }),
+    loadProducts(),
     loadViewResources(state.view),
   ];
   if (state.view === "audits") resources.push(loadAuditsPage(state.auditPage), state.selectedAuditId ? selectAudit(state.selectedAuditId) : Promise.resolve());
   await Promise.all(resources);
   connectEventStream();
   connectValidationEventStream();
+}
+
+async function loadProducts() {
+  const products = [];
+  for (let page = 1; ; page++) {
+    const payload = await api(`/api/v2/products?status=all&page=${page}&page_size=100`);
+    products.push(...payload.items);
+    if (page >= payload.total_pages) break;
+  }
+  state.products = products;
+  if (!state.products.some(product => product.id === state.selectedProductId)) {
+    state.selectedProductId = state.products.find(product => product.status === "active")?.id ?? null;
+  }
+  await loadProductTargets();
+  if (state.view === "projects") renderActiveView();
+}
+
+async function loadProductTargets() {
+  if (!state.selectedProductId) { state.targets = []; return; }
+  const productId = state.selectedProductId;
+  const payload = await api(`/api/v2/products/${encodeURIComponent(productId)}/targets?status=all&page=1&page_size=100`);
+  if (state.selectedProductId === productId) state.targets = payload.items;
 }
 
 async function loadViewResources(view) {
@@ -1514,14 +1595,16 @@ function openAuditDialog(repositoryId = null, templateAudit = null) {
   const form = $("audit-form");
   form.reset();
   const select = $("repository-select");
-  select.replaceChildren(...state.repositories.filter(repo => repo.ready).map(repo => {
-    const option = element("option", "", `${repo.name} · ${repo.branch ?? "HEAD"}`); option.value = repo.id; return option;
+  const product = state.products.find(item => item.id === state.selectedProductId);
+  select.replaceChildren(...state.targets.filter(target => target.status === "active" && target.availability !== "unavailable").map(target => {
+    const scope = target.source_scopes?.[0];
+    const option = element("option", "", `${target.name} · ${scope?.path ?? "未配置范围"}`); option.value = target.id; return option;
   }));
-  if (!select.options.length) { toast("当前没有可启动审计的项目，请先指定目录或修复项目就绪度。" ); setView("projects"); return; }
+  if (!product || product.status !== "active" || !select.options.length) { toast("当前产品没有可启动的单目录测试对象，请先新建对象并检查目录。" ); setView("projects"); return; }
   if (repositoryId) select.value = repositoryId;
   form.elements.name.value = templateAudit?.name ? `${templateAudit.name.replace(/（重试）$/u, "")}（重试）` : "";
   form.elements.audit_id.value = `audit-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 7)}`;
-  form.elements.ref.value = "HEAD";
+  form.elements.ref.value = "当前目录快照";
   const selectedModel = templateAudit ? (templateAudit.model ?? "default") : (state.modelSettings?.selected_model ?? "default");
   const modelOptions = [...(state.modelSettings?.options ?? [{ value: "default", label: "默认" }])];
   if (!modelOptions.some(option => option.value === selectedModel)) {
@@ -1539,8 +1622,139 @@ function openAuditDialog(repositoryId = null, templateAudit = null) {
 function openProjectDialog() {
   const form = $("project-form");
   form.reset();
+  const select = $("target-product-select");
+  select.replaceChildren(...state.products.filter(product => product.status === "active").map(product => {
+    const option = element("option", "", product.name); option.value = product.id; return option;
+  }));
+  select.value = state.selectedProductId ?? "";
   $("project-form-error").hidden = true;
   $("project-dialog").showModal();
+}
+
+function openProductDialog() {
+  const form = $("product-form");
+  form.reset();
+  $("product-form-error").hidden = true;
+  $("product-dialog").showModal();
+}
+
+function targetUrl(target) {
+  return `/api/v2/products/${encodeURIComponent(target.product_id)}/targets/${encodeURIComponent(target.id)}`;
+}
+
+function openTargetEditDialog(target) {
+  state.editingTarget = structuredClone(target);
+  const form = $("target-edit-form");
+  form.reset();
+  for (const field of ["name", "description", "version_label", "test_focus", "relationship_notes"]) {
+    form.elements[field].value = target[field] ?? "";
+  }
+  $("target-edit-scopes").replaceChildren(...target.source_scopes.map((scope, index) => {
+    const label = element("label", "", `源码目录 · ${scope.name}`);
+    const input = element("input");
+    input.name = `scope_path_${index}`;
+    input.value = scope.path;
+    input.required = true;
+    input.maxLength = 4096;
+    label.append(input);
+    return label;
+  }));
+  $("target-edit-error").hidden = true;
+  $("target-edit-dialog").showModal();
+}
+
+async function submitTargetEdit(event) {
+  event.preventDefault();
+  const target = state.editingTarget;
+  if (!target) return;
+  const data = new FormData(event.currentTarget);
+  const input = Object.fromEntries(["name", "description", "version_label", "test_focus", "relationship_notes"].map(field => [field, data.get(field)]));
+  const scopes = target.source_scopes.map((scope, index) => ({ ...scope, path: data.get(`scope_path_${index}`).trim() }));
+  if (scopes.some((scope, index) => scope.path !== target.source_scopes[index].path)) input.source_scopes = scopes;
+  $("submit-target-edit").disabled = true;
+  try {
+    await api(targetUrl(target), {
+      method: "PUT", headers: { "Content-Type": "application/json", "If-Match": `"${target.version}"` },
+      body: JSON.stringify(input),
+    });
+    $("target-edit-dialog").close();
+    toast("测试对象已更新");
+    await loadProductTargets();
+    renderActiveView();
+  } catch (error) {
+    $("target-edit-error").textContent = error.message;
+    $("target-edit-error").hidden = false;
+  } finally { $("submit-target-edit").disabled = false; }
+}
+
+async function openTargetTransferDialog(target) {
+  const products = [];
+  for (let page = 1; ; page++) {
+    const payload = await api(`/api/v2/products?status=active&page=${page}&page_size=100`);
+    products.push(...payload.items.filter(product => !product.system));
+    if (payload.items.length < 100) break;
+  }
+  state.transferringTarget = structuredClone(target);
+  $("target-transfer-name").textContent = `测试对象：${target.name}`;
+  $("target-transfer-product").replaceChildren(...products.map(product => {
+    const option = element("option", "", product.name);
+    option.value = product.id;
+    return option;
+  }));
+  $("submit-target-transfer").disabled = !products.length;
+  $("target-transfer-error").textContent = products.length ? "" : "尚无可用的正式产品，请先新建产品。";
+  $("target-transfer-error").hidden = products.length > 0;
+  $("target-transfer-dialog").showModal();
+}
+
+async function submitTargetTransfer(event) {
+  event.preventDefault();
+  const target = state.transferringTarget;
+  if (!target) return;
+  const destination = new FormData(event.currentTarget).get("destination_product_id");
+  $("submit-target-transfer").disabled = true;
+  try {
+    await api(`${targetUrl(target)}/actions`, {
+      method: "POST", headers: { "Content-Type": "application/json", "If-Match": `"${target.version}"` },
+      body: JSON.stringify({ action: "transfer", destination_product_id: destination }),
+    });
+    $("target-transfer-dialog").close();
+    state.auditController?.abort();
+    state.auditDetailController?.abort();
+    state.selectedAuditId = null;
+    state.selectedAudit = null;
+    state.audits = [];
+    state.selectedProductId = destination;
+    toast("测试对象及历史任务已归属目标产品");
+    await loadProducts();
+    setView("projects");
+  } catch (error) {
+    $("target-transfer-error").textContent = error.message;
+    $("target-transfer-error").hidden = false;
+  } finally { $("submit-target-transfer").disabled = false; }
+}
+
+async function submitProduct(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const button = $("submit-product");
+  button.disabled = true;
+  try {
+    const product = await api("/api/v2/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: data.get("name"), description: data.get("description") }),
+    });
+    state.selectedProductId = product.id;
+    $("product-dialog").close();
+    await loadProducts();
+    toast(`产品空间 ${product.name} 已创建`);
+    setView("projects");
+  } catch (error) {
+    $("product-form-error").textContent = error.message;
+    $("product-form-error").hidden = false;
+  } finally { button.disabled = false; }
 }
 
 async function submitProject(event) {
@@ -1550,15 +1764,16 @@ async function submitProject(event) {
   const button = $("submit-project");
   button.disabled = true;
   try {
-    const repository = await api("/api/v1/repositories", {
+    const target = await api(`/api/v2/products/${encodeURIComponent(data.get("product_id"))}/targets`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ path: data.get("path"), name: data.get("name") }),
+      body: JSON.stringify({ name: data.get("name"), version_label: data.get("version_label"), source_scopes: [{ name: "source", path: data.get("path") }] }),
     });
     $("project-dialog").close();
     form.reset();
-    toast(`审计项目 ${repository.name} 已登记`);
-    await load();
+    toast(`测试对象 ${target.name} 已创建`);
+    if (state.selectedProductId !== data.get("product_id")) state.selectedProductId = data.get("product_id");
+    await loadProducts();
     setView("projects");
   } catch (error) {
     $("project-form-error").textContent = error.message;
@@ -1573,7 +1788,7 @@ async function submitAudit(event) {
   const additionalInstructionsEnabled = form.elements.additional_instructions_enabled.checked;
   const testEnvironmentEnabled = form.elements.test_environment_enabled.checked;
   const input = {
-    name: data.get("name"), repository_id: data.get("repository_id"), audit_id: data.get("audit_id"), ref: data.get("ref"), allow_dirty: data.get("allow_dirty") === "on",
+    name: data.get("name"), target_id: data.get("target_id"), audit_id: data.get("audit_id"),
     model: data.get("model"),
     additional_instructions_enabled: additionalInstructionsEnabled,
     additional_instructions: additionalInstructionsEnabled ? form.elements.additional_instructions.value : "",
@@ -1583,7 +1798,7 @@ async function submitAudit(event) {
   const button = $("submit-audit");
   button.disabled = true;
   try {
-    const audit = await api("/api/v1/audits", {
+    const audit = await api(`/api/v2/products/${encodeURIComponent(state.selectedProductId)}/audits`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify(input),
@@ -1672,6 +1887,7 @@ document.querySelectorAll("[data-go]").forEach(button => button.addEventListener
 document.querySelectorAll("[data-open-audit]").forEach(button => button.addEventListener("click", () => openAuditDialog()));
 document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => $("audit-dialog").close()));
 document.querySelectorAll("[data-close-project]").forEach(button => button.addEventListener("click", () => $("project-dialog").close()));
+document.querySelectorAll("[data-close-product]").forEach(button => button.addEventListener("click", () => $("product-dialog").close()));
 document.querySelectorAll("[data-close-validation]").forEach(button => button.addEventListener("click", () => $("validation-dialog").close()));
 document.querySelectorAll("[data-close-report]").forEach(button => button.addEventListener("click", () => $("report-dialog").close()));
 document.querySelectorAll("[data-close-finding]").forEach(button => button.addEventListener("click", () => $("finding-dialog").close()));
@@ -1681,6 +1897,14 @@ document.querySelectorAll("[data-close-delete-project]").forEach(button => butto
 document.querySelectorAll("[data-close-cancel-validation]").forEach(button => button.addEventListener("click", closeCancelValidationDialog));
 $("new-audit").addEventListener("click", () => openAuditDialog());
 $("add-project").addEventListener("click", openProjectDialog);
+$("add-product").addEventListener("click", openProductDialog);
+$("product-archive").addEventListener("click", () => productAction().catch(showError));
+$("product-selector").addEventListener("change", event => {
+  state.selectedProductId = event.currentTarget.value;
+  state.selectedAuditId = null;
+  state.selectedAudit = null;
+  Promise.all([loadProductTargets(), state.view === "audits" ? loadAuditsPage(1) : Promise.resolve()]).then(renderActiveView).catch(showError);
+});
 $("refresh").addEventListener("click", () => load().then(() => toast("制品与运行状态已刷新")).catch(showError));
 $("dispatch-queue").addEventListener("click", () => dispatchQueueNow().catch(showError));
 document.querySelectorAll("[data-audit-tab]").forEach(button => button.addEventListener("click", () => {
@@ -1715,6 +1939,11 @@ for (const checkbox of $("audit-form").querySelectorAll(".enable-switch input[ty
   checkbox.addEventListener("change", () => syncAuditContextControls($("audit-form")));
 }
 $("project-form").addEventListener("submit", submitProject);
+$("product-form").addEventListener("submit", submitProduct);
+$("target-edit-form").addEventListener("submit", submitTargetEdit);
+$("target-transfer-form").addEventListener("submit", submitTargetTransfer);
+document.querySelectorAll("[data-close-target-edit]").forEach(button => button.addEventListener("click", () => $("target-edit-dialog").close()));
+document.querySelectorAll("[data-close-target-transfer]").forEach(button => button.addEventListener("click", () => $("target-transfer-dialog").close()));
 $("validation-form").addEventListener("submit", submitValidation);
 $("select-all-exchanges").addEventListener("change", event => {
   const visibleIds = filteredRequestExchanges().map(exchange => exchange.exchange_id);

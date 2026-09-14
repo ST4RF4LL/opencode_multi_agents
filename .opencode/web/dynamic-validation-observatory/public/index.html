@@ -14,7 +14,7 @@
         <div class="workspace-card"><span>当前工作空间</span><strong>源码安全工程中心</strong><small id="engine-caption">正在连接运行时…</small></div>
         <nav class="nav" aria-label="主导航">
           <button class="active" data-view="dashboard"><span>⌁</span>工作台</button>
-          <button data-view="projects"><span>◇</span>审计项目</button>
+          <button data-view="projects"><span>◇</span>产品与对象</button>
           <button data-view="audits"><span>▷</span>审计任务 <em id="active-audit-badge">0</em></button>
           <button data-view="findings"><span>!</span>漏洞发现 <em id="finding-badge">0</em></button>
           <button data-view="reports"><span>▤</span>审计报告</button>
@@ -43,7 +43,7 @@
             </div>
           </section>
 
-          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">AUDIT TARGETS</p><h2>审计项目</h2><p>登记你要审计的源码目录；路径属于工作台所在机器，而不是浏览器所在机器。</p></div><button id="add-project" class="button primary">＋ 指定目录</button></div><article class="panel"><div id="project-table" class="data-table"></div></article></section>
+          <section id="view-projects" class="view"><div class="page-heading"><div><p class="eyebrow">PRODUCT SPACES / AUDIT TARGETS</p><h2>产品与测试对象</h2><p>产品提供独立空间；一个测试对象可指向单个非 Git 目录，后续也可保存多个源码范围。</p></div><div class="topbar-actions"><button id="add-product" class="button secondary">＋ 新建产品</button><button id="add-project" class="button primary">＋ 新建对象</button></div></div><article class="panel"><div class="section-title"><div><p class="eyebrow">ACTIVE PRODUCT</p><h2>当前产品空间</h2></div><div class="topbar-actions"><label>产品 <select id="product-selector"></select></label><button id="product-archive" class="button secondary">归档产品</button></div></div><div id="project-table" class="data-table"></div></article></section>
 
           <section id="view-audits" class="view">
             <div class="page-heading"><div><p class="eyebrow">END-TO-END RUNS</p><h2>审计任务</h2><p>查看每个 audit_id 的阶段、制品、覆盖率与运行状态。</p></div><button id="dispatch-queue" class="button secondary">立即调度队列</button></div>
@@ -56,7 +56,7 @@
               <label>搜索任务 <input id="audit-query" type="search" placeholder="任务名称、ID、仓库或提交" /></label>
               <span id="audit-list-status" role="status"></span>
             </div>
-            <p class="audit-list-hint">“已完成”包含所有非运行任务，包括中断、取消、失败、排队中和已暂停的任务。</p>
+            <p class="audit-list-hint">“已完成”沿用历史命名，实际是“非运行”分组：包括中断、取消、失败、排队中和已暂停的任务。</p>
             <div class="split"><article class="panel">
               <div id="audit-table" class="data-table"></div>
               <nav id="audit-pagination" class="finding-pagination" aria-label="审计任务分页" hidden>
@@ -141,9 +141,9 @@
         <label>任务名称<input name="name" maxlength="160" placeholder="例如：支付服务发布前安全审计" required></label>
         <label>使用模型<select name="model" id="audit-model-select" required></select></label>
         <p class="context-note">模型随任务保存，排队和断点恢复沿用此选择；重试可重新选择。“默认”由 OpenCode 配置决定。</p>
-        <label>审计项目<select name="repository_id" id="repository-select" required></select></label>
-        <div class="form-row"><label>audit_id<input name="audit_id" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,127}" placeholder="audit-2026-001" required></label><label>目标 ref<input name="ref" value="HEAD" maxlength="200" required></label></div>
-        <label class="check"><input name="allow_dirty" type="checkbox">允许审计包含未提交修改的工作树（会降低可复现性）</label>
+        <label>测试对象<select name="target_id" id="repository-select" required></select></label>
+        <div class="form-row"><label>audit_id<input name="audit_id" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,127}" placeholder="audit-2026-001" required></label><label>版本备注<input name="ref" value="当前目录快照" maxlength="200"></label></div>
+        <p class="context-note">目录不要求 Git。任务实际启动前会生成范围清单与逐文件摘要；多范围对象会保存，但在跨范围关联流水线启用前不能启动。</p>
         <div class="audit-contexts">
           <section class="audit-context-option" data-context-option>
             <div class="audit-context-heading">
@@ -167,12 +167,47 @@
     </dialog>
     <dialog id="project-dialog">
       <form id="project-form" method="dialog">
-        <div class="dialog-heading"><div><p class="eyebrow">AUDIT TARGET</p><h2>指定审计项目目录</h2></div><button type="button" class="icon-button" data-close-project>×</button></div>
-        <label>项目目录<input name="path" maxlength="4096" placeholder="例如：/Users/me/Workspace/service-a 或 C:\\src\\service-a" required></label>
-        <label>显示名称（可选）<input name="name" maxlength="120" placeholder="默认使用目录名"></label>
-        <div class="notice">这里填写工作台服务所在 macOS、WSL、Windows 或 Linux 主机可访问的绝对目录。浏览器安全模型无法返回本机绝对路径，因此使用明确的路径输入。</div>
+        <div class="dialog-heading"><div><p class="eyebrow">AUDIT TARGET</p><h2>新建测试对象</h2></div><button type="button" class="icon-button" data-close-project>×</button></div>
+        <label>归属产品<select name="product_id" id="target-product-select" required></select></label>
+        <label>对象名称<input name="name" maxlength="160" placeholder="例如：支付服务 API" required></label>
+        <label>源码目录<input name="path" maxlength="4096" placeholder="例如：/Users/me/Workspace/service-a 或 C:\\src\\service-a" required></label>
+        <label>版本备注（可选）<input name="version_label" maxlength="240" placeholder="例如：release/2026.09"></label>
+        <div class="notice">目录无需包含 .git。这里填写工作台服务所在 Windows 或 Linux 主机可访问的绝对目录；对象列表不会反复扫描目录。</div>
         <div id="project-form-error" class="notice error" hidden></div>
         <div class="dialog-actions"><button type="button" class="button secondary" data-close-project>取消</button><button id="submit-project" class="button primary" type="submit">登记项目</button></div>
+      </form>
+    </dialog>
+    <dialog id="target-edit-dialog">
+      <form id="target-edit-form">
+        <div class="dialog-heading"><h2>编辑测试对象</h2><button type="button" class="icon-button" data-close-target-edit>×</button></div>
+        <label>对象名称<input name="name" maxlength="160" required></label>
+        <label>对象说明<textarea name="description" maxlength="4000"></textarea></label>
+        <label>版本备注<input name="version_label" maxlength="240"></label>
+        <label>测试重点<textarea name="test_focus" maxlength="4000"></textarea></label>
+        <label>范围关系说明<textarea name="relationship_notes" maxlength="4000"></textarea></label>
+        <div id="target-edit-scopes"></div>
+        <div class="notice">目录修改仅影响未来任务，历史任务保留启动时的配置快照。</div>
+        <div id="target-edit-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-target-edit>取消</button><button id="submit-target-edit" class="button primary" type="submit">保存修改</button></div>
+      </form>
+    </dialog>
+    <dialog id="target-transfer-dialog">
+      <form id="target-transfer-form">
+        <div class="dialog-heading"><h2>归属到产品</h2><button type="button" class="icon-button" data-close-target-transfer>×</button></div>
+        <p id="target-transfer-name"></p>
+        <label>目标产品<select name="destination_product_id" id="target-transfer-product" required></select></label>
+        <div class="notice">对象及其历史任务将整体归属目标产品。存在排队、暂停、运行或取消中的审计及活动验证时，请先结束任务。当前仅支持从“未定义”归入正式产品，暂不支持转回或跨产品转移。</div>
+        <div id="target-transfer-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-target-transfer>取消</button><button id="submit-target-transfer" class="button primary" type="submit">确认归属</button></div>
+      </form>
+    </dialog>
+    <dialog id="product-dialog">
+      <form id="product-form" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">PRODUCT SPACE</p><h2>新建产品</h2></div><button type="button" class="icon-button" data-close-product>×</button></div>
+        <label>产品名称<input name="name" maxlength="120" required placeholder="例如：支付平台"></label>
+        <label>产品说明（可选）<textarea name="description" maxlength="2000" placeholder="产品边界、业务背景或审计约束"></textarea></label>
+        <div id="product-form-error" class="notice error" hidden></div>
+        <div class="dialog-actions"><button type="button" class="button secondary" data-close-product>取消</button><button id="submit-product" class="button primary" type="submit">创建产品</button></div>
       </form>
     </dialog>
     <dialog id="delete-project-dialog">

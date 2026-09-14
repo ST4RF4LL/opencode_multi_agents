@@ -45,6 +45,7 @@ const PRIVATE_PROXY_ENVIRONMENT_FILE = "proxy-environment.json";
 const TERMINAL_OUTPUT_RELAY = fileURLToPath(new URL("./terminal-output-relay.mjs", import.meta.url));
 const STAGE_DELIVERY_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/workbench-stage-deliveries.json", import.meta.url));
 const STAGE_AGENT_REGISTRY = fileURLToPath(new URL("../../skills/common-subagent/audit-artifact-management/contracts/stage-agent-contracts.json", import.meta.url));
+const SCOPE_MANIFEST_BUILDER = fileURLToPath(new URL("../../skills/common-subagent/audit-coverage-accounting/scripts/build-scope-manifest.mjs", import.meta.url));
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -256,6 +257,29 @@ function normalizeRepository(repository, defaultConfigPath) {
   };
 }
 
+function targetRepositoryFromAudit(audit, defaultConfigPath) {
+  const snapshot = audit?.execution_spec;
+  const scopes = snapshot?.source_scopes;
+  if (!snapshot || !Array.isArray(scopes) || scopes.length !== 1) return null;
+  const scope = scopes[0];
+  if (!REPOSITORY_ID.test(audit.repository_id ?? "") || typeof scope?.path !== "string" || !isAbsolute(scope.path)) return null;
+  return {
+    id: audit.repository_id,
+    name: audit.repository_name ?? snapshot.target_name ?? audit.repository_id,
+    path: resolve(scope.path),
+    config_path: resolve(defaultConfigPath ?? join(scope.path, ".opencode", "opencode.json")),
+    storage_namespace: snapshot.storage_namespace ?? audit.repository_id,
+    execution_spec: snapshot,
+  };
+}
+
+function auditSourceReference(audit) {
+  if (audit?.source_kind === "directory") {
+    return `目录范围快照 SHA-256: ${audit.execution_spec_digest ?? audit.source_baseline?.scope_digest ?? "未生成"}`;
+  }
+  return `目标提交固定为 ${audit.commit}`;
+}
+
 function repositoryRegistryEntries(registry) {
   const value = Array.isArray(registry) ? registry : registry?.repositories;
   if (value === undefined || value === null) return [];
@@ -459,11 +483,14 @@ function deliveryRootPrompt(audit, paths) {
 function auditPrompt(audit, repository, paths, contextPaths = {}) {
   const sourceRoot = JSON.stringify(repository.path);
   const workspaceRoot = JSON.stringify(paths.workspace_root);
+  const gitHint = audit.source_kind === "directory"
+    ? "该对象不以 Git 为前提；不得把 Git 元数据、分支或提交当作范围条件。范围边界以任务启动前生成的 source-baseline.<audit_id>.json 及其摘要为准。"
+    : "如需读取 Git 信息，必须显式使用 git -C \"$AUDIT_SOURCE_ROOT\"。";
   return [
-    `@security-audit-orchestrator 对指定源码根目录执行一次完整的 repo 级 Tri-Lens 安全审计。`,
-    `本次 audit_id 固定为 ${audit.id}，目标提交固定为 ${audit.commit}。`,
+    `@security-audit-orchestrator 对指定源码根目录执行一次完整的源码级 Tri-Lens 安全审计。`,
+    `本次 audit_id 固定为 ${audit.id}，${auditSourceReference(audit)}。`,
     `唯一被审计源码根目录是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
-    "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径（例如 --root \"$AUDIT_SOURCE_ROOT\" 或 git -C \"$AUDIT_SOURCE_ROOT\"），不得用当前执行目录替代冻结范围根。",
+    `源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径（例如 --root \"$AUDIT_SOURCE_ROOT\"），不得用当前执行目录替代冻结范围根。${gitHint}`,
     ...deliveryRootPrompt(audit, paths),
     `本次调度唯一真相是本机文件 ${JSON.stringify(paths.todo_path)}，只能由 Orchestrator 使用 node \"$AUDIT_TODO_CLI\" 管理；严禁使用 OpenCode todolist，也不得向子代理暴露或让其修改该文件。Coverage Ledger MCP、哈希链、token、INSPECT/RECEIPT/DECISION 流程均已废弃。`,
     "完成 Scope、Recon 与 Threat 后，使用 build-coverage-plan.mjs --recon-dir \"$AUDIT_TMP_ROOT/recon\" 构建 Coverage Plan；不得调用 snapshot-coverage-inputs.mjs、复制输入或在命令行列举语言清单。随后调用 audit-todo init 创建本地审计项；每项为一个 Focus Area × domain，三个 lens 在同一工作包内完成。然后循环调用 audit-todo claim（最多 4 个工作包、每包最多 12 项），只把返回的有限工作包分派给对应专业 Agent。不得把完整 Focus Area 清单写入 OpenCode task 或上下文。",
@@ -482,8 +509,8 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
   const sourceRoot = JSON.stringify(repository.path);
   const workspaceRoot = JSON.stringify(paths.workspace_root);
   return [
-    `@security-audit-orchestrator 继续执行此前中断的 repo 级 Tri-Lens 安全审计。`,
-    `这是同一任务 ${audit.id} 的第 ${Number(audit.recovery_count ?? 0)} 次断点恢复，目标提交仍固定为 ${audit.commit}；不得生成新的 audit_id。`,
+    `@security-audit-orchestrator 继续执行此前中断的源码级 Tri-Lens 安全审计。`,
+    `这是同一任务 ${audit.id} 的第 ${Number(audit.recovery_count ?? 0)} 次断点恢复，${auditSourceReference(audit)}；不得生成新的 audit_id。`,
     `唯一被审计源码根目录仍是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
     `先检查 Web 注入的交付目录、临时目录以及本机本地任务清单 ${JSON.stringify(paths.todo_path)}；运行 node \"$AUDIT_TODO_CLI\" recover 和 stats，复用已有 DONE/GAP 项，只领取 PENDING 项。不得删除有效制品，也不要无条件重跑已完成工作包。若 stats.next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS，所有本地审计项都已经终态：不得再等待、重领或重跑 GAP，而是立即从后续交付制品继续收尾；后者须将 GAP 保留为残余缺口并输出部分覆盖报告。`,
     "优先复用已有阶段制品、最终报告和本地清单中的 DONE/GAP 状态；只恢复 PENDING 或过期 RUNNING 工作包。阶段制品的缺失、PARTIAL 或 GAP 仅作为 Web 展示和最终报告残余缺口，不能重开终态任务、生成嵌套任务或让运行保持等待。不得因缺失旧 Coverage Ledger 的 stage-delivery / coverage-finalize 制品而重跑已完成工作包。",
@@ -535,6 +562,7 @@ export class AuditRunner extends EventEmitter {
     this.queueScheduler = null;
     this.eventLogReader = new EventLogReader();
     this.modelResolver = null;
+    this.targetOperationGuard = null;
     this.setModelResolver(modelResolver);
     this.dispatching = new Set();
     this.completionWatchdogIntervalMs = Number.isFinite(Number(completionWatchdogIntervalMs))
@@ -624,8 +652,22 @@ export class AuditRunner extends EventEmitter {
   }
 
   reportsRootForAudit(audit) {
-    if (!REPOSITORY_ID.test(audit?.repository_id ?? "")) return null;
-    return join(this.artifactsRoot, audit.repository_id);
+    const repository = this.repositoryForAudit(audit);
+    if (!repository) return null;
+    return join(this.artifactsRoot, repository.storage_namespace ?? repository.id);
+  }
+
+  repositoryForAudit(audit) {
+    return targetRepositoryFromAudit(audit, this.configPath) ?? this.repositories.get(audit?.repository_id) ?? null;
+  }
+
+  managedRepositories() {
+    const repositories = new Map(this.repositories);
+    for (const audit of this.audits.values()) {
+      const repository = targetRepositoryFromAudit(audit, this.configPath);
+      if (repository) repositories.set(repository.id, repository);
+    }
+    return [...repositories.values()];
   }
 
   async verifyTodoCompletion(audit) {
@@ -894,10 +936,10 @@ export class AuditRunner extends EventEmitter {
   }
 
   artifactSources() {
-    return [...this.repositories.values()].map(repository => ({
+    return this.managedRepositories().map(repository => ({
       repository_id: repository.id,
       repository_name: repository.name,
-      reports_root: join(this.artifactsRoot, repository.id),
+      reports_root: join(this.artifactsRoot, repository.storage_namespace ?? repository.id),
     }));
   }
 
@@ -911,6 +953,9 @@ export class AuditRunner extends EventEmitter {
       source_root: repository.path,
       commit: audit.commit,
       branch: audit.branch,
+      source_kind: audit.source_kind ?? "git",
+      execution_spec_digest: audit.execution_spec_digest ?? null,
+      source_baseline: audit.source_baseline ?? null,
       created_at: audit.created_at,
       task_context: {
         additional_instructions_enabled: audit.private_context?.additional_instructions?.enabled === true,
@@ -937,8 +982,9 @@ export class AuditRunner extends EventEmitter {
 
   async prepareExecutionWorkspace(audit, repository) {
     const workspaceRoot = join(this.executionRoot, audit.id);
-    const reportsRoot = join(this.artifactsRoot, repository.id);
-    const tmpRoot = join(this.temporaryRoot, repository.id);
+    const storageNamespace = repository.storage_namespace ?? repository.id;
+    const reportsRoot = join(this.artifactsRoot, storageNamespace);
+    const tmpRoot = join(this.temporaryRoot, storageNamespace);
     await mkdir(workspaceRoot, { recursive: true });
     await Promise.all([
       ensureDirectoryLink(join(workspaceRoot, ".opencode"), dirname(repository.config_path)),
@@ -953,25 +999,59 @@ export class AuditRunner extends EventEmitter {
       todo_path: audit.todo_path ?? join(this.stateRoot, audit.id, "audit-todo.json"),
       todo_handoff_root: join(reportsRoot, "audit-todo", audit.id),
     };
+    await this.ensureSourceBaseline(audit, repository, paths);
     paths.source_binding = await this.ensureSourceBinding(audit, repository, paths);
-    await writeFile(join(workspaceRoot, "audit-workspace.json"), `${JSON.stringify({ audit_id: audit.id, repository_id: repository.id, ...paths }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await writeFile(join(workspaceRoot, "audit-workspace.json"), `${JSON.stringify({ audit_id: audit.id, repository_id: repository.id, storage_namespace: storageNamespace, ...paths }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     return paths;
+  }
+
+  async ensureSourceBaseline(audit, repository, paths) {
+    const directory = join(paths.reports_root, "coverage");
+    const path = join(directory, `source-baseline.${audit.id}.json`);
+    const temporaryPath = join(directory, `source-baseline.${audit.id}.${process.pid}.${randomUUID()}.next.json`);
+    await mkdir(directory, { recursive: true });
+    try {
+      await execFileAsync(process.execPath, [
+        SCOPE_MANIFEST_BUILDER,
+        "--root", repository.path,
+        "--audit-id", audit.id,
+        "--output", temporaryPath,
+        "--mode", audit.source_kind === "directory" ? "filesystem" : "auto",
+      ], { encoding: "utf8", timeout: 10 * 60_000, maxBuffer: 1024 * 1024 });
+      const manifest = JSON.parse(await readFile(temporaryPath, "utf8"));
+      if (!/^[a-f0-9]{64}$/i.test(manifest?.scope_digest ?? "")) throw new Error("任务启动时生成的源码范围清单摘要无效。");
+      const current = {
+        path,
+        scope_digest: manifest.scope_digest,
+        file_count: Number(manifest.summary?.files ?? 0),
+        mode: manifest.policy?.requested_mode ?? null,
+        generated_at: new Date().toISOString(),
+      };
+      if (audit.source_baseline && (audit.source_baseline.scope_digest !== current.scope_digest || audit.source_baseline.path !== current.path)) {
+        throw Object.assign(new Error("源码范围相较任务既有基线发生变化，拒绝在同一审计任务中继续。"), { statusCode: 409, code: "audit-source-baseline-drift" });
+      }
+      await rename(temporaryPath, path);
+      audit.source_baseline ??= current;
+      return audit.source_baseline;
+    } finally {
+      await rm(temporaryPath, { force: true }).catch(() => {});
+    }
   }
 
   async ensureExecutionWorkspace(auditId, repositoryId) {
     if (!AUDIT_ID.test(auditId ?? "")) throw Object.assign(new Error("audit_id 格式非法，无法创建执行工作区。"), { statusCode: 422, code: "audit-id-invalid" });
-    const repository = this.repositories.get(repositoryId);
-    if (!repository) throw Object.assign(new Error("仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
     const audit = this.audits.get(auditId);
     if (!audit) throw Object.assign(new Error("动态验证只能复用工作台受管审计的冻结执行上下文。"), { statusCode: 409, code: "audit-not-managed" });
     if (audit.repository_id !== repositoryId) {
       throw Object.assign(new Error("审计与仓库绑定不一致。"), { statusCode: 409, code: "audit-repository-mismatch" });
     }
+    const repository = this.repositoryForAudit(audit);
+    if (!repository) throw Object.assign(new Error("审计所属源码对象不可用。"), { statusCode: 422, code: "repository-not-allowed" });
     return this.prepareExecutionWorkspace(audit, repository);
   }
 
   runtimeRepositories() {
-    return [...this.repositories.values()].map(repository => ({ ...repository }));
+    return this.managedRepositories().map(repository => ({ ...repository }));
   }
 
   listAudits() {
@@ -1000,6 +1080,11 @@ export class AuditRunner extends EventEmitter {
     this.modelResolver = modelResolver;
   }
 
+  setTargetOperationGuard(targetOperationGuard) {
+    if (targetOperationGuard !== null && typeof targetOperationGuard !== "function") throw new TypeError("对象操作锁必须是函数或 null。");
+    this.targetOperationGuard = targetOperationGuard;
+  }
+
   async modelForLaunch(audit) {
     const configured = Object.hasOwn(audit, "model") ? audit.model : this.modelResolver ? await this.modelResolver(audit) : null;
     return normalizeOpenCodeModel(configured);
@@ -1020,7 +1105,7 @@ export class AuditRunner extends EventEmitter {
     await this.ready;
     const audit = this.audits.get(id);
     if (!audit || audit.status !== "queued" || this.dispatching.has(id)) return null;
-    const repository = this.repositories.get(audit.repository_id);
+    const repository = this.repositoryForAudit(audit);
     if (!repository) {
       audit.status = "failed";
       audit.error = "审计所属仓库不再可用。";
@@ -1033,7 +1118,9 @@ export class AuditRunner extends EventEmitter {
     this.dispatching.add(id);
     try {
       audit.queue = { ...queue, dispatched_at: new Date().toISOString() };
-      await this.start(audit, repository, { resume, existingSessionId: resume ? providerSessionId(queue.provider_session_id) : null });
+      const start = () => this.start(audit, repository, { resume, existingSessionId: resume ? providerSessionId(queue.provider_session_id) : null });
+      if (this.targetOperationGuard) await this.targetOperationGuard(audit, start);
+      else await start();
       return publicAudit(audit);
     } catch (error) {
       audit.status = resume ? "interrupted" : "failed";
@@ -1403,6 +1490,101 @@ export class AuditRunner extends EventEmitter {
     await this.record(audit, "audit.queued", {
       repository_id: repository.id,
       commit,
+      model: audit.model ?? DEFAULT_MODEL_SELECTION,
+      additional_instructions_enabled: audit.private_context.additional_instructions.enabled,
+      test_environment_enabled: audit.private_context.test_environment.enabled,
+    });
+    if (this.queueScheduler && await this.queueScheduler.enqueueNewAudit()) return publicAudit(audit);
+    this.dispatchQueuedAudit(audit.id).catch(() => {});
+    return publicAudit(audit);
+  }
+
+  async createAuditFromTarget(input, idempotencyKey) {
+    await this.ready;
+    if (!this.enabled) throw Object.assign(new Error("运行驱动未启用；请用 --enable-runner 启动平台。"), { statusCode: 503, code: "runner-disabled" });
+    if (!idempotencyKey || idempotencyKey.length > 200) throw Object.assign(new Error("缺少有效的 Idempotency-Key。"), { statusCode: 400, code: "idempotency-key-required" });
+    const snapshot = structuredClone(input?.execution_spec);
+    const snapshotDigest = input?.execution_spec_digest;
+    if (!snapshot || !/^[a-f0-9]{64}$/i.test(snapshotDigest ?? "") || createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") !== snapshotDigest || snapshot.target_id !== input.target_id || !Array.isArray(snapshot.source_scopes)) {
+      throw Object.assign(new Error("审计对象快照不完整或摘要无效。"), { statusCode: 422, code: "target-snapshot-invalid" });
+    }
+    if (snapshot.source_scopes.length !== 1) {
+      throw Object.assign(new Error("多范围对象已保存，但跨范围关联流水线尚未启用，不能只扫描其中一个范围。"), { statusCode: 409, code: "cross-scope-analysis-not-enabled" });
+    }
+    const sourceScope = snapshot.source_scopes[0];
+    if ((sourceScope.include_patterns?.length ?? 0) || (sourceScope.exclude_patterns?.length ?? 0)) {
+      throw Object.assign(new Error("范围包含/排除规则已保存，但受限范围枚举器尚未接入执行流水线；请先选择组件根目录作为单一范围。"), { statusCode: 409, code: "scope-pattern-execution-not-enabled" });
+    }
+    const repository = targetRepositoryFromAudit({
+      repository_id: snapshot.target_id,
+      repository_name: snapshot.target_name,
+      execution_spec: snapshot,
+    }, this.configPath);
+    if (!repository) throw Object.assign(new Error("审计对象的单目录范围无效。"), { statusCode: 422, code: "target-source-invalid" });
+    try {
+      const [canonical, info] = await Promise.all([realpath(repository.path), stat(repository.path)]);
+      if (!info.isDirectory() || canonical !== repository.path) throw new Error("source-path-drift");
+    } catch {
+      throw Object.assign(new Error("审计对象的源码范围不存在、不可读取或目录链接已变化。"), { statusCode: 422, code: "target-source-unavailable" });
+    }
+    const config = await configFacts(repository.config_path);
+    if (!config.config_valid) throw Object.assign(new Error("工作台 OpenCode 配置无效，不能启动审计。"), { statusCode: 422, code: "repository-not-ready" });
+    const id = input.audit_id || `audit-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
+    if (!AUDIT_ID.test(id)) throw Object.assign(new Error("audit_id 格式非法。"), { statusCode: 422, code: "audit-id-invalid" });
+    const idempotencyDigest = createHash("sha256").update(idempotencyKey).digest("hex");
+    for (const existing of this.audits.values()) if (existing.idempotency_digest === idempotencyDigest) return publicAudit(existing);
+    if (this.audits.has(id)) throw Object.assign(new Error("audit_id 已存在。"), { statusCode: 409, code: "audit-exists" });
+    const contexts = {
+      additional_instructions: normalizeContextInput(input, {
+        enabledField: "additional_instructions_enabled", valueField: "additional_instructions", label: "测试目标补充说明", maxLength: MAX_ADDITIONAL_INSTRUCTIONS,
+      }),
+      test_environment: normalizeContextInput(input, {
+        enabledField: "test_environment_enabled", valueField: "test_environment_context", label: "测试环境信息", maxLength: MAX_TEST_ENVIRONMENT_CONTEXT,
+      }),
+    };
+    const created = new Date().toISOString();
+    const audit = {
+      id,
+      name: typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 160) : `目录级安全审计 · ${repository.name}`,
+      repository_id: repository.id,
+      repository_name: repository.name,
+      source_kind: "directory",
+      execution_spec: snapshot,
+      execution_spec_digest: snapshotDigest,
+      commit: null,
+      branch: null,
+      status: "queued",
+      version: 1,
+      event_sequence: 0,
+      created_at: created,
+      updated_at: created,
+      started_at: null,
+      finished_at: null,
+      exit_code: null,
+      error: null,
+      allow_dirty: true,
+      model: normalizeOpenCodeModel(input.model),
+      provider_session_id: null,
+      recovery_count: 0,
+      stage_delivery_enforcement: "TODO_ENFORCED",
+      stage_delivery: null,
+      last_recovered_at: null,
+      interrupted_at: null,
+      interruption_reason: null,
+      queue: { mode: "start", enqueued_at: created },
+      idempotency_digest: idempotencyDigest,
+      todo_path: join(this.stateRoot, id, "audit-todo.json"),
+    };
+    audit.private_context = await this.writePrivateContexts(id, contexts);
+    audit.private_runtime = { proxy_environment: await this.writePrivateProxyEnvironment(id) };
+    audit.todo_summary = (await createEmptyAuditTodo({ todoPath: audit.todo_path, auditId: id })).summary;
+    this.audits.set(id, audit);
+    await this.persist(audit);
+    await this.record(audit, "audit.queued", {
+      repository_id: repository.id,
+      source_kind: audit.source_kind,
+      execution_spec_digest: snapshotDigest,
+      source_scope_id: sourceScope.id,
       model: audit.model ?? DEFAULT_MODEL_SELECTION,
       additional_instructions_enabled: audit.private_context.additional_instructions.enabled,
       test_environment_enabled: audit.private_context.test_environment.enabled,
@@ -2003,7 +2185,7 @@ export class AuditRunner extends EventEmitter {
   async compactOpenCodeSession(audit) {
     const sessionId = providerSessionId(audit.context_window_recovery?.session_id ?? audit.provider_session_id ?? audit.terminal?.provider_session_id);
     if (!sessionId) throw new Error("provider-session-id-missing");
-    const repository = this.repositories.get(audit.repository_id);
+    const repository = this.repositoryForAudit(audit);
     if (!repository) throw new Error("audit-repository-not-found");
     const workspaceRoot = audit.paths?.workspace_root;
     if (!isAbsolute(workspaceRoot ?? "")) throw new Error("audit-workspace-root-missing");
@@ -2145,17 +2327,27 @@ export class AuditRunner extends EventEmitter {
       if (!RECOVERABLE.has(audit.status) || this.processes.has(id) || this.completions.has(id)) {
         throw Object.assign(new Error("只有已中断、失败或已取消且没有残留 Runner 的审计可以断点恢复。"), { statusCode: 409, code: "audit-not-recoverable" });
       }
-      const repository = this.repositories.get(audit.repository_id);
-      if (!repository) throw Object.assign(new Error("审计所属仓库不在服务端白名单中。"), { statusCode: 422, code: "repository-not-allowed" });
+      const repository = this.repositoryForAudit(audit);
+      if (!repository) throw Object.assign(new Error("审计所属源码对象不可用。"), { statusCode: 422, code: "repository-not-allowed" });
       const facts = await this.repositoryFacts(repository);
-      if (!facts.git_repository || !facts.config_valid) {
+      if (!facts.config_valid) {
         throw Object.assign(new Error("项目目录或工作台 OpenCode 配置已不可用，不能恢复。"), { statusCode: 422, code: "repository-not-ready" });
       }
-      if (facts.commit !== audit.commit) {
-        throw Object.assign(new Error(`源码目录已不在原提交 ${audit.commit}，工作台不会自动 checkout。`), { statusCode: 409, code: "recovery-source-commit-changed" });
-      }
-      if (facts.dirty && audit.allow_dirty === false) {
-        throw Object.assign(new Error("源码目录在任务中断后出现未提交修改；为避免恢复到不同代码，已拒绝继续。"), { statusCode: 409, code: "recovery-source-dirty" });
+      if (audit.source_kind === "directory") {
+        try {
+          const [canonical, info] = await Promise.all([realpath(repository.path), stat(repository.path)]);
+          if (!info.isDirectory() || canonical !== repository.path) throw new Error("source-path-drift");
+        } catch {
+          throw Object.assign(new Error("源码范围不存在、不可读取或目录链接已变化，不能恢复。"), { statusCode: 422, code: "target-source-unavailable" });
+        }
+      } else {
+        if (!facts.git_repository) throw Object.assign(new Error("项目目录缺少 Git 元数据，不能恢复。"), { statusCode: 422, code: "repository-not-ready" });
+        if (facts.commit !== audit.commit) {
+          throw Object.assign(new Error(`源码目录已不在原提交 ${audit.commit}，工作台不会自动 checkout。`), { statusCode: 409, code: "recovery-source-commit-changed" });
+        }
+        if (facts.dirty && audit.allow_dirty === false) {
+          throw Object.assign(new Error("源码目录在任务中断后出现未提交修改；为避免恢复到不同代码，已拒绝继续。"), { statusCode: 409, code: "recovery-source-dirty" });
+        }
       }
 
       const existingSessionId = providerSessionId(audit.provider_session_id ?? audit.terminal?.provider_session_id);

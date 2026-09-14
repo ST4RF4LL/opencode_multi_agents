@@ -15,7 +15,8 @@
     "test:dynamic-validation-contract": "node tests/run-dynamic-validation-contract-tests.mjs && node tests/run-web-runtime-validation-tests.mjs",
     "test:dynamic-validation-core": "node tests/run-dynamic-validation-core-tests.mjs",
     "test:dynamic-validation-web": "node tests/run-dynamic-validation-observatory-tests.mjs",
-    "test:audit-workbench": "node tests/run-snapshot-cache-tests.mjs && node tests/run-audit-list-tests.mjs && node tests/run-audit-workbench-tests.mjs",
+    "test:audit-workbench": "node tests/run-snapshot-cache-tests.mjs && node tests/run-audit-list-tests.mjs && node tests/run-product-store-tests.mjs && node tests/run-audit-workbench-tests.mjs",
+    "test:product-store": "node tests/run-product-store-tests.mjs",
     "start:audit-workbench": "node web/dynamic-validation-observatory/server.mjs",
     "start:audit-workbench:runner": "node web/dynamic-validation-observatory/server.mjs --enable-runner",
     "start:audit-workbench:full": "node web/dynamic-validation-observatory/server.mjs --enable-runner --enable-dynamic-validation",
@@ -42,5 +43,8 @@
     "fflate": "^0.8.3",
     "markdown-it": "^15.0.0",
     "yaml": "^2.9.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   }
 }
