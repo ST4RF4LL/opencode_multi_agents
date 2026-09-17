@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { validateBoundFactPackets } from "../../../vulnerability-validator-subagent/vulnerability-validation/scripts/static-fact-packet.mjs";
+import { verifyRuntimeEvidenceFiles } from "../../../../lib/runtime-testing/evidence.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { objectDigest } from "./coverage-v2-common.mjs";
@@ -17,6 +18,10 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (!token?.startsWith("--") || value == null) throw new Error(`Invalid argument near ${token ?? "<end>"}`);
     args[token.slice(2)] = value;
+  }
+  if (args["runtime-evidence"]) {
+    if (args["quick-validation"]) throw new Error("不能混用运行证据与旧版 quick 参数。");
+    args["quick-validation"] = args["runtime-evidence"];
   }
   for (const key of ["audit-id", "mode", "coverage-summary", "adjudication-input", "adjudication", "validation-intake", "quick-validation", "affirmative", "negative", "moderator", "validation-routing", "cvss", "chains", "output"]) {
     if (!args[key]) throw new Error(`Required argument missing: --${key}`);
@@ -47,6 +52,9 @@ async function main() {
     readFile(resolve(args.chains), "utf8").then(JSON.parse),
   ]);
   await validateBoundFactPackets(resolve(process.env.AUDIT_WORKSPACE_ROOT ?? process.cwd()), validationIntake);
+  const integrated = validationIntake.schema_version === 3;
+  if (integrated !== Boolean(args["runtime-evidence"])) throw new Error("真实性契约版本与证据参数不匹配。");
+  if (integrated) await verifyRuntimeEvidenceFiles(resolve(args["runtime-evidence"]), validationIntake);
   if (summary.audit_id !== args["audit-id"] || summary.manifest_digest !== objectDigest(summary)) {
     throw new Error("Coverage summary is invalid or bound to another audit");
   }
@@ -172,7 +180,7 @@ async function main() {
     else acceptedChains.push(row);
   });
   const model = {
-    schema_version: 2,
+    schema_version: integrated ? 3 : 2,
     audit_id: args["audit-id"],
     scope_digest: summary.scope_digest,
     report_kind: args.mode === "final" ? "FINAL"
@@ -197,7 +205,7 @@ async function main() {
       adjudication_input: resolve(args["adjudication-input"]),
       adjudication: resolve(args.adjudication),
       truth_validation_intake: resolve(args["validation-intake"]),
-      quick_dynamic_results: resolve(args["quick-validation"]),
+      [integrated ? "runtime_testing_evidence" : "quick_dynamic_results"]: resolve(args["quick-validation"]),
       affirmative_review: resolve(args.affirmative),
       negative_review: resolve(args.negative),
       moderator_review: resolve(args.moderator),
@@ -211,6 +219,19 @@ async function main() {
     chains: acceptedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),
     rejected_chains: rejectedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),
   };
+  if (integrated) {
+    model.runtime_testing = {
+      protocol: "runtime-testing.v1", evidence_digest: quickResultSet.artifact_digest,
+      authorization_digest: quickResultSet.authorization_digest, environment_revision: quickResultSet.environment_revision,
+      status: quickResultSet.status, reason: quickResultSet.reason, cleanup_status: quickResultSet.cleanup_status,
+      elapsed_ms: quickResultSet.elapsed_ms, cleanup_elapsed_ms: quickResultSet.cleanup_elapsed_ms,
+      stages: quickResultSet.stages, source: source(resolve(args["runtime-evidence"]), quickResultSet.artifact_digest, "/packets"),
+      packets: quickResultSet.packets.map(packet => ({ id: packet.id, phase: packet.phase, execution_status: packet.execution_status,
+        outcome: packet.outcome, cleanup_status: packet.cleanup_status, summary: packet.summary ?? packet.reason,
+        gaps: packet.result?.gaps ?? [], changes: packet.result?.changes ?? [] })),
+      runtime_only_findings: structuredClone(routing.runtime_findings),
+    };
+  }
   model.manifest_digest = finalReportModelDigest(model);
   const errors = validateFinalReportModel(model);
   if (errors.length > 0) throw new Error(`Final report model is invalid:\n- ${errors.join("\n- ")}`);

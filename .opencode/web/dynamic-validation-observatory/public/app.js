@@ -496,7 +496,7 @@ function renderAuditDetail() {
   const head = element("div");
   head.append(element("p", "eyebrow", "AUDIT SNAPSHOT"), element("h2", "", audit.name), element("p", "mono", audit.id), status(audit.status));
   const facts = element("dl", "detail-facts");
-  [["测试对象", audit.repository_name], [audit.source_kind === "directory" ? "目录范围快照" : "提交", audit.source_kind === "directory" ? short(audit.execution_spec_digest, 18) : short(audit.commit, 18)], [audit.status === "queued" ? "OpenCode 模型（下次启动）" : "OpenCode 模型（本次启动）", modelForDisplay ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count ?? 0} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["上下文 watchdog", contextRecoveryText(audit.context_window_recovery)], ["人工完整验证", `${audit.runtime_validation_count ?? 0} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["快速动态", audit.task_context?.dynamic_validation_enabled ? "已授权（环境准备240秒 / 每报告180秒 / loopback）" : "未授权（直接静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "启动后生成"]].forEach(([label, value]) => {
+  [["测试对象", audit.repository_name], [audit.source_kind === "directory" ? "目录范围快照" : "提交", audit.source_kind === "directory" ? short(audit.execution_spec_digest, 18) : short(audit.commit, 18)], [audit.status === "queued" ? "OpenCode 模型（下次启动）" : "OpenCode 模型（本次启动）", modelForDisplay ?? "默认（不传 --model）"], ["制品", `${audit.artifact_count ?? 0} 个`], ["队列状态", audit.status === "queued" ? (audit.queue?.mode === "recover" ? "断点恢复等待调度；可立即调度" : "等待定时调度；可立即调度") : "未排队"], ["本地调度任务", todoStatusText(audit.todo)], ["上下文 watchdog", contextRecoveryText(audit.context_window_recovery)], ["人工完整验证", `${audit.runtime_validation_count ?? 0} 次`], ["补充说明", audit.task_context?.additional_instructions_enabled ? `已启用 · ${audit.task_context.additional_instructions_length} 字符` : "未启用"], ["动态参与", audit.runtime_testing ? "贯穿式流程（详见下方）" : audit.task_context?.dynamic_validation_enabled ? "旧版快速动态（240/180秒）" : "未授权（静态三方）"], ["交付进度来源", audit.progress_source === "local-audit-todo" ? "本地调度队列" : audit.progress_source === "stage-delivery-manifest" ? "八环节物化清单" : "历史制品推断"], ["断点恢复", audit.recovery_count ? `${audit.recovery_count} 次 · ${formatDate(audit.last_recovered_at)}` : "尚未恢复"], ["更新时间", formatDate(audit.updated_at)], ["覆盖状态", audit.coverage?.status ?? "未生成"], ["工作台制品目录", audit.paths?.reports_root ?? "启动后生成"]].forEach(([label, value]) => {
     const wrapper = element("div"); wrapper.append(element("dt", "", label), element("dd", "", value ?? "—")); facts.append(wrapper);
   });
   const stages = element("ol", "stage-list");
@@ -557,8 +557,27 @@ function renderAuditDetail() {
   }
   const logs = element("div", "runner-log");
   logs.append(element("p", "eyebrow", "RECENT OPENCODE EVENTS"), element("div", "agent-event-stream", "正在读取最近事件…"));
-  panel.replaceChildren(head, facts, stages, ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
+  const runtimePanel = renderRuntimeTesting(audit);
+  panel.replaceChildren(head, facts, stages, ...(runtimePanel ? [runtimePanel] : []), ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
   loadAuditLogs(audit.id, logs).catch(error => { logs.querySelector(".agent-event-stream").textContent = error.message; });
+}
+
+function renderRuntimeTesting(audit) {
+  if (!audit.runtime_testing) return null;
+  const value = audit.runtime_testing_state;
+  const panel = element("section", "audit-diagnostics");
+  const labels = { CONTACT: "前期环境接触", EXPLORE: "中期动态测试", CONFIRM: "按需确认", CLEANUP: "环境清理" };
+  const states = { SKIPPED: "已跳过", NOT_SCHEDULED: "未调度", RUNNING: "执行中", COMPLETED: "已完成", FAILED: "失败", TIMED_OUT: "超时", BLOCKED: "不可用", QUARANTINED: "已隔离", CLOSED: "已封存", AUTHORIZED: "已授权", READY: "环境就绪", IN_USE: "使用中", CANCELLED: "已取消" };
+  const reasons = { ENVIRONMENT_NOT_PROVIDED: "未提供环境信息", DYNAMIC_NOT_AUTHORIZED: "未启用动态授权", ENVIRONMENT_INVALID: "环境地址无效或不在授权范围", REQUIRED_IDENTITIES_MISSING: "缺少必要测试账号", IDENTITY_SCOPE_MISMATCH: "账号与所选身份模式不一致", ENVIRONMENT_ALREADY_LEASED: "环境正被其他任务使用", ENVIRONMENT_LEASE_REQUIRES_REVIEW: "环境租约需要人工核对", PROCESS_RECOVERY_ENVIRONMENT_UNKNOWN: "恢复后环境状态不明", ENVIRONMENT_STATE_UNKNOWN: "环境状态不明", BROWSER_CLOSE_FAILED: "测试浏览器关闭失败" };
+  panel.append(element("h3", "", "贯穿式运行测试"), element("p", "", value ? `${states[value.status] ?? value.status}${value.reason ? ` · ${reasons[value.reason] ?? value.reason}` : ""}` : "等待任务启动；环境未提供时自动跳过。"));
+  if (!value) return panel;
+  const list = element("ol", "stage-list");
+  for (const [phase, label] of Object.entries(labels)) {
+    const item = element("li"); item.append(element("span", "", label), element("small", "", states[value.stages?.[phase]] ?? value.stages?.[phase] ?? "未调度")); list.append(item);
+  }
+  panel.append(list, element("p", "", `已用 ${Math.ceil((value.elapsed_ms + value.cleanup_elapsed_ms) / 1000)} 秒；总预算 ${audit.runtime_testing.budget_minutes} 分钟；清理 ${value.cleanup_status}。`));
+  for (const packet of value.packets ?? []) panel.append(element("p", "", `${packet.id} · ${labels[packet.phase] ?? packet.phase} · ${states[packet.execution_status] ?? packet.execution_status} · ${packet.summary ?? packet.reason ?? ""}`));
+  return panel;
 }
 
 function eventCode(title, value) {
@@ -1602,7 +1621,7 @@ function syncAuditContextControls(form) {
     const textarea = form.elements[textareaName];
     const enabled = checkbox.checked;
     textarea.disabled = !enabled;
-    textarea.required = enabled;
+    textarea.required = enabled && textareaName !== "test_environment_context";
     textarea.closest("[data-context-option]")?.classList.toggle("enabled", enabled);
   }
 }
@@ -1814,6 +1833,12 @@ async function submitAudit(event) {
     additional_instructions: additionalInstructionsEnabled ? form.elements.additional_instructions.value : "",
     test_environment_enabled: testEnvironmentEnabled,
     test_environment_context: testEnvironmentEnabled ? form.elements.test_environment_context.value : "",
+    runtime_testing: {
+      protocol: "runtime-testing.v1", mode: form.elements.runtime_mode.value,
+      budget_minutes: Number(form.elements.runtime_budget.value), identity_mode: form.elements.runtime_identity.value,
+      explicit_authorization: testEnvironmentEnabled,
+      allowed_actions: ["navigate", "normal_interaction", ...(form.elements.runtime_test_input.checked ? ["test_input"] : []), ...(form.elements.runtime_test_mutation.checked ? ["test_mutation"] : [])],
+    },
   };
   const button = $("submit-audit");
   button.disabled = true;

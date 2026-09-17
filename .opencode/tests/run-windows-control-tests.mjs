@@ -11,7 +11,8 @@ import { createControlMcp } from "../scripts/windows-control-mcp.mjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-if (!["win32", "linux"].includes(process.platform)) {
+const portableMacOS = process.platform === "darwin" && process.env.AUDIT_ALLOW_MACOS_PORTABLE_TESTS === "1";
+if (!["win32", "linux"].includes(process.platform) && !portableMacOS) {
   process.stdout.write('{"status":"SKIPPED","reason":"SUPPORTED_TEST_HOST_REQUIRED"}\n');
   process.exit(0);
 }

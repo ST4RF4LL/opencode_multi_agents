@@ -384,7 +384,8 @@ async function main() {
     && semgrepCoreText.includes("stderrPath"), "direct Semgrep/OpenGrep CLI must bound context output and retain scanner stderr");
   for (const agent of SEMGREP_AGENTS) {
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");
-    assert(text.includes("node .opencode/scripts/static-scan.mjs doctor"), `${agent} must use the unified static scanner CLI`);
+    assert(/node \.opencode\/scripts\/static-scan\.mjs (?:plan|doctor)\b/.test(text)
+      && text.includes("plan --target"), `${agent} must use the unified static scanner CLI and plan target coverage`);
   }
   assert(!("coverage_ledger" in config.mcp), "project config must not enable the removed Coverage Ledger MCP");
   assert(!("coverage_ledger" in mcpMap.servers), "mcp-map must not retain Coverage Ledger");

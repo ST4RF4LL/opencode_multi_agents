@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProductStore, UNDEFINED_PRODUCT_ID } from "../web/dynamic-validation-observatory/product-store.mjs";
@@ -38,7 +38,7 @@ try {
   }, target.version);
   assert.equal(edited.name, "支付 API 新名称");
   assert.equal(edited.test_focus, "权限边界");
-  assert.equal(edited.source_scopes[0].path, sourceTwo);
+  assert.equal(edited.source_scopes[0].path, await realpath(sourceTwo));
   assert.equal(edited.source_scopes[0].id, target.source_scopes[0].id);
   assert.deepEqual(edited.source_scopes[0].include_patterns, target.source_scopes[0].include_patterns);
   assert.equal(edited.storage_namespace, target.storage_namespace);

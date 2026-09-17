@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -32,7 +33,7 @@ async function readJson(path) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [registry, roles, envelope, boundInput] = await Promise.all([
-    readJson(args.registry ?? DEFAULT_REGISTRY),
+    readJson(args.registry ?? DEFAULT_REGISTRY).then(runtimeStageRegistry),
     readJson(args.roles ?? DEFAULT_ROLES),
     readJson(args.input),
     args["bound-input"] ? readJson(args["bound-input"]) : null,

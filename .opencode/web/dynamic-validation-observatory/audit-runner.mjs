@@ -1,4 +1,7 @@
 import { EventLogReader } from "./event-log-reader.mjs";
+import { selection as runtimeSelection, authorize as authorizeRuntime } from "../../lib/runtime-testing/contract.mjs";
+import { RuntimeTestingService } from "../../lib/runtime-testing/service.mjs";
+import { verifyIntegratedFinalReport } from "../../lib/runtime-testing/final-verification.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
@@ -201,6 +204,10 @@ async function defaultTodoCompletionVerifier({ audit, reportsRoot }) {
   const repaired = await materializeFinalReportFromModel({ reportsRoot, auditId: audit.id });
   const finalReport = repaired.artifact;
   if (!finalReport) errors.push(...await finalReportDeliveryDiagnostics({ reportsRoot, auditId: audit.id, repair: repaired }));
+  if (audit.runtime_testing && finalReport) {
+    try { await verifyIntegratedFinalReport({ audit, reportsRoot }); }
+    catch (error) { errors.push(`贯穿式任务必须封存并校验 v3 报告、运行证据和独立三方结果：${error.code ?? "RUNTIME_FINAL_BINDING_INVALID"}。`); }
+  }
   return {
     complete: errors.length === 0,
     errors,
@@ -337,10 +344,12 @@ function normalizeContextInput(input, { enabledField, valueField, label, maxLeng
   }
   const value = input?.[valueField];
   if (value !== undefined && value !== null && typeof value !== "string") {
+    if (valueField === "test_environment_context") return { enabled: false, text: "" };
     throw Object.assign(new Error(`${label}必须是文本。`), { statusCode: 422, code: "audit-context-value-invalid" });
   }
   if (enabledValue !== true) return { enabled: false, text: "" };
   const text = String(value ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!text && valueField === "test_environment_context") return { enabled: false, text: "" };
   if (!text) throw Object.assign(new Error(`启用${label}后必须填写内容。`), { statusCode: 422, code: "audit-context-required" });
   if (text.includes("\0")) throw Object.assign(new Error(`${label}包含不允许的空字符。`), { statusCode: 422, code: "audit-context-value-invalid" });
   if (text.length > maxLength) throw Object.assign(new Error(`${label}不能超过 ${maxLength} 个字符。`), { statusCode: 422, code: "audit-context-too-large" });
@@ -386,7 +395,7 @@ function publicAudit(audit) {
       additional_instructions_length: Number(additional?.character_length ?? 0),
       test_environment_enabled: environment?.enabled === true,
       test_environment_length: Number(environment?.character_length ?? 0),
-      dynamic_validation_enabled: environment?.enabled === true,
+      dynamic_validation_enabled: audit.runtime_testing ? Boolean(audit.runtime_testing_state && !["SKIPPED", "BLOCKED"].includes(audit.runtime_testing_state.status) && environment?.enabled) : environment?.enabled === true,
     },
     todo: audit.todo_summary ?? {
       total: 0,
@@ -458,6 +467,13 @@ function privateContextPrompt(audit, contextPaths) {
     lines.push("用户未启用测试目标补充说明，不得猜测或补造额外要求。");
   }
   const environment = audit.private_context?.test_environment;
+  if (audit.runtime_testing) {
+    lines.push("本任务使用 runtime-testing.v1。环境只由运行测试控制器读取。缺少或无效环境、开关关闭、身份不足时所有动态环节 SKIPPED，不询问、不等待、不启动浏览器，静态继续。",
+      "前期 CONTACT 已由平台与 Recon 并行调度；Threat/Plan 阶段读取 node \"$AUDIT_RUNTIME_CLI\" status，把正常基线与缺口纳入规划。中期由专业 Agent 输出 Focus Area 绑定的 EXPLORE/CONFIRM 工作包，Orchestrator 仅调用 enqueue 分派；不得判断漏洞或直接控制浏览器。",
+      "按 .opencode/lib/runtime-testing/workflow.md 执行贯穿式流程。禁止调用 run-quick-dynamic-validation.mjs 或再次运行末尾固定 180 秒批次。收尾先关闭运行测试，封存 evidence-set，再进入 schema_version=3 的独立三方复核；动态 SUPPORTED 也必须经过 Moderator。",
+      "冻结授权、环境版本和来源绑定不可在任务内修改；需要补充环境或改变授权必须新建任务。历史人工验证保留独立记录，不得覆盖本任务终稿。");
+    return lines;
+  }
   if (environment?.enabled && contextPaths.test_environment) {
     lines.push(
       `用户已在创建任务时显式启用“测试环境信息”。需要环境上下文时读取 UTF-8 文件 ${JSON.stringify(contextPaths.test_environment)}（SHA-256: ${environment.sha256}），并将其视为敏感数据，不得在报告、事件、日志、handoff 或回复中复述账号、口令、令牌等秘密。`,
@@ -498,9 +514,11 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     "每次 claim/complete/recover 后立刻运行 audit-todo stats，并只以 stats.next_action 决定下一步：CLAIM 才继续领取；RECOVER_OR_WAIT 才处理运行租约；REPAIR_FAILURES 才处理失败。FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 表示所有本地审计项均已终态，必须停止所有领取、等待和 GAP 重试循环，转入关联、裁决、验证与报告收尾。DONE 数小于 total 并不表示还有任务：GAP 是已记录的终态；FINALIZE_WITH_RESIDUAL_GAPS 必须保留 GAP 并输出部分覆盖/残余缺口报告，不能等待用户或 operation timeout。",
     ...privateContextPrompt(audit, contextPaths),
     "完成可信结构、威胁建模、多视角漏洞挖掘、证据关联、发现裁决和最终中文报告封存；不能完成的分析必须作为残余 GAP 记录，不能无限续跑。",
-    "八个工作台环节的制品只供 Web 展示和报告引用，不是完成门禁：缺失、PARTIAL 或 GAP 只能写入残余缺口，绝不能新建嵌套工作、重开终态本地任务、等待用户或触发 operation timeout。唯一完成门禁是本地任务清单所有项为 DONE/GAP，且最终中文 Markdown 报告存在。不得调用或等待旧 Coverage Ledger 相关的 stage-delivery / coverage-finalize 门禁。",
-    "初步裁决后必须委派 vulnerability-validator：任务 opt-in 时先运行一次共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒快速动态确认，未确认项进入本地 Affirmative、Negative、Moderator 静态挑战；任务未 opt-in 时 quick 结果必须显式 SKIPPED，所有支持项进入静态挑战。最终报告只能消费完整 validation-routing manifest。",
-    "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
+    audit.runtime_testing
+      ? "八个工作台环节的展示制品缺失、PARTIAL 或 GAP 只记残余缺口，不能重开终态任务或等待用户。完成门禁要求本地任务清单所有项为 DONE/GAP、最终中文 Markdown 存在，并且 schema_version=3 报告模型通过运行证据及独立三方复核绑定校验。动态 SKIPPED 不阻塞静态收尾，但仍须封存跳过原因。不得调用旧 Coverage Ledger 的 stage-delivery / coverage-finalize 门禁。"
+      : "八个工作台环节的制品只供 Web 展示和报告引用，不是完成门禁：缺失、PARTIAL 或 GAP 只能写入残余缺口，绝不能新建嵌套工作、重开终态本地任务、等待用户或触发 operation timeout。唯一完成门禁是本地任务清单所有项为 DONE/GAP，且最终中文 Markdown 报告存在。不得调用或等待旧 Coverage Ledger 相关的 stage-delivery / coverage-finalize 门禁。",
+    audit.runtime_testing ? "初步裁决后委派 vulnerability-validator，使用贯穿式运行证据和独立三方复核。最终报告只能消费完整 schema_version=3 validation-routing manifest。" : "初步裁决后必须委派 vulnerability-validator，执行旧版 quick 与静态三方协议；最终报告只能消费完整 validation-routing manifest。",
+    audit.runtime_testing ? "贯穿式任务不启动旧版 quick runner，人工补充验证不得自动改写终稿。" : "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
     "这是无人值守的工作台任务：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明。每次收尾必须运行 audit-todo recover 和 stats；当 next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 时，生成/核验最终报告后立刻结束本次 OpenCode run，不得输出“继续”“等待”“下一步”或请求澄清，也不得创建新的嵌套步骤。",
   ].join("\n");
 }
@@ -519,8 +537,7 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     ...deliveryRootPrompt(audit, paths),
     "本地任务清单只由 Orchestrator 调度：继续以最多 4 个工作包、每包最多 12 项的界限领取和分派；不得使用 OpenCode todolist、Coverage Ledger MCP、哈希链或逐漏洞记账。子代理仅生成工作包 handoff，Orchestrator 完成结构校验后更新本地任务状态。",
     ...privateContextPrompt(audit, contextPaths),
-    "继续完成真实性 routing、覆盖门禁、CVSS、攻击链和最终中文报告封存。先校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复；不得重跑摘要有效的角色。",
-    "Orchestrator 不得直接控制浏览器或绕过受控 quick runner。完整动态验证仍只允许用户在工作台手动点击触发，且不得自动改写 routing 或终稿。",
+    audit.runtime_testing ? "复用已封存的运行证据，从最早缺失的三方复核继续。恢复时环境状态不明会被隔离，禁止重新接触目标；保留动态缺口并完成静态报告。" : "继续完成真实性 routing、CVSS、攻击链和最终报告。校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复。完整动态验证仅人工触发。",
     "这是无人值守的断点恢复：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明。每次收尾必须运行 audit-todo recover 和 stats；当 next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 时，生成/核验最终报告后立刻结束本次 OpenCode run，不得输出“继续”“等待”“下一步”或请求澄清，也不得创建新的嵌套步骤。",
   ].join("\n");
 }
@@ -533,6 +550,7 @@ export class AuditRunner extends EventEmitter {
   constructor({ stateRoot, platformRoot = null, repositories = [], configPath = null, enabled = false, command = "opencode", environment = process.env, spawnProcess = spawn, compactSessionRunner = null, terminalMonitor = null, modelResolver = null, stageDeliveryVerifier = defaultStageDeliveryVerifier, todoCompletionVerifier = defaultTodoCompletionVerifier, completionWatchdogIntervalMs = COMPLETION_WATCHDOG_INTERVAL_MS, operationTimeoutTerminationGraceMs = OPERATION_TIMEOUT_TERMINATION_GRACE_MS } = {}) {
     super();
     this.stateRoot = resolve(stateRoot);
+    this.runtimeTestingServices = new Map();
     this.configPath = configPath ? resolve(configPath) : null;
     this.platformRoot = resolve(platformRoot ?? (this.configPath ? resolve(dirname(this.configPath), "..") : process.cwd()));
     this.artifactsRoot = join(this.platformRoot, "reports", "repositories");
@@ -686,6 +704,7 @@ export class AuditRunner extends EventEmitter {
   }
 
   async completeVerifiedAudit(audit, { reason, completionSource, data = {}, terminateRunner = false }) {
+    await this.stopRuntimeTesting(audit);
     const child = terminateRunner ? this.processes.get(audit.id) : null;
     audit.status = "completed";
     audit.pid = null;
@@ -960,7 +979,8 @@ export class AuditRunner extends EventEmitter {
       task_context: {
         additional_instructions_enabled: audit.private_context?.additional_instructions?.enabled === true,
         additional_instructions_sha256: audit.private_context?.additional_instructions?.sha256 ?? null,
-        quick_dynamic_opt_in: audit.private_context?.test_environment?.enabled === true,
+        quick_dynamic_opt_in: !audit.runtime_testing && audit.private_context?.test_environment?.enabled === true,
+        ...(audit.runtime_testing ? { runtime_testing: audit.runtime_testing } : {}),
         test_environment_context_sha256: audit.private_context?.test_environment?.sha256 ?? null,
         full_dynamic_trigger: "MANUAL_ONLY",
       },
@@ -1069,6 +1089,12 @@ export class AuditRunner extends EventEmitter {
   getAudit(id) {
     const audit = this.audits.get(id);
     return audit ? publicAudit(audit) : null;
+  }
+
+  async stopRuntimeTesting(audit) {
+    const service = this.runtimeTestingServices.get(audit.id);
+    if (!service) return;
+    try { await service.shutdown(); } finally { this.runtimeTestingServices.delete(audit.id); }
   }
 
   setQueueScheduler(queueScheduler) {
@@ -1330,6 +1356,7 @@ export class AuditRunner extends EventEmitter {
     for (const directory of [
       join(reportsRoot, "handoffs", id),
       join(reportsRoot, "validation-handoff", "runtime", id),
+      join(reportsRoot, "runtime-testing", id),
     ]) await removeControlledPath(reportsRoot, directory);
     await removeControlledPath(this.temporaryRoot, join(this.temporaryRoot, repositoryId, id));
     await removeControlledPath(this.executionRoot, join(this.executionRoot, id));
@@ -1468,6 +1495,7 @@ export class AuditRunner extends EventEmitter {
       // Persist the task selection, including null for OpenCode defaults.
       // Queue dispatch and recovery must preserve this binding.
       model: normalizeOpenCodeModel(input.model),
+      runtime_testing: runtimeSelection(input),
       provider_session_id: null,
       recovery_count: 0,
       stage_delivery_enforcement: "TODO_ENFORCED",
@@ -1564,6 +1592,7 @@ export class AuditRunner extends EventEmitter {
       error: null,
       allow_dirty: true,
       model: normalizeOpenCodeModel(input.model),
+      runtime_testing: runtimeSelection(input),
       provider_session_id: null,
       recovery_count: 0,
       stage_delivery_enforcement: "TODO_ENFORCED",
@@ -1607,7 +1636,7 @@ export class AuditRunner extends EventEmitter {
     audit.paths = paths;
     await this.record(audit, "audit.workspace.ready", paths);
     const contextPaths = await this.verifiedPrivateContextPaths(audit);
-    const quickDynamicEnabled = audit.private_context?.test_environment?.enabled === true && Boolean(contextPaths.test_environment);
+    const quickDynamicEnabled = !audit.runtime_testing && audit.private_context?.test_environment?.enabled === true && Boolean(contextPaths.test_environment);
     const proxyEnvironment = await this.verifiedPrivateProxyEnvironment(audit);
     const environment = {
       ...(await buildOpenCodeEnvironment(repository.config_path, { ...this.environment, ...proxyEnvironment })),
@@ -1625,6 +1654,10 @@ export class AuditRunner extends EventEmitter {
       AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS: "180",
       AUDIT_QUICK_DYNAMIC_SETUP_SECONDS: "240",
       AUDIT_FULL_DYNAMIC_TRIGGER: "MANUAL_ONLY",
+      AUDIT_RUNTIME_PROTOCOL: "",
+      AUDIT_RUNTIME_CLI: "",
+      AUDIT_RUNTIME_STATE_ROOT: "",
+      AUDIT_RUNTIME_CONNECTION_PATH: "",
       ...(quickDynamicEnabled ? {
         AUDIT_TEST_ENVIRONMENT_CONTEXT_PATH: contextPaths.test_environment,
         AUDIT_TEST_ENVIRONMENT_CONTEXT_SHA256: audit.private_context.test_environment.sha256,
@@ -1634,6 +1667,24 @@ export class AuditRunner extends EventEmitter {
     await this.redactionsForAudit(audit);
     const prompt = resume ? recoveryPrompt(audit, repository, paths, contextPaths) : auditPrompt(audit, repository, paths, contextPaths);
     const model = await this.modelForLaunch(audit);
+    if (audit.runtime_testing) {
+      environment.AUDIT_RUNTIME_PROTOCOL = "runtime-testing.v1";
+      environment.AUDIT_RUNTIME_CLI = join(paths.workspace_root, ".opencode", "scripts", "runtime-testing.mjs");
+      environment.AUDIT_RUNTIME_STATE_ROOT = join(paths.reports_root, "runtime-testing", audit.id);
+      environment.AUDIT_RUNTIME_CONNECTION_PATH = join(this.stateRoot, audit.id, "runtime-testing", "endpoint.json");
+      const config = JSON.parse(environment.OPENCODE_CONFIG_CONTENT);
+      config.mcp["chrome-devtools"] = { enabled: false };
+      environment.OPENCODE_CONFIG_CONTENT = JSON.stringify(config);
+      const authorization = authorizeRuntime({ auditId: audit.id, selected: audit.runtime_testing,
+        enabled: audit.private_context?.test_environment?.enabled === true,
+        context: contextPaths.test_environment ? await readFile(contextPaths.test_environment, "utf8") : "",
+        sourceBinding: audit.commit ?? audit.execution_spec_digest, scopeDigest: audit.source_baseline.scope_digest });
+      const service = new RuntimeTestingService({ root: environment.AUDIT_RUNTIME_STATE_ROOT, privateRoot: dirname(environment.AUDIT_RUNTIME_CONNECTION_PATH),
+        authorization: authorization.public, privateContext: authorization.private, command: this.command, environment, workspaceRoot: paths.workspace_root, model,
+        onChange: async snapshot => { audit.runtime_testing_state = snapshot; await this.record(audit, "audit.runtime-testing.updated", { status: snapshot.status, active_packet: snapshot.active_packet, reason: snapshot.reason }); } });
+      this.runtimeTestingServices.set(audit.id, service);
+      await service.start();
+    }
     if (audit.model !== model) {
       audit.model = model;
       await this.record(audit, "audit.model.applied", {
@@ -1690,6 +1741,11 @@ export class AuditRunner extends EventEmitter {
       audit.execution_transport = "opencode-run";
       await this.record(audit, "audit.terminal.failed", { message: audit.terminal.message });
     }
+    const runtimeService = this.runtimeTestingServices.get(audit.id);
+    if (runtimeService) {
+      runtimeService.command = this.command;
+      await runtimeService.contact();
+    }
     const child = this.spawnProcess(command, args, {
       cwd: paths.workspace_root,
       env: environment,
@@ -1733,6 +1789,7 @@ export class AuditRunner extends EventEmitter {
       this.clearContextTerminationGuard(audit.id, child);
       if (this.processes.get(audit.id) !== child) return;
       const completion = startedEvent.then(async () => {
+        await this.stopRuntimeTesting(audit);
         this.processes.delete(audit.id);
         audit.pid = null;
         if (audit.status === "completed" && audit.completion_source === "todo-artifact-watchdog") {
@@ -2391,6 +2448,7 @@ export class AuditRunner extends EventEmitter {
     const child = this.processes.get(id);
     if (!child || TERMINAL.has(audit.status)) throw Object.assign(new Error("审计当前不可执行该操作。"), { statusCode: 409, code: "action-not-allowed" });
     if (action === "pause" && audit.status === "running") {
+      await this.stopRuntimeTesting(audit);
       audit.status = "pausing";
       await this.record(audit, "audit.pausing", {});
       if (!child.kill("SIGSTOP")) throw new Error("暂停信号发送失败。");
@@ -2410,6 +2468,7 @@ export class AuditRunner extends EventEmitter {
       audit.status = "running";
       await this.record(audit, "audit.resumed", {});
     } else if (action === "cancel" && ACTIVE.has(audit.status)) {
+      await this.stopRuntimeTesting(audit);
       if (audit.status === "paused") {
         if (audit.terminal?.live) await this.terminalMonitor.signalRun(audit.terminal, "SIGCONT");
         if (!child.kill("SIGCONT")) throw new Error("取消前恢复审计进程失败。");
@@ -2442,6 +2501,7 @@ export class AuditRunner extends EventEmitter {
 
   async shutdown() {
     await this.ready;
+    for (const id of this.runtimeTestingServices.keys()) await this.stopRuntimeTesting(this.audits.get(id));
     if (this.completionWatchdogTimer) clearInterval(this.completionWatchdogTimer);
     this.completionWatchdogTimer = null;
     for (const timer of this.timeoutRecoveryTimers.values()) clearTimeout(timer);

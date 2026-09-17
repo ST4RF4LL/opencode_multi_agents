@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
 
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -73,7 +74,7 @@ async function main() {
     throw new Error("--round and --candidate-count must be non-negative integers, with round >= 1");
   }
   const [registry, roles, focusManifest, outputPaths] = await Promise.all([
-    readJson(args.registry ?? DEFAULT_REGISTRY),
+    readJson(args.registry ?? DEFAULT_REGISTRY).then(runtimeStageRegistry),
     readJson(args.roles ?? DEFAULT_ROLES),
     readJson(args["focus-areas"]),
     listOutputEnvelopes(args["handoffs-dir"]),

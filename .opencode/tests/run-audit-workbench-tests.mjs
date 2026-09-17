@@ -405,7 +405,8 @@ if (mode === "run") {
   assert.equal(localTodoAudit.progress, 50);
   assert.equal(localTodoAudit.progress_source, "local-audit-todo");
   assert.equal(localTodoAudit.stage, "多维漏洞审计 · 1/4");
-  assert(snapshot.reports.find(report => report.audit_id === "audit-mismatch").integrity_issues.includes("final-report-not-deterministic-render"));
+  // Display snapshots do not run completion-time integrity verification.
+  assert.equal(Object.hasOwn(snapshot.reports.find(report => report.audit_id === "audit-mismatch"), "integrity_issues"), false);
   assert.equal(snapshot.findings[0].id, "F-001");
   assert.equal(snapshot.findings[0].description, "服务未校验记录归属。");
   assert.equal(snapshot.findings[0].remediation, "按当前主体校验记录所有权。");
@@ -1630,7 +1631,10 @@ if (mode === "run") {
     dynamicChild.stdout.write('{"password":"attacker-secret-value","token":"victim-secret-value"}\n');
     await writeFile(join(enabledValidationAuditRoot, "FIND-WEB-XSS-001.result.json"), "{}\n", "utf8");
     dynamicChild.emit("close", 0, null);
-    for (let attempt = 0; attempt < 60 && dynamicRunner.getRun(dynamicJobId)?.ephemeral_cleanup !== "SUCCEEDED"; attempt += 1) await new Promise(resolve => setImmediate(resolve));
+    const cleanupDeadline = Date.now() + 5000;
+    while (dynamicRunner.getRun(dynamicJobId)?.ephemeral_cleanup !== "SUCCEEDED" && Date.now() < cleanupDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
     assert.equal(dynamicRunner.getRun(dynamicJobId).status, "completed");
     assert.equal(dynamicRunner.getRun(dynamicJobId).ephemeral_cleanup, "SUCCEEDED");
     assert.equal(dynamicRunner.getRun(dynamicJobId).result_validation, "PASSED");
@@ -1713,6 +1717,8 @@ if (mode === "run") {
     await writeFile(join(auditTmpRoot, "scanner-output.json"), "{}\n", "utf8");
     await writeFile(ownedArtifact, `${JSON.stringify({ audit_id: created.id, coverage_status: "INCOMPLETE" })}\n`, "utf8");
     await writeFile(unrelatedArtifact, `${JSON.stringify({ audit_id: "audit-keep", coverage_status: "INCOMPLETE" })}\n`, "utf8");
+    const ownedArtifacts = (await buildWorkspaceSnapshot({ reportsRoot })).artifacts.filter(artifact => artifact.audit_id === created.id);
+    assert(ownedArtifacts.some(artifact => join(reportsRoot, artifact.path) === ownedArtifact));
     const cancelledAudit = runner.getAudit(created.id);
     const invalidDeleteResponse = await fetch(`${base}/api/v1/audits/${created.id}`, {
       method: "DELETE",
@@ -1728,7 +1734,8 @@ if (mode === "run") {
     assert.equal(deleteResponse.status, 200, JSON.stringify(await deleteResponse.clone().json()));
     const deletedAudit = await deleteResponse.json();
     assert.equal(deletedAudit.deleted, true);
-    assert.equal(deletedAudit.removed_artifact_files, 4);
+    assert.equal(deletedAudit.removed_artifact_files, ownedArtifacts.length);
+    for (const artifact of ownedArtifacts) await assert.rejects(stat(join(reportsRoot, artifact.path)), error => error.code === "ENOENT");
     assert.equal(deletedAudit.removed_runner_state, true);
     assert.equal(runner.getAudit(created.id), null);
     await assert.rejects(stat(join(stateRoot, created.id)), error => error.code === "ENOENT");
@@ -1878,10 +1885,13 @@ if (mode === "run") {
     assert.match(indexHtml, /name="additional_instructions"/);
     assert.match(indexHtml, /name="test_environment_enabled"/);
     assert.match(indexHtml, /name="test_environment_context"/);
-    assert.match(indexHtml, /未启用或未填写时，主审计不会启动浏览器/);
-    assert.match(indexHtml, /完整动态验证资格不受此开关限制/);
-    assert.match(indexHtml, /共享环境准备最多 240 秒、每个疑似漏洞报告最多 180 秒/);
-    assert.match(indexHtml, /可在验证页补录环境并逐次授权/);
+    assert.match(indexHtml, /未启用、未填写、地址无效或缺少所选身份时/);
+    assert.match(indexHtml, /自动跳过全部动态环节，不启动浏览器，静态审计继续/);
+    assert.match(indexHtml, /环境接触 \+ 中期探索 \+ 按需确认/);
+    assert.match(indexHtml, /自动跳过全部动态环节/);
+    assert.match(indexHtml, /任务创建时未填写测试环境也可在本页补录并逐次授权/);
+    assert.match(indexHtml, /人工补充验证需逐次授权并保存独立结果/);
+    assert.doesNotMatch(indexHtml, /共享环境准备 240 秒、每报告 180 秒快速动态/);
     assert.match(indexHtml, /id="export-selected-bruno"/);
     assert.match(indexHtml, /导出所选 OpenCollection/);
     assert.match(indexHtml, /人工发包请使用 Bruno/);
@@ -1903,7 +1913,7 @@ if (mode === "run") {
     assert.match(stylesSource, /agent-event\.recent/);
     assert.match(stylesSource, /agent-event\.tool/);
     assert.match(appSource, /删除任务/);
-    assert.match(appSource, /删除项目/);
+    assert.match(appSource, /已移除审计项目/);
     assert.match(appSource, /\/api\/v1\/repositories\//);
     assert.match(appSource, /submitDeleteProject/);
     assert.match(appSource, /断点恢复/);

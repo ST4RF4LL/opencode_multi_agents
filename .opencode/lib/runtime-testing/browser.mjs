@@ -1,0 +1,137 @@
+import http from "node:http";
+import https from "node:https";
+import net from "node:net";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { check, loopback } from "./contract.mjs";
+
+const READ = new Set(["list_pages", "select_page", "take_snapshot", "list_console_messages", "get_console_message", "list_network_requests", "get_network_request"]);
+const NAVIGATE = new Set(["navigate_page", "new_page", "close_page"]);
+const INTERACT = new Set(["click", "fill", "fill_form", "press_key", "hover", "handle_dialog"]);
+
+export function pinnedLoopbackLookup(_hostname, options, callback) {
+  // Node's automatic family selection requests an array when options.all is true.
+  if (options?.all) callback(null, [{ address: "127.0.0.1", family: 4 }]);
+  else callback(null, "127.0.0.1", 4);
+}
+
+export function authorizedConnectTarget(authority, origins) {
+  if (typeof authority !== "string") return null;
+  const url = loopback(`https://${authority}`);
+  if (!url || !origins.includes(url.origin)) return null;
+  const port = Number(url.port || 443);
+  // URL.host omits :443; CONNECT carries an explicit port even for that default.
+  if (authority.toLowerCase() !== `${url.hostname}:${port}`) return null;
+  return { host: url.hostname === "[::1]" ? "::1" : "127.0.0.1", port };
+}
+
+// Chromium must send even loopback requests through this exact-origin gate.
+// External redirects/subresources and other local ports are rejected here too.
+export async function createOriginProxy(origins) {
+  const allowed = new Set(origins); const sockets = new Set();
+  const track = socket => { sockets.add(socket); socket.on("close", () => sockets.delete(socket)); return socket; };
+  const permitted = value => { const url = loopback(value); return url && allowed.has(url.origin) ? url : null; };
+  const server = http.createServer((request, response) => {
+    const url = permitted(request.url);
+    if (!url) { response.writeHead(403).end("Origin not authorized"); return; }
+    const headers = { ...request.headers, host: url.host }; delete headers["proxy-authorization"]; delete headers["proxy-connection"];
+    const upstream = (url.protocol === "https:" ? https : http).request(url, { method: request.method, headers,
+      lookup: pinnedLoopbackLookup }, reply => {
+      response.writeHead(reply.statusCode, reply.headers); reply.pipe(response);
+    });
+    upstream.on("socket", track); upstream.on("error", () => { if (!response.headersSent) response.writeHead(502); response.end(); });
+    request.on("aborted", () => upstream.destroy()); response.on("close", () => upstream.destroy()); request.pipe(upstream);
+  });
+  server.on("connection", track);
+  server.on("connect", (request, client, head) => {
+    const target = authorizedConnectTarget(request.url, origins);
+    if (!target) { client.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
+    const upstream = track(net.connect(target, () => {
+      client.write("HTTP/1.1 200 Connection Established\r\n\r\n"); if (head.length) upstream.write(head);
+      client.pipe(upstream); upstream.pipe(client);
+    }));
+    upstream.on("error", () => client.destroy()); client.on("error", () => upstream.destroy()); client.on("close", () => upstream.destroy());
+  });
+  server.on("upgrade", (_request, socket) => socket.end("HTTP/1.1 403 Forbidden\r\n\r\n"));
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  let closing;
+  return { url: `http://127.0.0.1:${server.address().port}`, close: () => closing ??= (async () => {
+    for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve));
+  })() };
+}
+
+export class ChromeRuntimeBrowser {
+  constructor(authorization, { clientFactory = null } = {}) {
+    this.authorization = authorization; this.sessions = new Map(); this.startingClients = new Set(); this.proxy = null; this.clientFactory = clientFactory; this.closed = false;
+    this.sessionStarts = new Map(); this.clientClosures = new WeakMap();
+  }
+  async session(id) {
+    check(!this.closed && this.authorization.identities.some(identity => identity.id === id), "browser-identity-invalid");
+    if (this.sessions.has(id)) return this.sessions.get(id);
+    if (!this.sessionStarts.has(id)) this.sessionStarts.set(id, this.createSession(id));
+    return this.sessionStarts.get(id);
+  }
+  closeClient(client) {
+    if (!this.clientClosures.has(client)) this.clientClosures.set(client, Promise.resolve().then(() => client.close()));
+    return this.clientClosures.get(client);
+  }
+  async createSession(id) {
+    check(["win32", "linux"].includes(process.platform) || this.clientFactory, "runtime-host-unsupported");
+    this.proxyPromise ??= createOriginProxy(this.authorization.origins);
+    this.proxy = await this.proxyPromise;
+    if (this.closed) { await this.proxy.close(); throw new Error("runtime-browser-closed-during-startup"); }
+    const client = this.clientFactory ? await this.clientFactory(id) : new Client({ name: "runtime-testing-controller", version: "1.0.0" });
+    if (this.closed) { await this.closeClient(client); throw new Error("runtime-browser-closed-during-startup"); }
+    this.startingClients.add(client);
+    if (!this.clientFactory) {
+      const env = Object.fromEntries(Object.entries(process.env).filter(([key, value]) => typeof value === "string" && !/(proxy|AUDIT_.*TOKEN|AUDIT_TEST_ENVIRONMENT)/i.test(key)));
+      const transport = new StdioClientTransport({ command: process.platform === "win32" ? "npx.cmd" : "npx", args: ["--yes", "chrome-devtools-mcp@1.8.0",
+        "--isolated=true", "--headless=true", "--redact-network-headers=true", "--no-usage-statistics", "--no-performance-crux",
+        `--chrome-arg=--proxy-server=${this.proxy.url}`, "--chrome-arg=--proxy-bypass-list=<-loopback>",
+        "--chrome-arg=--disable-quic", "--chrome-arg=--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+        "--chrome-arg=--disable-background-networking"], env, stderr: "ignore" });
+      try { await client.connect(transport); } catch (error) { this.startingClients.delete(client); await this.closeClient(client).catch(() => {}); await transport.close().catch(() => {}); throw error; }
+    }
+    let tools;
+    try {
+      check(!this.closed, "runtime-browser-closed-during-startup");
+      tools = (await client.listTools()).tools;
+    } catch (error) { this.startingClients.delete(client); await this.closeClient(client).catch(() => {}); throw error; }
+    this.startingClients.delete(client);
+    if (this.closed) { await this.closeClient(client); throw new Error("runtime-browser-closed-during-startup"); }
+    const session = { client, tools }; this.sessions.set(id, session); return session;
+  }
+  allowed(name, packet) {
+    return READ.has(name) || NAVIGATE.has(name) && packet.actions.includes("navigate")
+      || INTERACT.has(name) && packet.actions.some(action => ["normal_interaction", "test_input", "test_mutation"].includes(action));
+  }
+  async tools(packet) {
+    const session = await this.session(packet.identity_ids[0]);
+    return session.tools.filter(tool => this.allowed(tool.name, packet)).map(tool => ({ ...tool,
+      inputSchema: { ...tool.inputSchema, properties: { ...tool.inputSchema.properties, identity_id: { type: "string", enum: packet.identity_ids } },
+        required: [...(tool.inputSchema.required ?? []), "identity_id"] } }));
+  }
+  async call(name, args, packet) {
+    check(this.allowed(name, packet) && packet.identity_ids.includes(args.identity_id), "browser-tool-not-authorized");
+    if (args.url != null) check(loopback(args.url) && this.authorization.origins.includes(new URL(args.url).origin), "browser-origin-not-authorized");
+    // No arbitrary JS, raw CDP, file uploads/downloads, request interception, or global browser reset.
+    check(!args.filePath && !args.file_path, "browser-file-operation-not-authorized");
+    const session = await this.session(args.identity_id); const { identity_id, ...arguments_ } = args;
+    check(!this.closed, "runtime-browser-closed");
+    return session.client.callTool({ name, arguments: arguments_ }, undefined, { timeout: 45_000 });
+  }
+  async close() {
+    this.closing ??= this.closeOnce();
+    return this.closing;
+  }
+  async closeOnce() {
+    this.closed = true; const clients = new Set([...this.sessions.values()].map(session => session.client).concat([...this.startingClients]));
+    const results = await Promise.allSettled([...clients].map(async client => {
+      // This client owns an isolated browser; closing its MCP transport terminates only that owned session.
+      await this.closeClient(client);
+    }));
+    if (this.proxyPromise) await this.proxyPromise.then(proxy => proxy.close(), () => {});
+    this.sessions.clear();
+    check(results.every(result => result.status === "fulfilled"), "browser-owned-session-close-failed");
+  }
+}

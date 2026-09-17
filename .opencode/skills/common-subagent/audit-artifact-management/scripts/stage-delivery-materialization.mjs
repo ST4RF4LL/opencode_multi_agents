@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
+import { verifyRuntimeEvidenceFiles } from "../../../../lib/runtime-testing/evidence.mjs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { validateStageDeliveryManifest } from "./stage-delivery-contract.mjs";
@@ -95,7 +97,7 @@ function validateKnownStageContracts(stageId, artifacts, errors) {
     const adjudication = json("finding-adjudication");
     const bundle = {
       intake: json("truth-validation-intake"),
-      quickResultSet: json("quick-dynamic-result-set"),
+      quickResultSet: json(artifacts.has("runtime-testing-evidence-set") ? "runtime-testing-evidence-set" : "quick-dynamic-result-set"),
       affirmative: json("affirmative-review"),
       negative: json("negative-review"),
       moderator: json("moderator-review"),
@@ -158,6 +160,10 @@ async function inspectManifestInternal({ reportsRoot, manifestPath, registry, st
     cache.set(relativePath, result);
     return result;
   }
+  if (manifest.registry_id === "workbench-stage-deliveries-runtime-testing-v1") {
+    registry = runtimeStageRegistry(registry, "runtime-testing.v1");
+    stageAgentRegistry = runtimeStageRegistry(stageAgentRegistry, "runtime-testing.v1");
+  }
   errors.push(...validateStageDeliveryManifest(manifest, registry, { stageAgentRegistry }));
   const expectedPath = stageManifestRelativePath(registry, manifest.audit_id, manifest.stage_id, manifest.round);
   if (relativePath !== expectedPath) errors.push(`manifest-path-mismatch:${relativePath}`);
@@ -175,6 +181,10 @@ async function inspectManifestInternal({ reportsRoot, manifestPath, registry, st
     }
     if (file.ok && binding.artifact_type === "quick-dynamic-result-set") {
       await validateQuickEvidenceMaterialization({ reportsRoot, file, errors });
+    }
+    if (file.ok && binding.artifact_type === "runtime-testing-evidence-set") {
+      try { await verifyRuntimeEvidenceFiles(resolveReportsArtifact(reportsRoot, binding.path)); }
+      catch (error) { errors.push(`runtime-testing-evidence:${error.code ?? "invalid"}`); }
     }
   }
 

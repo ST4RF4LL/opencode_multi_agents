@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
 
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
@@ -118,8 +119,8 @@ async function main() {
   const workspaceRoot = resolve(process.env.AUDIT_WORKSPACE_ROOT ?? process.cwd());
   const reportsRoot = resolve(process.env.AUDIT_REPORTS_ROOT ?? join(workspaceRoot, "reports"));
   const [registry, stageAgentRegistry, request] = await Promise.all([
-    readFile(join(CONTRACTS, "workbench-stage-deliveries.json"), "utf8").then(JSON.parse),
-    readFile(join(CONTRACTS, "stage-agent-contracts.json"), "utf8").then(JSON.parse),
+    readFile(join(CONTRACTS, "workbench-stage-deliveries.json"), "utf8").then(JSON.parse).then(runtimeStageRegistry),
+    readFile(join(CONTRACTS, "stage-agent-contracts.json"), "utf8").then(JSON.parse).then(runtimeStageRegistry),
     readFile(requestPath(workspaceRoot, args.get("request")), "utf8").then(JSON.parse),
   ]);
   const expectedFields = ["stage_id", "audit_id", "round", "status", "scope_digest", "activated_conditions", "input_artifacts", "output_artifacts", "validation_results", "gaps", "producer", "started_at", "completed_at"];

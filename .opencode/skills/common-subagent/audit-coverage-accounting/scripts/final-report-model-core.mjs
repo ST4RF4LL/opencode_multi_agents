@@ -38,10 +38,10 @@ function sourceValid(source) {
 export function validateFinalReportModel(model) {
   const errors = [];
   if (!isObject(model)) return ["final-report-model-not-object"];
-  if (![1, 2].includes(model.schema_version)) errors.push("final-report-model-schema-version-invalid");
+  if (![1, 2, 3].includes(model.schema_version)) errors.push("final-report-model-schema-version-invalid");
   if (!nonEmptyString(model.audit_id) || !validDigest(model.scope_digest)) errors.push("final-report-model-audit-or-scope-invalid");
   if (!new Set(["FINAL", "POLICY_FINAL", "PARTIAL_FINAL", "CHECKPOINT"]).has(model.report_kind)) errors.push("final-report-model-kind-invalid");
-  if (!isObject(model.inputs) || !["coverage_summary", "adjudication_input", "adjudication", "truth_validation_intake", "quick_dynamic_results", "affirmative_review", "negative_review", "moderator_review", "validation_routing", "cvss_assessment", "attack_chains"]
+  if (!isObject(model.inputs) || !["coverage_summary", "adjudication_input", "adjudication", "truth_validation_intake", model.schema_version === 3 ? "runtime_testing_evidence" : "quick_dynamic_results", "affirmative_review", "negative_review", "moderator_review", "validation_routing", "cvss_assessment", "attack_chains"]
     .every(key => nonEmptyString(model.inputs?.[key]))) {
     errors.push("final-report-model-inputs-invalid");
   }
@@ -54,6 +54,10 @@ export function validateFinalReportModel(model) {
     || !isObject(model.truth_validation.summary) || !sourceValid(model.truth_validation.source)) {
     errors.push("final-report-model-truth-validation-invalid");
   }
+  if (model.schema_version === 3 && (!isObject(model.runtime_testing) || model.runtime_testing.protocol !== "runtime-testing.v1"
+    || !validDigest(model.runtime_testing.evidence_digest) || !validDigest(model.runtime_testing.authorization_digest) || !sourceValid(model.runtime_testing.source)
+    || !["CLOSED", "SKIPPED", "BLOCKED", "QUARANTINED"].includes(model.runtime_testing.status) || !Array.isArray(model.runtime_testing.packets)
+    || !Array.isArray(model.runtime_testing.runtime_only_findings) || model.runtime_testing.runtime_only_findings.some(row => row.claim_scope !== "RUNTIME_ONLY" || row.source_mapping !== "UNKNOWN" || !["TRUE_POSITIVE", "FALSE_POSITIVE", "INCONCLUSIVE"].includes(row.verdict)))) errors.push("final-report-runtime-testing-invalid");
   if (model.residual_gaps !== undefined && (!Array.isArray(model.residual_gaps) || model.residual_gaps.some(gap => !nonEmptyString(gap)))) errors.push("final-report-residual-gaps-invalid");
   if (model.residual_gaps?.length && model.coverage?.coverage_status === "COMPLETE") errors.push("final-report-gaps-hidden-by-complete");
   if (model.report_kind === "FINAL" && model.coverage?.coverage_status !== "COMPLETE") errors.push("final-report-model-final-not-complete");
@@ -80,7 +84,7 @@ export function validateFinalReportModel(model) {
   for (const finding of model.findings ?? []) {
     const attackSurfaceErrors = validateAttackSurface(finding?.attack_surface);
     const attackSurfaceReviewErrors = validateAttackSurfaceReview(finding?.attack_surface_review, finding?.preliminary_state);
-    const reportDetailInvalid = model.schema_version === 2 && (
+    const reportDetailInvalid = model.schema_version >= 2 && (
       !nonEmptyString(finding?.title) || !nonEmptyString(finding?.vulnerability_type_id)
       || !nonEmptyString(finding?.domain) || !nonEmptyString(finding?.decision_rationale)
       || !isObject(finding?.primary_location) || !nonEmptyString(finding?.primary_location?.file)
@@ -328,7 +332,14 @@ export function renderFinalReport(model) {
     "",
     "### 真实性验证路由",
     "",
-    `快速动态与本地三方共处理 ${model.truth_validation.summary.total} 项：真实漏洞 ${model.truth_validation.summary.true_positive}，误报 ${model.truth_validation.summary.false_positive}，证据不足 ${model.truth_validation.summary.inconclusive}。完整动态验证保持人工触发。`,
+    `${model.schema_version === 3 ? "贯穿式运行证据与独立三方复核" : "快速动态与本地三方"}共处理 ${model.truth_validation.summary.total} 项源码候选：真实漏洞 ${model.truth_validation.summary.true_positive}，误报 ${model.truth_validation.summary.false_positive}，证据不足 ${model.truth_validation.summary.inconclusive}。`,
+    ...(model.schema_version === 3 ? ["", "### 运行测试过程与清理", "",
+      `运行状态：${model.runtime_testing.status}；原因：${model.runtime_testing.reason ?? "无"}；清理状态：${model.runtime_testing.cleanup_status}。动态执行状态不代表安全结论。`, "",
+      "| 工作包 | 环节 | 执行 | 观察结果 | 清理 |", "|---|---|---|---|---|",
+      ...model.runtime_testing.packets.map(packet => `| ${packet.id} | ${packet.phase} | ${packet.execution_status} | ${packet.outcome} | ${packet.cleanup_status} |`), "",
+      ...model.runtime_testing.packets.flatMap(packet => [packet.summary ?? "", ...packet.gaps, ...packet.changes.map(change => `测试残留记录：${change.marker}；范围：${change.resource}；清理：${change.cleanup_status}。`)]),
+      "", "### 仅限运行环境的候选结论", "", "以下结论经过独立三方复核，源码映射保持 UNKNOWN，不推定当前源码版本存在相同问题；不计入源码漏洞数量。", "",
+      ...model.runtime_testing.runtime_only_findings.flatMap(row => [`- ${row.finding_id}：${row.verdict}；${row.reasoning}`, ...row.gaps.map(gap => `  - ${gap}`)]), ""] : []),
     "",
     "### 逐项攻击面证据",
     "",

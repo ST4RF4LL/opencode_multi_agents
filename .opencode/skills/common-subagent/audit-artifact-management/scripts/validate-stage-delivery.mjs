@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
 
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -37,8 +38,8 @@ async function json(path) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [registry, stageAgentRegistry] = await Promise.all([
-    json(args.registry ?? DEFAULT_REGISTRY),
-    json(args["stage-agent-registry"] ?? DEFAULT_STAGE_AGENT_REGISTRY),
+    json(args.registry ?? DEFAULT_REGISTRY).then(runtimeStageRegistry),
+    json(args["stage-agent-registry"] ?? DEFAULT_STAGE_AGENT_REGISTRY).then(runtimeStageRegistry),
   ]);
   const registryErrors = validateStageDeliveryRegistry(registry, stageAgentRegistry);
   if (registryErrors.length > 0) throw new Error(`Stage delivery registry is invalid:\n- ${registryErrors.join("\n- ")}`);

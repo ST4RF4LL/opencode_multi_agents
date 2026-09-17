@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
 
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -18,8 +19,8 @@ try {
   const reportsRoot = resolve(argument("reports-root") ?? process.env.AUDIT_REPORTS_ROOT ?? "reports");
   if (!auditId) throw new Error("缺少 --audit-id。");
   const [registry, stageAgentRegistry] = await Promise.all([
-    readFile(join(CONTRACTS, "workbench-stage-deliveries.json"), "utf8").then(JSON.parse),
-    readFile(join(CONTRACTS, "stage-agent-contracts.json"), "utf8").then(JSON.parse),
+    readFile(join(CONTRACTS, "workbench-stage-deliveries.json"), "utf8").then(JSON.parse).then(runtimeStageRegistry),
+    readFile(join(CONTRACTS, "stage-agent-contracts.json"), "utf8").then(JSON.parse).then(runtimeStageRegistry),
   ]);
   const result = await verifyAuditStageDeliveries({ reportsRoot, auditId, registry, stageAgentRegistry });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
