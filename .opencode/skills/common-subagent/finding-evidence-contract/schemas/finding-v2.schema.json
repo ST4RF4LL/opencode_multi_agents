@@ -24,19 +24,49 @@
     "provenance"
   ],
   "properties": {
-    "finding_schema_version": { "const": 2 },
-    "finding_id": { "type": "string", "minLength": 1 },
-    "audit_id": { "type": "string", "minLength": 1 },
-    "scope_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-    "state": {
-      "enum": ["HYPOTHESIS", "CANDIDATE", "SUPPORTED_STATIC", "SUPPORTED_RUNTIME", "REJECTED", "INCONCLUSIVE"]
+    "finding_schema_version": {
+      "const": 2
     },
-    "classification": { "type": "object" },
-    "routing": { "type": "object" },
-    "locations": { "type": "object" },
-    "evidence": { "type": "object" },
-    "reachability": { "type": "object" },
-    "attacker_influence": { "type": "object" },
+    "finding_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audit_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "state": {
+      "enum": [
+        "HYPOTHESIS",
+        "CANDIDATE",
+        "SUPPORTED_STATIC",
+        "SUPPORTED_RUNTIME",
+        "REJECTED",
+        "INCONCLUSIVE"
+      ]
+    },
+    "classification": {
+      "type": "object"
+    },
+    "routing": {
+      "type": "object"
+    },
+    "locations": {
+      "type": "object"
+    },
+    "evidence": {
+      "type": "object"
+    },
+    "reachability": {
+      "type": "object"
+    },
+    "attacker_influence": {
+      "type": "object"
+    },
     "attack_surface": {
       "type": "object",
       "required": [
@@ -56,29 +86,115 @@
         "confidence"
       ],
       "properties": {
-        "schema_version": { "const": 1 },
-        "in_scope": { "type": "object" },
-        "exposure": { "type": "object" },
-        "vector": { "type": "object" },
-        "auth_scope": { "type": "object" },
-        "preconditions": { "type": "array" },
-        "identities": { "type": "object" },
-        "boundary_crossing": { "type": "object" },
-        "impact": { "type": "object" },
-        "target_reach": { "type": "object" },
-        "controls": { "type": "array" },
-        "counterevidence": { "type": "array" },
-        "blindspots": { "type": "array" },
-        "confidence": { "type": "object" }
+        "schema_version": {
+          "const": 1
+        },
+        "in_scope": {
+          "type": "object"
+        },
+        "exposure": {
+          "type": "object"
+        },
+        "vector": {
+          "type": "object"
+        },
+        "auth_scope": {
+          "type": "object"
+        },
+        "preconditions": {
+          "type": "array"
+        },
+        "identities": {
+          "type": "object"
+        },
+        "boundary_crossing": {
+          "type": "object"
+        },
+        "impact": {
+          "type": "object"
+        },
+        "target_reach": {
+          "type": "object"
+        },
+        "controls": {
+          "type": "array"
+        },
+        "counterevidence": {
+          "type": "array"
+        },
+        "blindspots": {
+          "type": "array"
+        },
+        "confidence": {
+          "type": "object"
+        }
       },
       "additionalProperties": false
     },
-    "guards": { "type": "array" },
-    "contradictions": { "type": "array" },
-    "uncertainty": { "type": "object" },
-    "severity": { "type": "object" },
-    "remediation": { "type": "object" },
-    "provenance": { "type": "object" }
+    "guards": {
+      "type": "array"
+    },
+    "contradictions": {
+      "type": "array"
+    },
+    "uncertainty": {
+      "type": "object"
+    },
+    "severity": {
+      "type": "object"
+    },
+    "remediation": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "report_details": {
+      "type": "object",
+      "required": [
+        "contract",
+        "root_cause",
+        "code_context",
+        "path",
+        "reproduction",
+        "remediation",
+        "regression_tests"
+      ],
+      "properties": {
+        "contract": {
+          "const": "finding-details.v1"
+        },
+        "root_cause": {
+          "type": "object"
+        },
+        "code_context": {
+          "type": "object"
+        },
+        "path": {
+          "type": "array",
+          "minItems": 2
+        },
+        "reproduction": {
+          "type": "object",
+          "required": [
+            "execution_status"
+          ],
+          "properties": {
+            "execution_status": {
+              "const": "NOT_RUN"
+            }
+          }
+        },
+        "remediation": {
+          "type": "object"
+        },
+        "regression_tests": {
+          "type": "array",
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": true
 }

@@ -12,8 +12,12 @@ async function main() {
     readFile(resolve(args[3]), "utf8"),
   ]);
   const errors = validateFinalReportModel(model);
-  if (/\bCONFIRMED\b/.test(markdown)) errors.push("final-report-forbidden-confirmed-label");
-  if (markdown.includes("security-attack-chain-hunter.")) errors.push("final-report-direct-raw-chain-reference");
+  // Detailed reports may quote a historical evidence state; only the routed
+  // verdict is a final conclusion. Legacy renderers keep their original gate.
+  if (!model.detail_contract && /\bCONFIRMED\b/.test(markdown)) errors.push("final-report-forbidden-confirmed-label");
+  // Detailed provenance includes the validated chain manifest's real filename.
+  // Chain acceptance is checked by the model builder; rendering stays exact.
+  if (!model.detail_contract && markdown.includes("security-attack-chain-hunter.")) errors.push("final-report-direct-raw-chain-reference");
   if (markdown !== renderFinalReport(model)) errors.push("final-report-not-deterministic-render");
   if (errors.length > 0) throw new Error(`Final report is invalid:\n- ${errors.join("\n- ")}`);
   process.stdout.write(`${JSON.stringify({ valid: true, audit_id: model.audit_id, report_kind: model.report_kind, model_digest: model.manifest_digest })}\n`);

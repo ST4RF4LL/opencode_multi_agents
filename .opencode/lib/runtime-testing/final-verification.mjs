@@ -1,10 +1,11 @@
 import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { verifyRuntimeEvidenceFiles } from "./evidence.mjs";
+import { verifyRuntimeEvidenceFiles, runtimeForFinding } from "./evidence.mjs";
 import { check, digest } from "./contract.mjs";
 import { validateTruthValidationBundle } from "../../skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs";
 import { validateBoundFactPackets } from "../../skills/vulnerability-validator-subagent/vulnerability-validation/scripts/static-fact-packet.mjs";
 import { validateFinalReportModel } from "../../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
+import { findingRuntimeBindings } from "../../skills/common-subagent/audit-coverage-accounting/scripts/report-dossier.mjs";
 
 export async function verifyIntegratedFinalReport({ audit, reportsRoot }) {
   const root = await realpath(reportsRoot); const workspace = audit.paths?.workspace_root ?? process.cwd();
@@ -41,5 +42,22 @@ export async function verifyIntegratedFinalReport({ audit, reportsRoot }) {
   check(digest(model.runtime_testing.packets) === digest(expectedPackets), "final-runtime-packet-display-mismatch");
   const accepted = bundle.routing.findings.filter(row => row.final_verdict === "TRUE_POSITIVE").map(row => row.finding_id).sort();
   check(digest(model.findings.map(row => row.finding_id).sort()) === digest(accepted), "final-runtime-source-finding-accounting-invalid");
+  if (model.detail_contract === "audit-report-details.v1") {
+    check(digest(model.runtime_testing.details.evidence) === digest(evidence), "final-runtime-details-evidence-mismatch");
+    for (const review of model.runtime_testing.details.reviews) {
+      const original = bundle[review.role.toLowerCase()];
+      check(review.session_id === original.agent_session_id && digest(review.findings) === digest(original.runtime_findings ?? [])
+        && review.source.digest === original.artifact_digest, "final-runtime-only-review-details-mismatch");
+    }
+    for (const row of [...model.findings, ...model.excluded_findings]) {
+      const expected = runtimeForFinding(evidence, row);
+      check(row.dossier?.runtime.status === expected.status && digest(row.dossier.runtime.packets) === digest(expected.packets)
+        && digest(row.dossier.runtime.evidence_bindings) === digest(findingRuntimeBindings(evidence, expected.packets)), "final-runtime-finding-details-mismatch");
+      for (const { role, review } of row.dossier.reviews) {
+        const original = bundle[role.toLowerCase()]?.findings.find(item => item.finding_id === row.finding_id);
+        check(original && digest(review) === digest(original), "final-runtime-review-details-mismatch");
+      }
+    }
+  }
   return true;
 }

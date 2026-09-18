@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { FINDING_DETAIL_CONTRACT, validateFindingReportDetails } from "../skills/common-subagent/finding-evidence-contract/scripts/finding-report-details.mjs";
 
 export const PACKET_REPORT_CONTRACT = "tri-lens-v2";
 export const PACKET_LENSES = ["sink-driven", "control-driven", "config-driven"];
@@ -14,6 +15,7 @@ export function itemReportPaths(item) {
 }
 
 export async function validatePacketReports({ reportsRoot, auditId, item, reports }) {
+  if (item.finding_detail_contract != null && item.finding_detail_contract !== FINDING_DETAIL_CONTRACT) throw new Error("工作包漏洞交付内容契约版本不受支持。");
   if (!Array.isArray(reports) || reports.length !== 3 || new Set(reports.map(entry => entry.lens)).size !== 3
     || reports.some(entry => !PACKET_LENSES.includes(entry.lens))) throw new Error("工作包必须绑定三个不同视角的报告。");
   const root = resolve(reportsRoot), realRoot = await realpath(root);
@@ -34,8 +36,11 @@ export async function validatePacketReports({ reportsRoot, auditId, item, report
       || (item.assignment_id && report.scope?.focus_assignment_id !== item.assignment_id)
       || typeof report.agent_session_id !== "string" || !report.agent_session_id) throw new Error("视角报告与工作包身份不匹配。");
     sessions.add(report.agent_session_id);
+    if (item.finding_detail_contract === FINDING_DETAIL_CONTRACT && !Array.isArray(report.findings)) throw new Error("视角报告必须显式提供 findings 数组，无候选时使用空数组。");
     for (const finding of report.findings ?? []) {
       if (typeof finding.finding_id !== "string" || !finding.finding_id) throw new Error("报告 finding_id 无效。");
+      const detailErrors = validateFindingReportDetails(finding, { required: item.finding_detail_contract === FINDING_DETAIL_CONTRACT });
+      if (detailErrors.length) throw new Error(`漏洞 ${finding.finding_id} 的交付内容不足：${detailErrors.join("、")}`);
       findings.add(finding.finding_id);
     }
   }

@@ -3,6 +3,7 @@
 import {
   auditTodoSummary,
   claimAuditTodo,
+  checkAuditTodoPacket,
   completeAuditTodoPacket,
   createEmptyAuditTodo,
   failAuditTodoPacket,
@@ -71,6 +72,15 @@ async function main() {
         reportsRoot: required(values, "reports-root"),
       });
       break;
+    case "check":
+      result = await checkAuditTodoPacket({
+        todoPath,
+        packetId: required(values, "packet"),
+        handoffPath: required(values, "handoff"),
+        reportsRoot: required(values, "reports-root"),
+      });
+      if (!result.complete) process.exitCode = 1;
+      break;
     case "fail":
       result = await failAuditTodoPacket({
         todoPath,
@@ -92,12 +102,13 @@ async function main() {
       });
       break;
     default:
-      throw new Error("用法：audit-todo.mjs <create|init|stats|claim|complete|fail|recover|list> --todo <path> ...");
+      throw new Error("用法：audit-todo.mjs <create|init|stats|claim|check|complete|fail|recover|list> --todo <path> ...");
   }
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
 main().catch(error => {
+  if (error.coverage_check) process.stdout.write(`${JSON.stringify(error.coverage_check)}\n`);
   process.stderr.write(`${error.message}\n`);
   process.exitCode = 1;
 });

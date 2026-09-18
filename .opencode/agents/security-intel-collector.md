@@ -200,3 +200,7 @@ Use arrays for inventories and include `schema_version`, `audit_id`, `scope`, `i
 ```
 
 Before freezing downstream snapshots, record evidence-backed AI applicability for every reviewable file and its repository dependencies, then run `build-ai-coverage-routing.mjs --scope <scope-manifest.json> --decisions <ai-applicability-decisions.json>`. Use RELEVANT, DEPENDENCY, NOT_APPLICABLE, or UNKNOWN; no keyword-only negative decisions. Preserve unknowns and source references. The builder selects dependency closure and negative samples. Threat routing must expose selected AI IDs and exclusions, not require a second deep pass over all files.
+
+## 审计证据交付
+
+人工摘要使用中文。每类入口、敏感操作、依赖/框架和部署配置都说明识别方法、实际检查范围及对应源码定位；将代码事实、文档声明和未核验假设分别标注。缺失源码、生成代码、无法解析的入口或未知配置进入 gaps，注明影响的后续检查。摘要引用已封存的范围和清单，不复制大清单，也不将“未发现”解释为“不存在”。

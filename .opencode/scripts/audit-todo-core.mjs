@@ -1,5 +1,6 @@
 import { PACKET_REPORT_CONTRACT, validatePacketReports } from "./packet-reports.mjs";
-import { randomUUID } from "node:crypto";
+import { FINDING_DETAIL_CONTRACT } from "../skills/common-subagent/finding-evidence-contract/scripts/finding-report-details.mjs";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -58,6 +59,7 @@ function itemFromUnit(unit, index) {
     artifact_path: null,
     finding_ids: [],
     gap_reason: null,
+    gap_kind: null,
     updated_at: now(),
   };
 }
@@ -78,6 +80,7 @@ function validateTodo(todo) {
     if (itemIds.has(item.item_id)) errors.push(`todo-item-duplicate:${item.item_id}`);
     itemIds.add(item.item_id);
     if (!AUDIT_TODO_STATES.includes(item.status)) errors.push(`todo-item-state-invalid:${item.item_id}`);
+    if (item.gap_kind != null && (item.gap_kind !== "SKIPPED" || item.status !== "GAP" || typeof item.gap_reason !== "string" || !item.gap_reason.trim())) errors.push(`todo-item-skip-invalid:${item.item_id}`);
   }
   return [...new Set(errors)];
 }
@@ -205,6 +208,7 @@ export function summarizeAuditTodo(todo) {
     running: counts.running,
     done: counts.done,
     gap: counts.gap,
+    skipped: items.filter(item => item.status === "GAP" && item.gap_kind === "SKIPPED").length,
     failed: counts.failed,
     terminal,
     complete: finalizationReady,
@@ -225,16 +229,21 @@ export async function initializeAuditTodo({ todoPath, auditId, planPath }) {
       if (existing.plan_path && resolve(existing.plan_path) !== resolve(planPath)) {
         throw new Error("本地任务清单已绑定到其他 Coverage Plan，拒绝覆盖已有调度状态。");
       }
+      if (existing.plan_sha256 && existing.plan_sha256 !== createHash("sha256").update(await readFile(resolve(planPath))).digest("hex")) {
+        throw new Error("Coverage Plan 已变更；必须显式核对新增或变更的 Focus Area，不能复用旧队列声明完整覆盖。");
+      }
       return { todo: existing, created: false, summary: summarizeAuditTodo(existing) };
     }
   }
-  const plan = JSON.parse(await readFile(resolve(planPath), "utf8"));
+  const planBytes = await readFile(resolve(planPath));
+  const plan = JSON.parse(planBytes.toString("utf8"));
   if (plan.audit_id !== auditId) throw new Error("Coverage Plan 的 audit_id 与本地任务不一致。");
   if (plan.packet_report_contract !== undefined && plan.packet_report_contract !== PACKET_REPORT_CONTRACT) throw new Error("Coverage Plan 工作包报告契约版本不受支持。");
+  if (plan.finding_detail_contract !== undefined && (plan.finding_detail_contract !== FINDING_DETAIL_CONTRACT || plan.packet_report_contract !== PACKET_REPORT_CONTRACT)) throw new Error("Coverage Plan 漏洞交付内容契约版本不受支持。");
   const units = Array.isArray(plan.coverage_units) ? plan.coverage_units : [];
   if (units.length === 0) throw new Error("Coverage Plan 没有可调度的 coverage_units。");
   const itemIds = new Set();
-  const items = units.map((unit, index) => ({ ...itemFromUnit(unit, index), report_contract: plan.packet_report_contract ?? "legacy-v1", scope_digest: plan.scope_digest ?? null, report_bindings: [] }));
+  const items = units.map((unit, index) => ({ ...itemFromUnit(unit, index), report_contract: plan.packet_report_contract ?? "legacy-v1", finding_detail_contract: plan.finding_detail_contract ?? null, scope_digest: plan.scope_digest ?? null, report_bindings: [] }));
   for (const item of items) {
     if (itemIds.has(item.item_id)) throw new Error(`Coverage Plan 包含重复的调度项：${item.item_id}`);
     itemIds.add(item.item_id);
@@ -244,6 +253,7 @@ export async function initializeAuditTodo({ todoPath, auditId, planPath }) {
     schema_version: AUDIT_TODO_SCHEMA_VERSION,
     audit_id: auditId,
     plan_path: resolve(planPath),
+    plan_sha256: createHash("sha256").update(planBytes).digest("hex"),
     created_at: createdAt,
     updated_at: createdAt,
     items,
@@ -322,6 +332,7 @@ function publicPacket(todo, packet) {
       assignment_id: item.assignment_id,
       required_lenses: item.required_lenses,
       report_contract: item.report_contract ?? "legacy-v1",
+      finding_detail_contract: item.finding_detail_contract ?? null,
       expected_check_count: item.expected_check_count,
     })),
   };
@@ -378,54 +389,69 @@ export async function claimAuditTodo({ todoPath, packetLimit = 4, itemsPerPacket
   return { packets, summary, next_action: summary.next_action };
 }
 
-async function validateHandoff({ handoffPath, reportsRoot, todo, packet }) {
-  const absoluteHandoff = resolve(handoffPath);
-  if (!safeChild(reportsRoot, absoluteHandoff)) throw new Error("工作包交付件必须位于受控 reports 目录中。");
-  const info = await stat(absoluteHandoff);
-  if (!info.isFile() || info.size === 0 || info.size > 8 * 1024 * 1024) throw new Error("工作包交付件不是有效的受控 JSON 文件。");
-  let handoff;
-  try { handoff = JSON.parse(await readFile(absoluteHandoff, "utf8")); } catch { throw new Error("工作包交付件不是有效 JSON。"); }
-  if (!object(handoff) || handoff.schema_version !== 1 || handoff.audit_id !== todo.audit_id || handoff.packet_id !== packet.packet_id || !Array.isArray(handoff.results)) {
-    throw new Error("工作包交付件缺少 schema_version、audit_id、packet_id 或 results。");
-  }
-  const expected = new Set(packet.item_ids);
+export async function checkPacketHandoff({ handoffPath, reportsRoot, todo, packet }) {
+  const identity = item => ({ item_id: item.item_id, focus_area_id: item.focus_area_id, assignment_id: item.assignment_id, domain: item.domain, agent_name: item.agent_name });
+  const expected = new Map(packetItems(todo, packet).map(item => [item.item_id, item]));
+  const check = { packet_id: packet.packet_id, agent_name: packet.agent_name, complete: false, missing_items: [], invalid_items: [], errors: [], results: [], handoff_path: null };
+  if (expected.size !== packet.item_ids.length || [...expected.values()].some(item => item.packet_id !== packet.packet_id || item.status !== "RUNNING")) check.errors.push("工作包任务集合缺失、重复或已不属于当前 RUNNING 租约。");
   const seen = new Set();
-  const results = [];
-  for (const result of handoff.results) {
-    if (!object(result) || typeof result.item_id !== "string" || !expected.has(result.item_id) || seen.has(result.item_id)) {
-      throw new Error("工作包交付件包含未知或重复的 item_id。");
+  try {
+    const absoluteHandoff = resolve(handoffPath);
+    if (!safeChild(reportsRoot, absoluteHandoff)) throw new Error("工作包交付件必须位于受控 reports 目录中。");
+    const info = await stat(absoluteHandoff);
+    if (!info.isFile() || info.size === 0 || info.size > 8 * 1024 * 1024) throw new Error("工作包交付件不是有效的受控 JSON 文件。");
+    const handoff = JSON.parse(await readFile(absoluteHandoff, "utf8"));
+    if (!object(handoff) || handoff.schema_version !== 1 || handoff.audit_id !== todo.audit_id || handoff.packet_id !== packet.packet_id || !Array.isArray(handoff.results)) {
+      throw new Error("工作包交付件缺少或不匹配 schema_version、audit_id、packet_id、results。");
     }
-    if (!new Set(["DONE", "GAP"]).has(result.status)) throw new Error("工作包交付状态只能是 DONE 或 GAP。");
-    const item = todo.items.find(item => item.item_id === result.item_id);
-    const triLens = item.report_contract === PACKET_REPORT_CONTRACT;
-    const bound = triLens && result.status === "DONE" ? await validatePacketReports({ reportsRoot, auditId: todo.audit_id, item, reports: result.reports }) : null;
-    if (!triLens && result.status === "DONE" && (typeof result.report_path !== "string" || !result.report_path)) {
-      throw new Error(`DONE 项缺少 report_path：${result.item_id}`);
+    check.handoff_path = relative(resolve(reportsRoot), absoluteHandoff).split(sep).join("/");
+    for (const result of handoff.results) {
+      const item = expected.get(result?.item_id);
+      if (!item || seen.has(item.item_id)) {
+        check.errors.push(`工作包交付件包含未知或重复的 item_id：${String(result?.item_id ?? "<missing>")}`);
+        continue;
+      }
+      seen.add(item.item_id);
+      try {
+        if (!["DONE", "GAP"].includes(result.status)) throw new Error("工作包交付状态只能是 DONE 或 GAP。");
+        if (result.gap_kind != null && (result.gap_kind !== "SKIPPED" || result.status !== "GAP")) throw new Error("跳过必须声明 status=GAP、gap_kind=SKIPPED。");
+        if (result.status === "GAP" && (typeof result.gap_reason !== "string" || !result.gap_reason.trim())) throw new Error("GAP / SKIPPED 项必须提供非空 gap_reason。");
+        const triLens = item.report_contract === PACKET_REPORT_CONTRACT;
+        const bound = triLens && result.status === "DONE" ? await validatePacketReports({ reportsRoot, auditId: todo.audit_id, item, reports: result.reports }) : null;
+        if (!triLens && result.status === "DONE" && (typeof result.report_path !== "string" || !result.report_path)) throw new Error("DONE 项缺少 report_path。");
+        let reportPath = null;
+        if (typeof result.report_path === "string" && result.report_path) {
+          if (isAbsolute(result.report_path)) throw new Error("report_path 必须相对 reports 目录。");
+          const candidate = resolve(reportsRoot, result.report_path);
+          if (!safeChild(reportsRoot, candidate)) throw new Error("report_path 越出受控 reports 目录。");
+          const reportInfo = await stat(candidate);
+          if (!reportInfo.isFile() || reportInfo.size === 0) throw new Error(`报告文件不存在或为空：${result.report_path}`);
+          reportPath = result.report_path.split(sep).join("/");
+        }
+        check.results.push({
+          ...identity(item), status: result.status, report_path: reportPath,
+          report_bindings: bound?.bindings ?? [],
+          finding_ids: bound ? bound.findingIds : Array.isArray(result.finding_ids) ? result.finding_ids.filter(value => typeof value === "string").slice(0, 500) : [],
+          gap_reason: result.status === "GAP" ? result.gap_reason.trim().slice(0, 4000) : null,
+          gap_kind: result.gap_kind ?? null,
+        });
+      } catch (error) {
+        check.invalid_items.push({ ...identity(item), reason: error.message });
+      }
     }
-    if (result.status === "GAP" && (typeof result.gap_reason !== "string" || !result.gap_reason.trim())) {
-      throw new Error(`GAP 项缺少 gap_reason：${result.item_id}`);
-    }
-    let reportPath = null;
-    if (typeof result.report_path === "string" && result.report_path) {
-      if (isAbsolute(result.report_path)) throw new Error("report_path 必须相对 reports 目录。");
-      const candidate = resolve(reportsRoot, result.report_path);
-      if (!safeChild(reportsRoot, candidate)) throw new Error("report_path 越出受控 reports 目录。");
-      const reportInfo = await stat(candidate);
-      if (!reportInfo.isFile() || reportInfo.size === 0) throw new Error(`报告文件不存在或为空：${result.report_path}`);
-      reportPath = result.report_path.split(sep).join("/");
-    }
-    seen.add(result.item_id);
-    results.push({
-      item_id: result.item_id,
-      status: result.status,
-      report_path: reportPath,
-      report_bindings: bound?.bindings ?? [],
-      finding_ids: bound ? bound.findingIds : Array.isArray(result.finding_ids) ? result.finding_ids.filter(value => typeof value === "string").slice(0, 500) : [],
-      gap_reason: typeof result.gap_reason === "string" ? result.gap_reason.trim().slice(0, 4000) : null,
-    });
+  } catch (error) {
+    check.errors.push(error.code === "ENOENT" ? "尚未提交工作包交付件。" : error.message);
   }
-  if (seen.size !== expected.size) throw new Error("工作包交付件没有覆盖该工作包的全部 item_id。");
-  return { handoffPath: relative(resolve(reportsRoot), absoluteHandoff).split(sep).join("/"), results };
+  check.missing_items = [...expected.values()].filter(item => !seen.has(item.item_id)).map(identity);
+  check.complete = check.missing_items.length === 0 && check.invalid_items.length === 0 && check.errors.length === 0;
+  return check;
+}
+
+export async function checkAuditTodoPacket({ todoPath, packetId, handoffPath, reportsRoot }) {
+  const todo = await readAuditTodo(todoPath);
+  const packet = todo.packets.find(candidate => candidate.packet_id === packetId);
+  if (!packet || packet.status !== "RUNNING") throw new Error("未找到 RUNNING 工作包，不能检查过期或已交付的任务。");
+  return checkPacketHandoff({ handoffPath, reportsRoot, todo, packet });
 }
 
 export async function completeAuditTodoPacket({ todoPath, packetId, handoffPath, reportsRoot }) {
@@ -433,7 +459,15 @@ export async function completeAuditTodoPacket({ todoPath, packetId, handoffPath,
   const packet = todo.packets.find(candidate => candidate.packet_id === packetId);
   if (!packet) throw new Error("未找到本地工作包。");
   if (packet.status !== "RUNNING") throw new Error(`工作包当前不是 RUNNING：${packet.status}`);
-  const handoff = await validateHandoff({ handoffPath, reportsRoot, todo, packet });
+  const handoff = await checkPacketHandoff({ handoffPath, reportsRoot, todo, packet });
+  if (!handoff.complete) {
+    const details = [
+      ...handoff.errors,
+      ...handoff.missing_items.map(item => `遗漏 ${item.focus_area_id} / ${item.assignment_id} (${item.item_id})`),
+      ...handoff.invalid_items.map(item => `${item.focus_area_id} / ${item.assignment_id}：${item.reason}`),
+    ];
+    throw Object.assign(new Error(`Focus Area 交付未覆盖全部任务：${details.slice(0, 20).join("；")}。请补齐，特殊跳过必须显式声明原因。`), { coverage_check: handoff });
+  }
   const byItem = new Map(handoff.results.map(result => [result.item_id, result]));
   for (const item of packetItems(todo, packet)) {
     const result = byItem.get(item.item_id);
@@ -444,10 +478,11 @@ export async function completeAuditTodoPacket({ todoPath, packetId, handoffPath,
     item.report_bindings = result.report_bindings;
     item.finding_ids = result.finding_ids;
     item.gap_reason = result.gap_reason;
+    item.gap_kind = result.gap_kind;
     item.updated_at = now();
   }
   packet.status = handoff.results.every(result => result.status === "DONE") ? "DONE" : "GAP";
-  packet.handoff_path = handoff.handoffPath;
+  packet.handoff_path = handoff.handoff_path;
   packet.lease_expires_at = null;
   packet.updated_at = now();
   todo.updated_at = now();

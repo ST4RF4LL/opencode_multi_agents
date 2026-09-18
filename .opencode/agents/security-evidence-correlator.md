@@ -108,3 +108,7 @@ Include:
 Return a concise markdown summary to the orchestrator. Keep canonical findings as candidates until the independent Finding Adjudication manifest accounts for them. Only its `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` decisions may enter attack-chain construction or final synthesis; the later `vulnerability-validator` reviews the routed finding set using immutable fact packets before report synthesis.
 
 One packet session may supply three reports per Focus item with the same actual agent_session_id. Treat `(session, focus_area_id, audit_strategy)` as the record identity; do not request three new sessions. AI accounting follows the frozen scope.ai_routing selection, preserving excluded/unknown decisions.
+
+## 交付内容完整性
+
+关联交付必须保留每个原始 Finding v2（包括 report_details）的身份、摘要和来源引用。仅在证明同一成因/路径时合并，保留全部来源及正反证；不同前置条件、影响范围与保护措施不得压缩为一句结论。关联结果提供证据面索引与矛盾问题，不能替换或改写原始 Finding；下游最终报告从已验收原始候选及独立复核生成。

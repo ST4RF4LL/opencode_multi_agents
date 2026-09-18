@@ -17,6 +17,7 @@ import { openCodeEventView } from "./opencode-event-view.mjs";
 import { auditsFromArtifacts, materializeFinalReportFromModel, scanReportArtifacts } from "./workspace-model.mjs";
 import { verifyAuditStageDeliveries } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-materialization.mjs";
 import { auditTodoSummary, createEmptyAuditTodo } from "../../scripts/audit-todo-core.mjs";
+import { inspectFocusAreaCoverage, formatFocusAreaReminder } from "../../scripts/focus-area-watchdog.mjs";
 import { validateFinalReportModel } from "../../skills/common-subagent/audit-coverage-accounting/scripts/final-report-model-core.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -201,9 +202,20 @@ async function defaultTodoCompletionVerifier({ audit, reportsRoot }) {
   if (summary?.pending) errors.push(`仍有 ${summary.pending} 项 PENDING。`);
   if (summary?.running) errors.push(`仍有 ${summary.running} 项 RUNNING。`);
   if (summary?.failed) errors.push(`仍有 ${summary.failed} 项 FAILED，必须重试或人工处理。`);
+  const focusCheck = await inspectFocusAreaCoverage({ todoPath: audit.todo_path, reportsRoot });
+  if (focusCheck.initialized && !focusCheck.complete) errors.push(formatFocusAreaReminder(focusCheck));
   const repaired = await materializeFinalReportFromModel({ reportsRoot, auditId: audit.id });
   const finalReport = repaired.artifact;
   if (!finalReport) errors.push(...await finalReportDeliveryDiagnostics({ reportsRoot, auditId: audit.id, repair: repaired }));
+  const skippedAreas = focusCheck.exceptions.filter(item => item.status === "SKIPPED").sort((a, b) => a.item_id.localeCompare(b.item_id));
+  if (finalReport && skippedAreas.length) {
+    try {
+      const model = JSON.parse(await readFile(join(reportsRoot, "final", `security-audit-report-model.${audit.id}.json`), "utf8"));
+      const reported = (model.focus_area_exceptions ?? []).filter(item => item.status === "SKIPPED").sort((a, b) => a.item_id.localeCompare(b.item_id));
+      const values = rows => rows.map(item => [item.item_id, item.focus_area_id, item.assignment_id, item.domain, item.agent_name, item.status, item.reason]);
+      if (JSON.stringify(values(reported)) !== JSON.stringify(values(skippedAreas))) throw new Error("skip-report-mismatch");
+    } catch { errors.push("最终报告必须逐项保留本地清单中的 SKIPPED Focus Area、责任分派和跳过原因。"); }
+  }
   if (audit.runtime_testing && finalReport) {
     try { await verifyIntegratedFinalReport({ audit, reportsRoot }); }
     catch (error) { errors.push(`贯穿式任务必须封存并校验 v3 报告、运行证据和独立三方结果：${error.code ?? "RUNTIME_FINAL_BINDING_INVALID"}。`); }
@@ -508,9 +520,10 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     `唯一被审计源码根目录是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
     `源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径（例如 --root \"$AUDIT_SOURCE_ROOT\"），不得用当前执行目录替代冻结范围根。${gitHint}`,
     ...deliveryRootPrompt(audit, paths),
-    `本次调度唯一真相是本机文件 ${JSON.stringify(paths.todo_path)}，只能由 Orchestrator 使用 node \"$AUDIT_TODO_CLI\" 管理；严禁使用 OpenCode todolist，也不得向子代理暴露或让其修改该文件。Coverage Ledger MCP、哈希链、token、INSPECT/RECEIPT/DECISION 流程均已废弃。`,
+    "每次专业 Agent 提交工作包后，先运行 audit-todo check --todo <本地清单> --packet <packet_id> --handoff <交付件> --reports-root <受控报告根>。watchdog 会核对分派集合并在工具结果中提醒遗漏/无效项；补齐后再 complete。特殊跳过必须逐项提交 status=GAP、gap_kind=SKIPPED 和非空 gap_reason，保留至最终中文报告，不计为 DONE。",
+    `本次调度唯一真相是本机文件 ${JSON.stringify(paths.todo_path)}，只能由 Orchestrator 使用 node \"$AUDIT_TODO_CLI\" 管理；严禁使用 OpenCode todolist；子代理仅可通过 audit-todo check 只读核对自己的工作包，不得读取完整清单到上下文或修改该文件。Coverage Ledger MCP、哈希链、token、INSPECT/RECEIPT/DECISION 流程均已废弃。`,
     "完成 Scope、Recon 与 Threat 后，使用 build-coverage-plan.mjs --recon-dir \"$AUDIT_TMP_ROOT/recon\" 构建 Coverage Plan；不得调用 snapshot-coverage-inputs.mjs、复制输入或在命令行列举语言清单。随后调用 audit-todo init 创建本地审计项；每项为一个 Focus Area × domain，三个 lens 在同一工作包内完成。然后循环调用 audit-todo claim（最多 4 个工作包、每包最多 12 项），只把返回的有限工作包分派给对应专业 Agent。不得把完整 Focus Area 清单写入 OpenCode task 或上下文。",
-    "专业 Agent 只写报告和一个工作包 handoff JSON 到 reports/audit-todo/<audit_id>/；handoff 必须逐项标明 DONE 或 GAP、三视角 reports 数组（lens/path/sha256）或 gap_reason。Orchestrator 通过 audit-todo complete 校验三视角绑定、摘要及同一真实 session，再调用 audit-todo complete；子代理失败时调用 audit-todo fail，过期 RUNNING 项调用 audit-todo recover 后重新领取。Orchestrator 不得阅读源码、判断漏洞或改写 Finding。",
+    "专业 Agent 只写报告和一个工作包 handoff JSON 到 reports/audit-todo/<audit_id>/；handoff 必须逐项标明 DONE 或 GAP、三视角 reports 数组（lens/path/sha256）或 gap_reason。Orchestrator 通过 audit-todo check 校验三视角绑定、摘要及同一真实 session，再调用 audit-todo complete；子代理失败时调用 audit-todo fail，过期 RUNNING 项调用 audit-todo recover 后重新领取。Orchestrator 不得阅读源码、判断漏洞或改写 Finding。",
     "每次 claim/complete/recover 后立刻运行 audit-todo stats，并只以 stats.next_action 决定下一步：CLAIM 才继续领取；RECOVER_OR_WAIT 才处理运行租约；REPAIR_FAILURES 才处理失败。FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 表示所有本地审计项均已终态，必须停止所有领取、等待和 GAP 重试循环，转入关联、裁决、验证与报告收尾。DONE 数小于 total 并不表示还有任务：GAP 是已记录的终态；FINALIZE_WITH_RESIDUAL_GAPS 必须保留 GAP 并输出部分覆盖/残余缺口报告，不能等待用户或 operation timeout。",
     ...privateContextPrompt(audit, contextPaths),
     "完成可信结构、威胁建模、多视角漏洞挖掘、证据关联、发现裁决和最终中文报告封存；不能完成的分析必须作为残余 GAP 记录，不能无限续跑。",
@@ -535,7 +548,7 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     "会话中的历史说明只能作为线索，阶段完成性必须以当前落盘制品及确定性校验结果为准；若发现半写入、摘要不匹配或前后不一致的制品，应重建对应制品后再继续。",
     "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径，不得用当前执行目录替代冻结范围根。",
     ...deliveryRootPrompt(audit, paths),
-    "本地任务清单只由 Orchestrator 调度：继续以最多 4 个工作包、每包最多 12 项的界限领取和分派；不得使用 OpenCode todolist、Coverage Ledger MCP、哈希链或逐漏洞记账。子代理仅生成工作包 handoff，Orchestrator 完成结构校验后更新本地任务状态。",
+    "本地任务清单只由 Orchestrator 调度：继续以最多 4 个工作包、每包最多 12 项的界限领取和分派；不得使用 OpenCode todolist、Coverage Ledger MCP、哈希链或逐漏洞记账。子代理生成工作包 handoff 并运行只读 audit-todo check；watchdog 提醒遗漏项。特殊跳过逐项记录 GAP / gap_kind=SKIPPED 和中文原因，Orchestrator 完成结构校验后更新本地任务状态。",
     ...privateContextPrompt(audit, contextPaths),
     audit.runtime_testing ? "复用已封存的运行证据，从最早缺失的三方复核继续。恢复时环境状态不明会被隔离，禁止重新接触目标；保留动态缺口并完成静态报告。" : "继续完成真实性 routing、CVSS、攻击链和最终报告。校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复。完整动态验证仅人工触发。",
     "这是无人值守的断点恢复：不得调用 question 工具、打开交互式选项或等待用户输入。需授权或缺少环境的可选后续只能作为待办写入最终中文说明。每次收尾必须运行 audit-todo recover 和 stats；当 next_action 为 FINALIZE 或 FINALIZE_WITH_RESIDUAL_GAPS 时，生成/核验最终报告后立刻结束本次 OpenCode run，不得输出“继续”“等待”“下一步”或请求澄清，也不得创建新的嵌套步骤。",
@@ -795,12 +808,32 @@ export class AuditRunner extends EventEmitter {
       let completed = 0;
       for (const audit of this.audits.values()) {
         if (audit.status !== "running" || !this.processes.has(audit.id)) continue;
+        await this.remindIncompleteFocusAreas(audit);
         if (await this.reconcileManagedCompletion(audit, reason, { allowRunning: true })) completed += 1;
       }
       return completed;
     } finally {
       this.completionWatchdogRunning = false;
     }
+  }
+
+  async remindIncompleteFocusAreas(audit) {
+    if (audit.stage_delivery_enforcement !== "TODO_ENFORCED") return;
+    const reportsRoot = this.reportsRootForAudit(audit);
+    if (!reportsRoot) return;
+    let check;
+    try { check = await inspectFocusAreaCoverage({ todoPath: audit.todo_path, reportsRoot }); }
+    catch { check = { initialized: true, complete: false, outstanding: [], exceptions: [], issues: ["覆盖检查 UNAVAILABLE：任务清单无法读取或校验，不能声明全部覆盖。"], fingerprint: "UNAVAILABLE" }; }
+    if (!check.initialized || audit.focus_area_watchdog?.fingerprint === check.fingerprint) return;
+    const reminder = formatFocusAreaReminder(check);
+    audit.focus_area_watchdog = { fingerprint: check.fingerprint, complete: check.complete, outstanding_count: check.outstanding.length,
+      skipped_count: check.exceptions.filter(item => item.status === "SKIPPED").length, reminder, checked_at: new Date().toISOString() };
+    const path = join(this.stateRoot, audit.id, "focus-area-coverage.json");
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    await writeFile(temporary, `${JSON.stringify(check, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await rename(temporary, path);
+    await this.record(audit, reminder ? "audit.focus-area.reminder" : "audit.focus-area.accounted", audit.focus_area_watchdog);
+    if (reminder) await this.recordLog(audit, "stderr", reminder);
   }
 
   async reconcileLegacyCompletion(audit, reason = "watchdog") {
@@ -1664,6 +1697,11 @@ export class AuditRunner extends EventEmitter {
       } : {}),
     };
     const sessionId = providerSessionId(existingSessionId ?? audit.provider_session_id ?? audit.terminal?.provider_session_id);
+    const focusConfig = JSON.parse(environment.OPENCODE_CONFIG_CONTENT);
+    // Explicit loading also covers OPENCODE_DISABLE_PROJECT_CONFIG=true.
+    const configuredPlugins = JSON.parse(await readFile(repository.config_path, "utf8")).plugin ?? [];
+    focusConfig.plugin = [...configuredPlugins, new URL("../../lib/focus-area-watchdog-plugin.mjs", import.meta.url).href];
+    environment.OPENCODE_CONFIG_CONTENT = JSON.stringify(focusConfig);
     await this.redactionsForAudit(audit);
     const prompt = resume ? recoveryPrompt(audit, repository, paths, contextPaths) : auditPrompt(audit, repository, paths, contextPaths);
     const model = await this.modelForLaunch(audit);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { aiRequired } from "./ai-coverage-routing.mjs";
+import { FINDING_DETAIL_CONTRACT } from "../../finding-evidence-contract/scripts/finding-report-details.mjs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -386,6 +387,7 @@ async function main() {
     coverage_model_version: COVERAGE_MODEL_VERSION,
     execution_model: COVERAGE_EXECUTION_MODEL,
     packet_report_contract: "tri-lens-v2",
+    finding_detail_contract: FINDING_DETAIL_CONTRACT,
     ai_routing_digest: scope.ai_routing?.routing_digest ?? null,
     ai_routing_unknown_file_ids: scope.ai_routing?.unknown_file_ids ?? [],
     coverage_policy: {

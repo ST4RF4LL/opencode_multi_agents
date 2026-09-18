@@ -174,3 +174,13 @@ Use the session format from `secure-code-review-common` and include:
 Report only evidence-backed candidates. Mark runtime/input-dependent uncertainty in the finding so it is included in the sealed final report; do not invoke `vulnerability-validator` per finding.
 
 For a local packet, Stage/Agent INPUT and OUTPUT envelopes are evidence records per Focus assignment/lens, bundled inside this one invocation. Use the same actual session ID in those records and distinct filenames containing Focus/lens; never launch another session only to populate a lens envelope.
+
+## Focus Area 交付自检与 watchdog
+
+提交工作包前，运行 `node "$AUDIT_TODO_CLI" check --todo "$AUDIT_TODO_PATH" --packet <packet_id> --handoff <交付件绝对路径> --reports-root "$AUDIT_REPORTS_ROOT"`。这是只读检查，不领取或修改队列。逐项核对领取的 item_id、Focus Area 与责任分派；退出码非零时补齐 `missing_items`、修复 `invalid_items`，不能把遗漏解释为无漏洞。watchdog 在工具结果和专业 task 返回时提供提醒；只处理自己领取的工作包，队列写入仍由 Orchestrator 负责。
+
+特殊情况允许跳过：在对应交付项中明确填写 `status: "GAP"`、`gap_kind: "SKIPPED"`、非空中文 `gap_reason`，并在专业报告中列出 Focus Area / assignment_id 和跳过原因。不提交 DONE 报告来代替跳过，不自动跳过未回应任务。已接受的跳过保留为终态缺口，进入最终报告的跳过清单，不计入有效完成数。
+
+## 漏洞内容交付契约
+
+工作包声明 `finding_detail_contract=finding-details.v1` 时，每个候选按 `finding-evidence-contract/references/finding-report-details.md` 填写 `report_details`：中文成因、应有/实际行为、绑定事实索引的完整路径、代码上下文、未执行复现设计、定位明确的修复步骤、正常功能与安全回归用例。复现设计不能冒充实际执行；运行证据仍由控制器产生。内容不完整会使工作包验收失败并进入 watchdog 提醒。无 Finding 的 Area 不编造候选来满足格式；Area 缺口仍走原 GAP/SKIPPED 交付。

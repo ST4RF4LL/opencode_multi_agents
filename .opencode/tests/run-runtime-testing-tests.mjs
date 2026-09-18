@@ -495,6 +495,15 @@ test("缺少环境的 v3 空候选审计可完成封存，旧模型不能冒充�
   const path = join(reportsRoot, "final", `security-audit-report-model.${intake.audit_id}.json`); await writeFile(path, JSON.stringify(model));
   const audit = { id: intake.audit_id, source_baseline: { scope_digest: SHA }, paths: { workspace_root: root }, runtime_testing_state: controller.snapshot() };
   assert.equal(await verifyIntegratedFinalReport({ audit, reportsRoot }), true);
+  model.detail_contract = "audit-report-details.v1"; model.delivery_gaps = [];
+  model.runtime_testing.details = { evidence, reviews: [affirmative, negative, moderator].map(value => ({ role: value.role, session_id: value.agent_session_id,
+    findings: value.runtime_findings, source: { ...source(inputs[`${value.role.toLowerCase()}_review`], value.artifact_digest), json_pointer: "/runtime_findings" } })) };
+  model.manifest_digest = finalReportModelDigest(model); await writeFile(path, JSON.stringify(model));
+  assert.equal(await verifyIntegratedFinalReport({ audit, reportsRoot }), true);
+  model.runtime_testing.details.reviews[0].session_id = "unbound-session";
+  model.manifest_digest = finalReportModelDigest(model); await writeFile(path, JSON.stringify(model));
+  await assert.rejects(verifyIntegratedFinalReport({ audit, reportsRoot }), /only-review-details-mismatch/);
+  model.runtime_testing.details.reviews[0].session_id = affirmative.agent_session_id;
   model.schema_version = 2; model.manifest_digest = finalReportModelDigest(model); await writeFile(path, JSON.stringify(model));
   await assert.rejects(verifyIntegratedFinalReport({ audit, reportsRoot }), /protocol-mismatch/);
 });

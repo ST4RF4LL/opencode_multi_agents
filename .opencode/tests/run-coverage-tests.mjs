@@ -1795,7 +1795,7 @@ async function main() {
       "--session-id", "invalid-nonempty-fixture",
       "--output", join(coverage, "adjudication-invalid-empty.json"),
     ], 1);
-    const attackChainsPath = join(coverage, "attack-chains.json");
+    const attackChainsPath = join(coverage, "security-attack-chain-hunter.coverage-fixture-audit.r1.json");
     const attackChains = {
       schema_version: 2,
       audit_id: AUDIT_ID,
@@ -1875,6 +1875,16 @@ async function main() {
     run("verify-final-report.mjs", ["--model", finalReportModelPath, "--markdown", finalReportPath]);
     const finalReportModel = JSON.parse(await readFile(finalReportModelPath, "utf8"));
     const finalReport = await readFile(finalReportPath, "utf8");
+    const detail = finalReportModel.findings[0].dossier;
+    if (finalReportModel.detail_contract !== "audit-report-details.v1"
+      || JSON.stringify(detail.finding) !== JSON.stringify(adjudicationCandidate.finding)
+      || JSON.stringify(detail.adjudication) !== JSON.stringify(adjudication.decisions[0])
+      || detail.reviews.length !== 3 || !detail.missing_sections.length
+      || !finalReportModel.findings[0].cvss.rationale || !finalReportModel.chains[0].steps.length
+      || !finalReport.includes(adjudication.decisions[0].semantic_proof.path.steps[0])
+      || detail.reviews.some(review => !finalReport.includes(review.review.reasoning))) {
+      throw new Error("Final report lost original facts, semantic proof, review reasoning, scoring rationale or delivery gaps");
+    }
     if (finalReportModel.schema_version !== 2
       || finalReportModel.findings.length !== 1 || finalReportModel.chains.length !== 1
       || finalReportModel.findings[0].primary_location?.file !== attestedFinding.locations.primary.file

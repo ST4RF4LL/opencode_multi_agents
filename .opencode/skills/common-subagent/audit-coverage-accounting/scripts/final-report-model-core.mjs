@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { validateAttackSurface } from "../../finding-evidence-contract/scripts/finding-contract.mjs";
 import { validateAttackSurfaceReview } from "../../finding-adjudication/scripts/finding-adjudication-contract.mjs";
+import { REPORT_DETAIL_CONTRACT, validateFindingDossier } from "./report-dossier.mjs";
+import { renderFindingDossier, renderChainDetails, runtimeDetail } from "./render-report-dossier.mjs";
+import { validateRuntimeEvidence } from "../../../../lib/runtime-testing/evidence.mjs";
 
 const ADMITTED_FINDING_STATES = new Set(["TRUE_POSITIVE"]);
 const PRELIMINARY_SUPPORTED_STATES = new Set(["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"]);
@@ -39,6 +42,22 @@ export function validateFinalReportModel(model) {
   const errors = [];
   if (!isObject(model)) return ["final-report-model-not-object"];
   if (![1, 2, 3].includes(model.schema_version)) errors.push("final-report-model-schema-version-invalid");
+  if (model.detail_contract !== undefined && model.detail_contract !== REPORT_DETAIL_CONTRACT) errors.push("final-report-detail-contract-invalid");
+  if (model.detail_contract === REPORT_DETAIL_CONTRACT) {
+    const expectedGaps = [...(model.findings ?? []), ...(model.excluded_findings ?? [])].flatMap(row => (row?.dossier?.missing_sections ?? []).map(reason => ({ finding_id: row.finding_id, reason })));
+    if (!Array.isArray(model.delivery_gaps) || JSON.stringify(model.delivery_gaps) !== JSON.stringify(expectedGaps)) errors.push("final-report-delivery-gaps-mismatch");
+    for (const row of [...(model.findings ?? []), ...(model.excluded_findings ?? [])]) errors.push(...validateFindingDossier(row));
+    for (const chain of [...(model.chains ?? []), ...(model.rejected_chains ?? [])]) {
+      if (!Array.isArray(chain?.steps) || !chain.steps.length || !Array.isArray(chain.transitions) || !Array.isArray(chain.gaps)) errors.push("final-report-chain-detail-missing");
+    }
+    if (model.schema_version === 3) {
+      const detail = model.runtime_testing?.details;
+      if (!detail || validateRuntimeEvidence(detail.evidence).length || detail.evidence.artifact_digest !== model.runtime_testing.evidence_digest
+        || !Array.isArray(detail.reviews) || detail.reviews.length !== 3
+        || new Set(detail.reviews.map(row => row.role)).size !== 3
+        || detail.reviews.some(row => !["AFFIRMATIVE", "NEGATIVE", "MODERATOR"].includes(row.role) || !Array.isArray(row.findings) || !sourceValid(row.source))) errors.push("final-report-runtime-details-invalid");
+    }
+  }
   if (!nonEmptyString(model.audit_id) || !validDigest(model.scope_digest)) errors.push("final-report-model-audit-or-scope-invalid");
   if (!new Set(["FINAL", "POLICY_FINAL", "PARTIAL_FINAL", "CHECKPOINT"]).has(model.report_kind)) errors.push("final-report-model-kind-invalid");
   if (!isObject(model.inputs) || !["coverage_summary", "adjudication_input", "adjudication", "truth_validation_intake", model.schema_version === 3 ? "runtime_testing_evidence" : "quick_dynamic_results", "affirmative_review", "negative_review", "moderator_review", "validation_routing", "cvss_assessment", "attack_chains"]
@@ -60,6 +79,14 @@ export function validateFinalReportModel(model) {
     || !Array.isArray(model.runtime_testing.runtime_only_findings) || model.runtime_testing.runtime_only_findings.some(row => row.claim_scope !== "RUNTIME_ONLY" || row.source_mapping !== "UNKNOWN" || !["TRUE_POSITIVE", "FALSE_POSITIVE", "INCONCLUSIVE"].includes(row.verdict)))) errors.push("final-report-runtime-testing-invalid");
   if (model.residual_gaps !== undefined && (!Array.isArray(model.residual_gaps) || model.residual_gaps.some(gap => !nonEmptyString(gap)))) errors.push("final-report-residual-gaps-invalid");
   if (model.residual_gaps?.length && model.coverage?.coverage_status === "COMPLETE") errors.push("final-report-gaps-hidden-by-complete");
+  if (model.focus_area_exceptions !== undefined) {
+    const exceptions = Array.isArray(model.focus_area_exceptions) ? model.focus_area_exceptions : [];
+    if (!Array.isArray(model.focus_area_exceptions) || exceptions.some(item => !isObject(item)
+      || !["item_id", "focus_area_id", "assignment_id", "domain", "agent_name", "reason"].every(key => nonEmptyString(item[key]))
+      || !["GAP", "SKIPPED"].includes(item.status))
+      || new Set(exceptions.map(item => item?.item_id)).size !== exceptions.length) errors.push("final-report-focus-area-exceptions-invalid");
+    if (exceptions.length && model.coverage?.coverage_status === "COMPLETE") errors.push("final-report-focus-area-exceptions-hidden-by-complete");
+  }
   if (model.report_kind === "FINAL" && model.coverage?.coverage_status !== "COMPLETE") errors.push("final-report-model-final-not-complete");
   if (model.report_kind === "POLICY_FINAL" && (model.coverage?.policy_satisfied !== true
     || !new Set(["FINALIZED_OBSERVED", "FINALIZED_RELEASE", "FINALIZED_COMPLETE"]).has(model.coverage?.seal_state))) {
@@ -290,7 +317,7 @@ export function renderFinalReport(model) {
     : model.findings.map(finding => `| ${markdownText(finding.finding_id)} | \`${markdownText(locationText(finding.primary_location))}\` | ${markdownText(finding.attack_surface.exposure.state)} · ${markdownText(finding.attack_surface.exposure.surface)} | ${markdownText(finding.attack_surface.boundary_crossing.state)} · ${markdownText(finding.attack_surface.boundary_crossing.from)} → ${markdownText(finding.attack_surface.boundary_crossing.to)} | ${markdownText(finding.attack_surface.impact.outcome)} |`);
   const findingDetailSections = model.findings.length === 0
     ? ["_没有通过真实性路由的漏洞。_", ""]
-    : model.findings.flatMap(renderFindingDetail);
+    : model.findings.flatMap(model.detail_contract === REPORT_DETAIL_CONTRACT ? row => renderFindingDossier(row) : renderFindingDetail);
   return [
     `<!-- GENERATED: final-report-model ${model.manifest_digest} -->`,
     model.report_kind === "FINAL" ? "# 安全审计报告"
@@ -300,6 +327,7 @@ export function renderFinalReport(model) {
     "## 报告状态",
     "",
     `审计：\`${model.audit_id}\`。覆盖状态：**${model.coverage.coverage_status}**。策略：**${model.coverage.policy_mode ?? "assurance"}**（${model.coverage.policy_satisfied ? "已满足" : "未满足"}）。`,
+    ...(model.detail_contract === REPORT_DETAIL_CONTRACT ? ["", `冻结范围 SHA-256：\`${model.scope_digest}\`。覆盖验收摘要：\`${model.coverage.summary_digest}\`。`] : []),
     ...(model.report_kind === "CHECKPOINT"
       ? ["", "这是非终态检查点。未验证检查仍为缺口，不能作为终稿或完整审计声明。"]
       : model.report_kind === "PARTIAL_FINAL"
@@ -309,9 +337,17 @@ export function renderFinalReport(model) {
       : []),
     "",
     ...(model.residual_gaps?.length ? ["## 残余覆盖缺口", "", ...model.residual_gaps.map(gap => `- ${gap.replace(/[\r\n]+/g, " ")}`), ""] : []),
+    ...(model.focus_area_exceptions?.length ? [
+      "## Focus Area 跳过与未完成清单", "",
+      "下列分派未计入有效审计完成数；显式跳过不代表已审查或无漏洞。", "",
+      "| Focus Area / 分派 | 责任 Agent / domain | 标识 | 原因 |", "|---|---|---|---|",
+      ...model.focus_area_exceptions.map(item => `| ${markdownText(item.focus_area_id)} / ${markdownText(item.assignment_id)} | ${markdownText(item.agent_name)} / ${markdownText(item.domain)} | ${item.status} | ${markdownText(item.reason)} |`), "",
+    ] : []),
     "## 管理摘要",
     "",
     `本次审计确认 ${model.findings.length} 个 Finding；以下内容按 CVSS 基础分从高到低排列。每项首先给出源码文件和行号，再给出证据链、影响、利用前提与修复建议。`,
+    ...(model.detail_contract === REPORT_DETAIL_CONTRACT ? ["", `报告内容契约：${REPORT_DETAIL_CONTRACT}；内容完整性：${model.delivery_gaps.length ? "存在交付缺口" : "必需字段齐备"}。覆盖完成状态、内容完整性和动态执行状态分别判断。`, "",
+      ...(model.delivery_gaps.length ? ["| 候选 | 交付信息缺口 |", "|---|---|", ...model.delivery_gaps.map(gap => `| ${markdownText(gap.finding_id)} | ${markdownText(gap.reason)} |`)] : [])] : []),
     "",
     "## 漏洞清单",
     "",
@@ -337,13 +373,18 @@ export function renderFinalReport(model) {
       `运行状态：${model.runtime_testing.status}；原因：${model.runtime_testing.reason ?? "无"}；清理状态：${model.runtime_testing.cleanup_status}。动态执行状态不代表安全结论。`, "",
       "| 工作包 | 环节 | 执行 | 观察结果 | 清理 |", "|---|---|---|---|---|",
       ...model.runtime_testing.packets.map(packet => `| ${packet.id} | ${packet.phase} | ${packet.execution_status} | ${packet.outcome} | ${packet.cleanup_status} |`), "",
-      ...model.runtime_testing.packets.flatMap(packet => [packet.summary ?? "", ...packet.gaps, ...packet.changes.map(change => `测试残留记录：${change.marker}；范围：${change.resource}；清理：${change.cleanup_status}。`)]),
+      ...(model.detail_contract === REPORT_DETAIL_CONTRACT
+        ? runtimeDetail({ ...model.runtime_testing.details.evidence, protocol: "runtime-testing.v1" })
+        : model.runtime_testing.packets.flatMap(packet => [packet.summary ?? "", ...packet.gaps, ...packet.changes.map(change => `测试残留记录：${change.marker}；范围：${change.resource}；清理：${change.cleanup_status}。`)])),
       "", "### 仅限运行环境的候选结论", "", "以下结论经过独立三方复核，源码映射保持 UNKNOWN，不推定当前源码版本存在相同问题；不计入源码漏洞数量。", "",
-      ...model.runtime_testing.runtime_only_findings.flatMap(row => [`- ${row.finding_id}：${row.verdict}；${row.reasoning}`, ...row.gaps.map(gap => `  - ${gap}`)]), ""] : []),
+      ...model.runtime_testing.runtime_only_findings.flatMap(row => [`- ${row.finding_id}：${row.verdict}；${row.reasoning}`, ...row.gaps.map(gap => `  - ${gap}`)]),
+      ...(model.detail_contract === REPORT_DETAIL_CONTRACT ? model.runtime_testing.details.reviews.flatMap(review => review.findings.flatMap(row => [
+        `- ${review.role} / ${markdownText(row.finding_id)}：${markdownText(row.reasoning)}；会话：${markdownText(review.session_id)}。`,
+        `  - 完整复核记录：${markdownText(JSON.stringify(row))}`, `  - 来源：${markdownText(review.source.artifact)} ${review.source.json_pointer}；SHA-256：${review.source.digest}`])) : []), ""] : []),
     "",
     "### 逐项攻击面证据",
     "",
-    "详细的攻击面、反证、盲点与来源绑定保留在最终 JSON 模型中；本附录只保留人工处置所需的定位和边界摘要。",
+    model.detail_contract === REPORT_DETAIL_CONTRACT ? "逐项审计事实、独立判断、反证、运行观察和来源摘要详见漏洞详情；本表用于快速定位攻击边界。完整上游对象同时保存在 JSON 模型中。" : "详细的攻击面、反证、盲点与来源绑定保留在最终 JSON 模型中；本附录只保留人工处置所需的定位和边界摘要。",
     "",
     "| Finding | 主要位置 | 暴露面 | 边界跨越 | 影响 |",
     "|---|---|---|---|---|",
@@ -354,6 +395,7 @@ export function renderFinalReport(model) {
     "| ID | 评估 | 首个阻断步骤 |",
     "|---|---|---|",
     ...chainRows,
+    ...(model.detail_contract === REPORT_DETAIL_CONTRACT ? ["", ...model.chains.flatMap(renderChainDetails)] : []),
     "",
     "### 排除项与剩余结果",
     "",
@@ -362,12 +404,14 @@ export function renderFinalReport(model) {
     "| ID | 结果 |",
     "|---|---|",
     ...excludedFindingRows,
+    ...(model.detail_contract === REPORT_DETAIL_CONTRACT ? ["", ...model.excluded_findings.flatMap(row => renderFindingDossier(row, { excluded: true }))] : []),
     "",
     "#### 已反驳攻击链",
     "",
     "| ID | 结果 |",
     "|---|---|",
     ...rejectedChainRows,
+    ...(model.detail_contract === REPORT_DETAIL_CONTRACT ? ["", ...model.rejected_chains.flatMap(renderChainDetails)] : []),
     "",
     "本报告由上述模型确定性渲染。`CONDITIONAL` 攻击链属于尚未解决的假设，不是已支持的利用路径。",
     "",

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseCvssV31Vector } from "./cvss-v31.mjs";
+import { validateFindingReportDetails } from "./finding-report-details.mjs";
 
 export const FINDING_SCHEMA_VERSION = 2;
 export const FINDING_STATES = new Set([
@@ -350,6 +351,7 @@ export function validateFinding(finding, context = {}) {
     }
   }
   if (!isObject(finding.remediation) || !nonEmptyString(finding.remediation.summary)) errors.push("remediation-missing");
+  errors.push(...validateFindingReportDetails(finding, { required: context.requireReportDetails === true }));
   if (!isObject(finding.provenance) || !validDigest(finding.provenance.source_report_sha256)) errors.push("provenance-source-report-digest-invalid");
 
   const check = context.check;

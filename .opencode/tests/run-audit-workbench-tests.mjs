@@ -1406,6 +1406,7 @@ if (mode === "run") {
     const runtimeOpenCodeConfig = JSON.parse(spawnCall.options.env.OPENCODE_CONFIG_CONTENT);
     assert.equal(Object.hasOwn(runtimeOpenCodeConfig.mcp, "coverage_ledger"), false);
     assert.equal(runtimeOpenCodeConfig.subagent_depth, 2);
+    assert.ok(runtimeOpenCodeConfig.plugin.some(entry => typeof entry === "string" && entry.endsWith("/lib/focus-area-watchdog-plugin.mjs")), "禁用项目配置时仍须加载 Focus Area watchdog 工具结果钩子");
     assert.match(spawnCall.args[0], /terminal-output-relay\.mjs$/);
     const monitoredRunArgs = terminalMonitor.starts[0].args;
     assert.deepEqual(monitoredRunArgs.slice(0, 3), ["run", "--format", "json"]);

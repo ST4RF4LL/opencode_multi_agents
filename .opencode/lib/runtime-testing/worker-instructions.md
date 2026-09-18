@@ -13,3 +13,5 @@ anonymous 身份不得登录，也不得使用说明中未纳入授权 accounts 
 任何新增测试数据都进入 changes，逐项记录唯一 marker、resource、cleanup_status。执行后通过正常应用清理路径删除；清理失败必须保留影响范围、失败证据与人工处理步骤，cleanup_status=FAILED/UNKNOWN，停止后续测试。即使清理失败也保留已有支持证据。不要自行关闭其他身份或全局 Chrome 进程。
 
 使用 submit_result 一次性提交：execution_status、outcome、cleanup_status、summary、observations、gaps、evidence_ids、changes，以及适用的 proof。提交后立即结束，不再调用工具、不等待后续指令。
+
+过程交付须让审阅者能重建测试：observations 按实际执行顺序记录身份、应用动作、预期/实际差异以及对应的真实 evidence_id；正常基线与反证操作同样保留。工具调用记录由控制器留存，叙述不能替代它们。没有执行的步骤放进 gaps 并说明原因，不写为观察；失败、超时、证据不足、未复现均说明限制。proof 各字段引用支持它的观察与证据，不只写“通过”。不得为充实报告扩大测试范围或记录敏感登录信息。

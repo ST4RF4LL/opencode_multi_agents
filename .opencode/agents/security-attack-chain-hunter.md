@@ -64,3 +64,7 @@ reports/attack-chains/security-attack-chain-hunter.<audit_id>.r<round>.json
 The report must account for every Focus Area, every trust boundary, and every asset, even when no chain is found. Preserve `GAP` for an unreadable or unresolved surface. Emit evidence-backed chain candidates with ordered preconditions and transitions; send them to `security-evidence-correlator` for canonicalization.
 
 Do not execute exploits, contact live systems, invent missing transitions, or treat correlated prose as source evidence.
+
+## 审计证据交付
+
+中文说明每一步的入口、主体权限、产生的能力及所需前提，并逐步引用已裁定的证据。每个连接说明前一步的产出为何满足下一步前提，区分事实支持、条件成立与尚未证明；跨身份、租户或服务的跳转不得只用攻击故事连接。未成立的链也记录首个阻断步骤、反证和缺口，交给最终报告展开，不能只交 chain_id 与状态。

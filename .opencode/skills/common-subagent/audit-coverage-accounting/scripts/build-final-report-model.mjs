@@ -10,6 +10,7 @@ import { validateCvssAssessmentManifest } from "../../finding-adjudication/scrip
 import { validateAttackChainManifest } from "../../../attack-chain-subagent/system-attack-chain-hunting/scripts/attack-chain-contract.mjs";
 import { validateTruthValidationBundle } from "../../../vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs";
 import { finalReportModelDigest, validateFinalReportModel } from "./final-report-model-core.mjs";
+import { REPORT_DETAIL_CONTRACT, buildFindingDossier } from "./report-dossier.mjs";
 
 function parseArgs(argv) {
   const args = {};
@@ -115,6 +116,9 @@ async function main() {
   const cvssByFindingId = new Map(cvss.assessments.map((assessment, index) => [assessment.finding_id, { assessment, index }]));
   const candidatesByFindingId = new Map(input.candidates.map((candidate, index) => [candidate.finding_id, { candidate, index }]));
   const routingByFindingId = new Map(routing.findings.map((item, index) => [item.finding_id, { item, index }]));
+  const roles = [{ role: "AFFIRMATIVE", manifest: affirmative, artifact: resolve(args.affirmative) },
+    { role: "NEGATIVE", manifest: negative, artifact: resolve(args.negative) },
+    { role: "MODERATOR", manifest: moderator, artifact: resolve(args.moderator) }];
   adjudication.decisions.forEach((decision, index) => {
     const candidateRecord = candidatesByFindingId.get(decision.finding_id);
     if (!candidateRecord) throw new Error(`Adjudication decision has no bound candidate: ${decision.finding_id}`);
@@ -140,6 +144,9 @@ async function main() {
       attack_surface_review: structuredClone(decision.attack_surface_review),
       attack_surface_review_source: attackSurfaceReviewSource(index),
       validation: null,
+      dossier: buildFindingDossier({ candidate: candidateRecord.candidate, decision, roles, runtimeEvidence: quickResultSet, integrated,
+        source: { finding: source(resolve(args["adjudication-input"]), input.manifest_digest, `/candidates/${candidateRecord.index}/finding`),
+          runtime: source(resolve(args["quick-validation"]), quickResultSet.artifact_digest, integrated ? "/packets" : "/results") } }),
     };
     if (["SUPPORTED_STATIC", "SUPPORTED_RUNTIME"].includes(decision.state)) {
       const routed = routingByFindingId.get(decision.finding_id);
@@ -149,6 +156,8 @@ async function main() {
         route: routed.item.route,
         final_verdict: routed.item.final_verdict,
         report_disposition: routed.item.report_disposition,
+        rationale: routed.item.rationale,
+        evidence_refs: structuredClone(routed.item.evidence_refs),
         source: routingSource(routed.index),
       };
       if (routed.item.final_verdict === "TRUE_POSITIVE") {
@@ -158,6 +167,9 @@ async function main() {
           vector: score.assessment.vector,
           base_score: score.assessment.base_score,
           severity: score.assessment.severity,
+          rationale: score.assessment.rationale,
+          assumptions: structuredClone(score.assessment.assumptions),
+          evidence_refs: structuredClone(score.assessment.evidence_refs),
           source: cvssSource(score.index),
         };
         findings.push(row);
@@ -171,16 +183,19 @@ async function main() {
   const rejectedChains = [];
   chains.chains.forEach((chain, index) => {
     const row = {
+      ...structuredClone(chain),
       chain_id: chain.chain_id,
       assessment_state: chain.assessment_state,
       first_blocking_step_id: chain.first_blocking_step_id,
       source: chainSource(index),
+      gaps: structuredClone(chains.gaps.filter(gap => gap.chain_ids?.includes(chain.chain_id))),
     };
     if (chain.assessment_state === "CONTRADICTED") rejectedChains.push(row);
     else acceptedChains.push(row);
   });
   const model = {
     schema_version: integrated ? 3 : 2,
+    detail_contract: REPORT_DETAIL_CONTRACT,
     audit_id: args["audit-id"],
     scope_digest: summary.scope_digest,
     report_kind: args.mode === "final" ? "FINAL"
@@ -214,10 +229,12 @@ async function main() {
       attack_chains: resolve(args.chains),
     },
     residual_gaps: summary.residual_gaps ?? [],
+    focus_area_exceptions: summary.focus_area_exceptions ?? [],
     findings: findings.sort((left, right) => right.cvss.base_score - left.cvss.base_score || left.finding_id.localeCompare(right.finding_id)),
     excluded_findings: excludedFindings.sort((left, right) => left.finding_id.localeCompare(right.finding_id)),
     chains: acceptedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),
     rejected_chains: rejectedChains.sort((left, right) => left.chain_id.localeCompare(right.chain_id)),
+    delivery_gaps: [...findings, ...excludedFindings].flatMap(row => row.dossier.missing_sections.map(reason => ({ finding_id: row.finding_id, reason }))),
   };
   if (integrated) {
     model.runtime_testing = {
@@ -230,6 +247,9 @@ async function main() {
         outcome: packet.outcome, cleanup_status: packet.cleanup_status, summary: packet.summary ?? packet.reason,
         gaps: packet.result?.gaps ?? [], changes: packet.result?.changes ?? [] })),
       runtime_only_findings: structuredClone(routing.runtime_findings),
+      details: { evidence: structuredClone(quickResultSet), reviews: roles.map(({ role, manifest, artifact }) => ({ role,
+        session_id: manifest.agent_session_id, findings: structuredClone(manifest.runtime_findings ?? []),
+        source: source(artifact, manifest.artifact_digest, "/runtime_findings") })) },
     };
   }
   model.manifest_digest = finalReportModelDigest(model);

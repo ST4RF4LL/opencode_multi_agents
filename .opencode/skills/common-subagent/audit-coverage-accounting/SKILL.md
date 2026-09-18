@@ -198,10 +198,17 @@ node "$AUDIT_TODO_CLI" claim --todo "$AUDIT_TODO_PATH" --packets 4 --items 12
 Each specialist receives only one returned packet. It writes its normal
 vulnerability-mining report and one JSON handoff under
 `reports/audit-todo/<audit-id>/<packet-id>.json`. The handoff lists each packet
-item exactly once as `DONE` (existing relative `report_path`, optional finding
-IDs) or `GAP` (concise reason). The orchestrator checks only its shape and the
-referenced report file, then records it with `audit-todo complete`. It must not
-review source code or decide whether a finding is true while doing that.
+item exactly once as `DONE` (three digest-bound lens reports) or `GAP`
+(non-empty reason). Before submitting, run the read-only `audit-todo check`
+with `--todo`, `--packet`, `--handoff`, and `--reports-root`. The checker lists
+missing and invalid Focus Area assignments; the specialist must correct them.
+The orchestrator then records the handoff with `audit-todo complete`, which
+repeats the same checks. It does not decide whether a finding is true.
+
+Special-case skips use `status=GAP`, `gap_kind=SKIPPED`, and a non-empty Chinese
+`gap_reason` on each skipped item. Missing results are never automatically
+skipped. Preserve Area/assignment ownership and the skip reason in the report.
+Watchdog reminders do not reopen accepted DONE/GAP items or authorize nested work.
 
 If a packet fails before a valid handoff, the orchestrator calls
 `audit-todo fail`; recoverable failures return to `PENDING`, while an exhausted
@@ -212,7 +219,8 @@ report. The final completion gate is: no PENDING/RUNNING/FAILED item, accepted
 handoffs for every claimed packet, and an existing final Chinese Markdown
 report.
 
-Specialists never read, mutate, or infer queue state. They own source analysis
+Specialists may run the read-only packet check above, but never mutate queue
+state or claim other work. They own source analysis
 and findings; the orchestrator owns dispatch and recording only. Result states
 inside reports remain independently `NO_FINDING`, `FINDING`, or
 `INCONCLUSIVE`; a `DONE` task never closes a different type, interface, or
@@ -349,10 +357,20 @@ node .opencode/skills/common-subagent/audit-coverage-accounting/scripts/verify-f
 ```
 
 The model retains all non-admitted finding decisions and contradicted chains as
-residual outcomes. Only `SUPPORTED_STATIC`/`SUPPORTED_RUNTIME` findings and
+residual outcomes. Only routed `TRUE_POSITIVE` findings and
 adjudication-bound `CONDITIONAL`/supported chains appear as final results.
-`verify-final-report.mjs` rejects any byte drift, `CONFIRMED` label, or direct
-reference to an unadjudicated raw attack-chain artifact.
+`verify-final-report.mjs` rejects any byte drift. Legacy reports also reject the
+`CONFIRMED` label and raw chain-agent filenames. Detailed reports may quote
+historical evidence states and the validated chain manifest's provenance path;
+their final conclusions remain bound to the validated routing verdict. The
+builder validates the chain manifest against adjudication and routing before
+accepting it; the renderer cannot add results outside that model.
+
+## 完整审计证据报告
+
+新模型声明 `detail_contract=audit-report-details.v1`。每项 dossier 保留原始 Finding、独立裁决、三方完整复核、当前候选绑定的运行包、来源路径与摘要。正文展开事实、语义路径、防护与反证、实际验证过程及结论限制；修复与回归标准作为后续处置。误报/证据不足项同样展开处置依据，运行附录保留环境接触和未映射源码的测试记录。
+
+Coverage Plan 声明 `finding_detail_contract=finding-details.v1` 时，必须在 TODO 分派中保留并验收每项候选的内容扩展。内容缺口、覆盖缺口、运行状态分别呈现；不能以缺少环境为由阻塞静态报告，也不能为了补齐版面伪造运行或代码证据。旧任务缺失内容显示为 delivery_gaps，已封存制品不修改。详见 `docs/audit-deliverable-format-redesign.md`。
 
 If there is any local `GAP`, use `--mode policy-final`; the generated Markdown
 must preserve all gaps. Use `--mode final` only when every local item is DONE.

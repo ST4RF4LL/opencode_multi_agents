@@ -90,3 +90,7 @@ Partition the complete base-owner and AI-overlay file/function/catalog universes
 Do not execute target code, query a live target, expose secrets, or silently treat unknown deployed controls as absent.
 
 For new source scopes, use the Recon scope.ai_routing selection (also exposed in threat-routing-index) to partition AI files/functions. AI-negative excluded files receive no deep AI assignment; selected dependency and sample files do. UNKNOWN remains an explicit gap and cannot become PASS through omission. Historical scopes without the new policy retain their frozen coverage requirements.
+
+## 审计证据交付
+
+威胁描述与分派理由使用中文。每个 Focus Area 的已有说明字段应回答：保护哪个资产/边界、攻击主体需要什么能力、需要验证哪些假设、应查哪些入口与控制、什么证据能支持或反驳假设。使用稳定的 threat/entry-point/assignment 引用串联，保留未证明的前提和明确降优先级的原因，使后续审计能说明为何检查及如何得出结论。

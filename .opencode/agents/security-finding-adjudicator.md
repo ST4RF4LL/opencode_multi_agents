@@ -109,3 +109,7 @@ it, contact a target, or promote a future result inside this workflow.
   evidence to the later chain/synthesis stage.
 - Do not call any dynamic validator; preliminary supported decisions are
   routed later by `vulnerability-validator`.
+
+## 交付内容完整性
+
+交付 semantic_proof.path.steps 时逐步说明输入传播、控制判断、框架/API语义和安全效果；guards 的 local/inherited/global/deployment 各层分别列出实际检查证据，counterclaim 给出最强反例及采纳/反驳依据。候选的 report_details 是待审查主张，不是裁决理由的替代品。不要只复述“静态已证明”。

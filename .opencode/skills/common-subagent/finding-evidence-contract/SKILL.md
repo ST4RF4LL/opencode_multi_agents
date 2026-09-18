@@ -46,6 +46,14 @@ For coverage-track findings, `classification.discovery_track` is `coverage`, `ro
 
 Use `scripts/finding-contract.mjs` as the shared implementation. Verifiers and local packet workflows must call the same functions rather than duplicating field checks.
 
+## 可复核的漏洞交付内容
+
+当工作包声明 `finding_detail_contract=finding-details.v1`，每个候选 Finding v2 必须增加 `report_details`。保持原 Finding ID 和证据摘要绑定，不创建另一份脱离证据的报告结论。具体格式见 `references/finding-report-details.md`，检查实现为 `scripts/finding-report-details.mjs`。交付门禁会拒绝缺少成因、证据路径、复现设计、修复步骤和安全/正常功能回归标准的候选。
+
+`reproduction` 永远是未执行的复现设计，必须声明 `execution_status=NOT_RUN`；真实执行记录只能来自已经授权并封存的运行证据。不要将预期漏洞现象写成实际观察，不执行为编写报告而设计的请求。代码片段只引用已检查的事实位置，移除凭据与个人数据；无法提供时声明 `code_context.state=UNAVAILABLE` 并说明原因。
+
+所有说明使用中文。修复动作必须指向具体代码/配置位置，并解释恢复哪项安全约束；回归标准同时包含攻击输入被拒绝和合法功能仍可用。禁止用“加强校验”“参考最佳实践”代替具体步骤。
+
 ## External runtime-validation handoff
 
 Use `scripts/external-runtime-validation-contract.mjs` only to export or verify
