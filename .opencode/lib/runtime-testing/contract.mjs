@@ -21,12 +21,48 @@ export function seal(value) { return { ...value, artifact_digest: digest(value) 
 export function fail(code, message = code) { return Object.assign(new Error(message), { code, statusCode: 422 }); }
 export function check(value, code, message) { if (!value) throw fail(code, message); }
 export function text(value) { return typeof value === "string" && value.trim().length > 0; }
-export function loopback(value) {
+export function httpUrl(value) {
   try {
+    if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim()) || /[\s\\]/u.test(value.trim())) return null;
     const url = new URL(value);
-    if (!["http:", "https:"].includes(url.protocol) || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.username || url.password) return null;
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
     return url;
   } catch { return null; }
+}
+
+// Only environment input accepts a missing scheme; browser requests remain absolute.
+function environmentUrl(value) {
+  if (typeof value !== "string") return null;
+  const input = value.trim();
+  const shorthand = /^(?:\[[0-9a-f:.]+\]|[a-z0-9][a-z0-9.-]*)(?::\d+)?(?:[/?#]|$)/i.test(input);
+  return httpUrl(shorthand ? `http://${input}` : input);
+}
+
+function parseEnvironment(context) {
+  try { return { environment: JSON.parse(context) }; } catch {
+    const input = context.trim();
+    // Broken structured input must not fall back to a partial URL/account match.
+    if (input.startsWith("{") || input.startsWith("[") && !/^\[[0-9a-f:.]+\](?::|\/|$)/i.test(input)) return { reason: "ENVIRONMENT_FORMAT_INVALID" };
+    const field = labels => context.match(new RegExp(`^[\\t ]*(?:[-*][\\t ]+)?(?:\\*\\*)?(?:${labels})(?:\\*\\*)?[\\t ]*[:：][\\t ]*([^\\r\\n]*)$`, "mi"))?.[1]?.trim();
+    const primary = field("url|target_base_url|base_url|地址|环境地址|测试地址|测试环境地址|目标地址|应用地址|入口地址");
+    const clean = value => value.replace(/^[<\("'`]+|[>\)"'`，；。]+$/g, "");
+    let targets;
+    if (primary != null) targets = [environmentUrl(clean(primary.split(/[\s,，;；。]/u)[0]))];
+    else {
+      const candidates = [...context.matchAll(/(?:[a-z][a-z0-9+.-]*:\/\/[^\s<>"'`,，;；。)]+|(?<![\w.@:/-])(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:.]+\]|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d+(?:[/?#][^\s<>"'`,，;；。)]*)?)/gi)].map(match => match[0]);
+      if (!candidates.length) {
+        const direct = environmentUrl(clean(input));
+        if (!direct) return { reason: "ENVIRONMENT_URL_MISSING" };
+        targets = [direct];
+      } else targets = candidates.map(value => environmentUrl(clean(value)));
+    }
+    if (targets.some(target => !target)) return { reason: "ENVIRONMENT_URL_INVALID" };
+    if (new Set(targets.map(target => target.origin)).size > 1) return { reason: "ENVIRONMENT_URL_AMBIGUOUS" };
+    const username = field("username|用户名|用户|测试账号|账号");
+    return { environment: { url: targets[0].href,
+      accounts: username ? [{ id: "shared", username, password: field("password|测试密码|密码") }] : [],
+      instructions: context, test_data_scope: field("test_data_scope|测试数据范围"), cleanup_instructions: field("cleanup_instructions|清理说明") } };
+  }
 }
 
 // A protocol must be selected explicitly; old quick opt-ins never grant new capabilities.
@@ -51,19 +87,15 @@ export function authorize({ auditId, selected, enabled, context = "", sourceBind
   const skipped = reason => ({ public: seal({ ...base, status: "SKIPPED", reason }), private: null });
   if (typeof context !== "string" || !context.trim()) return skipped("ENVIRONMENT_NOT_PROVIDED");
   if (selected?.protocol !== PROTOCOL || enabled !== true || selected.explicit_authorization !== true) return skipped("DYNAMIC_NOT_AUTHORIZED");
-  let environment;
-  try { environment = JSON.parse(context); } catch {
-    const urls = [...context.matchAll(/https?:\/\/[^\s<>"'`]+/g)].map(match => match[0]);
-    const field = labels => context.match(new RegExp(`^(?:${labels})\\s*[:：]\\s*(.+)$`, "mi"))?.[1]?.trim();
-    environment = { url: urls.length === 1 ? urls[0] : null,
-      accounts: field("username|用户名|测试账号|账号") ? [{ id: "shared", username: field("username|用户名|测试账号|账号"), password: field("password|测试密码|密码") }] : [],
-      instructions: context, test_data_scope: field("test_data_scope|测试数据范围"), cleanup_instructions: field("cleanup_instructions|清理说明") };
-  }
-  if (!environment || typeof environment !== "object" || Array.isArray(environment)) return skipped("ENVIRONMENT_INVALID");
-  const target = loopback(environment.url ?? environment.target_base_url);
-  if (!target) return skipped("ENVIRONMENT_INVALID");
+  const { environment, reason } = parseEnvironment(context);
+  if (reason) return skipped(reason);
+  if (!environment || typeof environment !== "object" || Array.isArray(environment)) return skipped("ENVIRONMENT_FORMAT_INVALID");
+  const targetValue = environment.url ?? environment.target_base_url;
+  if (!text(targetValue)) return skipped("ENVIRONMENT_URL_MISSING");
+  const target = environmentUrl(targetValue);
+  if (!target) return skipped("ENVIRONMENT_URL_INVALID");
   const origins = environment.origins ?? [target.origin];
-  if (!Array.isArray(origins) || origins.length < 1 || origins.length > 8 || origins.some(origin => loopback(origin)?.origin !== origin) || !origins.includes(target.origin)) return skipped("ENVIRONMENT_INVALID");
+  if (!Array.isArray(origins) || origins.length < 1 || origins.length > 8 || origins.some(origin => httpUrl(origin)?.origin !== origin) || !origins.includes(target.origin)) return skipped("ENVIRONMENT_ORIGINS_INVALID");
   const accounts = environment.accounts ?? [];
   const identityMode = selected.identity_mode ?? "anonymous";
   if (environment.requires_login === true && identityMode === "anonymous") return skipped("REQUIRED_IDENTITIES_MISSING");

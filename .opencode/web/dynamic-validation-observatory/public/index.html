@@ -102,7 +102,7 @@
             <div id="runtime-grid" class="metric-grid"></div>
             <div id="capability-grid" class="capability-grid"></div>
             <article class="panel environment-panel"><div class="section-title"><div><p class="eyebrow">COMPONENT HEALTH</p><h2>组件健康</h2></div><button class="text-button" id="refresh-environment">重新探测</button></div><div id="environment-table" class="data-table"></div></article>
-            <article class="panel boundary-panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>审计项目由操作员指定工作台所在机器上的绝对目录，并在服务端规范化、校验和持久登记。</li><li>目标源码目录与工作台 OpenCode Agent/MCP 配置相互隔离。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>新建任务按所选参与方式、动作和总预算执行环境接触、中期测试与按需确认；未提供有效环境时自动跳过。人工补充验证需逐次授权并保存独立结果，所有动态访问只允许 loopback。</li></ul></article>
+            <article class="panel boundary-panel"><div class="section-title"><div><p class="eyebrow">BOUNDARIES</p><h2>平台安全边界</h2></div></div><ul class="boundary-list"><li>服务仅监听 localhost / 127.0.0.1 / [::1]。</li><li>审计项目由操作员指定工作台所在机器上的绝对目录，并在服务端规范化、校验和持久登记。</li><li>目标源码目录与工作台 OpenCode Agent/MCP 配置相互隔离。</li><li>OpenCode 通过参数数组与固定 orchestrator prompt 启动，<code>shell=false</code>。</li><li>默认拒绝脏工作树和未 checkout 的目标 ref。</li><li>新建任务按所选参与方式、动作和总预算执行环境接触、中期测试与按需确认；未提供有效环境时自动跳过。贯穿式测试由用户确认环境并授权目标，不根据公网或内网分类拒绝。人工补充验证需逐次授权并保存独立结果，沿用原有 localhost 契约。</li></ul></article>
           </section>
 
           <section id="view-settings" class="view">
@@ -154,15 +154,15 @@
           </section>
           <section class="audit-context-option sensitive" data-context-option>
             <div class="audit-context-heading">
-              <div><strong>测试环境信息</strong><small>单账号可分行填写 URL、账号和密码；多账号使用 JSON，并说明登录与清理方式。</small></div>
+              <div><strong>测试环境信息</strong><small>由你确认这是已授权的测试环境，支持 IP 或域名，不区分公网、内网。单账号分行填写地址、账号和密码；多账号使用 JSON。</small></div>
               <label class="enable-switch"><input name="test_environment_enabled" type="checkbox" aria-controls="test-environment-context"><span>ENABLE</span></label>
             </div>
-            <label class="context-textarea" for="test-environment-context">环境上下文<textarea id="test-environment-context" name="test_environment_context" maxlength="24000" autocomplete="off" spellcheck="false" placeholder="URL: http://127.0.0.1:8080&#10;测试账号: ...&#10;测试密码: ...&#10;登录/数据清理说明: ..." disabled></textarea></label>
+            <label class="context-textarea" for="test-environment-context">环境上下文<textarea id="test-environment-context" name="test_environment_context" maxlength="24000" autocomplete="off" spellcheck="false" placeholder="地址：test.example:8080&#10;测试账号: ...&#10;测试密码: ...&#10;登录/数据清理说明: ..." disabled></textarea></label>
             <div class="form-row"><label>动态参与方式<select name="runtime_mode"><option value="INTEGRATED_TESTING">环境接触 + 中期探索 + 按需确认</option><option value="CONTACT_ONLY">仅环境接触</option><option value="TARGETED_CONFIRMATION">环境接触 + 定向确认</option></select></label><label>总预算（分钟，含清理预留）<input name="runtime_budget" type="number" value="60" min="10" max="240"></label></div>
             <label>测试身份<select name="runtime_identity"><option value="anonymous">匿名访问（不需要登录）</option><option value="shared">一个授权测试账号</option><option value="distinct">多个隔离测试账号</option></select></label>
             <label><input name="runtime_test_input" type="checkbox">允许使用无害标记测试应用输入</label>
             <label><input name="runtime_test_mutation" type="checkbox">允许在指定测试数据范围内创建并清理测试记录（须提供 test_data_scope 和 cleanup_instructions）</label>
-            <p class="context-note">启用环境开关即授权所选参与方式与动作，仅限明确提供的 loopback 地址。未启用、未填写、地址无效或缺少所选身份时，自动跳过全部动态环节，不启动浏览器，静态审计继续。多账号使用 JSON：url、revision、accounts（id/username/password/role）、login_instructions、cleanup_instructions。环境按敏感上下文保存，不在 API 回显。动态支持证据仍进入独立三方复核，不再追加固定 180 秒验证批次。</p>
+            <p class="context-note">启用环境开关即确认目标为你有权测试的环境，并授权所选参与方式与动作。系统不判断地址属于公网还是内网，仅校验地址格式并限制访问已授权的目标。支持 IP:端口、域名:端口，省略协议默认 HTTP，HTTPS 须显式填写。有账号时请选择对应测试身份。未启用、未填写、地址无效或缺少所选身份时，自动跳过全部动态环节，不启动浏览器，静态审计继续。多账号使用 JSON：url、revision、accounts（id/username/password/role）、login_instructions、cleanup_instructions；跨主机或端口访问须在 origins 中明确列出。环境按敏感上下文保存，不在 API 回显。动态支持证据仍进入独立三方复核，不再追加固定 180 秒验证批次。</p>
           </section>
         </div>
         <div id="audit-form-error" class="notice error" hidden></div>

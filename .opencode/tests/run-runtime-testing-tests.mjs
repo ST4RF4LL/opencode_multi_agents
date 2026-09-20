@@ -5,13 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import http from "node:http";
+import { PassThrough, Readable } from "node:stream";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { PROTOCOL, authorize, selection, seal, digest, validatePacket, validateSubmission } from "../lib/runtime-testing/contract.mjs";
 import { RuntimeTestingController } from "../lib/runtime-testing/controller.mjs";
 import { RuntimeTestingService } from "../lib/runtime-testing/service.mjs";
-import { ChromeRuntimeBrowser, authorizedConnectTarget, pinnedLoopbackLookup, createOriginProxy } from "../lib/runtime-testing/browser.mjs";
+import { ChromeRuntimeBrowser, authorizedConnectTarget, targetLookup, createOriginProxy } from "../lib/runtime-testing/browser.mjs";
 import { verifyRuntimeEvidenceFiles, runtimeCandidates } from "../lib/runtime-testing/evidence.mjs";
 import { runtimeStageRegistry } from "../lib/runtime-testing/stage-registry.mjs";
 import { reportArtifactPath } from "../lib/runtime-testing/paths.mjs";
@@ -64,13 +65,65 @@ test("空环境及旧 opt-in 不启动控制服务、worker 或浏览器", async
 });
 
 test("非法目标、缺少身份和缺少持久化清理范围均自动跳过", () => {
-  for (const url of ["https://example.com", "http://service:8080", "file:///tmp/index.html", "http://user:pass@localhost:8080"]) assert.equal(grant({ context: JSON.stringify({ url }) }).public.status, "SKIPPED");
+  for (const url of ["file:///tmp/index.html", "ftp://test.example", "http://user:pass@localhost:8080", "http://host:99999", "http://host/a b", "http://host\\other"]) assert.equal(grant({ context: JSON.stringify({ url }) }).public.status, "SKIPPED");
   for (const context of ["{}", "null", "[]", "无法解析的环境", JSON.stringify({ url: "http://localhost:8080", origins: ["http://localhost:8081"] })]) assert.equal(grant({ context }).public.status, "SKIPPED");
   assert.equal(grant({ selected: { ...selected, identity_mode: "distinct" } }).public.reason, "REQUIRED_IDENTITIES_MISSING");
   assert.equal(grant({ selected: { ...selected, allowed_actions: [...selected.allowed_actions, "test_mutation"] } }).public.reason, "REQUIRED_MUTATION_SCOPE_MISSING");
   assert.equal(grant({ context: JSON.stringify({ url: "http://localhost:8080", requires_login: true }) }).public.status, "SKIPPED");
   const first = grant(); const second = grant({ context: JSON.stringify({ url: "http://127.0.0.1:8080", revision: "fixture-2" }) });
   assert.notEqual(first.public.artifact_digest, second.public.artifact_digest);
+});
+
+test("测试环境按用户授权接受任意网络地址，兼容中文字段和无协议地址", () => {
+  const cases = [
+    ["地址：192.0.2.10:31943，用户说明见下文", "http://192.0.2.10:31943/"],
+    ["192.0.2.10:31943", "http://192.0.2.10:31943/"],
+    ["URL: https://test.example:8443/app", "https://test.example:8443/app"],
+    ["地址：http://10.0.0.8:8080", "http://10.0.0.8:8080/"],
+    ["地址：test.internal:8080", "http://test.internal:8080/"],
+    ["URL: http://service:8080", "http://service:8080/"],
+    ["地址：[2001:db8::1]:8080", "http://[2001:db8::1]:8080/"],
+    ["[::1]:8080", "http://[::1]:8080/"],
+    ["localhost:8080", "http://localhost:8080/"],
+    ["- **URL**: `http://test.example:8080`", "http://test.example:8080/"],
+    ["入口 http://test.example:8080，登录 http://test.example:8080/login", "http://test.example:8080/"],
+    ["URL: http://test.example:8080\n登录：http://test.example:8080/login\n参考：https://docs.example/guide", "http://test.example:8080/"],
+    [JSON.stringify({ target_base_url: "test.example:8080" }), "http://test.example:8080/"],
+  ];
+  for (const [context, url] of cases) {
+    const auth = grant({ context }); assert.equal(auth.public.status, "AUTHORIZED", context);
+    assert.equal(auth.private.url, url); assert.deepEqual(auth.public.origins, [new URL(url).origin]);
+  }
+  const auth = grant({ context: JSON.stringify({ url: "https://test.example/app", origins: ["https://test.example", "https://login.test.example"] }) });
+  assert.equal(auth.public.status, "AUTHORIZED"); assert.deepEqual(auth.public.origins, ["https://login.test.example", "https://test.example"]);
+  assert.equal(grant({ enabled: false, context: cases[0][0] }).public.reason, "DYNAMIC_NOT_AUTHORIZED");
+  assert.equal(grant({ selected: { ...selected, explicit_authorization: false }, context: cases[0][0] }).public.reason, "DYNAMIC_NOT_AUTHORIZED");
+});
+
+test("远程目标仍校验身份并保持账号私有，解析失败展示具体原因", () => {
+  const context = "地址：192.0.2.10:31943\n测试账号：fixture-user\n测试密码：fixture-password";
+  const auth = grant({ selected: { ...selected, identity_mode: "shared" }, context });
+  assert.equal(auth.public.status, "AUTHORIZED");
+  assert.deepEqual(auth.private.accounts, [{ id: "shared", username: "fixture-user", password: "fixture-password" }]);
+  assert.doesNotMatch(JSON.stringify(auth.public), /fixture-user|fixture-password/);
+  assert.equal(grant({ context }).public.reason, "IDENTITY_SCOPE_MISMATCH");
+  assert.equal(grant({ selected: { ...selected, identity_mode: "shared" }, context: "地址：192.0.2.10:31943\n用户：fixture-user" }).public.reason, "REQUIRED_IDENTITIES_MISSING");
+  assert.equal(grant({ selected: { ...selected, identity_mode: "shared" }, context: "地址：192.0.2.10:31943\n用户：\n密码：fixture-password" }).public.reason, "REQUIRED_IDENTITIES_MISSING");
+  const cases = [
+    ["没有地址", "ENVIRONMENT_URL_MISSING"],
+    ["URL: http://test.example:99999", "ENVIRONMENT_URL_INVALID"],
+    ["地址：无效地址\n说明：http://test.example", "ENVIRONMENT_URL_INVALID"],
+    ['{"url":"http://test.example",', "ENVIRONMENT_FORMAT_INVALID"],
+    ["[]", "ENVIRONMENT_FORMAT_INVALID"],
+    ["首页：http://test.example\n登录：https://login.test.example", "ENVIRONMENT_URL_AMBIGUOUS"],
+    [JSON.stringify({ url: "http://test.example", origins: ["http://other.example"] }), "ENVIRONMENT_ORIGINS_INVALID"],
+    [JSON.stringify({ url: "http://test.example", origins: ["http://test.example/path"] }), "ENVIRONMENT_ORIGINS_INVALID"],
+  ];
+  for (const [value, reason] of cases) {
+    const result = grant({ context: value }); assert.equal(result.public.status, "SKIPPED");
+    assert.equal(result.public.reason, reason, value); assert.equal(result.private, null);
+    assert.deepEqual(result.public.origins, []);
+  }
 });
 
 test("阶段契约按显式协议分流，旧注册表保持原摘要", async () => {
@@ -167,6 +220,21 @@ test("跨审计与 loopback 别名不能并发占用同一环境", async t => {
   } finally { for (const service of services) await service.shutdown(); }
 });
 
+test("不同远程主机同端口不互锁，同一授权目标仍互斥且不启动浏览器", async t => {
+  const root = await temporary(t); const services = []; let browserCalls = 0;
+  try {
+    for (const [index, host] of ["192.0.2.10", "198.51.100.10", "localhost", "192.0.2.10"].entries()) {
+      const auth = grant({ auditId: `audit-remote-lock-${index}`, context: JSON.stringify({ url: `http://${host}:8080` }) });
+      const service = new RuntimeTestingService({ root: join(root, `reports-${index}`), privateRoot: join(root, "state", `audit-${index}`, "runtime-testing"), authorization: auth.public,
+        browserFactory: async () => { browserCalls++; throw new Error("不得启动浏览器"); } });
+      services.push(service); await service.start();
+    }
+    for (const service of services.slice(0, 3)) assert.notEqual(service.server, null);
+    assert.equal(services[3].server, null); assert.equal(services[3].controller.state.reason, "ENVIRONMENT_ALREADY_LEASED");
+    assert.equal(browserCalls, 0);
+  } finally { for (const service of services) await service.shutdown(); }
+});
+
 test("服务启动通知失败会关闭 API 并释放未使用的环境租约", async t => {
   const root = await temporary(t); const auth = grant();
   const failed = new RuntimeTestingService({ root: join(root, "failed"), privateRoot: join(root, "state", "failed", "runtime-testing"),
@@ -236,8 +304,8 @@ test("证据汇总不能更改工作包的 finding、阶段或实际证据归属
   await assert.rejects(verifyRuntimeEvidenceFiles(path), /evidence-invalid/);
 });
 
-test("受控 MCP 工具拒绝远程导航和任意脚本，各身份独立且复用自身会话", async () => {
-  const auth = grant({ selected: { ...selected, identity_mode: "distinct" }, context: JSON.stringify({ url: "http://127.0.0.1:8080", accounts: [
+test("受控 MCP 接受已授权远程导航，拒绝其他目标和任意脚本，各身份独立", async () => {
+  const auth = grant({ selected: { ...selected, identity_mode: "distinct" }, context: JSON.stringify({ url: "http://test.example:8080", accounts: [
     { id: "attacker", username: "test-a", password: "private-a" }, { id: "victim", username: "test-v", password: "private-v" },
   ] }) });
   const created = []; const calls = []; const closed = [];
@@ -247,28 +315,36 @@ test("受控 MCP 工具拒绝远程导航和任意脚本，各身份独立且复
   } });
   try {
     const plan = packet(auth.public);
+    await assert.rejects(browser.call("navigate_page", { identity_id: "attacker", url: "http://test.example:8081" }, plan), /origin-not-authorized/);
     await assert.rejects(browser.call("navigate_page", { identity_id: "attacker", url: "http://127.0.0.1:8081" }, plan), /origin-not-authorized/);
     await assert.rejects(browser.call("navigate_page", { identity_id: "attacker", url: "https://example.com" }, plan), /origin-not-authorized/);
     await assert.rejects(browser.call("evaluate_script", { identity_id: "attacker", function: "() => 1" }, plan), /tool-not-authorized/);
     assert.deepEqual(created, []);
     const available = await browser.tools(plan); assert.equal(available.some(tool => tool.name === "evaluate_script"), false);
-    for (const id of ["attacker", "victim", "attacker"]) await browser.call("navigate_page", { identity_id: id, url: "http://127.0.0.1:8080" }, plan);
+    for (const id of ["attacker", "victim", "attacker"]) await browser.call("navigate_page", { identity_id: id, url: "http://test.example:8080" }, plan);
     assert.deepEqual(created, ["attacker", "victim"]); assert.equal(calls.length, 3);
   } finally { await browser.close(); }
   assert.deepEqual(closed.sort(), ["attacker", "victim"]);
 });
 
 test("HTTPS 默认端口和 IPv6 CONNECT 正确匹配，非法 authority 不接触目标", () => {
-  const origins = ["https://localhost", "https://127.0.0.1:8443", "https://[::1]"];
+  const origins = ["https://localhost", "https://127.0.0.1:8443", "https://[::1]", "https://test.example", "https://192.0.2.10:8443", "https://[2001:db8::1]:8443"];
   assert.deepEqual(authorizedConnectTarget("localhost:443", origins), { host: "127.0.0.1", port: 443 });
   assert.deepEqual(authorizedConnectTarget("[::1]:443", origins), { host: "::1", port: 443 });
   assert.deepEqual(authorizedConnectTarget("127.0.0.1:8443", origins), { host: "127.0.0.1", port: 8443 });
+  assert.deepEqual(authorizedConnectTarget("test.example:443", origins), { host: "test.example", port: 443 });
+  assert.deepEqual(authorizedConnectTarget("192.0.2.10:8443", origins), { host: "192.0.2.10", port: 8443 });
+  assert.deepEqual(authorizedConnectTarget("[2001:db8::1]:8443", origins), { host: "2001:db8::1", port: 8443 });
   for (const authority of ["localhost:444", "localhost:443/path", "localhost:443#fragment", "user@localhost:443", "example.com:443", "localhost", "127.1:443"]) assert.equal(authorizedConnectTarget(authority, origins), null);
 });
 
-test("固定 loopback 解析兼容 Node 的单地址和 all 查询协议", () => {
-  pinnedLoopbackLookup("localhost", { all: true }, (error, addresses) => { assert.equal(error, null); assert.deepEqual(addresses, [{ address: "127.0.0.1", family: 4 }]); });
-  pinnedLoopbackLookup("localhost", {}, (error, address, family) => { assert.equal(error, null); assert.equal(address, "127.0.0.1"); assert.equal(family, 4); });
+test("只有 localhost 固定到本机，远程 IP 保持实际地址且不发 DNS 请求", async () => {
+  targetLookup("localhost", { all: true }, (error, addresses) => { assert.equal(error, null); assert.deepEqual(addresses, [{ address: "127.0.0.1", family: 4 }]); });
+  targetLookup("localhost", {}, (error, address, family) => { assert.equal(error, null); assert.equal(address, "127.0.0.1"); assert.equal(family, 4); });
+  await new Promise((resolve, reject) => targetLookup("192.0.2.10", { all: true }, (error, addresses) => {
+    if (error) return reject(error);
+    try { assert.deepEqual(addresses, [{ address: "192.0.2.10", family: 4 }]); resolve(); } catch (failure) { reject(failure); }
+  }));
 });
 
 test("HTTP 代理能访问本用例的授权伪服务，其他 origin 被拒绝", async () => {
@@ -290,6 +366,36 @@ test("HTTP 代理能访问本用例的授权伪服务，其他 origin 被拒绝"
   } finally {
     await proxy?.close(); target.closeAllConnections(); await new Promise(resolve => target.close(resolve));
   }
+});
+
+test("HTTP 代理向授权远程地址转发且拒绝其他 origin；上游使用替身", async t => {
+  const originalRequest = http.request; const forwarded = [];
+  t.mock.method(http, "request", (url, options, receive) => {
+    forwarded.push({ url, options });
+    const upstream = new PassThrough();
+    upstream.on("finish", () => {
+      const reply = Readable.from(["fixture-response"]); reply.statusCode = 200; reply.headers = {};
+      receive(reply);
+    });
+    return upstream;
+  });
+  const origin = "http://192.0.2.10:31943";
+  const proxy = await createOriginProxy([origin]);
+  const request = path => new Promise((resolve, reject) => {
+    const pending = originalRequest(proxy.url, { path, headers: { "proxy-authorization": "fixture-secret" } }, response => {
+      let body = ""; response.setEncoding("utf8"); response.on("data", chunk => { body += chunk; });
+      response.on("end", () => resolve({ status: response.statusCode, body }));
+    });
+    pending.on("error", reject); pending.end();
+  });
+  try {
+    assert.deepEqual(await request(`${origin}/login`), { status: 200, body: "fixture-response" });
+    for (const other of ["http://192.0.2.10:31944", "http://198.51.100.10:31943", "http://localhost:31943"]) assert.equal((await request(other)).status, 403);
+    assert.equal(forwarded.length, 1); assert.equal(forwarded[0].url.href, `${origin}/login`);
+    assert.equal(forwarded[0].options.headers.host, "192.0.2.10:31943");
+    assert.equal(forwarded[0].options.headers["proxy-authorization"], undefined);
+    assert.equal(forwarded[0].options.lookup, targetLookup);
+  } finally { await proxy.close(); }
 });
 
 test("并发工具发现只初始化一次身份，关闭后迟到的 client 不再连接", async () => {

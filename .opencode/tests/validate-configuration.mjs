@@ -415,7 +415,8 @@ async function main() {
   assert(dynamicValidatorText.includes("DOM_PROBE_ONLY") && dynamicValidatorText.includes("STORED_CROSS_USER"), "dynamic validator must enforce XSS evidence levels");
   assert(rootAgentsText.includes("Never reset browser state by killing Chrome")
     && rootAgentsText.includes("stored XSS")
-    && rootAgentsText.includes("localhost"), "root AGENTS.md lacks dynamic-validation safety boundaries");
+    && rootAgentsText.includes("do not infer authorization from public/private/loopback IP classification")
+    && rootAgentsText.includes("restrict requests to the explicitly authorized origins"), "root AGENTS.md lacks dynamic-validation safety boundaries");
   for (const agent of ["vulnerability-validator", "vulnerability-affirmative", "vulnerability-negative", "vulnerability-moderator"]) {
     assert(sameSet(mcpMap.agents[agent], []), `${agent} must not receive an MCP server`);
     const text = await readFile(join(OPENCODE, "agents", `${agent}.md`), "utf8");

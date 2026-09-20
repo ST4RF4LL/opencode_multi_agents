@@ -3,13 +3,15 @@ import https from "node:https";
 import net from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { check, loopback } from "./contract.mjs";
+import { lookup as dnsLookup } from "node:dns";
+import { check, httpUrl } from "./contract.mjs";
 
 const READ = new Set(["list_pages", "select_page", "take_snapshot", "list_console_messages", "get_console_message", "list_network_requests", "get_network_request"]);
 const NAVIGATE = new Set(["navigate_page", "new_page", "close_page"]);
 const INTERACT = new Set(["click", "fill", "fill_form", "press_key", "hover", "handle_dialog"]);
 
-export function pinnedLoopbackLookup(_hostname, options, callback) {
+export function targetLookup(hostname, options, callback) {
+  if (hostname.toLowerCase() !== "localhost") return dnsLookup(hostname, options, callback);
   // Node's automatic family selection requests an array when options.all is true.
   if (options?.all) callback(null, [{ address: "127.0.0.1", family: 4 }]);
   else callback(null, "127.0.0.1", 4);
@@ -17,26 +19,26 @@ export function pinnedLoopbackLookup(_hostname, options, callback) {
 
 export function authorizedConnectTarget(authority, origins) {
   if (typeof authority !== "string") return null;
-  const url = loopback(`https://${authority}`);
+  const url = httpUrl(`https://${authority}`);
   if (!url || !origins.includes(url.origin)) return null;
   const port = Number(url.port || 443);
   // URL.host omits :443; CONNECT carries an explicit port even for that default.
   if (authority.toLowerCase() !== `${url.hostname}:${port}`) return null;
-  return { host: url.hostname === "[::1]" ? "::1" : "127.0.0.1", port };
+  return { host: url.hostname === "localhost" ? "127.0.0.1" : url.hostname.replace(/^\[|\]$/g, ""), port };
 }
 
 // Chromium must send even loopback requests through this exact-origin gate.
-// External redirects/subresources and other local ports are rejected here too.
+// Redirects/subresources outside the operator-authorized origins are rejected.
 export async function createOriginProxy(origins) {
   const allowed = new Set(origins); const sockets = new Set();
   const track = socket => { sockets.add(socket); socket.on("close", () => sockets.delete(socket)); return socket; };
-  const permitted = value => { const url = loopback(value); return url && allowed.has(url.origin) ? url : null; };
+  const permitted = value => { const url = httpUrl(value); return url && allowed.has(url.origin) ? url : null; };
   const server = http.createServer((request, response) => {
     const url = permitted(request.url);
     if (!url) { response.writeHead(403).end("Origin not authorized"); return; }
     const headers = { ...request.headers, host: url.host }; delete headers["proxy-authorization"]; delete headers["proxy-connection"];
     const upstream = (url.protocol === "https:" ? https : http).request(url, { method: request.method, headers,
-      lookup: pinnedLoopbackLookup }, reply => {
+      lookup: targetLookup }, reply => {
       response.writeHead(reply.statusCode, reply.headers); reply.pipe(response);
     });
     upstream.on("socket", track); upstream.on("error", () => { if (!response.headersSent) response.writeHead(502); response.end(); });
@@ -113,7 +115,7 @@ export class ChromeRuntimeBrowser {
   }
   async call(name, args, packet) {
     check(this.allowed(name, packet) && packet.identity_ids.includes(args.identity_id), "browser-tool-not-authorized");
-    if (args.url != null) check(loopback(args.url) && this.authorization.origins.includes(new URL(args.url).origin), "browser-origin-not-authorized");
+    if (args.url != null) check(httpUrl(args.url) && this.authorization.origins.includes(new URL(args.url).origin), "browser-origin-not-authorized");
     // No arbitrary JS, raw CDP, file uploads/downloads, request interception, or global browser reset.
     check(!args.filePath && !args.file_path, "browser-file-operation-not-authorized");
     const session = await this.session(args.identity_id); const { identity_id, ...arguments_ } = args;

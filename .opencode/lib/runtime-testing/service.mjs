@@ -11,7 +11,11 @@ import { PROTOCOL, check, validatePacket } from "./contract.mjs";
 const originOwners = new Map();
 const gateway = fileURLToPath(new URL("./worker-mcp.mjs", import.meta.url));
 const workerInstructions = fileURLToPath(new URL("./worker-instructions.md", import.meta.url));
-const leaseKey = origin => { const url = new URL(origin); return `${url.protocol}//loopback:${url.port || (url.protocol === "https:" ? 443 : 80)}`; };
+const leaseKey = origin => {
+  const url = new URL(origin);
+  if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return `${url.protocol}//loopback:${url.port || (url.protocol === "https:" ? 443 : 80)}`;
+  return `origin:${url.origin}`;
+};
 
 export class RuntimeTestingService {
   constructor({ root, privateRoot, authorization, privateContext, command, environment, workspaceRoot, model, onChange = async () => {}, browserFactory, worker }) {

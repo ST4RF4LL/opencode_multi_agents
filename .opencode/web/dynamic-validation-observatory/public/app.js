@@ -568,7 +568,18 @@ function renderRuntimeTesting(audit) {
   const panel = element("section", "audit-diagnostics");
   const labels = { CONTACT: "前期环境接触", EXPLORE: "中期动态测试", CONFIRM: "按需确认", CLEANUP: "环境清理" };
   const states = { SKIPPED: "已跳过", NOT_SCHEDULED: "未调度", RUNNING: "执行中", COMPLETED: "已完成", FAILED: "失败", TIMED_OUT: "超时", BLOCKED: "不可用", QUARANTINED: "已隔离", CLOSED: "已封存", AUTHORIZED: "已授权", READY: "环境就绪", IN_USE: "使用中", CANCELLED: "已取消" };
-  const reasons = { ENVIRONMENT_NOT_PROVIDED: "未提供环境信息", DYNAMIC_NOT_AUTHORIZED: "未启用动态授权", ENVIRONMENT_INVALID: "环境地址无效或不在授权范围", REQUIRED_IDENTITIES_MISSING: "缺少必要测试账号", IDENTITY_SCOPE_MISMATCH: "账号与所选身份模式不一致", ENVIRONMENT_ALREADY_LEASED: "环境正被其他任务使用", ENVIRONMENT_LEASE_REQUIRES_REVIEW: "环境租约需要人工核对", PROCESS_RECOVERY_ENVIRONMENT_UNKNOWN: "恢复后环境状态不明", ENVIRONMENT_STATE_UNKNOWN: "环境状态不明", BROWSER_CLOSE_FAILED: "测试浏览器关闭失败" };
+  const reasons = {
+    ENVIRONMENT_NOT_PROVIDED: "未提供环境信息", DYNAMIC_NOT_AUTHORIZED: "未启用动态授权",
+    ENVIRONMENT_INVALID: "环境信息未通过创建任务时的校验；请使用当前版本新建任务",
+    ENVIRONMENT_FORMAT_INVALID: "环境 JSON 格式无效，须提供包含 url 的对象",
+    ENVIRONMENT_URL_MISSING: "未识别到目标地址；请填写 URL: http://主机:端口 或 地址：主机:端口",
+    ENVIRONMENT_URL_INVALID: "目标地址格式无效；须为 HTTP(S) 地址，账号密码请单独填写",
+    ENVIRONMENT_URL_AMBIGUOUS: "说明中包含多个不同目标；请用 URL: 指定主地址，其他授权地址写入 JSON origins",
+    ENVIRONMENT_ORIGINS_INVALID: "origins 须为完整 HTTP(S) origin 列表（仅协议、主机和端口），且包含主地址",
+    REQUIRED_IDENTITIES_MISSING: "缺少所选身份所需的测试账号或密码", IDENTITY_SCOPE_MISMATCH: "账号与所选身份模式不一致；填写账号时请选择登录身份",
+    REQUIRED_MUTATION_SCOPE_MISSING: "允许创建测试记录时须提供测试数据范围和清理说明",
+    ENVIRONMENT_ALREADY_LEASED: "环境正被其他任务使用", ENVIRONMENT_LEASE_REQUIRES_REVIEW: "环境租约需要人工核对", PROCESS_RECOVERY_ENVIRONMENT_UNKNOWN: "恢复后环境状态不明", ENVIRONMENT_STATE_UNKNOWN: "环境状态不明", BROWSER_CLOSE_FAILED: "测试浏览器关闭失败",
+  };
   panel.append(element("h3", "", "贯穿式运行测试"), element("p", "", value ? `${states[value.status] ?? value.status}${value.reason ? ` · ${reasons[value.reason] ?? value.reason}` : ""}` : "等待任务启动；环境未提供时自动跳过。"));
   if (!value) return panel;
   const list = element("ol", "stage-list");

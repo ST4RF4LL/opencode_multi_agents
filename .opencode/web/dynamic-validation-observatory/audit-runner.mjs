@@ -481,6 +481,7 @@ function privateContextPrompt(audit, contextPaths) {
   const environment = audit.private_context?.test_environment;
   if (audit.runtime_testing) {
     lines.push("本任务使用 runtime-testing.v1。环境只由运行测试控制器读取。缺少或无效环境、开关关闭、身份不足时所有动态环节 SKIPPED，不询问、不等待、不启动浏览器，静态继续。",
+      "测试环境由用户自行判断并显式授权，不根据公网、内网或本机地址分类拒绝；运行测试仅访问冻结授权中的 HTTP(S) origins。",
       "前期 CONTACT 已由平台与 Recon 并行调度；Threat/Plan 阶段读取 node \"$AUDIT_RUNTIME_CLI\" status，把正常基线与缺口纳入规划。中期由专业 Agent 输出 Focus Area 绑定的 EXPLORE/CONFIRM 工作包，Orchestrator 仅调用 enqueue 分派；不得判断漏洞或直接控制浏览器。",
       "按 .opencode/lib/runtime-testing/workflow.md 执行贯穿式流程。禁止调用 run-quick-dynamic-validation.mjs 或再次运行末尾固定 180 秒批次。收尾先关闭运行测试，封存 evidence-set，再进入 schema_version=3 的独立三方复核；动态 SUPPORTED 也必须经过 Moderator。",
       "冻结授权、环境版本和来源绑定不可在任务内修改；需要补充环境或改变授权必须新建任务。历史人工验证保留独立记录，不得覆盖本任务终稿。");
