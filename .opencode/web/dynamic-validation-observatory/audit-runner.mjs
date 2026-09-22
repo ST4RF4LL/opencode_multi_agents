@@ -1,6 +1,9 @@
 import { EventLogReader } from "./event-log-reader.mjs";
 import { selection as runtimeSelection, authorize as authorizeRuntime } from "../../lib/runtime-testing/contract.mjs";
 import { RuntimeTestingService } from "../../lib/runtime-testing/service.mjs";
+import { knowledgeEnvironment } from "../../lib/knowledge-workflow.mjs";
+import { bacSelection } from "../../lib/bac/contract.mjs";
+import { verifyBacFinalReport } from "../../lib/bac/final-verification.mjs";
 import { verifyIntegratedFinalReport } from "../../lib/runtime-testing/final-verification.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -219,6 +222,10 @@ async function defaultTodoCompletionVerifier({ audit, reportsRoot }) {
   if (audit.runtime_testing && finalReport) {
     try { await verifyIntegratedFinalReport({ audit, reportsRoot }); }
     catch (error) { errors.push(`贯穿式任务必须封存并校验 v3 报告、运行证据和独立三方结果：${error.code ?? "RUNTIME_FINAL_BINDING_INVALID"}。`); }
+  }
+  if (audit.bac_analysis?.mode === "auto" && finalReport) {
+    try { await verifyBacFinalReport({ audit, reportsRoot }); }
+    catch (error) { errors.push(`越权专项交付未通过：${error.message}`); }
   }
   return {
     complete: errors.length === 0,
@@ -480,7 +487,7 @@ function privateContextPrompt(audit, contextPaths) {
   }
   const environment = audit.private_context?.test_environment;
   if (audit.runtime_testing) {
-    lines.push("本任务使用 runtime-testing.v1。环境只由运行测试控制器读取。缺少或无效环境、开关关闭、身份不足时所有动态环节 SKIPPED，不询问、不等待、不启动浏览器，静态继续。",
+    lines.push("本任务使用 runtime-testing.v1。环境原文作为私有 prompt 完整交给运行测试 Agent。开关关闭或内容为空时自动 SKIPPED；其他情况下由 Agent 先理解原文，再登记目标、身份与敏感值，不能用固定字段或正则未匹配来判定环境无效。确实缺少信息的步骤说明缺口，静态继续。",
       "测试环境由用户自行判断并显式授权，不根据公网、内网或本机地址分类拒绝；运行测试仅访问冻结授权中的 HTTP(S) origins。",
       "前期 CONTACT 已由平台与 Recon 并行调度；Threat/Plan 阶段读取 node \"$AUDIT_RUNTIME_CLI\" status，把正常基线与缺口纳入规划。中期由专业 Agent 输出 Focus Area 绑定的 EXPLORE/CONFIRM 工作包，Orchestrator 仅调用 enqueue 分派；不得判断漏洞或直接控制浏览器。",
       "按 .opencode/lib/runtime-testing/workflow.md 执行贯穿式流程。禁止调用 run-quick-dynamic-validation.mjs 或再次运行末尾固定 180 秒批次。收尾先关闭运行测试，封存 evidence-set，再进入 schema_version=3 的独立三方复核；动态 SUPPORTED 也必须经过 Moderator。",
@@ -521,6 +528,8 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
     `唯一被审计源码根目录是 ${sourceRoot}；当前 OpenCode 目录 ${workspaceRoot} 只是工作台执行工作区，不属于审计范围。`,
     `源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径（例如 --root \"$AUDIT_SOURCE_ROOT\"），不得用当前执行目录替代冻结范围根。${gitHint}`,
     ...deliveryRootPrompt(audit, paths),
+    knowledgeContextPrompt(),
+    bacContextPrompt(audit),
     "每次专业 Agent 提交工作包后，先运行 audit-todo check --todo <本地清单> --packet <packet_id> --handoff <交付件> --reports-root <受控报告根>。watchdog 会核对分派集合并在工具结果中提醒遗漏/无效项；补齐后再 complete。特殊跳过必须逐项提交 status=GAP、gap_kind=SKIPPED 和非空 gap_reason，保留至最终中文报告，不计为 DONE。",
     `本次调度唯一真相是本机文件 ${JSON.stringify(paths.todo_path)}，只能由 Orchestrator 使用 node \"$AUDIT_TODO_CLI\" 管理；严禁使用 OpenCode todolist；子代理仅可通过 audit-todo check 只读核对自己的工作包，不得读取完整清单到上下文或修改该文件。Coverage Ledger MCP、哈希链、token、INSPECT/RECEIPT/DECISION 流程均已废弃。`,
     "完成 Scope、Recon 与 Threat 后，使用 build-coverage-plan.mjs --recon-dir \"$AUDIT_TMP_ROOT/recon\" 构建 Coverage Plan；不得调用 snapshot-coverage-inputs.mjs、复制输入或在命令行列举语言清单。随后调用 audit-todo init 创建本地审计项；每项为一个 Focus Area × domain，三个 lens 在同一工作包内完成。然后循环调用 audit-todo claim（最多 4 个工作包、每包最多 12 项），只把返回的有限工作包分派给对应专业 Agent。不得把完整 Focus Area 清单写入 OpenCode task 或上下文。",
@@ -537,6 +546,16 @@ function auditPrompt(audit, repository, paths, contextPaths = {}) {
   ].join("\n");
 }
 
+function knowledgeContextPrompt() {
+  return "知识库只读入口为 node \"$AUDIT_KNOWLEDGE_CLI\"，使用方式见 .opencode/lib/knowledge-workflow.md。Orchestrator 只向 Threat/Coverage/Seeded Variant 专业 Agent 传递入口和轨道，不自行检索或判断漏洞。专业 Agent 先按当前信任边界检索根因，再按需读取关联案例与检测器，保留来源摘要、成立前提、反例和质量状态；blind 轨道不查询、不接收知识种子。知识库不可用、陈旧或无匹配只记检索缺口，继续源码审计，不替代当前项目证据或覆盖目录。";
+}
+
+function bacContextPrompt(audit) {
+  return audit.bac_analysis?.mode === "auto"
+    ? "本任务已启用 bac-analysis.v1 越权专项，读取 .opencode/lib/bac/workflow.md。Recon 复用冻结入口，Orchestrator 在专业包执行前调度独立 ACP 策略会话；源码 Agent 提取实际路径并调用 AUDIT_BAC_CLI。control-driven 报告必须有专项附件或显式 GAP/有据不适用；原始候选经 Finding v2 与原三方复核。此开关不授权任何动态请求。"
+    : "本任务未启用越权专项差分；保留原有权限审计。历史任务不追加专项交付要求。";
+}
+
 function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
   const sourceRoot = JSON.stringify(repository.path);
   const workspaceRoot = JSON.stringify(paths.workspace_root);
@@ -549,6 +568,8 @@ function recoveryPrompt(audit, repository, paths, contextPaths = {}) {
     "会话中的历史说明只能作为线索，阶段完成性必须以当前落盘制品及确定性校验结果为准；若发现半写入、摘要不匹配或前后不一致的制品，应重建对应制品后再继续。",
     "源码根目录必须只读：不得在其中创建或修改 reports、tmp、配置、缓存或任何其他文件。读取源码、Git 信息及调用扫描器时必须显式使用 AUDIT_SOURCE_ROOT 的绝对路径，不得用当前执行目录替代冻结范围根。",
     ...deliveryRootPrompt(audit, paths),
+    knowledgeContextPrompt(),
+    bacContextPrompt(audit),
     "本地任务清单只由 Orchestrator 调度：继续以最多 4 个工作包、每包最多 12 项的界限领取和分派；不得使用 OpenCode todolist、Coverage Ledger MCP、哈希链或逐漏洞记账。子代理生成工作包 handoff 并运行只读 audit-todo check；watchdog 提醒遗漏项。特殊跳过逐项记录 GAP / gap_kind=SKIPPED 和中文原因，Orchestrator 完成结构校验后更新本地任务状态。",
     ...privateContextPrompt(audit, contextPaths),
     audit.runtime_testing ? "复用已封存的运行证据，从最早缺失的三方复核继续。恢复时环境状态不明会被隔离，禁止重新接触目标；保留动态缺口并完成静态报告。" : "继续完成真实性 routing、CVSS、攻击链和最终报告。校验已存在的 quick/Affirmative/Negative/Moderator 制品，从最早缺失步骤恢复。完整动态验证仅人工触发。",
@@ -1015,6 +1036,7 @@ export class AuditRunner extends EventEmitter {
         additional_instructions_sha256: audit.private_context?.additional_instructions?.sha256 ?? null,
         quick_dynamic_opt_in: !audit.runtime_testing && audit.private_context?.test_environment?.enabled === true,
         ...(audit.runtime_testing ? { runtime_testing: audit.runtime_testing } : {}),
+        ...(audit.bac_analysis ? { bac_analysis: audit.bac_analysis } : {}),
         test_environment_context_sha256: audit.private_context?.test_environment?.sha256 ?? null,
         full_dynamic_trigger: "MANUAL_ONLY",
       },
@@ -1530,6 +1552,7 @@ export class AuditRunner extends EventEmitter {
       // Queue dispatch and recovery must preserve this binding.
       model: normalizeOpenCodeModel(input.model),
       runtime_testing: runtimeSelection(input),
+      bac_analysis: bacSelection(input.bac_analysis ?? "auto"),
       provider_session_id: null,
       recovery_count: 0,
       stage_delivery_enforcement: "TODO_ENFORCED",
@@ -1627,6 +1650,7 @@ export class AuditRunner extends EventEmitter {
       allow_dirty: true,
       model: normalizeOpenCodeModel(input.model),
       runtime_testing: runtimeSelection(input),
+      bac_analysis: bacSelection(input.bac_analysis ?? "auto"),
       provider_session_id: null,
       recovery_count: 0,
       stage_delivery_enforcement: "TODO_ENFORCED",
@@ -1684,6 +1708,10 @@ export class AuditRunner extends EventEmitter {
       AUDIT_AI_ROUTING_POLICY: "surface-dependency-v1",
       AUDIT_TODO_HANDOFF_ROOT: paths.todo_handoff_root,
       AUDIT_TODO_CLI: join(paths.workspace_root, ".opencode", "scripts", "audit-todo.mjs"),
+      ...knowledgeEnvironment(this.platformRoot, this.environment),
+      AUDIT_KNOWLEDGE_CLI: join(paths.workspace_root, ".opencode", "scripts", "knowledge-query.mjs"),
+      AUDIT_BAC_MODE: audit.bac_analysis?.mode ?? "off",
+      AUDIT_BAC_CLI: join(paths.workspace_root, ".opencode", "scripts", "bac-analysis.mjs"),
       AUDIT_QUICK_DYNAMIC_ENABLED: quickDynamicEnabled ? "true" : "false",
       AUDIT_QUICK_DYNAMIC_DEADLINE_SECONDS: "180",
       AUDIT_QUICK_DYNAMIC_SETUP_SECONDS: "240",

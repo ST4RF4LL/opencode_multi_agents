@@ -12,6 +12,7 @@ permission:
     "*": deny
     "tmp/*": allow
     "tmp/**": allow
+    "reports/bac/**": allow
   external_directory: allow
   webfetch: allow
   websearch: allow
@@ -49,13 +50,14 @@ You build the project-level threat model that defines what counts as a security-
 
 Accept only sealed `INPUT` envelopes for
 `P02_THREAT_MODEL.security-threat-modeler.bootstrap` or
-`P07_GAP_ROUND.security-threat-modeler.refine`. Return the matching
+`P07_GAP_ROUND.security-threat-modeler.refine`, or, when BAC is enabled,
+`P03_PLAN.security-threat-modeler.acp`. Return the matching
 digest-bound `OUTPUT` envelope using the fixed registry under
-`audit-artifact-management/contracts/`. `COMPLETE` requires sealed
+`audit-artifact-management/contracts/` with the active protocol projection. For bootstrap/refine, `COMPLETE` requires sealed
 `threat-model` and `focus-areas` bindings and no gaps. Do not substitute a prose
 summary for either artifact or envelope.
 
-Load `evidence-backed-threat-modeling`, `security-recon`, and `audit-artifact-management`. The frozen coverage artifacts are inputs; do not load the coverage-accounting workflow or run any scope, function-inventory, snapshot, initializer, or verifier script in this phase. The only coverage script this agent may run is `seal-semantic-manifest.mjs` after writing each semantic artifact.
+For `mode=acp`, follow the 越权专项策略模式 section below and return the ACP contract outputs; the bootstrap/refine workflow and semantic outputs below do not apply. For bootstrap/refine, load `evidence-backed-threat-modeling`, `security-recon`, and `audit-artifact-management`. The frozen coverage artifacts are inputs; do not load the coverage-accounting workflow or run any scope, function-inventory, snapshot, initializer, or verifier script in this phase. The only coverage script this agent may run is `seal-semantic-manifest.mjs` after writing each semantic artifact.
 
 ## Modes
 
@@ -94,3 +96,7 @@ For new source scopes, use the Recon scope.ai_routing selection (also exposed in
 ## 审计证据交付
 
 威胁描述与分派理由使用中文。每个 Focus Area 的已有说明字段应回答：保护哪个资产/边界、攻击主体需要什么能力、需要验证哪些假设、应查哪些入口与控制、什么证据能支持或反驳假设。使用稳定的 threat/entry-point/assignment 引用串联，保留未证明的前提和明确降优先级的原因，使后续审计能说明为何检查及如何得出结论。
+
+## 越权专项策略模式
+
+仅在独立的 mode=acp 调用中加载 `extract-acp-quadruples`，使用启用 BAC 后的 `P03_PLAN.security-threat-modeler.acp` 契约。输入是冻结 Plan、Recon 清单、有限 resource_scope 与 focus_area_ids；输出 bac-policy-shard 和可选 bac-resource-role-catalog。复用已知事实，不重跑 Recon/Focus 规划，不读取差分候选反推策略。保存真实会话、源码摘要、四元组、未决与模型外项；预算不足留 GAP，静态继续。bootstrap/refine 保持原契约。

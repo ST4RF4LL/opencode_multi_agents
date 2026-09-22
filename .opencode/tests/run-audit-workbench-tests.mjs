@@ -518,7 +518,7 @@ if (mode === "run") {
     repositories: [{ id: "fixture", name: "测试仓库", path: repositoryRoot }],
     configPath: join(repositoryRoot, ".opencode", "opencode.json"),
     enabled: true,
-    environment: { ...process.env, http_proxy: "http://proxy-fixture.test:8080", HTTPS_PROXY: "http://secure-proxy-fixture.test:8443" },
+    environment: { ...process.env, AUDIT_KNOWLEDGE_ROOT: "../KnowledgeWorkFlow", http_proxy: "http://proxy-fixture.test:8080", HTTPS_PROXY: "http://secure-proxy-fixture.test:8443" },
     terminalMonitor,
     spawnProcess(command, args, options) {
       spawnCall = { command, args, options };
@@ -560,6 +560,8 @@ if (mode === "run") {
   assert.deepEqual(fallbackSpawnCall.args.slice(0, 6), ["run", "--format", "json", "--agent", "security-audit-orchestrator", "--dir"]);
   assert.equal(fallbackSpawnCall.args[6], join(platformRoot, "workspace", "audit-runs", "audit-fallback-001"));
   assert.equal(fallbackSpawnCall.options.cwd, join(platformRoot, "workspace", "audit-runs", "audit-fallback-001"));
+  assert.equal(fallbackAudit.bac_analysis.mode, "auto");
+  assert.equal(fallbackSpawnCall.options.env.AUDIT_BAC_MODE, "auto");
   assert.equal(fallbackRunner.getAudit(fallbackAudit.id).terminal.status, "unavailable");
   fallbackChild.stdout.write('{"type":"step_start","sessionID":"ses_fallback_fixture"}\n');
   for (let attempt = 0; attempt < 50 && !fallbackRunner.getAudit(fallbackAudit.id).provider_session_id; attempt += 1) await new Promise(resolve => setImmediate(resolve));
@@ -571,6 +573,7 @@ if (mode === "run") {
   const sourceBinding = JSON.parse(await readFile(join(platformRoot, "reports", "repositories", "fixture", "platform", "audit-runs", fallbackAudit.id, "source-binding.json"), "utf8"));
   assert.equal(sourceBinding.audit_id, fallbackAudit.id);
   assert.equal(sourceBinding.task_context.quick_dynamic_opt_in, false);
+  assert.equal(sourceBinding.task_context.bac_analysis.mode, "auto");
   assert.match(sourceBinding.binding_digest, /^[a-f0-9]{64}$/);
   await fallbackRunner.shutdown();
 
@@ -596,8 +599,10 @@ if (mode === "run") {
     ref: "HEAD",
     allow_dirty: true,
     model: queuedModelSelection,
+    bac_analysis: "off",
   }, "queued-model-request-001");
   assert.equal(queuedRunner.getAudit(queuedAudit.id).status, "queued");
+  assert.equal(queuedRunner.getAudit(queuedAudit.id).bac_analysis.mode, "off");
   assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "global-provider/global-audit");
   queuedModelSelection = "project-provider/project-default";
   assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "global-provider/global-audit");
@@ -605,6 +610,7 @@ if (mode === "run") {
   queuedModelSelection = "project-provider/project-review";
   await queuedRunner.dispatchQueuedAudit(queuedAudit.id);
   assert.equal(queuedTerminalMonitor.starts[0].args[queuedTerminalMonitor.starts[0].args.indexOf("--model") + 1], "global-provider/global-audit");
+  assert.equal(queuedTerminalMonitor.starts[0].environment.AUDIT_BAC_MODE, "off");
   await queuedRunner.shutdown();
 
   const gatedChild = new FakeChild();
@@ -1402,6 +1408,8 @@ if (mode === "run") {
     assert.equal(spawnCall.options.env.OPENCODE_CONFIG, join(canonicalRepositoryRoot, ".opencode", "opencode.json"));
     assert.equal(spawnCall.options.env.OPENCODE_CONFIG_DIR, join(canonicalRepositoryRoot, ".opencode"));
     assert.equal(spawnCall.options.env.OPENCODE_DISABLE_PROJECT_CONFIG, "true");
+    assert.equal(spawnCall.options.env.AUDIT_KNOWLEDGE_ROOT, resolve(platformRoot, "../KnowledgeWorkFlow"));
+    assert.equal(spawnCall.options.env.AUDIT_KNOWLEDGE_CLI, join(executionWorkspace, ".opencode/scripts/knowledge-query.mjs"));
     assert.equal(typeof spawnCall.options.env.OPENCODE_CONFIG_CONTENT, "string");
     const runtimeOpenCodeConfig = JSON.parse(spawnCall.options.env.OPENCODE_CONFIG_CONTENT);
     assert.equal(Object.hasOwn(runtimeOpenCodeConfig.mcp, "coverage_ledger"), false);
@@ -1417,6 +1425,8 @@ if (mode === "run") {
     assert.match(monitoredPrompt, /audit-live-001/);
     assert.match(monitoredPrompt, new RegExp(canonicalRepositoryRoot.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.match(monitoredPrompt, /源码根目录必须只读/);
+    assert.match(monitoredPrompt, /AUDIT_KNOWLEDGE_CLI/);
+    assert.match(monitoredPrompt, /blind 轨道不查询、不接收知识种子/);
     assert.match(monitoredPrompt, /唯一的持久交付根目录/);
     assert.equal(monitoredPrompt.includes(reportsRoot), true);
     assert.equal(monitoredPrompt.includes(join(reportsRoot, "final", `security-audit-report.${created.id}.md`)), true);
@@ -1886,10 +1896,10 @@ if (mode === "run") {
     assert.match(indexHtml, /name="additional_instructions"/);
     assert.match(indexHtml, /name="test_environment_enabled"/);
     assert.match(indexHtml, /name="test_environment_context"/);
-    assert.match(indexHtml, /未启用、未填写、地址无效或缺少所选身份时/);
-    assert.match(indexHtml, /自动跳过全部动态环节，不启动浏览器，静态审计继续/);
+    assert.match(indexHtml, /不要求固定账号字段、分行格式或 JSON/);
+    assert.match(indexHtml, /确实缺少信息时说明具体缺口，静态审计继续/);
     assert.match(indexHtml, /环境接触 \+ 中期探索 \+ 按需确认/);
-    assert.match(indexHtml, /自动跳过全部动态环节/);
+    assert.match(indexHtml, /未启用或未填写时自动跳过/);
     assert.match(indexHtml, /任务创建时未填写测试环境也可在本页补录并逐次授权/);
     assert.match(indexHtml, /人工补充验证需逐次授权并保存独立结果/);
     assert.doesNotMatch(indexHtml, /共享环境准备 240 秒、每报告 180 秒快速动态/);
@@ -2052,6 +2062,7 @@ if (mode === "run") {
   assert.match(resumedSpawnCall.args[0], /terminal-output-relay\.mjs$/);
   assert.equal(resumedSpawnCall.options.env.http_proxy, resumedProxyEnvironment.http_proxy);
   assert.equal(resumedSpawnCall.options.env.HTTPS_PROXY, resumedProxyEnvironment.HTTPS_PROXY);
+  assert.equal(resumedSpawnCall.options.env.AUDIT_BAC_MODE, "off", "历史任务恢复不得追加越权专项要求");
   assert.equal(JSON.stringify(resumedAudit).includes("resume-proxy-fixture.test"), false);
   const resumeRunArgs = resumeTerminalMonitor.starts[0].args;
   assert.equal(resumeRunArgs[resumeRunArgs.indexOf("--session") + 1], "ses_resume_fixture");

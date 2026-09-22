@@ -28,7 +28,7 @@
     "java-weak-cryptography",
     "java-hardcoded-secrets",
     "java-log-injection",
-    "java-mass-assignment"
+    "java-mass-assignment", "java-access-path-analysis"
   ],
   "notes": {
     "deep_vuln_skills_source": "vuln_skill_builder/skills/java-*",

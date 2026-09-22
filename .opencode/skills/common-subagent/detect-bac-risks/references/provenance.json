@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "adaptation": "bac-analysis.v1",
+  "sources": [
+    {
+      "source": "bacagent_reproduction/detect-bac-risks/SKILL.md",
+      "sha256": "cd8f630b52d2787d31de80c7619d34dcda35fafbdabd14e4a8139826f10f2da3"
+    },
+    {
+      "source": "bacagent_reproduction/detect-bac-risks/scripts/analyze_bac.py",
+      "sha256": "fd1cab986c580b23e9a6bbfb70eb06860c995328309d07cf989d3f64b076b306"
+    },
+    {
+      "source": "bacagent_reproduction/detect-bac-risks/scripts/validate_bac_findings.py",
+      "sha256": "8793fcd747b710257a03b33a6ebbc706b9e92003585fa8fb37fa29901f78847c"
+    },
+    {
+      "source": "bacagent_reproduction/detect-bac-risks/scripts/test_analyze_bac.py",
+      "sha256": "74d438eef89213cb5ff1f348907bb95a34cb7981e57cb9f47a37c38c1beca407"
+    },
+    {
+      "source": "bacagent_reproduction/detect-bac-risks/references/input-output-contract.md",
+      "sha256": "e217a481f89082c349f720cc61c26d96d3b3c7a4c276319a34301b9ff243308e"
+    },
+    {
+      "source": "bacagent_reproduction/detect-bac-risks/references/detection-rules.md",
+      "sha256": "c3054718a99df2112fcf36cff555a945f1c5fe01f27bfe9dcffb8cf836837721"
+    },
+    {
+      "source": "extract-acp-quadruples/SKILL.md",
+      "sha256": "6f1f28043aefbd5a9d2066119573a7cfffce0944fe2a661c04dfa6e4b599e05b"
+    },
+    {
+      "source": "extract-acp-quadruples/references/acp-model.md",
+      "sha256": "73fc844bfaffd4b71c37489a771d60b0b18bfc0d8e8c1f9942073b4c7bfcdf85"
+    },
+    {
+      "source": "extract-acp-quadruples/references/java-evidence.md",
+      "sha256": "2970bd41218ebeea99a12b7ebc50b81152984617712e01b4fd066b3bd013f09f"
+    }
+  ]
+}

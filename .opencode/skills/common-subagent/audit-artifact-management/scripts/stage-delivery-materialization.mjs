@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { runtimeStageRegistry } from "../../../../lib/runtime-testing/stage-registry.mjs";
+import { bacStageRegistry } from "../../../../lib/bac/stage-registry.mjs";
 import { verifyRuntimeEvidenceFiles } from "../../../../lib/runtime-testing/evidence.mjs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -160,9 +161,13 @@ async function inspectManifestInternal({ reportsRoot, manifestPath, registry, st
     cache.set(relativePath, result);
     return result;
   }
-  if (manifest.registry_id === "workbench-stage-deliveries-runtime-testing-v1") {
-    registry = runtimeStageRegistry(registry, "runtime-testing.v1");
-    stageAgentRegistry = runtimeStageRegistry(stageAgentRegistry, "runtime-testing.v1");
+  if (["workbench-stage-deliveries-runtime-testing-v1", "workbench-stage-deliveries-runtime-testing-v1-bac-v1"].includes(manifest.registry_id)) {
+    const bacMode = manifest.registry_id.endsWith("-bac-v1") ? "auto" : "off";
+    registry = runtimeStageRegistry(registry, "runtime-testing.v1", bacMode);
+    stageAgentRegistry = runtimeStageRegistry(stageAgentRegistry, "runtime-testing.v1", bacMode);
+  } else if (manifest.registry_id === "workbench-stage-deliveries-v1-bac-v1") {
+    registry = bacStageRegistry(registry, "auto");
+    stageAgentRegistry = bacStageRegistry(stageAgentRegistry, "auto");
   }
   errors.push(...validateStageDeliveryManifest(manifest, registry, { stageAgentRegistry }));
   const expectedPath = stageManifestRelativePath(registry, manifest.audit_id, manifest.stage_id, manifest.round);

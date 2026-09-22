@@ -1,7 +1,8 @@
 {
   "scripts": {
-    "test": "npm run test:runtime-testing && npm run test:config && npm run test:audit-todo && npm run test:audit-queue && npm run test:stage-agent-contract && npm run test:stage-delivery-contract && npm run test:truth-validation-contract && npm run test:threat-model-contract && npm run test:semgrep && npm run test:finding-contract && npm run test:report-details && npm run test:external-runtime-validation-contract && npm run test:dynamic-validation-contract && npm run test:windows-control && npm run test:dynamic-validation-core && npm run test:dynamic-validation-web && npm run test:audit-workbench && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
+    "test": "npm run test:bac && npm run test:runtime-testing && npm run test:knowledge && npm run test:config && npm run test:audit-todo && npm run test:audit-queue && npm run test:stage-agent-contract && npm run test:stage-delivery-contract && npm run test:truth-validation-contract && npm run test:threat-model-contract && npm run test:semgrep && npm run test:finding-contract && npm run test:report-details && npm run test:external-runtime-validation-contract && npm run test:dynamic-validation-contract && npm run test:windows-control && npm run test:dynamic-validation-core && npm run test:dynamic-validation-web && npm run test:audit-workbench && npm run test:finding-adjudication && npm run test:cvss-assessment && npm run test:adjudication-regressions && npm run test:attack-chain-contract && npm run test:semantic-reseed && npm run test:coverage && npm run test:semantic",
     "test:runtime-testing": "node --test tests/run-runtime-testing-tests.mjs",
+    "test:knowledge": "node --test tests/run-knowledge-workflow-tests.mjs",
     "test:config": "node tests/validate-configuration.mjs",
     "test:audit-todo": "node tests/run-audit-todo-tests.mjs && node tests/run-workflow-optimization-tests.mjs && node --test tests/run-focus-area-watchdog-tests.mjs",
     "test:audit-queue": "node tests/run-audit-queue-tests.mjs",
@@ -37,7 +38,9 @@
     "winapp:control": "node scripts/windows-control-cli.mjs",
     "winapp:mcp": "node scripts/windows-control-mcp.mjs",
     "test:windows-control": "node tests/run-windows-control-tests.mjs",
-    "test:report-details": "node --test tests/run-report-details-tests.mjs"
+    "test:report-details": "node --test tests/run-report-details-tests.mjs",
+    "test:bac": "node --test tests/run-bac-analysis-tests.mjs",
+    "bac": "node scripts/bac-analysis.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

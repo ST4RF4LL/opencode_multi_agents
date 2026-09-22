@@ -102,7 +102,9 @@ export function validateStageContractRegistry(registry, roles = null) {
   }
 
   const contracts = new Map();
-  const roleNames = roles && isObject(roles.agents) ? new Set(Object.keys(roles.agents)) : null;
+  const integratedRuntime = registry.purpose?.startsWith("runtime-testing.v1：");
+  const roleNames = roles && isObject(roles.agents)
+    ? new Set(Object.keys(roles.agents).filter(name => !integratedRuntime || name !== "quick-dynamic-validator")) : null;
   for (const contract of registry.contracts ?? []) {
     const id = contract?.contract_id;
     if (!isObject(contract) || !nonEmptyString(id) || contracts.has(id)) {
@@ -128,7 +130,9 @@ export function validateStageContractRegistry(registry, roles = null) {
         .filter(contract => contract.agent_name === agentName)
         .map(contract => contract.contract_id)
         .sort();
-      const declared = roles.agents[agentName]?.stage_contract_ids;
+      const baseDeclared = roles.agents[agentName]?.stage_contract_ids;
+      const declared = Array.isArray(baseDeclared) ? [...baseDeclared,
+        ...(registry.bac_analysis === "bac-analysis.v1" ? roles.agents[agentName]?.protocol_stage_contract_ids?.["bac-analysis.v1"] ?? [] : [])] : baseDeclared;
       if (expected.length === 0) errors.push(`role:${agentName}:stage-contract-missing`);
       if (!Array.isArray(declared)
         || declared.length !== expected.length

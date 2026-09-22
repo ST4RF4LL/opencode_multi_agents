@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, rename, lstat, realpath } from "node:fs/pro
 import { join, relative, resolve, isAbsolute } from "node:path";
 import { performance } from "node:perf_hooks";
 import { PROTOCOL, PHASES, seal, digest, check, text, validatePacket, validateSubmission, redact, fail } from "./contract.mjs";
+import { environmentTools, resolveEnvironment } from "./environment-prompt.mjs";
 
 export async function atomicJson(path, value) {
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -19,9 +20,10 @@ export async function checkedJson(root, path, expected = null) {
 }
 
 export class RuntimeTestingController {
-  constructor({ root, authorization, privateContext, browserFactory, worker, now = () => performance.now(), setTimer = setTimeout, clearTimer = clearTimeout }) {
+  constructor({ root, authorization, privateContext, browserFactory, worker, prepareEnvironment = async () => async () => {}, persistEnvironment = async () => {}, now = () => performance.now(), setTimer = setTimeout, clearTimer = clearTimeout }) {
     this.root = resolve(root); this.authorization = authorization; this.privateContext = privateContext ?? {};
     this.browserFactory = browserFactory; this.worker = worker; this.now = now;
+    this.prepareEnvironment = prepareEnvironment; this.persistEnvironment = persistEnvironment;
     this.setTimer = setTimer; this.clearTimer = clearTimer;
     this.active = null; this.browser = null; this.closed = false; this.serial = Promise.resolve();
     this.ready = this.initialize();
@@ -29,8 +31,16 @@ export class RuntimeTestingController {
   async initialize() {
     await mkdir(join(this.root, "packets"), { recursive: true });
     await mkdir(join(this.root, "evidence"), { recursive: true });
+    let recoveredState = false;
     try {
       const prior = await checkedJson(this.root, "state.json");
+      recoveredState = true;
+      if (this.authorization.environment_ready === false && prior.authorization_digest !== this.authorization.artifact_digest) {
+        const prepared = await checkedJson(this.root, "authorization.json");
+        check(prepared.artifact_digest === digest(prepared) && prepared.input_authorization_digest === this.authorization.artifact_digest,
+          "runtime-authorization-changed-new-run-required");
+        this.authorization = prepared;
+      }
       check(prior.authorization_digest === this.authorization.artifact_digest, "runtime-authorization-changed-new-run-required");
       this.state = prior;
       if (prior.active_packet || prior.browser_allocated && !["CLOSED", "SKIPPED", "QUARANTINED"].includes(prior.status)) {
@@ -52,10 +62,11 @@ export class RuntimeTestingController {
         if (this.state.status !== "QUARANTINED") { this.state.status = "BLOCKED"; this.state.reason = "PROCESS_RECOVERY_QUEUE_INTERRUPTED"; }
       }
     } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+      if (error.code !== "ENOENT" || recoveredState) throw error;
       this.state = { protocol: PROTOCOL, audit_id: this.authorization.audit_id, authorization_digest: this.authorization.artifact_digest,
         environment_revision: this.authorization.environment_revision, status: this.authorization.status === "SKIPPED" ? "SKIPPED" : "AUTHORIZED",
-        reason: this.authorization.reason, started_at: new Date().toISOString(), elapsed_ms: 0, cleanup_elapsed_ms: 0,
+        reason: this.authorization.reason, environment_ready: this.authorization.environment_ready ?? true,
+        started_at: new Date().toISOString(), elapsed_ms: 0, cleanup_elapsed_ms: 0,
         budget_ms: this.authorization.budget_ms, cleanup_reserve_ms: this.authorization.cleanup_reserve_ms,
         browser_allocated: false, active_packet: null, baseline_packet: null, cleanup_status: "NOT_REQUIRED", packets: [], queued_packets: [], evidence: [],
         stages: Object.fromEntries(PHASES.map(phase => [phase, this.authorization.status === "SKIPPED" ? "SKIPPED" : "NOT_SCHEDULED"])) };
@@ -143,6 +154,7 @@ export class RuntimeTestingController {
       check(active.submission, "runtime-no-submission");
       result = active.submission;
     } catch (error) {
+      error = active.preparationError ?? error;
       if (this.active === active) active.stopWorker?.();
       result = { execution_status: error.code === "runtime-packet-timed-out" ? "TIMED_OUT" : "FAILED", outcome: "INCONCLUSIVE",
         cleanup_status: this.state.browser_allocated ? "UNKNOWN" : "NOT_REQUIRED", summary: "运行测试未完成，已停止环境复用。",
@@ -159,6 +171,8 @@ export class RuntimeTestingController {
   }
   async tools(token) {
     const active = this.requireActive(token);
+    check(!active.environmentPreparing, "runtime-environment-preparation-in-progress");
+    if (this.authorization.environment_ready === false) return environmentTools.filter(tool => tool.name === "configure_environment");
     if (!this.browser) {
       this.state.browser_allocated = true; await this.save();
       this.requireActive(token);
@@ -177,12 +191,65 @@ export class RuntimeTestingController {
     const tools = await this.browser.tools(active.packet);
     this.requireActive(token); return tools;
   }
+  async configureEnvironment(token, input) {
+    return this.exclusive(async () => {
+      const active = this.requireActive(token);
+      check(active.packet.phase === "CONTACT" && !this.state.browser_allocated && active.actionIds.size === 0 && this.state.packets.length === 1,
+        "runtime-environment-configuration-closed");
+      const prepared = resolveEnvironment(this.authorization, input);
+      // Register secrets before any failure could become a public diagnostic.
+      this.privateContext.sensitive_values = [...new Set([...(this.privateContext.sensitive_values ?? []), ...prepared.private.sensitive_values])];
+      check(prepared.public.identities.every(identity => !this.privateContext.sensitive_values.includes(identity.id)), "runtime-environment-identity-must-not-contain-credentials");
+      active.environmentPreparing = true;
+      let release;
+      try {
+        release = await this.prepareEnvironment(prepared.public);
+        this.requireActive(token);
+        const privateContext = { ...this.privateContext, ...prepared.private, sensitive_values: this.privateContext.sensitive_values };
+        await this.persistEnvironment(privateContext); this.requireActive(token);
+        this.authorization = prepared.public; Object.assign(this.privateContext, privateContext);
+        // No browser evidence exists yet. Freeze the interpreted environment and
+        // bind the initial CONTACT packet before admitting the first request.
+        active.packet = { ...active.packet, authorization_digest: prepared.public.artifact_digest,
+          identity_ids: prepared.public.identities.map(identity => identity.id) };
+        active.row.input_digest = digest(active.packet);
+        this.state.authorization_digest = prepared.public.artifact_digest; this.state.environment_ready = true;
+        await atomicJson(join(this.root, "authorization.json"), prepared.public);
+        await atomicJson(join(this.root, "packets", `${active.packet.id}.input.json`), seal(active.packet));
+        await this.save();
+        this.requireActive(token);
+        return { environment_ready: true, authorization_digest: prepared.public.artifact_digest,
+          origins: prepared.public.origins, identities: prepared.public.identities, test_data_scope: prepared.public.test_data_scope,
+          packet: active.packet };
+      } catch (error) {
+        await release?.();
+        // Never admit a browser after a partially persisted binding.
+        active.expired = true; active.preparationError = error; active.resolveAccepted();
+        throw error;
+      } finally { active.environmentPreparing = false; }
+    });
+  }
+  registerSensitiveValues(token, values) {
+    const active = this.requireActive(token);
+    check(!active.environmentPreparing, "runtime-environment-preparation-in-progress");
+    check(Array.isArray(values) && values.every(text), "runtime-environment-redactions-invalid");
+    this.privateContext.sensitive_values = [...new Set([...(this.privateContext.sensitive_values ?? []), ...values])];
+    return { registered: true };
+  }
   async call(token, name, args) {
     const active = this.requireActive(token);
     const prior = active.operation; let release;
     active.operation = new Promise(resolve => { release = resolve; }); await prior;
     try {
-      this.requireActive(token); await this.tools(token);
+      this.requireActive(token);
+      check(this.authorization.environment_ready !== false, "runtime-environment-not-prepared");
+      // Normal CONTACT form values can include credentials understood by the
+      // Agent; register them before they reach browser responses or evidence.
+      if (active.packet.phase === "CONTACT") {
+        const values = name === "fill" ? [args.value] : name === "fill_form" ? (args.elements ?? []).map(element => element.value) : [];
+        this.privateContext.sensitive_values = [...new Set([...(this.privateContext.sensitive_values ?? []), ...values.filter(text)])];
+      }
+      await this.tools(token);
       this.requireActive(token);
       const id = `${active.packet.id}.action-${++active.actionSequence}`;
       let result;
@@ -203,8 +270,12 @@ export class RuntimeTestingController {
   async submit(token, value) {
     const active = this.requireActive(token); await active.operation;
     this.requireActive(token);
+    check(!active.environmentPreparing, "runtime-environment-preparation-in-progress");
     validateSubmission(value, active.packet, active.actionIds);
-    if (active.packet.phase === "CONTACT" && value.execution_status === "COMPLETED") check(active.packet.identity_ids.every(id => active.identitiesUsed.has(id)), "contact-identities-not-observed");
+    if (active.packet.phase === "CONTACT" && value.execution_status === "COMPLETED") {
+      check(this.authorization.environment_ready !== false, "runtime-environment-not-prepared");
+      check(active.packet.identity_ids.every(id => active.identitiesUsed.has(id)), "contact-identities-not-observed");
+    }
     if (value.outcome === "SUPPORTED" && active.packet.vulnerability_type_id === "JW-INJECT-06") {
       check(active.packet.identity_ids.every(id => active.identitiesUsed.has(id)), "xss-identities-not-observed");
     }

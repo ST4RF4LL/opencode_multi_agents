@@ -229,6 +229,7 @@ async function main() {
       attack_chains: resolve(args.chains),
     },
     residual_gaps: summary.residual_gaps ?? [],
+    ...(summary.bac_analysis ? { bac_analysis: structuredClone(summary.bac_analysis) } : {}),
     focus_area_exceptions: summary.focus_area_exceptions ?? [],
     findings: findings.sort((left, right) => right.cvss.base_score - left.cvss.base_score || left.finding_id.localeCompare(right.finding_id)),
     excluded_findings: excludedFindings.sort((left, right) => left.finding_id.localeCompare(right.finding_id)),

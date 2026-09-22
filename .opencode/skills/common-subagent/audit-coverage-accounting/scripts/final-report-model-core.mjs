@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { validateAttackSurface } from "../../finding-evidence-contract/scripts/finding-contract.mjs";
+import { renderBacSummary, validateBacSummary } from "../../../../lib/bac/summary.mjs";
 import { validateAttackSurfaceReview } from "../../finding-adjudication/scripts/finding-adjudication-contract.mjs";
 import { REPORT_DETAIL_CONTRACT, validateFindingDossier } from "./report-dossier.mjs";
 import { renderFindingDossier, renderChainDetails, runtimeDetail } from "./render-report-dossier.mjs";
@@ -78,6 +79,10 @@ export function validateFinalReportModel(model) {
     || !["CLOSED", "SKIPPED", "BLOCKED", "QUARANTINED"].includes(model.runtime_testing.status) || !Array.isArray(model.runtime_testing.packets)
     || !Array.isArray(model.runtime_testing.runtime_only_findings) || model.runtime_testing.runtime_only_findings.some(row => row.claim_scope !== "RUNTIME_ONLY" || row.source_mapping !== "UNKNOWN" || !["TRUE_POSITIVE", "FALSE_POSITIVE", "INCONCLUSIVE"].includes(row.verdict)))) errors.push("final-report-runtime-testing-invalid");
   if (model.residual_gaps !== undefined && (!Array.isArray(model.residual_gaps) || model.residual_gaps.some(gap => !nonEmptyString(gap)))) errors.push("final-report-residual-gaps-invalid");
+  if (model.bac_analysis) {
+    errors.push(...validateBacSummary(model.bac_analysis));
+    if (model.bac_analysis.status === "PARTIAL" && model.coverage?.coverage_status === "COMPLETE") errors.push("bac-gaps-hidden-by-complete");
+  }
   if (model.residual_gaps?.length && model.coverage?.coverage_status === "COMPLETE") errors.push("final-report-gaps-hidden-by-complete");
   if (model.focus_area_exceptions !== undefined) {
     const exceptions = Array.isArray(model.focus_area_exceptions) ? model.focus_area_exceptions : [];
@@ -337,6 +342,7 @@ export function renderFinalReport(model) {
       : []),
     "",
     ...(model.residual_gaps?.length ? ["## 残余覆盖缺口", "", ...model.residual_gaps.map(gap => `- ${gap.replace(/[\r\n]+/g, " ")}`), ""] : []),
+    ...renderBacSummary(model.bac_analysis),
     ...(model.focus_area_exceptions?.length ? [
       "## Focus Area 跳过与未完成清单", "",
       "下列分派未计入有效审计完成数；显式跳过不代表已审查或无漏洞。", "",

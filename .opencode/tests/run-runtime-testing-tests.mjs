@@ -9,7 +9,8 @@ import { PassThrough, Readable } from "node:stream";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { PROTOCOL, authorize, selection, seal, digest, validatePacket, validateSubmission } from "../lib/runtime-testing/contract.mjs";
+import { PROTOCOL, authorize, selection, seal, digest, validatePacket, validateSubmission, redact } from "../lib/runtime-testing/contract.mjs";
+import { resolveEnvironment, workerInput, environmentTools } from "../lib/runtime-testing/environment-prompt.mjs";
 import { RuntimeTestingController } from "../lib/runtime-testing/controller.mjs";
 import { RuntimeTestingService } from "../lib/runtime-testing/service.mjs";
 import { ChromeRuntimeBrowser, authorizedConnectTarget, targetLookup, createOriginProxy } from "../lib/runtime-testing/browser.mjs";
@@ -26,7 +27,22 @@ const portableMacOS = process.platform === "darwin" && process.env.AUDIT_ALLOW_M
 if (!["linux", "win32"].includes(process.platform) && !portableMacOS) throw new Error("请在 Windows/Linux 执行回归；经授权的 macOS 伪浏览器回归可设置 AUDIT_ALLOW_MACOS_PORTABLE_TESTS=1。真实运行平台限制保持不变。");
 const SHA = "a".repeat(64);
 const selected = selection({ runtime_testing: { protocol: PROTOCOL, mode: "INTEGRATED_TESTING", budget_minutes: 60, explicit_authorization: true, identity_mode: "anonymous", allowed_actions: ["navigate", "normal_interaction", "test_input"] } });
-function grant(overrides = {}) { return authorize({ auditId: "audit-runtime-test", selected, enabled: true, context: JSON.stringify({ url: "http://127.0.0.1:8080", revision: "fixture-1" }), scopeDigest: SHA, ...overrides }); }
+function promptGrant(overrides = {}) { return authorize({ auditId: "audit-runtime-test", selected, enabled: true, context: JSON.stringify({ url: "http://127.0.0.1:8080", revision: "fixture-1" }), scopeDigest: SHA, ...overrides }); }
+// Existing controller/evidence regressions use an already interpreted fixture.
+// Only this fixture adapter reads its own JSON; production consumes raw prompts.
+function grant(overrides = {}) {
+  const initial = promptGrant(overrides);
+  if (initial.public.status === "SKIPPED") return initial;
+  const fixture = JSON.parse(overrides.context ?? JSON.stringify({ url: "http://127.0.0.1:8080" }));
+  const accounts = fixture.accounts ?? [];
+  const plan = { target_url: fixture.url, origins: fixture.origins ?? [new URL(fixture.url).origin],
+    identities: accounts.length ? accounts.map(account => ({ id: account.id, role: "test-user" })) : [{ id: "anonymous", role: "anonymous" }],
+    sensitive_values: accounts.flatMap(account => [account.username, account.password]),
+    ...(fixture.test_data_scope ? { test_data_scope: fixture.test_data_scope, cleanup_instructions: fixture.cleanup_instructions } : {}) };
+  const prepared = resolveEnvironment(initial.public, plan);
+  return { public: prepared.public, private: { ...initial.private, ...prepared.private } };
+}
+
 function packet(authorization, phase = "CONTACT", id = "contact-1", extra = {}) {
   return { protocol: PROTOCOL, audit_id: authorization.audit_id, id, phase, authorization_digest: authorization.artifact_digest,
     environment_revision: authorization.environment_revision, identity_ids: authorization.identities.map(identity => identity.id),
@@ -64,66 +80,143 @@ test("空环境及旧 opt-in 不启动控制服务、worker 或浏览器", async
   assert.equal(grant({ enabled: false }).public.status, "SKIPPED");
 });
 
-test("非法目标、缺少身份和缺少持久化清理范围均自动跳过", () => {
-  for (const url of ["file:///tmp/index.html", "ftp://test.example", "http://user:pass@localhost:8080", "http://host:99999", "http://host/a b", "http://host\\other"]) assert.equal(grant({ context: JSON.stringify({ url }) }).public.status, "SKIPPED");
-  for (const context of ["{}", "null", "[]", "无法解析的环境", JSON.stringify({ url: "http://localhost:8080", origins: ["http://localhost:8081"] })]) assert.equal(grant({ context }).public.status, "SKIPPED");
-  assert.equal(grant({ selected: { ...selected, identity_mode: "distinct" } }).public.reason, "REQUIRED_IDENTITIES_MISSING");
-  assert.equal(grant({ selected: { ...selected, allowed_actions: [...selected.allowed_actions, "test_mutation"] } }).public.reason, "REQUIRED_MUTATION_SCOPE_MISSING");
-  assert.equal(grant({ context: JSON.stringify({ url: "http://localhost:8080", requires_login: true }) }).public.status, "SKIPPED");
-  const first = grant(); const second = grant({ context: JSON.stringify({ url: "http://127.0.0.1:8080", revision: "fixture-2" }) });
-  assert.notEqual(first.public.artifact_digest, second.public.artifact_digest);
+test("环境原文原样进入私有 prompt，不用地址、账号或 JSON 格式决定准入", () => {
+  const contexts = [
+    "前端管理员账号密码：fixture-user/Fixture_789，环境在 test.example:8080。",
+    "使用公司测试 SSO 登录，不需要单独的用户名和密码字段。",
+    '{"url":"http://test.example","accounts":[', "没有约定字段格式的自然语言说明", "{}", "[]",
+    "测试站点在 192.0.2.10:31943；请先理解说明，再访问目标。",
+  ];
+  for (const context of contexts) {
+    const auth = promptGrant({ context, selected: { ...selected, identity_mode: "auto", allowed_actions: ["navigate", "test_mutation"] } });
+    assert.equal(auth.public.status, "AUTHORIZED"); assert.equal(auth.public.environment_ready, false);
+    assert.equal(auth.private.prompt, context); assert.deepEqual(auth.public.origins, []);
+    assert.equal(auth.private.accounts, undefined); assert.equal(JSON.stringify(auth.public).includes(context), false);
+    const attachment = workerInput(packet(auth.public), auth.public, auth.private);
+    assert.equal(attachment.environment.prompt, context);
+    assert.equal(promptGrant({ context, enabled: false }).public.reason, "DYNAMIC_NOT_AUTHORIZED");
+  }
+  assert.notEqual(promptGrant({ context: "说明甲" }).public.context_digest, promptGrant({ context: "说明乙" }).public.context_digest);
+  assert.equal(selection({ runtime_testing: { protocol: PROTOCOL, mode: "CONTACT_ONLY" } }).identity_mode, "auto");
+  assert.deepEqual(environmentTools.map(tool => tool.name), ["register_sensitive_values", "configure_environment", "browser_tools", "browser_call"]);
 });
 
-test("测试环境按用户授权接受任意网络地址，兼容中文字段和无协议地址", () => {
-  const cases = [
-    ["地址：192.0.2.10:31943，用户说明见下文", "http://192.0.2.10:31943/"],
-    ["192.0.2.10:31943", "http://192.0.2.10:31943/"],
-    ["URL: https://test.example:8443/app", "https://test.example:8443/app"],
-    ["地址：http://10.0.0.8:8080", "http://10.0.0.8:8080/"],
-    ["地址：test.internal:8080", "http://test.internal:8080/"],
-    ["URL: http://service:8080", "http://service:8080/"],
-    ["地址：[2001:db8::1]:8080", "http://[2001:db8::1]:8080/"],
-    ["[::1]:8080", "http://[::1]:8080/"],
-    ["localhost:8080", "http://localhost:8080/"],
-    ["- **URL**: `http://test.example:8080`", "http://test.example:8080/"],
-    ["入口 http://test.example:8080，登录 http://test.example:8080/login", "http://test.example:8080/"],
-    ["URL: http://test.example:8080\n登录：http://test.example:8080/login\n参考：https://docs.example/guide", "http://test.example:8080/"],
-    [JSON.stringify({ target_base_url: "test.example:8080" }), "http://test.example:8080/"],
-  ];
-  for (const [context, url] of cases) {
-    const auth = grant({ context }); assert.equal(auth.public.status, "AUTHORIZED", context);
-    assert.equal(auth.private.url, url); assert.deepEqual(auth.public.origins, [new URL(url).origin]);
-  }
-  const auth = grant({ context: JSON.stringify({ url: "https://test.example/app", origins: ["https://test.example", "https://login.test.example"] }) });
-  assert.equal(auth.public.status, "AUTHORIZED"); assert.deepEqual(auth.public.origins, ["https://login.test.example", "https://test.example"]);
-  assert.equal(grant({ enabled: false, context: cases[0][0] }).public.reason, "DYNAMIC_NOT_AUTHORIZED");
-  assert.equal(grant({ selected: { ...selected, explicit_authorization: false }, context: cases[0][0] }).public.reason, "DYNAMIC_NOT_AUTHORIZED");
+function interpretedEnvironment(extra = {}) {
+  return { target_url: "http://192.0.2.10:31943", origins: ["http://192.0.2.10:31943"],
+    identities: [{ id: "account-1", role: "test-user" }], sensitive_values: ["fixture-user", "Fixture_789"], ...extra };
+}
+
+test("Agent 理解配置后才允许浏览器，原文和敏感值不进入公共证据", async t => {
+  const root = await temporary(t); const prompt = "前端管理员账号密码：fixture-user/Fixture_789，站点在 192.0.2.10:31943。";
+  const initial = promptGrant({ context: prompt, selected: { ...selected, identity_mode: "auto" } }); let browsers = 0; let persisted;
+  const extraSecrets = ["x/y", 'quoted"\\fixture'];
+  const counts = { calls: 0, closed: 0 };
+  const controller = new RuntimeTestingController({ root, authorization: initial.public, privateContext: initial.private,
+    persistEnvironment: async value => { persisted = structuredClone(value); },
+    browserFactory: async () => { browsers++; return fakeBrowser(counts); },
+    worker: async ({ controller, active, privateContext }) => {
+      assert.equal(privateContext.prompt, prompt);
+      assert.deepEqual(controller.registerSensitiveValues(active.token, extraSecrets), { registered: true });
+      assert.deepEqual((await controller.tools(active.token)).map(tool => tool.name), ["configure_environment"]);
+      await assert.rejects(controller.call(active.token, "navigate_page", { identity_id: "environment", url: "http://192.0.2.10:31943" }), /not-prepared/);
+      assert.equal(browsers, 0);
+      const resolved = await controller.configureEnvironment(active.token, interpretedEnvironment());
+      assert.equal(browsers, 0); assert.equal(JSON.stringify(resolved).includes("Fixture_789"), false);
+      assert.deepEqual(active.packet.identity_ids, ["account-1"]);
+      assert.notEqual(active.packet.authorization_digest, initial.public.artifact_digest);
+      await assert.rejects(controller.configureEnvironment(active.token, interpretedEnvironment()), /already-prepared/);
+      const evidence = await controller.call(active.token, "navigate_page", { identity_id: "account-1", url: "http://192.0.2.10:31943" });
+      await controller.submit(active.token, submission({ evidence_ids: [evidence.evidence_id], summary: `已完成测试身份基线：${extraSecrets.join("、")}。` }));
+    } });
+  await controller.run(packet(initial.public)); await controller.close();
+  assert.equal(browsers, 1); assert.equal(persisted.prompt, prompt); assert.deepEqual(persisted.sensitive_values, [...extraSecrets, "fixture-user", "Fixture_789"]);
+  const masked = redact({ value: extraSecrets.join("、") }, persisted);
+  for (const secret of extraSecrets) assert.equal(masked.includes(JSON.stringify(secret).slice(1, -1)), false);
+  const evidence = await verifyRuntimeEvidenceFiles(join(root, "evidence-set.json"));
+  assert.equal(evidence.packets.length, 1); assert.equal(JSON.stringify(evidence).includes("Fixture_789"), false);
+  for (const secret of extraSecrets) assert.equal(evidence.packets[0].summary.includes(secret), false);
+  const authorization = JSON.parse(await readFile(join(root, "authorization.json"), "utf8"));
+  assert.equal(authorization.input_authorization_digest, initial.public.artifact_digest);
+  assert.equal(JSON.stringify(authorization).includes("fixture-user"), false);
 });
 
-test("远程目标仍校验身份并保持账号私有，解析失败展示具体原因", () => {
-  const context = "地址：192.0.2.10:31943\n测试账号：fixture-user\n测试密码：fixture-password";
-  const auth = grant({ selected: { ...selected, identity_mode: "shared" }, context });
-  assert.equal(auth.public.status, "AUTHORIZED");
-  assert.deepEqual(auth.private.accounts, [{ id: "shared", username: "fixture-user", password: "fixture-password" }]);
-  assert.doesNotMatch(JSON.stringify(auth.public), /fixture-user|fixture-password/);
-  assert.equal(grant({ context }).public.reason, "IDENTITY_SCOPE_MISMATCH");
-  assert.equal(grant({ selected: { ...selected, identity_mode: "shared" }, context: "地址：192.0.2.10:31943\n用户：fixture-user" }).public.reason, "REQUIRED_IDENTITIES_MISSING");
-  assert.equal(grant({ selected: { ...selected, identity_mode: "shared" }, context: "地址：192.0.2.10:31943\n用户：\n密码：fixture-password" }).public.reason, "REQUIRED_IDENTITIES_MISSING");
-  const cases = [
-    ["没有地址", "ENVIRONMENT_URL_MISSING"],
-    ["URL: http://test.example:99999", "ENVIRONMENT_URL_INVALID"],
-    ["地址：无效地址\n说明：http://test.example", "ENVIRONMENT_URL_INVALID"],
-    ['{"url":"http://test.example",', "ENVIRONMENT_FORMAT_INVALID"],
-    ["[]", "ENVIRONMENT_FORMAT_INVALID"],
-    ["首页：http://test.example\n登录：https://login.test.example", "ENVIRONMENT_URL_AMBIGUOUS"],
-    [JSON.stringify({ url: "http://test.example", origins: ["http://other.example"] }), "ENVIRONMENT_ORIGINS_INVALID"],
-    [JSON.stringify({ url: "http://test.example", origins: ["http://test.example/path"] }), "ENVIRONMENT_ORIGINS_INVALID"],
-  ];
-  for (const [value, reason] of cases) {
-    const result = grant({ context: value }); assert.equal(result.public.status, "SKIPPED");
-    assert.equal(result.public.reason, reason, value); assert.equal(result.private, null);
-    assert.deepEqual(result.public.origins, []);
+test("Agent 判断信息确实不足时可直接说明缺口，无需浏览器或账号格式解析", async t => {
+  const root = await temporary(t); const initial = promptGrant({ context: "账号说明已给出，但目标和登录入口尚不明确。" }); let browsers = 0;
+  const controller = new RuntimeTestingController({ root, authorization: initial.public, privateContext: initial.private,
+    browserFactory: async () => { browsers++; throw new Error("不得启动浏览器"); },
+    worker: async ({ controller, active }) => controller.submit(active.token, submission({ execution_status: "SKIPPED", outcome: "INCONCLUSIVE",
+      summary: "原文没有明确目标及登录入口，无法执行环境接触。", gaps: ["目标及登录入口缺失。"] })) });
+  await controller.run(packet(initial.public)); await controller.close();
+  assert.equal(browsers, 0); assert.equal(controller.state.stages.CONTACT, "SKIPPED");
+  const evidence = await verifyRuntimeEvidenceFiles(join(root, "evidence-set.json")); assert.equal(evidence.packets[0].execution_status, "SKIPPED");
+});
+
+test("执行配置只约束目标、隔离和已授权动作，不要求用户名密码结构", () => {
+  const initial = promptGrant({ context: "SSO 测试入口 https://test.example，使用已提供的登录流程。", selected: { ...selected, identity_mode: "auto" } });
+  const configured = resolveEnvironment(initial.public, interpretedEnvironment({ target_url: "https://test.example", origins: ["https://test.example"], sensitive_values: [] }));
+  assert.equal(configured.public.environment_ready, true); assert.equal(configured.private.prompt, undefined);
+  for (const target_url of ["file:///tmp/test", "ftp://test.example", "http://user:pass@test.example", "http://host:99999"]) {
+    assert.throws(() => resolveEnvironment(initial.public, interpretedEnvironment({ target_url })), /origins-invalid/);
   }
+  assert.throws(() => resolveEnvironment(initial.public, interpretedEnvironment({ origins: ["http://other.example"] })), /origins-invalid/);
+  assert.throws(() => resolveEnvironment(initial.public, interpretedEnvironment({ identities: [{ id: "a", role: "test-user" }, { id: "a", role: "test-user" }] })), /identities-invalid/);
+  const mutation = promptGrant({ context: "可操作指定测试记录，结束后删除。", selected: { ...selected, identity_mode: "auto", allowed_actions: ["navigate", "test_mutation"] } });
+  for (const details of [{}, { test_data_scope: "指定测试记录" }, { cleanup_instructions: "通过应用删除记录。" }]) {
+    const contactOnly = resolveEnvironment(mutation.public, interpretedEnvironment(details)).public;
+    assert.equal(contactOnly.test_data_scope, null);
+    assert.doesNotThrow(() => validatePacket(packet(contactOnly), contactOnly));
+    assert.throws(() => validatePacket(packet(contactOnly, "EXPLORE", "mutation", {
+      actions: ["test_mutation"], test_data_scope: "指定测试记录", cleanup_plan: "通过应用删除记录。",
+    }), contactOnly), /mutation-cleanup-required/);
+  }
+  const prepared = resolveEnvironment(mutation.public, interpretedEnvironment({ test_data_scope: "用户指定的测试记录", cleanup_instructions: "通过应用删除记录。" }));
+  assert.equal(prepared.private.test_data_scope, "用户指定的测试记录");
+  assert.equal(prepared.public.test_data_scope.startsWith("environment-scope:"), true);
+  assert.equal(JSON.stringify(prepared.public).includes("用户指定的测试记录"), false);
+});
+
+test("服务把完整 prompt 传入 worker，登记后才取得环境租约并私有持久化", async t => {
+  const root = await temporary(t); const prompt = "测试站点 192.0.2.10:31943，前端管理员账号密码：fixture-user/Fixture_789。";
+  const initial = promptGrant({ context: prompt, selected: { ...selected, identity_mode: "auto" } });
+  const counts = { calls: 0, closed: 0 }; let workerCalls = 0;
+  const privateRoot = join(root, "state", "audit", "runtime-testing");
+  const service = new RuntimeTestingService({ root: join(root, "reports"), privateRoot, authorization: initial.public, privateContext: initial.private,
+    browserFactory: async () => fakeBrowser(counts), worker: async ({ controller, active, privateContext }) => {
+      workerCalls++; assert.equal(privateContext.prompt, prompt); assert.equal(service.keys.length, 0);
+      await controller.configureEnvironment(active.token, interpretedEnvironment());
+      assert.equal(service.keys.length, 1); assert.equal(counts.calls, 0);
+      const result = await controller.call(active.token, "navigate_page", { identity_id: "account-1", url: "http://192.0.2.10:31943" });
+      await controller.submit(active.token, submission({ evidence_ids: [result.evidence_id] }));
+    } });
+  try {
+    await service.start(); assert.equal(workerCalls, 0); assert.equal(service.keys.length, 0);
+    await service.contact(); await service.draining;
+    assert.equal(workerCalls, 1); assert.equal(service.controller.state.status, "READY");
+    const privateEnvironment = JSON.parse(await readFile(join(privateRoot, "environment.json"), "utf8"));
+    assert.equal(privateEnvironment.prompt, prompt); assert.equal(privateEnvironment.sensitive_values.includes("Fixture_789"), true);
+    assert.equal(JSON.stringify(service.controller.snapshot()).includes("Fixture_789"), false);
+  } finally { await service.shutdown(); }
+  await verifyRuntimeEvidenceFiles(join(root, "reports", "evidence-set.json"));
+});
+
+test("环境登记期间取消会释放刚取得的租约，不启动浏览器或提交迟到绑定", async t => {
+  const root = await temporary(t); const initial = promptGrant({ selected: { ...selected, identity_mode: "auto" } });
+  let release; let entered; let released = 0; let browsers = 0;
+  const gate = new Promise(resolve => { release = resolve; }); const waiting = new Promise(resolve => { entered = resolve; });
+  const controller = new RuntimeTestingController({ root, authorization: initial.public, privateContext: initial.private,
+    prepareEnvironment: async () => { entered(); await gate; return async () => { released++; }; },
+    browserFactory: async () => { browsers++; throw new Error("不得启动浏览器"); } });
+  const active = await controller.start(packet(initial.public));
+  const pending = controller.configureEnvironment(active.token, interpretedEnvironment());
+  const rejected = assert.rejects(pending, /lease-invalid/);
+  await waiting;
+  await assert.rejects(controller.tools(active.token), /preparation-in-progress/);
+  await assert.rejects(controller.submit(active.token, submission({ execution_status: "SKIPPED" })), /preparation-in-progress/);
+  const cancelling = controller.cancel(); release();
+  await rejected; await cancelling;
+  assert.equal(released, 1); assert.equal(browsers, 0);
+  assert.equal(controller.authorization.artifact_digest, initial.public.artifact_digest);
+  const evidence = await verifyRuntimeEvidenceFiles(join(root, "evidence-set.json")); assert.equal(evidence.packets[0].execution_status, "CANCELLED");
 });
 
 test("阶段契约按显式协议分流，旧注册表保持原摘要", async () => {
@@ -165,7 +258,7 @@ test("XSS 支持需要两个身份的实际工具记录，脱敏保留固定 pro
   try {
     await controller.run(packet(auth.public));
     const active = await controller.start(packet(auth.public, "EXPLORE", "explore-xss", { vulnerability_type_id: "JW-INJECT-06" }));
-    const first = await controller.call(active.token, "navigate_page", { identity_id: "attacker", url: auth.private.url });
+    const first = await controller.call(active.token, "navigate_page", { identity_id: "attacker", url: auth.private.target_url });
     const result = submission({ outcome: "SUPPORTED", evidence_ids: [first.evidence_id], proof: {
       method: "REAL_APPLICATION_INPUT", persisted_or_revisited: "通过真实应用输入后重访测试页面。", victim_execution: "独立授权身份观察唯一测试标记。",
     } });

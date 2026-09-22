@@ -26,6 +26,12 @@
   "reports": {
     "root": "reports",
     "location_rule": "All durable audit deliverables MUST be written under the workspace-root reports/ directory. Never place final reports, SARIF, coverage verification, correlation, finding adjudication, attack-chain, or vulnerability-mining artifacts under tmp/ or inside audited application/test source trees outside reports/.",
+    "bac_analysis": {
+      "format": "bac-analysis.v1 JSON with Chinese Markdown and candidate SARIF",
+      "producer": "independent security-threat-modeler policy session and assigned source-audit session",
+      "path_templates": ["reports/bac/{audit_id}/policies/{policy_id}.json", "reports/bac/{audit_id}/drafts/{run_id}.request.json", "reports/bac/{audit_id}/runs/{run_id}/{bac-findings.json,bac-findings.md,manifest.json,result.sarif,review.json,attachment.json}"],
+      "notes": "Enabled task selection is frozen in the Coverage Plan and local packets. The control-driven report binds immutable comparison and review files; every raw candidate has exactly one disposition. Source content, tuple, role, path and Finding v2 bindings are checked. Unknown facts remain gaps; no target execution is authorized. The deterministic coverage/final model includes the per-unit BAC summary."
+    },
     "final_report": {
       "format": "markdown",
       "cardinality": "one final synthesized report per audit_id",

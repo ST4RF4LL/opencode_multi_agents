@@ -8,6 +8,7 @@ const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
 const MAX_ARTIFACTS = 5000;
 const REPORT_EXTENSIONS = new Set([".json", ".md", ".sarif"]);
 const REPORT_DIRECTORIES = new Set([
+  "bac",
   "adjudication",
   "attack-chains",
   "checkpoints",
@@ -512,6 +513,8 @@ export function auditsFromArtifacts(artifacts, validationRuns = [], runnerAudits
       runtime_validation_count: runtimeCount,
       artifact_count: auditArtifacts.length,
       coverage: coverageFromArtifacts(auditArtifacts),
+      bac_analysis: runner?.bac_analysis ?? null,
+      bac_summary: finalReportModelForAudit(auditArtifacts, auditId)?.model.bac_analysis ?? null,
       created_at: runner?.created_at ?? lastModified,
       updated_at: runner?.updated_at ?? lastModified,
       exit_code: runner?.exit_code ?? null,

@@ -6,7 +6,8 @@
 
 需要：
 
-- Git、Node.js 20+ 与 npm。
+- Git、Node.js 22.5+ 与 npm（版本下限与 `.opencode/package.json` 一致）。
+- 越权专项使用原生 Python 3.10+，只需标准库。Linux 默认 `python3`，Windows 默认 `python`；可用 `AUDIT_BAC_PYTHON` 指定可执行文件绝对路径。依赖缺失会记录专项 GAP，其余静态审计继续。详见[越权专项分析](bac-analysis.md)。
 - 当前稳定版 Google Chrome。动态 Web-XSS 验证会启动一个可见的隔离 Chrome；不会连接日常浏览器 profile。
 - OpenCode。可按[官方安装说明](https://opencode.ai/docs/)执行：
 

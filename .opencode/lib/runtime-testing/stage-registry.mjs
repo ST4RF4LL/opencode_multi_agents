@@ -1,7 +1,9 @@
 import { stageDeliveryRegistryDigest } from "../../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-contract.mjs";
+import { bacStageRegistry } from "../bac/stage-registry.mjs";
 
 // Explicit protocol selection leaves legacy registry semantics unchanged.
-export function runtimeStageRegistry(registry, protocol = process.env.AUDIT_RUNTIME_PROTOCOL) {
+export function runtimeStageRegistry(registry, protocol = process.env.AUDIT_RUNTIME_PROTOCOL, bacMode = process.env.AUDIT_BAC_MODE) {
+  registry = bacStageRegistry(registry, bacMode);
   if (!registry || protocol !== "runtime-testing.v1" || registry.registry_id?.endsWith("runtime-testing-v1") || registry.purpose?.startsWith("runtime-testing.v1：")) return registry;
   function project(value) {
     if (Array.isArray(value)) return value.filter(item => item !== "P08_FINALIZE.quick-dynamic-validator" && item?.agent_name !== "quick-dynamic-validator").map(project);
@@ -29,7 +31,7 @@ export function runtimeStageRegistry(registry, protocol = process.env.AUDIT_RUNT
   }
   output.purpose = `runtime-testing.v1：${registry.purpose}`;
   if (output.registry_id) {
-    output.registry_id = "workbench-stage-deliveries-runtime-testing-v1";
+    output.registry_id = `workbench-stage-deliveries-runtime-testing-v1${output.bac_analysis ? "-bac-v1" : ""}`;
     output.registry_digest = stageDeliveryRegistryDigest(output);
   }
   return output;

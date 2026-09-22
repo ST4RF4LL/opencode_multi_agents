@@ -86,3 +86,7 @@ metadata:
 - False-positive patterns live under `.opencode/shared/security-audit/false-positive-cases/java/java-idor-fp.md`.
 - Prefer defensive local validation; do not reuse historical payloads as generic exploits.
 - Coordinate with thin review skills (`java-injection-review`, `java-web-security-review`, `java-deserialization-review`) for cross-cutting coverage.
+
+## BAC 差分协作
+
+启用 bac-analysis.v1 的包同时使用 `java-access-path-analysis` 与 `detect-bac-risks`，将直接 owner/角色检查的实际路径证据交给确定性比较器。预期 ACP 来自独立策略会话；不要从当前路径缺少校验反推 NONE。tenant、父子授权、共享与字段控制保持本 skill 的原审计范围，不为适配四元组而简化。

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { aiRequired } from "./ai-coverage-routing.mjs";
+import { bacSelection } from "../../../../lib/bac/contract.mjs";
 import { FINDING_DETAIL_CONTRACT } from "../../finding-evidence-contract/scripts/finding-report-details.mjs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -388,6 +389,7 @@ async function main() {
     execution_model: COVERAGE_EXECUTION_MODEL,
     packet_report_contract: "tri-lens-v2",
     finding_detail_contract: FINDING_DETAIL_CONTRACT,
+    ...(process.env.AUDIT_BAC_MODE ? { bac_analysis: bacSelection(process.env.AUDIT_BAC_MODE) } : {}),
     ai_routing_digest: scope.ai_routing?.routing_digest ?? null,
     ai_routing_unknown_file_ids: scope.ai_routing?.unknown_file_ids ?? [],
     coverage_policy: {

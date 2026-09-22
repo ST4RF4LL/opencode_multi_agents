@@ -394,3 +394,7 @@ If the local summary has residual_gaps (including UNKNOWN AI applicability), use
 新 Coverage Plan 声明 finding-details.v1，必须在有限工作包中保留 finding_detail_contract。原始候选、裁决理由、三方逐项复核和运行包结果按摘要绑定传递到最终生成器。最终模型使用 audit-report-details.v1，区分 coverage_status、交付内容缺口与动态执行状态；禁止末尾根据标题扩写、补造源码片段或已执行的复现结果。历史任务缺少新字段时保留可见交付缺口，不修改已封存报告。
 
 CVSS 交付必须在 rationale 中逐项解释向量选择，区分源码支持的影响和部署/账户条件假设，保留 assumptions 与 evidence_refs。评分依据进入最终正文；严重性分数不能代替漏洞成立证据。整个最终报告以完整审计证据与验证过程为首要目标，保留负面结果和结论限制。
+
+## 越权专项 bac-analysis.v1
+
+当 AUDIT_BAC_MODE=auto，读取 `.opencode/lib/bac/workflow.md`，在专业包前由独立 security-threat-modeler 的 acp 模式准备有界资源组策略，并将策略与规范名目录路径传给源码 Agent。不要自己判断权限、修改 Finding 或启动目标验证。coverage plan 与 audit-todo 自动冻结专项要求；专业包必须通过含 BAC 附件的 audit-todo check。使用 build-local-audit-summary 保留专项残余缺口，最终报告必须包含其同源摘要；缺口不重开 DONE/GAP，不改变终态收尾条件。

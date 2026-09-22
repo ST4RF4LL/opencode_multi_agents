@@ -4,8 +4,8 @@
 
 ## 执行顺序
 
-1. 平台在启动静态审计前冻结授权、环境原文摘要、来源版本与范围摘要。未启用、环境为空或非法、必要身份缺失，控制器直接输出 SKIPPED；不启动服务、worker、浏览器或网络请求。静态流程正常推进。
-2. **CONTACT 与 Recon 并行**：平台自动调度正常环境接触。此阶段不需要 Finding，只确认授权地址、各身份隔离、登录与正常响应。专业 Agent/Orchestrator 读取 `node "$AUDIT_RUNTIME_CLI" status` 和 `$AUDIT_RUNTIME_STATE_ROOT/authorization.json`；无法接触环境时保留缺口，不阻塞 Recon。
+1. 平台在启动静态审计前冻结授权、环境原文摘要、来源版本与范围摘要。仅未启用或环境内容为空时，控制器直接输出 SKIPPED；不启动服务、worker、浏览器或网络请求。有内容时完整保存在私有 environment.prompt，不能以字段名或正则匹配结果决定是否启动环境理解。静态流程正常推进。
+2. **CONTACT 与 Recon 并行**：平台自动调度正常环境接触。此阶段不需要 Finding。Agent 先理解完整 environment.prompt，通过 configure_environment 登记目标、实际身份、敏感值和适用的测试数据范围，再用 browser_tools/browser_call 确认登录与正常响应；工具发现不会在登记前启动浏览器。确实缺少信息时由 Agent 说明具体缺口并跳过。专业 Agent/Orchestrator 读取 `node "$AUDIT_RUNTIME_CLI" status` 和 `$AUDIT_RUNTIME_STATE_ROOT/authorization.json`；无法接触环境时保留缺口，不阻塞 Recon。
 3. **Threat/Plan**：专业 Agent 结合基线与源码提出可证伪假设，写单独的运行工作包。Orchestrator 只进行格式校验和分派，不阅读源码或判定漏洞。每包默认 5–10 分钟，必须有正常对照和停止条件；无授权不生成待执行队列。
 4. **EXPLORE 与源码审计交错**：专业 Agent 完成一个 Focus Area 后可输出探索包，无需先有 Finding。通过 `node "$AUDIT_RUNTIME_CLI" enqueue <包的绝对路径>` 入队后立即继续静态工作。包位于 `$AUDIT_REPORTS_ROOT/runtime-testing/<audit_id>/plans/`，不修改现有 audit-todo handoff 的字段。控制器串行运行，同一环境仅一份租约；不同身份对应隔离 Chrome DevTools MCP 实例。环境忙时排队，不开启第二个浏览器控制器。
 5. **按需 CONFIRM**：专业 Agent 获得源码候选后，立即输出绑定 Finding 对象摘要与漏洞类型的确认包，不等待全部静态审计结束。先复用同环境、同版本、同假设的观察，只补充欠缺的应用路径、影响或反证。每假设最多两次测试；再次执行必须写明新增证据。没有源码定位的观察保留为 RUNTIME_ONLY 候选，禁止伪造源码行号。
@@ -14,7 +14,7 @@
 
 ## 工作包
 
-所有字段由 `contract.mjs:validatePacket` 检查。最小 EXPLORE 示例（摘要、身份、范围必须替换为当前真实绑定）：
+所有字段由 `contract.mjs:validatePacket` 检查。环境准备完成后才创建 EXPLORE/CONFIRM 包；以 CONTACT 登记后的 authorization.json 为准，不能使用登记前的临时 environment 身份或旧摘要。最小 EXPLORE 示例（摘要、身份、范围必须替换为当前真实绑定）：
 
 ```json
 {
@@ -35,14 +35,14 @@
   "expected_behavior": "普通文本安全展示，其他身份不会执行标记。",
   "steps": ["先提交普通文本建立对照，再通过真实应用输入提交唯一无害标记。", "另一授权身份在隔离会话重访，记录结果并清理测试记录。"],
   "counterchecks": ["确认普通文本对照与输入保存路径，排除工具直接注入。"],
-  "test_data_scope": "已授权的测试资料记录",
+  "test_data_scope": "<authorization.test_data_scope>",
   "cleanup_plan": "经应用编辑入口恢复资料并重访确认标记消失。"
 }
 ```
 
 CONFIRM 还要求 finding_id、finding_object_digest、vulnerability_type_id。CONTACT 不允许 test_input/test_mutation。CLEANUP 不能添加新测试目的。动作必须是创建任务时授权的子集。模型不能扩展 origin、身份、总预算或读取凭证等数据。
 
-持久化测试还要求创建任务时提供 test_data_scope 与 cleanup_instructions。包内 test_data_scope 必须与授权记录完全一致，不能自行填写更大的范围。
+持久化测试要求用户在原文中说明测试数据范围及应用清理方法，由 Agent 理解后登记，不要求用户手填 test_data_scope 或 cleanup_instructions 字段。缺少这些说明时只限制写入测试，正常访问与登录仍可进行。公开授权中的 test_data_scope 为不含原文的范围标识；包内必须复制该标识，不能自行扩大范围。执行 Agent 每次都收到完整私有 prompt 和已登记的私有范围说明。
 
 ## 真实性制品 v3
 

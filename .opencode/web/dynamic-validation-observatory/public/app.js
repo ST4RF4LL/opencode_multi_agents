@@ -558,8 +558,26 @@ function renderAuditDetail() {
   const logs = element("div", "runner-log");
   logs.append(element("p", "eyebrow", "RECENT OPENCODE EVENTS"), element("div", "agent-event-stream", "正在读取最近事件…"));
   const runtimePanel = renderRuntimeTesting(audit);
-  panel.replaceChildren(head, facts, stages, ...(runtimePanel ? [runtimePanel] : []), ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
+  const bacPanel = renderBacAnalysis(audit);
+  panel.replaceChildren(head, facts, stages, ...(bacPanel ? [bacPanel] : []), ...(runtimePanel ? [runtimePanel] : []), ...(diagnosticPanel ? [diagnosticPanel] : []), actions, logs);
   loadAuditLogs(audit.id, logs).catch(error => { logs.querySelector(".agent-event-stream").textContent = error.message; });
+}
+
+function renderBacAnalysis(audit) {
+  if (!audit.bac_analysis && !audit.bac_summary) return null;
+  const panel = element("section", "audit-diagnostics");
+  panel.append(element("h3", "", "越权专项分析"));
+  const summary = audit.bac_summary;
+  if (!summary) panel.append(element("p", "", audit.bac_analysis?.mode === "auto" ? "已启用，等待工作包交付策略、访问路径和差分复查结果。" : "专项差分已关闭；常规权限审计继续执行。"));
+  else {
+    panel.append(element("p", "", `状态 ${summary.status} · 路径 ${summary.counts.paths} · 策略 ${summary.counts.policies} · 候选 ${summary.counts.candidates} · 接入复核 ${summary.counts.accepted}`));
+    panel.append(element("p", "context-note", summary.claim_boundary));
+    const list = element("ul");
+    for (const unit of summary.units) list.append(element("li", "", `${unit.focus_area_id} / ${unit.assignment_id}：${unit.status}${unit.reason ? `；${unit.reason}` : ""}`));
+    for (const gap of summary.gaps) list.append(element("li", "", `缺口：${gap}`));
+    panel.append(list);
+  }
+  return panel;
 }
 
 function renderRuntimeTesting(audit) {
@@ -571,17 +589,20 @@ function renderRuntimeTesting(audit) {
   const reasons = {
     ENVIRONMENT_NOT_PROVIDED: "未提供环境信息", DYNAMIC_NOT_AUTHORIZED: "未启用动态授权",
     ENVIRONMENT_INVALID: "环境信息未通过创建任务时的校验；请使用当前版本新建任务",
-    ENVIRONMENT_FORMAT_INVALID: "环境 JSON 格式无效，须提供包含 url 的对象",
-    ENVIRONMENT_URL_MISSING: "未识别到目标地址；请填写 URL: http://主机:端口 或 地址：主机:端口",
-    ENVIRONMENT_URL_INVALID: "目标地址格式无效；须为 HTTP(S) 地址，账号密码请单独填写",
-    ENVIRONMENT_URL_AMBIGUOUS: "说明中包含多个不同目标；请用 URL: 指定主地址，其他授权地址写入 JSON origins",
-    ENVIRONMENT_ORIGINS_INVALID: "origins 须为完整 HTTP(S) origin 列表（仅协议、主机和端口），且包含主地址",
-    REQUIRED_IDENTITIES_MISSING: "缺少所选身份所需的测试账号或密码", IDENTITY_SCOPE_MISMATCH: "账号与所选身份模式不一致；填写账号时请选择登录身份",
-    REQUIRED_MUTATION_SCOPE_MISSING: "允许创建测试记录时须提供测试数据范围和清理说明",
+    ENVIRONMENT_FORMAT_INVALID: "旧任务的环境格式校验未通过；新建任务会将原文交给 Agent 理解",
+    ENVIRONMENT_URL_MISSING: "旧任务未识别到地址；新建任务会将原文交给 Agent 理解",
+    ENVIRONMENT_URL_INVALID: "旧任务的地址格式校验未通过",
+    ENVIRONMENT_URL_AMBIGUOUS: "旧任务无法确定主地址",
+    ENVIRONMENT_ORIGINS_INVALID: "旧任务的目标范围校验未通过",
+    REQUIRED_IDENTITIES_MISSING: "旧任务的账号解析或身份检查未通过；新建任务不再按固定字段解析凭据",
+    IDENTITY_SCOPE_MISMATCH: "旧任务的账号与身份模式检查未通过",
+    REQUIRED_MUTATION_SCOPE_MISSING: "旧任务未识别到测试数据范围或清理说明",
+    ENVIRONMENT_CONTACT_INCOMPLETE: "环境接触未完成，具体原因见下方 Agent 的结果和缺口说明",
     ENVIRONMENT_ALREADY_LEASED: "环境正被其他任务使用", ENVIRONMENT_LEASE_REQUIRES_REVIEW: "环境租约需要人工核对", PROCESS_RECOVERY_ENVIRONMENT_UNKNOWN: "恢复后环境状态不明", ENVIRONMENT_STATE_UNKNOWN: "环境状态不明", BROWSER_CLOSE_FAILED: "测试浏览器关闭失败",
   };
   panel.append(element("h3", "", "贯穿式运行测试"), element("p", "", value ? `${states[value.status] ?? value.status}${value.reason ? ` · ${reasons[value.reason] ?? value.reason}` : ""}` : "等待任务启动；环境未提供时自动跳过。"));
   if (!value) return panel;
+  if (value.environment_ready === false && !["SKIPPED", "CLOSED", "BLOCKED", "QUARANTINED"].includes(value.status)) panel.append(element("p", "", "Agent 将先理解完整环境说明，再登记执行配置并访问目标。"));
   const list = element("ol", "stage-list");
   for (const [phase, label] of Object.entries(labels)) {
     const item = element("li"); item.append(element("span", "", label), element("small", "", states[value.stages?.[phase]] ?? value.stages?.[phase] ?? "未调度")); list.append(item);
@@ -1652,6 +1673,7 @@ function openAuditDialog(repositoryId = null, templateAudit = null) {
   form.elements.name.value = templateAudit?.name ? `${templateAudit.name.replace(/（重试）$/u, "")}（重试）` : "";
   form.elements.audit_id.value = `audit-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 7)}`;
   form.elements.ref.value = "当前目录快照";
+  form.elements.bac_analysis.value = templateAudit?.bac_analysis?.mode ?? "auto";
   const selectedModel = templateAudit ? (templateAudit.model ?? "default") : (state.modelSettings?.selected_model ?? "default");
   const modelOptions = [...(state.modelSettings?.options ?? [{ value: "default", label: "默认" }])];
   if (!modelOptions.some(option => option.value === selectedModel)) {
@@ -1840,6 +1862,7 @@ async function submitAudit(event) {
   const input = {
     name: data.get("name"), target_id: data.get("target_id"), audit_id: data.get("audit_id"),
     model: data.get("model"),
+    bac_analysis: data.get("bac_analysis") ?? "auto",
     additional_instructions_enabled: additionalInstructionsEnabled,
     additional_instructions: additionalInstructionsEnabled ? form.elements.additional_instructions.value : "",
     test_environment_enabled: testEnvironmentEnabled,

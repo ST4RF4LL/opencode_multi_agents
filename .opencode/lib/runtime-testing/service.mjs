@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { RuntimeTestingController, atomicJson } from "./controller.mjs";
 import { ChromeRuntimeBrowser } from "./browser.mjs";
-import { PROTOCOL, check, validatePacket } from "./contract.mjs";
+import { PROTOCOL, check, fail, validatePacket } from "./contract.mjs";
+import { workerInput } from "./environment-prompt.mjs";
 
 const originOwners = new Map();
 const gateway = fileURLToPath(new URL("./worker-mcp.mjs", import.meta.url));
@@ -24,6 +25,8 @@ export class RuntimeTestingService {
     this.queue = []; this.draining = null; this.accepting = true; this.server = null; this.keys = [];
     this.lockPaths = [];
     this.controller = new RuntimeTestingController({ root, authorization, privateContext,
+      prepareEnvironment: grant => this.acquireEnvironment(grant),
+      persistEnvironment: async context => { await mkdir(this.privateRoot, { recursive: true }); await atomicJson(join(this.privateRoot, "environment.json"), context); },
       browserFactory: browserFactory ?? (async grant => new ChromeRuntimeBrowser(grant)),
       worker: async args => { await this.changed(); return worker ? worker(args) : this.worker(args); } });
   }
@@ -39,27 +42,13 @@ export class RuntimeTestingService {
   async startOnce() {
     await this.controller.ready;
     if (["SKIPPED", "CLOSED", "BLOCKED", "QUARANTINED"].includes(this.controller.state.status)) { await this.controller.close(); await this.changed(); return this; }
-    const keys = this.controller.authorization.origins.map(leaseKey);
-    if (keys.some(key => originOwners.has(key))) {
-      this.controller.state.status = "BLOCKED"; this.controller.state.reason = "ENVIRONMENT_ALREADY_LEASED";
-      await this.controller.close(); await this.changed(); return this;
-    }
-    this.keys = keys; for (const key of keys) originOwners.set(key, this);
-    const leasesRoot = join(dirname(dirname(this.privateRoot)), "runtime-environment-leases");
-    await mkdir(leasesRoot, { recursive: true });
-    try {
-      for (const key of [...new Set(keys)].sort()) {
-        const path = join(leasesRoot, `${createHash("sha256").update(key).digest("hex")}.json`);
-        await writeFile(path, JSON.stringify({ audit_id: this.controller.authorization.audit_id, owner: this.token, reason: "环境使用中；异常退出后禁止自动清除租约。" }), { flag: "wx", mode: 0o600 });
-        this.lockPaths.push(path);
+    if (this.controller.authorization.environment_ready !== false) {
+      try { await this.acquireEnvironment(this.controller.authorization); }
+      catch (error) {
+        if (!["ENVIRONMENT_ALREADY_LEASED", "ENVIRONMENT_LEASE_REQUIRES_REVIEW"].includes(error.code)) throw error;
+        this.controller.state.status = "BLOCKED"; this.controller.state.reason = error.code;
+        await this.controller.close(); await this.changed(); return this;
       }
-    } catch (error) {
-      for (const path of this.lockPaths.splice(0)) await rm(path, { force: true });
-      for (const key of this.keys) if (originOwners.get(key) === this) originOwners.delete(key);
-      this.keys = [];
-      if (error.code !== "EEXIST") throw error;
-      this.controller.state.status = "BLOCKED"; this.controller.state.reason = "ENVIRONMENT_LEASE_REQUIRES_REVIEW";
-      await this.controller.close(); await this.changed(); return this;
     }
     this.server = http.createServer((request, response) => this.handle(request, response));
     this.server.requestTimeout = 60_000;
@@ -78,6 +67,31 @@ export class RuntimeTestingService {
     this.expiryTimer.unref?.();
     await this.changed(); return this;
   }
+  async acquireEnvironment(authorization) {
+    const keys = [...new Set(authorization.origins.map(leaseKey))];
+    check(keys.length > 0 && this.keys.length === 0, "runtime-environment-lease-invalid");
+    check(!keys.some(key => originOwners.has(key)), "ENVIRONMENT_ALREADY_LEASED");
+    this.keys = keys; for (const key of keys) originOwners.set(key, this);
+    const release = async () => {
+      for (const path of this.lockPaths.splice(0)) await rm(path, { force: true });
+      for (const key of this.keys) if (originOwners.get(key) === this) originOwners.delete(key);
+      this.keys = [];
+    };
+    try {
+      const leasesRoot = join(dirname(dirname(this.privateRoot)), "runtime-environment-leases");
+      await mkdir(leasesRoot, { recursive: true });
+      for (const key of keys.sort()) {
+        const path = join(leasesRoot, `${createHash("sha256").update(key).digest("hex")}.json`);
+        await writeFile(path, JSON.stringify({ audit_id: authorization.audit_id, owner: this.token, reason: "环境使用中；异常退出后禁止自动清除租约。" }), { flag: "wx", mode: 0o600 });
+        this.lockPaths.push(path);
+      }
+      return release;
+    } catch (error) {
+      await release();
+      if (error.code === "EEXIST") throw fail("ENVIRONMENT_LEASE_REQUIRES_REVIEW");
+      throw error;
+    }
+  }
   async changed() { await this.onChange({ ...this.controller.snapshot(), queued_packets: this.queue.map(packet => ({ id: packet.id, phase: packet.phase })) }); }
   async handle(request, response) {
     try {
@@ -86,8 +100,10 @@ export class RuntimeTestingService {
       for await (const chunk of request) { size += chunk.length; check(size <= 512 * 1024, "runtime-body-too-large"); chunks.push(chunk); }
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
       const token = request.headers.authorization?.replace(/^Bearer /, ""); let result;
-      if (["/tools", "/call", "/submit"].includes(request.url)) {
+      if (["/tools", "/call", "/submit", "/configure", "/redactions"].includes(request.url)) {
         this.controller.requireActive(token);
+        if (request.url === "/redactions") result = this.controller.registerSensitiveValues(token, body.values);
+        if (request.url === "/configure") result = await this.controller.configureEnvironment(token, body);
         if (request.url === "/tools") result = await this.controller.tools(token);
         if (request.url === "/call") result = await this.controller.call(token, body.name, body.arguments ?? {});
         if (request.url === "/submit") result = await this.controller.submit(token, body);
@@ -156,7 +172,7 @@ export class RuntimeTestingService {
       authorization_digest: grant.artifact_digest, environment_revision: grant.environment_revision,
       identity_ids: grant.identities.map(identity => identity.id), actions: grant.allowed_actions.filter(action => ["navigate", "normal_interaction"].includes(action)),
       budget_seconds: 600, question: "测试环境是否可访问，授权身份和正常操作基线是否可用？", expected_behavior: "每个授权身份在隔离会话中访问对应测试范围。",
-      steps: ["读取已提供的环境说明；缺少登录步骤时记录缺口。", "通过真实应用路径确认页面、身份和正常响应；不得进行漏洞输入。"], counterchecks: [] });
+      steps: ["先完整理解私有环境 prompt，登记目标、隔离身份和敏感值；无法确定必要信息时说明缺口。", "通过真实应用路径确认页面、身份和正常响应；不得进行漏洞输入。"], counterchecks: [] });
   }
   async worker({ active, privateContext }) {
     check(["win32", "linux"].includes(process.platform), "runtime-host-unsupported");
@@ -170,7 +186,7 @@ export class RuntimeTestingService {
       permission: { "*": "deny", "runtime-browser_*": "allow" } } } };
     // Secrets are on a private attachment, never in argv or public report artifacts.
     const inputPath = join(this.privateRoot, `${active.packet.id}.worker.json`);
-    await atomicJson(inputPath, { packet: active.packet, environment: privateContext });
+    await atomicJson(inputPath, workerInput(active.packet, this.controller.authorization, privateContext));
     try {
       // Preparation may have outlived the lease; never launch a late worker.
       this.controller.requireActive(active.token);

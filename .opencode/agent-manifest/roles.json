@@ -21,6 +21,7 @@
     "security-threat-modeler": {
       "mode": "subagent",
       "stage_contract_ids": ["P02_THREAT_MODEL.security-threat-modeler.bootstrap", "P07_GAP_ROUND.security-threat-modeler.refine"],
+      "protocol_stage_contract_ids": {"bac-analysis.v1": ["P03_PLAN.security-threat-modeler.acp"]},
       "responsibility": "Build and optionally owner-refine a durable threat model, generalize authorized security history into project-specific threat classes, enforce entry-point threat coverage, and partition the complete audit universe into deterministic Focus Areas.",
       "inputs": ["Recon summary", "compact threat-routing index", "Recon inventories", "architecture and security documents", "authorized history/advisories", "owner answers when already available"],
       "outputs": ["sealed threat-model.json", "sealed focus-areas.json", "entry-point threat coverage", "history clusters and sibling leads", "blocking open questions"],

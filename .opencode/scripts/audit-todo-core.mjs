@@ -1,4 +1,5 @@
 import { PACKET_REPORT_CONTRACT, validatePacketReports } from "./packet-reports.mjs";
+import { bacForUnit } from "../lib/bac/contract.mjs";
 import { FINDING_DETAIL_CONTRACT } from "../skills/common-subagent/finding-evidence-contract/scripts/finding-report-details.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -243,7 +244,8 @@ export async function initializeAuditTodo({ todoPath, auditId, planPath }) {
   const units = Array.isArray(plan.coverage_units) ? plan.coverage_units : [];
   if (units.length === 0) throw new Error("Coverage Plan 没有可调度的 coverage_units。");
   const itemIds = new Set();
-  const items = units.map((unit, index) => ({ ...itemFromUnit(unit, index), report_contract: plan.packet_report_contract ?? "legacy-v1", finding_detail_contract: plan.finding_detail_contract ?? null, scope_digest: plan.scope_digest ?? null, report_bindings: [] }));
+  const items = units.map((unit, index) => ({ ...itemFromUnit(unit, index), report_contract: plan.packet_report_contract ?? "legacy-v1", finding_detail_contract: plan.finding_detail_contract ?? null, scope_digest: plan.scope_digest ?? null, report_bindings: [],
+    ...(bacForUnit(plan, unit) ? { bac_analysis: bacForUnit(plan, unit) } : {}) }));
   for (const item of items) {
     if (itemIds.has(item.item_id)) throw new Error(`Coverage Plan 包含重复的调度项：${item.item_id}`);
     itemIds.add(item.item_id);
@@ -333,6 +335,7 @@ function publicPacket(todo, packet) {
       required_lenses: item.required_lenses,
       report_contract: item.report_contract ?? "legacy-v1",
       finding_detail_contract: item.finding_detail_contract ?? null,
+      ...(item.bac_analysis ? { bac_analysis: item.bac_analysis } : {}),
       expected_check_count: item.expected_check_count,
     })),
   };

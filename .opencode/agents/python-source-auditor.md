@@ -194,3 +194,7 @@ For a local packet, Stage/Agent INPUT and OUTPUT envelopes are evidence records 
 ## 漏洞内容交付契约
 
 工作包声明 `finding_detail_contract=finding-details.v1` 时，每个候选按 `finding-evidence-contract/references/finding-report-details.md` 填写 `report_details`：中文成因、应有/实际行为、绑定事实索引的完整路径、代码上下文、未执行复现设计、定位明确的修复步骤、正常功能与安全回归用例。复现设计不能冒充实际执行；运行证据仍由控制器产生。内容不完整会使工作包验收失败并进入 watchdog 提醒。无 Finding 的 Area 不编造候选来满足格式；Area 缺口仍走原 GAP/SKIPPED 交付。
+
+## 越权专项交付
+
+工作包带 bac_analysis.required=true 时加载 `detect-bac-risks` 并遵循 `.opencode/lib/bac/workflow.md`；Java 另外加载 `java-access-path-analysis`。策略由 Orchestrator 分派的独立会话提供，当前会话只恢复实际路径、合成控制、比较与复查。control-driven 报告必须携带封存附件或显式 GAP/有据不适用；把接入候选原样写入该报告。其他 lens 复用实际事实但不复制专项候选。无策略、工具失败、预算不足或未支持框架均保存缺口，不创建嵌套任务、不等待用户，不自行调用浏览器。

@@ -97,6 +97,10 @@ Skill 到 agent 的映射通过目录约定和 `collection.json` 自动完成，
 - `INCONCLUSIVE`: 仅在缺失条件明确时补充证据要求，不提升为确认案例。
 - `partial/failed/stopped/invalidated`: 记录复核缺口，不执行依赖结论的知识提升。
 
+外部 KnowledgeWorkFlow 通过[只读知识检索适配器](.opencode/lib/knowledge-workflow.md)接入。默认寻找平台同级的 `KnowledgeWorkFlow`，也可用 `AUDIT_KNOWLEDGE_ROOT` 指定；复用知识库原生索引、分类修订和来源哈希校验，支持根因、案例、规则与根因检测器。专业 Agent 先匹配安全条件与反例，再选适用规则；保留“原案例差分 / 静态样本 / 跨项目验证”的区别。Blind 轨道不加载知识种子，检索结果不替代当前项目证据或覆盖记账。
+
+新建工作台任务默认启用[越权专项分析](docs/bac-analysis.md)，也可在创建时关闭。独立会话提取 D/O/R/AC 预期策略，Java/Python/Web 源码会话恢复实际数据库访问路径，确定性差分产生待复核候选，再接入现有 Finding 与三方复核。专项缺口、策略冲突和模型外权限会进入最终中文报告；静态专项开关不授予动态执行权限。原生运行依赖 Python 3.10+，可用 `AUDIT_BAC_PYTHON` 指定。
+
 ## Temporary artifacts and reports
 
 所有**持久交付件**输出到工作区根目录的 `reports/`（不是 `tmp/`，也不是被审计应用/测试源码树内部）。临时产物存放在 `tmp/` 下按 `audit_id` 分目录管理。`tmp/` 与 `reports/**` 被 `.gitignore` 忽略；`tmp/` 只保留 `tmp/.gitkeep` 和 `tmp/README.md` 作为目录占位。

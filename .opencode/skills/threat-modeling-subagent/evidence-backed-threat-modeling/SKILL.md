@@ -31,6 +31,8 @@ Read [references/artifact-schemas.md](references/artifact-schemas.md) before emi
 
 Use provenance tags `code-verified`, `documented`, `owner-asserted`, `history-inferred`, `deployment-unknown`, and `contradictory`. Never promote an owner statement or old advisory into code-verified evidence.
 
+For external mechanism guidance, read `.opencode/lib/knowledge-workflow.md` and query `node "$AUDIT_KNOWLEDGE_CLI" search --track threat-model --query "<boundary or security invariant>"`. Match necessary conditions and safe counterexamples before linking a seed to a Focus Area. Preserve source hashes and native quality limitations in existing evidence fields; knowledge drafts and detector hits are not code-verified facts. Do not put retrieved case details or mechanism checklists into blind-track packets. Missing/stale knowledge leaves a retrieval limitation and does not stop evidence-backed modeling.
+
 For AI systems, include malicious content, compromised tools, peer agents, knowledge sources, model providers, tenants, supply-chain actors, and insiders where applicable. Bind AI threats to application assets and consequences rather than reporting model behavior alone.
 
 ## Refine with the owner

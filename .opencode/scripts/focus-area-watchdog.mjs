@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { checkPacketHandoff, readAuditTodo } from "./audit-todo-core.mjs";
+import { bacForUnit, objectDigest } from "../lib/bac/contract.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const identity = item => ({ item_id: item.item_id, focus_area_id: item.focus_area_id, assignment_id: item.assignment_id, domain: item.domain, agent_name: item.agent_name });
@@ -28,6 +29,9 @@ export async function inspectFocusAreaCoverage({ todoPath, reportsRoot, agentNam
         else if (item && ["focus_area_id", "domain", "agent_name"].some(key => item[key] !== unit[key])) issues.push(`任务身份与计划不一致：${itemId}`);
         else if (item && item.assignment_id !== (unit.assignment_id ?? unit.unit_id)) issues.push(`任务责任分派与计划不一致：${itemId}`);
         else if (item && (item.finding_detail_contract ?? null) !== (plan.finding_detail_contract ?? null)) issues.push(`漏洞交付内容契约与计划不一致：${itemId}`);
+        const expectedBac = bacForUnit(plan, unit);
+        if (item && objectDigest(item.bac_analysis ?? null) !== objectDigest(expectedBac)) issues.push(`越权专项分派与计划不一致：${itemId}`);
+        if (item && expectedBac && (item.report_contract !== plan.packet_report_contract || item.scope_digest !== plan.scope_digest)) issues.push(`越权专项报告契约或源码范围与计划不一致：${itemId}`);
       }
       for (const item of todo.items) if (!expectedIds.has(item.item_id)) issues.push(`任务不在绑定计划内：${item.item_id}`);
     } catch (error) { issues.push(`无法核对 Coverage Plan：${error.message}`); }

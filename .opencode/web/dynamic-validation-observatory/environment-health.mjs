@@ -159,7 +159,7 @@ export class EnvironmentHealthService {
       id: "node", label: "Node.js", category: "基础运行时", status: nodeMajor >= 20 ? "ready" : "unavailable", version: this.nodeVersion,
       command: "node", required_for: ["workbench", "static", "dynamic"], detail: nodeMajor >= 20 ? "满足 Node.js 20+ 要求。" : "需要 Node.js 20 或更高版本。",
     };
-    const [npm, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, gitleaks, osvScanner, chrome, dependencies, mcp] = await Promise.all([
+    const [npm, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, gitleaks, osvScanner, chrome, dependencies, mcp, bacPython] = await Promise.all([
       probeExecutable({ id: "npm", label: "npm", category: "基础运行时", command: platform === "win32" ? "npm.cmd" : "npm", requiredFor: ["workbench", "dynamic"], environment, platform, execute, resolveCommand }),
       probeExecutable({ id: "git", label: "Git", category: "基础运行时", command: "git", requiredFor: ["static", "dynamic"], environment, platform, execute, resolveCommand }),
       openCodeComponent({ environment, platform, architecture: this.architecture, execute, resolveCommand }),
@@ -174,13 +174,15 @@ export class EnvironmentHealthService {
       chromeComponent({ environment, platform, execute, resolveCommand }),
       readPackageComponent(this.projectRoot),
       inspectMcpConfiguration(this.configPaths),
+      probeExecutable({ id: "bac_python", label: "Python（越权专项）", category: "静态分析（可选）", command: environment.AUDIT_BAC_PYTHON || (platform === "win32" ? "python" : "python3"), requiredFor: ["bac_analysis"], environment, platform, execute, resolveCommand }),
     ]);
     const chromeMcp = configuredComponent("chrome_devtools_mcp", "Chrome DevTools MCP", "动态验证", mcp.chrome_devtools, ["dynamic"], "隔离 Chrome DevTools MCP 已启用。" );
-    const components = [node, npm, dependencies, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, gitleaks, osvScanner, chrome, chromeMcp];
+    const components = [node, npm, dependencies, git, opencode, tmux, java, joern, joernParse, opengrep, semgrep, gitleaks, osvScanner, chrome, chromeMcp, bacPython];
     const capabilities = [
       capability("workbench", "工作台", ["node", "project_dependencies"], components),
       capability("static", "静态漏洞挖掘", ["node", "git", "opencode", "project_dependencies"], components, { anyOf: ["opengrep", "semgrep"] }),
       capability("source_pattern_scan", "源码模式扫描", [], components, { anyOf: ["opengrep", "semgrep"] }),
+      capability("bac_analysis", "越权专项差分（可选）", ["node", "opencode", "bac_python"], components, { optional: true }),
       capability("secret_scan", "密钥泄漏扫描（可选）", ["gitleaks"], components, { optional: true }),
       capability("dependency_scan", "依赖漏洞扫描（可选）", ["osv_scanner"], components, { optional: true }),
       capability("deep_dataflow", "深度数据流分析（可选）", ["java", "joern", "joern_parse"], components, { optional: true }),
