@@ -1348,6 +1348,32 @@ export class AuditRunner extends EventEmitter {
     return result;
   }
 
+  async retryDraft(auditId) {
+    await this.ready;
+    const audit = this.audits.get(auditId);
+    if (!audit) throw Object.assign(new Error("原审计任务不存在，无法恢复重试内容。"), { statusCode: 404, code: "audit-not-found" });
+    const paths = await this.verifiedPrivateContextPaths(audit);
+    const draft = {};
+    for (const [key, enabledField, valueField] of [
+      ["additional_instructions", "additional_instructions_enabled", "additional_instructions"],
+      ["test_environment", "test_environment_enabled", "test_environment_context"],
+    ]) {
+      draft[enabledField] = audit.private_context?.[key]?.enabled === true;
+      draft[valueField] = "";
+      if (!draft[enabledField]) continue;
+      let bytes;
+      try { bytes = await readFile(paths[key]); }
+      catch { throw Object.assign(new Error("原任务的私有上下文读取失败，无法恢复重试内容。"), { statusCode: 409, code: "audit-context-integrity-failed" }); }
+      if (createHash("sha256").update(bytes).digest("hex") !== audit.private_context[key].sha256) {
+        throw Object.assign(new Error("原任务的私有上下文已变化，无法恢复重试内容。"), { statusCode: 409, code: "audit-context-integrity-failed" });
+      }
+      // The storage writer appends one newline; preserve all user text inside it.
+      const text = bytes.toString("utf8");
+      draft[valueField] = text.endsWith("\n") ? text.slice(0, -1) : text;
+    }
+    return draft;
+  }
+
   async dynamicValidationPolicy(auditId, repositoryId = null) {
     await this.ready;
     const audit = this.audits.get(auditId);

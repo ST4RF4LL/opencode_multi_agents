@@ -811,6 +811,16 @@ export function createAuditWorkbenchServer({
             return;
           }
         }
+        const productAuditRetryDraft = matchProductAuditPath(url.pathname, "retry-draft");
+        if (request.method === "POST" && productAuditRetryDraft) {
+          // Private text is returned only for an explicit, product-scoped form
+          // refill, with the same origin checks as submission and no caching.
+          assertSafeMutation(request);
+          await requestJson(request);
+          await auditForProduct(productAuditRetryDraft.productId, productAuditRetryDraft.auditId);
+          json(response, 200, await runner.retryDraft(productAuditRetryDraft.auditId));
+          return;
+        }
         const productAuditAction = matchProductAuditPath(url.pathname, "actions");
         if (request.method === "POST" && productAuditAction) {
           assertSafeMutation(request);

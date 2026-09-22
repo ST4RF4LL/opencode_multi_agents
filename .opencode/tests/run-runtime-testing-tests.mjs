@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { strict as assert } from "node:assert";
+import { EventEmitter } from "node:events";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,8 +25,6 @@ import { validateStageContractRegistry } from "../skills/common-subagent/audit-a
 import { validateStageDeliveryRegistry } from "../skills/common-subagent/audit-artifact-management/scripts/stage-delivery-contract.mjs";
 import { validateTruthValidationBundle, validateStaticRoleReview, validateTruthValidationIntake } from "../skills/vulnerability-validator-subagent/vulnerability-validation/scripts/truth-validation-contract.mjs";
 
-const portableMacOS = process.platform === "darwin" && process.env.AUDIT_ALLOW_MACOS_PORTABLE_TESTS === "1";
-if (!["linux", "win32"].includes(process.platform) && !portableMacOS) throw new Error("请在 Windows/Linux 执行回归；经授权的 macOS 伪浏览器回归可设置 AUDIT_ALLOW_MACOS_PORTABLE_TESTS=1。真实运行平台限制保持不变。");
 const SHA = "a".repeat(64);
 const selected = selection({ runtime_testing: { protocol: PROTOCOL, mode: "INTEGRATED_TESTING", budget_minutes: 60, explicit_authorization: true, identity_mode: "anonymous", allowed_actions: ["navigate", "normal_interaction", "test_input"] } });
 function promptGrant(overrides = {}) { return authorize({ auditId: "audit-runtime-test", selected, enabled: true, context: JSON.stringify({ url: "http://127.0.0.1:8080", revision: "fixture-1" }), scopeDigest: SHA, ...overrides }); }
@@ -78,6 +78,79 @@ test("空环境及旧 opt-in 不启动控制服务、worker 或浏览器", async
   assert.equal(calls, 0);
   assert.equal(grant({ selected: null }).public.reason, "DYNAMIC_NOT_AUTHORIZED");
   assert.equal(grant({ enabled: false }).public.status, "SKIPPED");
+});
+
+test("Web 服务与默认 worker 在当前主机按工具能力启动，不设操作系统门禁", async t => {
+  const root = await temporary(t); const auth = grant();
+  const configPath = join(root, "opencode.json"); await writeFile(configPath, "{}");
+  const counts = { calls: 0, closed: 0 }; const launches = [];
+  const service = new RuntimeTestingService({ root: join(root, "reports"), privateRoot: join(root, "private"),
+    authorization: auth.public, privateContext: auth.private, command: "fixture-opencode", workspaceRoot: root,
+    environment: { OPENCODE_CONFIG: configPath }, browserFactory: async () => fakeBrowser(counts),
+    spawnProcess(command, args, options) {
+      launches.push({ command, args, options });
+      const child = new EventEmitter(); child.kill = () => true;
+      queueMicrotask(() => successfulWorker({ controller: service.controller, active: service.controller.active })
+        .then(() => child.emit("close", 0), error => child.emit("error", error)));
+      return child;
+    } });
+  try {
+    await service.start(); assert.notEqual(service.server, null);
+    await service.contact(); await service.draining;
+    assert.equal(launches.length, 1); assert.equal(launches[0].command, "fixture-opencode");
+    assert.equal(launches[0].options.shell, false);
+    assert.equal(service.controller.state.status, "READY"); assert.equal(counts.calls, 1);
+    await service.shutdown();
+    const evidence = await verifyRuntimeEvidenceFiles(join(root, "reports", "evidence-set.json"));
+    assert.equal(evidence.packets[0].execution_status, "COMPLETED");
+    assert.equal(evidence.cleanup_status, "NOT_REQUIRED"); assert.equal(evidence.stages.CLEANUP, "SKIPPED");
+    assert.equal(counts.closed, 1);
+  } finally { await service.shutdown(); }
+});
+
+test("Web 浏览器默认 MCP 连接路径不设主机门禁，无需 clientFactory 绕过", async t => {
+  const auth = grant(); let connected = 0; let closed = 0;
+  t.mock.method(Client.prototype, "connect", async () => { connected++; });
+  t.mock.method(Client.prototype, "listTools", async () => ({ tools: [{ name: "navigate_page", inputSchema: { type: "object" } }] }));
+  t.mock.method(Client.prototype, "callTool", async () => ({ content: [] }));
+  t.mock.method(Client.prototype, "close", async () => { closed++; });
+  const browser = new ChromeRuntimeBrowser(auth.public);
+  try {
+    assert.equal((await browser.tools(packet(auth.public)))[0].name, "navigate_page");
+    await browser.call("navigate_page", { identity_id: "anonymous", url: "http://127.0.0.1:8080" }, packet(auth.public));
+    assert.equal(connected, 1);
+  } finally { await browser.close(); }
+  assert.equal(closed, 1);
+});
+
+test("Web 跨平台执行仍保留未授权或空环境的跳过原因", async t => {
+  const root = await temporary(t);
+  for (const [index, overrides] of [{ enabled: false }, { context: "" }].entries()) {
+    const auth = promptGrant(overrides);
+    const service = new RuntimeTestingService({ root: join(root, `${index}`), privateRoot: join(root, "private", `${index}`),
+      authorization: auth.public });
+    try {
+      await service.start();
+      assert.equal(service.controller.state.status, "SKIPPED");
+      assert.equal(service.controller.state.reason, auth.public.reason);
+      assert.equal(service.server, null);
+    } finally { await service.shutdown(); }
+  }
+});
+
+test("旧版主机限制的封存结果保持原样，不自动重启已跳过的任务", async t => {
+  const root = await temporary(t); const auth = grant();
+  const first = new RuntimeTestingController({ root, authorization: auth.public }); await first.ready;
+  first.state.status = "SKIPPED"; first.state.reason = "RUNTIME_HOST_UNSUPPORTED";
+  first.state.stages = Object.fromEntries(Object.keys(first.state.stages).map(phase => [phase, "SKIPPED"]));
+  const before = await first.close();
+  const recovered = new RuntimeTestingService({ root, privateRoot: join(root, "private"), authorization: auth.public });
+  try {
+    await recovered.start();
+    const evidence = await verifyRuntimeEvidenceFiles(join(root, "evidence-set.json"));
+    assert.deepEqual(evidence, before);
+    assert.equal(recovered.server, null);
+  } finally { await recovered.shutdown(); }
 });
 
 test("环境原文原样进入私有 prompt，不用地址、账号或 JSON 格式决定准入", () => {

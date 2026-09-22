@@ -25,6 +25,7 @@ const state = {
   auditLoading: false,
   auditController: null,
   auditDetailController: null,
+  auditDialogRequest: 0,
   auditSearchTimer: null,
   auditQueryKey: null,
   selectedValidationId: null,
@@ -547,7 +548,11 @@ function renderAuditDetail() {
   }
   if (["queued", "failed", "interrupted", "cancelled", "completed", "artifact_only"].includes(audit.status) && audit.repository_id) {
     const retry = element("button", "button secondary", audit.status === "completed" ? "再次审计" : "新建重试");
-    retry.addEventListener("click", () => openAuditDialog(audit.repository_id, audit));
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      try { await openAuditDialog(audit.repository_id, audit); }
+      finally { retry.disabled = false; }
+    });
     actions.append(retry);
     if (state.selectedProductId === "product-undefined") {
       const remove = element("button", "button danger", "删除任务");
@@ -588,6 +593,8 @@ function renderRuntimeTesting(audit) {
   const states = { SKIPPED: "已跳过", NOT_SCHEDULED: "未调度", RUNNING: "执行中", COMPLETED: "已完成", FAILED: "失败", TIMED_OUT: "超时", BLOCKED: "不可用", QUARANTINED: "已隔离", CLOSED: "已封存", AUTHORIZED: "已授权", READY: "环境就绪", IN_USE: "使用中", CANCELLED: "已取消" };
   const reasons = {
     ENVIRONMENT_NOT_PROVIDED: "未提供环境信息", DYNAMIC_NOT_AUTHORIZED: "未启用动态授权",
+    RUNTIME_HOST_UNSUPPORTED: "旧版主机限制导致跳过；当前 Web 测试已移除此限制",
+    "runtime-host-unsupported": "旧版主机限制导致启动受阻；当前 Web 测试已移除此限制",
     ENVIRONMENT_INVALID: "环境信息未通过创建任务时的校验；请使用当前版本新建任务",
     ENVIRONMENT_FORMAT_INVALID: "旧任务的环境格式校验未通过；新建任务会将原文交给 Agent 理解",
     ENVIRONMENT_URL_MISSING: "旧任务未识别到地址；新建任务会将原文交给 Agent 理解",
@@ -600,15 +607,26 @@ function renderRuntimeTesting(audit) {
     ENVIRONMENT_CONTACT_INCOMPLETE: "环境接触未完成，具体原因见下方 Agent 的结果和缺口说明",
     ENVIRONMENT_ALREADY_LEASED: "环境正被其他任务使用", ENVIRONMENT_LEASE_REQUIRES_REVIEW: "环境租约需要人工核对", PROCESS_RECOVERY_ENVIRONMENT_UNKNOWN: "恢复后环境状态不明", ENVIRONMENT_STATE_UNKNOWN: "环境状态不明", BROWSER_CLOSE_FAILED: "测试浏览器关闭失败",
   };
-  panel.append(element("h3", "", "贯穿式运行测试"), element("p", "", value ? `${states[value.status] ?? value.status}${value.reason ? ` · ${reasons[value.reason] ?? value.reason}` : ""}` : "等待任务启动；环境未提供时自动跳过。"));
+  const legacyHostRejection = value?.reason === "runtime-host-unsupported" && value.browser_allocated === false;
+  panel.append(element("h3", "", "贯穿式运行测试"), element("p", "", value ? `${legacyHostRejection ? "启动受阻" : states[value.status] ?? value.status}${value.reason ? ` · ${reasons[value.reason] ?? value.reason}` : ""}` : "等待任务启动；环境未提供时自动跳过。"));
   if (!value) return panel;
+  if (["RUNTIME_HOST_UNSUPPORTED", "runtime-host-unsupported"].includes(value.reason)) {
+    panel.append(element("p", "", "这是旧任务保存的结果。更新并重启工作台后，点击“新建重试”沿用原环境说明；Web 测试可在 macOS 上通过 Chrome DevTools MCP 执行。"));
+  }
   if (value.environment_ready === false && !["SKIPPED", "CLOSED", "BLOCKED", "QUARANTINED"].includes(value.status)) panel.append(element("p", "", "Agent 将先理解完整环境说明，再登记执行配置并访问目标。"));
   const list = element("ol", "stage-list");
   for (const [phase, label] of Object.entries(labels)) {
-    const item = element("li"); item.append(element("span", "", label), element("small", "", states[value.stages?.[phase]] ?? value.stages?.[phase] ?? "未调度")); list.append(item);
+    const cleanupNotRequired = phase === "CLEANUP" && value.cleanup_status === "NOT_REQUIRED"
+      && ["CLOSED", "SKIPPED", "BLOCKED", "QUARANTINED"].includes(value.status) && !(value.packets ?? []).some(packet => packet.phase === "CLEANUP");
+    const stage = cleanupNotRequired ? "无需清理" : legacyHostRejection && phase === "CONTACT" ? "启动受阻" : states[value.stages?.[phase]] ?? value.stages?.[phase] ?? "未调度";
+    const item = element("li"); item.append(element("span", "", label), element("small", "", stage)); list.append(item);
   }
-  panel.append(list, element("p", "", `已用 ${Math.ceil((value.elapsed_ms + value.cleanup_elapsed_ms) / 1000)} 秒；总预算 ${audit.runtime_testing.budget_minutes} 分钟；清理 ${value.cleanup_status}。`));
-  for (const packet of value.packets ?? []) panel.append(element("p", "", `${packet.id} · ${labels[packet.phase] ?? packet.phase} · ${states[packet.execution_status] ?? packet.execution_status} · ${packet.summary ?? packet.reason ?? ""}`));
+  const cleanup = { NOT_REQUIRED: "无需清理", SUCCEEDED: "已完成", FAILED: "失败", UNKNOWN: "状态不明" };
+  panel.append(list, element("p", "", `已用 ${Math.ceil((value.elapsed_ms + value.cleanup_elapsed_ms) / 1000)} 秒；总预算 ${audit.runtime_testing.budget_minutes} 分钟；清理状态：${cleanup[value.cleanup_status] ?? value.cleanup_status}。`));
+  for (const packet of value.packets ?? []) {
+    const hostRejected = legacyHostRejection && packet.phase === "CONTACT" && packet.execution_status === "FAILED";
+    panel.append(element("p", "", `${packet.id} · ${labels[packet.phase] ?? packet.phase} · ${hostRejected ? "启动受阻" : states[packet.execution_status] ?? packet.execution_status} · ${hostRejected ? "旧版主机限制拦截了 Agent 启动，未访问目标。" : packet.summary ?? packet.reason ?? ""}`));
+  }
   return panel;
 }
 
@@ -1658,8 +1676,22 @@ function syncAuditContextControls(form) {
   }
 }
 
-function openAuditDialog(repositoryId = null, templateAudit = null) {
+async function openAuditDialog(repositoryId = null, templateAudit = null) {
+  const requestId = ++state.auditDialogRequest;
   if (!state.runtime?.runner?.enabled) { toast("运行驱动未启用，请运行 npm --prefix .opencode run start:audit-workbench:runner。"); return; }
+  const productId = state.selectedProductId;
+  let draft = null;
+  if (templateAudit && templateAudit.status !== "artifact_only") {
+    try {
+      draft = await api(`/api/v2/products/${encodeURIComponent(productId)}/audits/${encodeURIComponent(templateAudit.id)}/retry-draft`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", cache: "no-store",
+      });
+    } catch (error) {
+      if (requestId === state.auditDialogRequest && productId === state.selectedProductId) toast(`无法恢复重试内容：${error.message}`);
+      return;
+    }
+    if (requestId !== state.auditDialogRequest || productId !== state.selectedProductId) return;
+  }
   const form = $("audit-form");
   form.reset();
   const select = $("repository-select");
@@ -1683,6 +1715,20 @@ function openAuditDialog(repositoryId = null, templateAudit = null) {
     const option = element("option", "", item.label); option.value = item.value; return option;
   }));
   form.elements.model.value = selectedModel;
+  if (draft) {
+    form.elements.additional_instructions_enabled.checked = draft.additional_instructions_enabled;
+    form.elements.additional_instructions.value = draft.additional_instructions;
+    form.elements.test_environment_enabled.checked = draft.test_environment_enabled;
+    form.elements.test_environment_context.value = draft.test_environment_context;
+  }
+  if (templateAudit?.runtime_testing) {
+    const runtime = templateAudit.runtime_testing;
+    form.elements.runtime_mode.value = runtime.mode;
+    form.elements.runtime_budget.value = runtime.budget_minutes;
+    form.elements.runtime_identity.value = runtime.identity_mode;
+    form.elements.runtime_test_input.checked = runtime.allowed_actions?.includes("test_input") ?? false;
+    form.elements.runtime_test_mutation.checked = runtime.allowed_actions?.includes("test_mutation") ?? false;
+  }
   syncAuditContextControls(form);
   $("audit-form-error").hidden = true;
   $("audit-dialog").showModal();
@@ -1965,6 +2011,13 @@ document.querySelectorAll(".nav button[data-view]").forEach(button => button.add
 document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => setView(button.dataset.go)));
 document.querySelectorAll("[data-open-audit]").forEach(button => button.addEventListener("click", () => openAuditDialog()));
 document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => $("audit-dialog").close()));
+$("audit-dialog").addEventListener("close", () => {
+  if ($("audit-dialog").open) return;
+  state.auditDialogRequest += 1;
+  const form = $("audit-form");
+  form.reset();
+  syncAuditContextControls(form);
+});
 document.querySelectorAll("[data-close-project]").forEach(button => button.addEventListener("click", () => $("project-dialog").close()));
 document.querySelectorAll("[data-close-product]").forEach(button => button.addEventListener("click", () => $("product-dialog").close()));
 document.querySelectorAll("[data-close-validation]").forEach(button => button.addEventListener("click", () => $("validation-dialog").close()));

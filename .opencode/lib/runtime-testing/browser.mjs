@@ -78,7 +78,6 @@ export class ChromeRuntimeBrowser {
     return this.clientClosures.get(client);
   }
   async createSession(id) {
-    check(["win32", "linux"].includes(process.platform) || this.clientFactory, "runtime-host-unsupported");
     this.proxyPromise ??= createOriginProxy(this.authorization.origins);
     this.proxy = await this.proxyPromise;
     if (this.closed) { await this.proxy.close(); throw new Error("runtime-browser-closed-during-startup"); }

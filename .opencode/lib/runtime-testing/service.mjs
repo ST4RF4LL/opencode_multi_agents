@@ -19,11 +19,12 @@ const leaseKey = origin => {
 };
 
 export class RuntimeTestingService {
-  constructor({ root, privateRoot, authorization, privateContext, command, environment, workspaceRoot, model, onChange = async () => {}, browserFactory, worker }) {
+  constructor({ root, privateRoot, authorization, privateContext, command, environment, workspaceRoot, model, onChange = async () => {}, browserFactory, worker, spawnProcess = spawn }) {
     this.root = root; this.privateRoot = privateRoot; this.command = command; this.environment = environment;
     this.workspaceRoot = workspaceRoot; this.model = model; this.onChange = onChange; this.token = randomUUID();
     this.queue = []; this.draining = null; this.accepting = true; this.server = null; this.keys = [];
     this.lockPaths = [];
+    this.spawnProcess = spawnProcess;
     this.controller = new RuntimeTestingController({ root, authorization, privateContext,
       prepareEnvironment: grant => this.acquireEnvironment(grant),
       persistEnvironment: async context => { await mkdir(this.privateRoot, { recursive: true }); await atomicJson(join(this.privateRoot, "environment.json"), context); },
@@ -175,7 +176,6 @@ export class RuntimeTestingService {
       steps: ["先完整理解私有环境 prompt，登记目标、隔离身份和敏感值；无法确定必要信息时说明缺口。", "通过真实应用路径确认页面、身份和正常响应；不得进行漏洞输入。"], counterchecks: [] });
   }
   async worker({ active, privateContext }) {
-    check(["win32", "linux"].includes(process.platform), "runtime-host-unsupported");
     const inherited = JSON.parse(this.environment.OPENCODE_CONFIG_CONTENT ?? "{}");
     const configured = JSON.parse(await readFile(this.environment.OPENCODE_CONFIG, "utf8"));
     const mcp = Object.fromEntries([...new Set([...Object.keys(configured.mcp ?? {}), ...Object.keys(inherited.mcp ?? {})])].map(name => [name, { enabled: false }]));
@@ -191,7 +191,7 @@ export class RuntimeTestingService {
       // Preparation may have outlived the lease; never launch a late worker.
       this.controller.requireActive(active.token);
       await new Promise((resolve, reject) => {
-        const child = spawn(this.command, ["run", "--format", "json", "--agent", "runtime-testing-worker", "--dir", this.workspaceRoot,
+        const child = this.spawnProcess(this.command, ["run", "--format", "json", "--agent", "runtime-testing-worker", "--dir", this.workspaceRoot,
           ...(this.model ? ["--model", this.model] : []), "--file", inputPath, "执行附件中的唯一工作包，通过 runtime-browser 提交结果后结束。"],
         { cwd: this.workspaceRoot, env: { ...this.environment, OPENCODE_CONFIG_CONTENT: JSON.stringify(config) }, stdio: "ignore", shell: false });
         let stopping; let exited = false;

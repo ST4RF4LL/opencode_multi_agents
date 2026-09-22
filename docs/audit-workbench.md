@@ -62,7 +62,9 @@ terminal-output-relay.json # tmux 模式；只读输出中继路径；0600
 terminal.txt              # 任务结束时的最终只读画面（如可捕获）
 ```
 
-两个 textarea 的原文不会进入 `run.json`、事件、日志、工作区快照或审计 API。`run.json` 只保存 enable、长度、固定文件名与 SHA-256；OpenCode prompt 只绑定私密文件路径与摘要，并要求 Agent 在需要时读取且不得复述秘密。Runner 从私密文件派生仅驻内存的精确脱敏词，用于日志、SSE 和 Web 返回的实时/归档终端画面。直接 attach 到本机 tmux/psmux 可以看到未经 Web 脱敏的原始 `opencode run` 输出，仍应把它视为可接触测试凭证的受信操作界面。断点恢复会重新校验文件摘要后复用原上下文；缺失或被修改时拒绝恢复。删除任务会连同该任务私密状态目录一起删除这些文件。
+两个 textarea 的原文不会进入 `run.json`、事件、日志、工作区快照或普通审计查询 API。`run.json` 只保存 enable、长度、固定文件名与 SHA-256；OpenCode prompt 只绑定私密文件路径与摘要，并要求 Agent 在需要时读取且不得复述秘密。Runner 从私密文件派生仅驻内存的精确脱敏词，用于日志、SSE 和 Web 返回的实时/归档终端画面。直接 attach 到本机 tmux/psmux 可以看到未经 Web 脱敏的原始 `opencode run` 输出，仍应把它视为可接触测试凭证的受信操作界面。断点恢复会重新校验文件摘要后复用原上下文；缺失或被修改时拒绝恢复。删除任务会连同该任务私密状态目录一起删除这些文件。
+
+“新建重试”和“再次审计”通过专用 `POST /api/v2/products/:productId/audits/:auditId/retry-draft` 读取原任务已保存的两段说明及 ENABLE 状态，回填到可编辑表单；同时保留原动态参与方式、预算、身份偏好和允许动作。该接口检查任务的当前产品归属、JSON 请求类型和同源要求，响应禁止缓存，读取前后验证私有文件摘要，不创建或启动任务。文件丢失、被修改或读取失败时明确报错，不以空白内容替代。提交时为新任务独立保存当前表单内容；修改或关闭某项不影响原任务。关闭弹窗后清空表单，不写入浏览器持久存储。
 
 审计交付制品写入 `reports/repositories/<repository-id>/`，中间文件写入 `tmp/repositories/<repository-id>/`。相对路径契约仍是 `reports/final/...`、`reports/coverage/...`、`tmp/<audit-id>/...`；上述物理命名空间由执行目录链接完成。`reports/**`、`tmp/*` 和 `workspace/` 已在项目根 `.gitignore` 中忽略。动态验证 request/result 也使用同一仓库制品命名空间，不再回写测试对象目录。
 

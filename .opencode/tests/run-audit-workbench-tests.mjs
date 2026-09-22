@@ -607,6 +607,29 @@ if (mode === "run") {
   queuedModelSelection = "project-provider/project-default";
   assert.equal(queuedRunner.getAudit(queuedAudit.id).model, "global-provider/global-audit");
   assert.equal(await queuedRunner.modelForLaunch({ model: null }), null, "显式默认不得被全局模型覆盖");
+  const originalContexts = {
+    additional_instructions_enabled: true,
+    additional_instructions: "只验证指定入口。\n\n保留这段说明的分行与中文。",
+    test_environment_enabled: true,
+    test_environment_context: "测试入口：http://test.example:8080\n测试账号：retry-fixture/retry-fixture-secret\n只操作指定测试记录。",
+  };
+  const retrySource = await queuedRunner.createAudit({ repository_id: "fixture", allow_dirty: true,
+    audit_id: "audit-retry-context-source", ...originalContexts }, "retry-context-source");
+  const retryDraft = await queuedRunner.retryDraft(retrySource.id);
+  assert.deepEqual(retryDraft, originalContexts);
+  const retryCopy = await queuedRunner.createAudit({ repository_id: "fixture", allow_dirty: true,
+    audit_id: "audit-retry-context-copy", ...retryDraft }, "retry-context-copy");
+  assert.deepEqual(await queuedRunner.retryDraft(retryCopy.id), originalContexts);
+  const editedRetry = await queuedRunner.createAudit({ repository_id: "fixture", allow_dirty: true,
+    audit_id: "audit-retry-context-edited", ...retryDraft, additional_instructions: "重试时修改的关注点。",
+    test_environment_enabled: false }, "retry-context-edited");
+  assert.deepEqual(await queuedRunner.retryDraft(editedRetry.id), {
+    additional_instructions_enabled: true, additional_instructions: "重试时修改的关注点。",
+    test_environment_enabled: false, test_environment_context: "",
+  });
+  assert.deepEqual(await queuedRunner.retryDraft(retrySource.id), originalContexts);
+  assert.equal(JSON.stringify(queuedRunner.listAudits()).includes("retry-fixture-secret"), false);
+  assert.equal(JSON.stringify(await queuedRunner.eventsSince(retryCopy.id)).includes("retry-fixture-secret"), false);
   queuedModelSelection = "project-provider/project-review";
   await queuedRunner.dispatchQueuedAudit(queuedAudit.id);
   assert.equal(queuedTerminalMonitor.starts[0].args[queuedTerminalMonitor.starts[0].args.indexOf("--model") + 1], "global-provider/global-audit");
@@ -941,6 +964,33 @@ if (mode === "run") {
   const cachedProbeCount = versionProbeCount;
   await environmentService.snapshot();
   assert.equal(versionProbeCount, cachedProbeCount);
+
+  for (const chromeLocation of ["system", "user", null]) {
+    const chromeCandidates = []; let macChromeLaunches = 0;
+    const macHealthService = new EnvironmentHealthService({
+      projectRoot: resolve(OPENCODE, ".."), configPaths: [healthConfig],
+      environment: { PATH: fakeBin, OPENCODE_BIN: join(fakeBin, "opencode") },
+      platform: "darwin", architecture: "arm64", nodeVersion: "22.12.0",
+      async resolveCommand(command) {
+        if (/chrome|chromium/i.test(command)) {
+          chromeCandidates.push(command);
+          return (command === "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ? chromeLocation === "system" : chromeLocation === "user") ? command : null;
+        }
+        return command;
+      },
+      async execute(command) {
+        if (/chrome|chromium/i.test(command)) { macChromeLaunches++; throw new Error("环境自检不得启动 Chrome"); }
+        return { stdout: `${basename(command)} 1.0.0\n`, stderr: "" };
+      },
+    });
+    const macHealth = await macHealthService.snapshot();
+    assert.equal(macChromeLaunches, 0); assert.equal(chromeCandidates.length, chromeLocation === "system" ? 1 : 2);
+    assert.equal(macHealth.components.find(item => item.id === "chrome").status, chromeLocation ? "ready" : "unavailable");
+    const dynamic = macHealth.capabilities.find(item => item.id === "dynamic");
+    assert.equal(dynamic.status, chromeLocation ? "ready" : "blocked");
+    assert.deepEqual(dynamic.blockers, chromeLocation ? [] : ["chrome"]);
+    assert.equal(macHealth.capabilities.find(item => item.id === "static").status, "ready");
+  }
 
   let windowsChromeLaunches = 0;
   const windowsHealthService = new EnvironmentHealthService({
@@ -1531,6 +1581,43 @@ if (mode === "run") {
     assert.match(logPayload, /PRIVATE_CONTEXT_REDACTED/);
     assert.equal(parsedLogPayload.items.every(item => typeof item.kind === "string" && typeof item.label === "string"), true);
     assert.equal(parsedLogPayload.items.every(item => item.message === undefined), true);
+
+    const retryDraftPath = `/api/v2/products/product-undefined/audits/${created.id}/retry-draft`;
+    const readRetryDraft = (headers = {}) => fetch(`${base}${retryDraftPath}`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: "{}",
+    });
+    const retryDraftResponse = await readRetryDraft();
+    assert.equal(retryDraftResponse.status, 200);
+    assert.equal(retryDraftResponse.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await retryDraftResponse.json(), {
+      additional_instructions_enabled: true,
+      additional_instructions: "只验证 XSS 漏洞；其他类型只记录静态证据。",
+      test_environment_enabled: true,
+      test_environment_context: "URL: http://127.0.0.1:8080\nAttacker: attacker-fixture / context-attacker-secret\nVictim: victim-fixture / context-victim-secret",
+    });
+    assert.equal((await fetch(`${base}${retryDraftPath}`)).status, 404);
+    assert.equal((await readRetryDraft({ Origin: "https://unrelated.example" })).status, 403);
+    assert.equal((await readRetryDraft({ "Content-Type": "text/plain" })).status, 415);
+    const unrelatedProduct = await server.productStore.createProduct({ name: "重试上下文隔离测试" });
+    assert.equal((await fetch(`${base}/api/v2/products/${unrelatedProduct.id}/audits/${created.id}/retry-draft`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    })).status, 404);
+    const privateEnvironment = runner.audits.get(created.id).private_context.test_environment;
+    const originalDigest = privateEnvironment.sha256;
+    try {
+      privateEnvironment.sha256 = "0".repeat(64);
+      const invalidDraft = await readRetryDraft();
+      assert.equal(invalidDraft.status, 409);
+      assert.equal((await invalidDraft.text()).includes("context-attacker-secret"), false);
+    } finally { privateEnvironment.sha256 = originalDigest; }
+    const environmentFile = join(stateRoot, created.id, privateEnvironment.file_name);
+    const environmentBytes = await readFile(environmentFile);
+    try {
+      await rm(environmentFile);
+      assert.equal((await readRetryDraft()).status, 409);
+    } finally { await writeFile(environmentFile, environmentBytes, { mode: 0o600 }); }
+    const publicDetail = await (await fetch(`${base}/api/v2/products/product-undefined/audits/${created.id}`)).text();
+    assert.equal(publicDetail.includes("context-attacker-secret"), false);
 
     const duplicateResponse = await fetch(`${base}/api/v1/audits`, {
       method: "POST",

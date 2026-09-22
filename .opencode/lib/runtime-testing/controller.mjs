@@ -342,7 +342,7 @@ export class RuntimeTestingController {
     await this.releaseBrowser();
     if (!["SKIPPED", "QUARANTINED", "BLOCKED"].includes(this.state.status)) this.state.status = "CLOSED";
     if (this.state.status !== "SKIPPED") {
-      if (this.state.stages.CLEANUP === "NOT_SCHEDULED") this.state.stages.CLEANUP = ["FAILED", "UNKNOWN"].includes(this.state.cleanup_status) ? "BLOCKED" : "COMPLETED";
+      if (this.state.stages.CLEANUP === "NOT_SCHEDULED") this.state.stages.CLEANUP = this.state.cleanup_status === "NOT_REQUIRED" ? "SKIPPED" : ["FAILED", "UNKNOWN"].includes(this.state.cleanup_status) ? "BLOCKED" : "COMPLETED";
       for (const phase of PHASES) if (this.state.stages[phase] === "NOT_SCHEDULED") this.state.stages[phase] = "SKIPPED";
     }
     await this.save(); return this.writeEvidenceSet();
@@ -368,6 +368,7 @@ export class RuntimeTestingController {
     const value = seal({ protocol: PROTOCOL, artifact_type: "runtime-testing-evidence-set", audit_id: this.authorization.audit_id,
       authorization_digest: this.authorization.artifact_digest, environment_revision: this.authorization.environment_revision,
       status: this.state.status, reason: this.state.reason, cleanup_status: this.state.cleanup_status,
+      ...(this.state.runtime_host ? { runtime_host: this.state.runtime_host } : {}),
       elapsed_ms: this.state.elapsed_ms, cleanup_elapsed_ms: this.state.cleanup_elapsed_ms, stages: this.state.stages,
       packets, evidence_bindings: this.state.evidence });
     await atomicJson(join(this.root, "evidence-set.json"), value); return value;

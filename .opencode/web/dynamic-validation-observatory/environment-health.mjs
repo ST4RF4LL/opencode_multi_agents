@@ -65,10 +65,10 @@ async function chromeComponent({ environment, platform, execute, resolveCommand 
         ]
       : ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"];
   for (const command of commands) {
-    if (platform === "win32") {
+    if (platform === "win32" || platform === "darwin") {
       const resolved = await resolveCommand(command, environment, platform);
       if (resolved) {
-        return { id: "chrome", label: "Google Chrome", category: "动态验证", status: "ready", version: null, command: basename(resolved), required_for: ["dynamic"], detail: "已检测到 Chrome；Windows 环境不会为读取版本而启动浏览器进程。" };
+        return { id: "chrome", label: "Google Chrome", category: "动态验证", status: "ready", version: null, command: basename(resolved), required_for: ["dynamic"], detail: "已检测到 Chrome；不会为读取版本而启动浏览器进程。" };
       }
       continue;
     }

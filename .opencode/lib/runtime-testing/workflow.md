@@ -4,7 +4,7 @@
 
 ## 执行顺序
 
-1. 平台在启动静态审计前冻结授权、环境原文摘要、来源版本与范围摘要。仅未启用或环境内容为空时，控制器直接输出 SKIPPED；不启动服务、worker、浏览器或网络请求。有内容时完整保存在私有 environment.prompt，不能以字段名或正则匹配结果决定是否启动环境理解。静态流程正常推进。
+1. 平台在启动静态审计前冻结授权、环境原文摘要、来源版本与范围摘要。未启用或环境内容为空时，控制器直接输出 SKIPPED；不启动服务、worker、浏览器或网络请求。有内容时完整保存在私有 environment.prompt，不能以字段名或正则匹配结果决定是否启动环境理解。Web 测试使用跨平台的 OpenCode 与 Chrome DevTools MCP，macOS 不因主机系统被拒绝；依赖是否可用由实际工具能力决定。Windows 桌面工具的系统限制只适用于该工具。静态流程正常推进。
 2. **CONTACT 与 Recon 并行**：平台自动调度正常环境接触。此阶段不需要 Finding。Agent 先理解完整 environment.prompt，通过 configure_environment 登记目标、实际身份、敏感值和适用的测试数据范围，再用 browser_tools/browser_call 确认登录与正常响应；工具发现不会在登记前启动浏览器。确实缺少信息时由 Agent 说明具体缺口并跳过。专业 Agent/Orchestrator 读取 `node "$AUDIT_RUNTIME_CLI" status` 和 `$AUDIT_RUNTIME_STATE_ROOT/authorization.json`；无法接触环境时保留缺口，不阻塞 Recon。
 3. **Threat/Plan**：专业 Agent 结合基线与源码提出可证伪假设，写单独的运行工作包。Orchestrator 只进行格式校验和分派，不阅读源码或判定漏洞。每包默认 5–10 分钟，必须有正常对照和停止条件；无授权不生成待执行队列。
 4. **EXPLORE 与源码审计交错**：专业 Agent 完成一个 Focus Area 后可输出探索包，无需先有 Finding。通过 `node "$AUDIT_RUNTIME_CLI" enqueue <包的绝对路径>` 入队后立即继续静态工作。包位于 `$AUDIT_REPORTS_ROOT/runtime-testing/<audit_id>/plans/`，不修改现有 audit-todo handoff 的字段。控制器串行运行，同一环境仅一份租约；不同身份对应隔离 Chrome DevTools MCP 实例。环境忙时排队，不开启第二个浏览器控制器。
@@ -62,6 +62,8 @@ runtime_review.packet_ids 必须覆盖与该 Finding 绑定的全部工作包，
 ## 预算、故障与复用
 
 总预算默认 60 分钟，预留 10 分钟清理（较小预算按 1/6 预留）。控制器使用单调计时，包含 worker 推理、MCP 调用、证据写入；排队不计主动耗时，但审计环境最大存续时间独立受限。未执行的包记 SKIPPED，不能冒充 TIMED_OUT。
+
+Web 服务、worker 和浏览器控制器不设置操作系统白名单。旧版因 RUNTIME_HOST_UNSUPPORTED/runtime-host-unsupported 封存的任务保留原结果，更新后通过新建重试重新执行，不自动复活历史任务或清除环境隔离。封存时没有清理工作且 cleanup_status=NOT_REQUIRED，CLEANUP 阶段记 SKIPPED，界面显示“无需清理”。
 
 测试环境由用户自行判断并显式授权，不根据公网、内网或本机地址分类拒绝。授权 origin 按协议、主机与端口精确匹配；代理拒绝未授权 origin 的跳转和子资源。非本机目标按实际主机寻址，并使用各自 origin 的环境锁；localhost/127.0.0.1/[::1] 的同协议同端口继续共享环境锁。进程异常遗留的租约不能自动清除，需要操作者核对测试数据和浏览器后在受控状态目录处理；当前任务静态流程继续。所有浏览器都由本次 MCP controller 创建并关闭，不操作用户现有 Chrome。
 
